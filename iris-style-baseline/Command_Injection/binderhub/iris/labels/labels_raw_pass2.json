@@ -1,0 +1,1047 @@
+{
+  "run_id": "binderhub-iris-pass2-step3-20261014",
+  "generated_at": "2026-10-14T11:03:24Z",
+  "step": "Phase 1 Step 3 - LLM API Candidate Labeling",
+  "pass_id": 2,
+  "focus": "Command/Argument Injection (CWE-78 primary; CWE-77, CWE-88 in pass scope)",
+  "cwes": ["077", "078", "088"],
+  "target": {
+    "project": "binderhub",
+    "language": "python",
+    "primary_framework": "tornado",
+    "source_root": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\binderhub_vuln",
+    "experiment_root": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\binderhub\\iris"
+  },
+  "model": {
+    "provider": "Z.ai (GLM)",
+    "model_id": "glm-5.3",
+    "invocation_mode": "Claude Code CLI agent session; labeling performed by the session model directly after reading the real binderhub sources (no separate completion API call, no vulnerability ground truth consulted)",
+    "parameters": {
+      "temperature": "not set (agent harness default; no sampling controls exposed)",
+      "max_tokens": "not set",
+      "response_format": "JSON authored via file-write tooling and machine-validated against assets/labels_schema.json"
+    },
+    "determinism_notes": "single pass per batch; no re-ask loop; entries with confidence < 0.55 flagged for the human review gate instead of re-queried",
+    "context_inputs": [
+      "iris/extraction/sources.csv (74 rows)",
+      "iris/extraction/sinks.csv (10 rows)",
+      "iris/exploration/detection.json",
+      "augur-0.3.0/WORKFLOW.md",
+      "augur-0.3.0/references/python.md",
+      "augur-0.3.0/references/patterns.md",
+      "augur-0.3.0/assets/labels_schema.json",
+      "binderhub sources: app.py, base.py, build.py, builder.py, main.py, launcher.py, health.py, registry.py, repoproviders.py"
+    ]
+  },
+  "labeling_rubric": {
+    "source": "attacker-influenced input at an external boundary: HTTP request path/query/header fields, handler URL path-capture params, external API responses fetched for user-chosen repo/ref",
+    "sink": "executes, submits, or injects into command/argument execution: subprocess APIs, container argv, pod submission, env injection into the build pod execution environment",
+    "sanitizer": "proven neutralization for the pass (arg-list invocation without shell, strict allow-list validation, format validation on values reaching commands)",
+    "summary": "internal helper / provider accessor that propagates taint from attacker input toward build command parameters (needed for realistic propagation)",
+    "none": "unrelated to CWE-78 for this pass: trusted server-side configuration, cluster-internal service responses, log/display-only data",
+    "classification_semantics": "tp means the labeled ROLE is genuinely played by this API for pass 2 (e.g. a real sink reachable by request data); it does NOT mean a confirmed exploitable vulnerability. fp means the candidate was judged not to play the role. candidate/unknown reserved for plausible-but-unconfirmed roles."
+  },
+  "batches": [
+    {
+      "batch_id": "pass2-S1",
+      "description": "source candidates 1-11: binderhub/app.py environment reads and binderhub/base.py request field accesses",
+      "size": 11,
+      "input_csv": "extraction/sources.csv rows 1-11",
+      "input_rows": [
+        ["Attribute()", "source_candidate", "os.environ.get", "return", "os.environ", "binderhub.app", -1, 415, "binderhub/app.py:415", "Attribute()"],
+        ["Attribute()", "source_candidate", "os.environ.get", "return", "os.environ", "binderhub.app", -1, 568, "binderhub/app.py:568", "Attribute()"],
+        ["Attribute()", "source_candidate", "os.getenv", "return", "os", "binderhub.app", -1, 837, "binderhub/app.py:837", "Attribute()"],
+        ["Attribute", "source_candidate", "request.remote_ip", "field", "tornado.httputil.HTTPServerRequest", "binderhub.base", -1, 37, "binderhub/base.py:37", "Attribute"],
+        ["Attribute", "source_candidate", "request.headers", "field", "tornado.httputil.HTTPServerRequest", "binderhub.base", -1, 56, "binderhub/base.py:56", "Attribute"],
+        ["Attribute", "source_candidate", "request.headers", "field", "tornado.httputil.HTTPServerRequest", "binderhub.base", -1, 62, "binderhub/base.py:62", "Attribute"],
+        ["Attribute", "source_candidate", "request.headers", "field", "tornado.httputil.HTTPServerRequest", "binderhub.base", -1, 93, "binderhub/base.py:93", "Attribute"],
+        ["Attribute", "source_candidate", "request.headers", "field", "tornado.httputil.HTTPServerRequest", "binderhub.base", -1, 93, "binderhub/base.py:93", "Attribute"],
+        ["Attribute", "source_candidate", "request.remote_ip", "field", "tornado.httputil.HTTPServerRequest", "binderhub.base", -1, 118, "binderhub/base.py:118", "Attribute"],
+        ["Attribute", "source_candidate", "request.path", "field", "tornado.httputil.HTTPServerRequest", "binderhub.base", -1, 155, "binderhub/base.py:155", "Attribute"],
+        ["Attribute", "source_candidate", "request.path", "field", "tornado.httputil.HTTPServerRequest", "binderhub.base", -1, 156, "binderhub/base.py:156", "Attribute"]
+      ],
+      "entries": [
+        {
+          "id": "src-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {"package": "python-stdlib", "module": "os.environ", "type": null, "callable": "os.environ.get", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/app.py", "line": 415},
+          "rationale": "JUPYTERHUB_API_TOKEN is trusted server-side deployment configuration supplied by the operator environment, not by HTTP clients; the value authenticates calls to the JupyterHub API and never reaches command construction. Distinguishing trusted server config from user-controlled input per the pass rubric.",
+          "evidence": ["binderhub/app.py:413-415 `@default('hub_api_token')` -> `return os.environ.get('JUPYTERHUB_API_TOKEN', '')`"]
+        },
+        {
+          "id": "src-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {"package": "python-stdlib", "module": "os.environ", "type": null, "callable": "os.environ.get", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/app.py", "line": 568},
+          "rationale": "BINDERHUB_BUILD_TOKEN_SECRET is operator-set deployment configuration used as the HMAC key for build-token signing/verification; server-side secret, not attacker input, no command propagation.",
+          "evidence": ["binderhub/app.py:566-574 `@default('build_token_secret')` reads `os.environ.get('BINDERHUB_BUILD_TOKEN_SECRET')`, else generates `secrets.token_bytes(32)`"]
+        },
+        {
+          "id": "src-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {"package": "python-stdlib", "module": "os", "type": null, "callable": "os.getenv", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/app.py", "line": 837},
+          "rationale": "JUPYTERHUB_OAUTH_CALLBACK_URL is deployment configuration; it is urlparse'd and only used to register the OAuth callback route in the tornado handler table. No attacker control, no command flow.",
+          "evidence": ["binderhub/app.py:836-840 `oauth_redirect_uri = os.getenv('JUPYTERHUB_OAUTH_CALLBACK_URL') or url_path_join(self.base_url, 'oauth_callback')`; route registration only"]
+        },
+        {
+          "id": "src-004",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.remote_ip", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/base.py", "line": 37},
+          "rationale": "Client IP is attacker-influenced (HTTPServer is started with xheaders=True, so X-Forwarded-For is honored) and is a genuine external-boundary input; at this call site it feeds the network ban check only, with no observed propagation into command construction. Kept as a boundary source for conservative recall.",
+          "evidence": ["binderhub/base.py:32-48 check_request_ip: `request_ip = self.request.remote_ip`; `ip_in_networks(request_ip, ban_networks, ...)`", "binderhub/app.py:871-874 `self.http_server = HTTPServer(self.tornado_app, xheaders=True)`"]
+        },
+        {
+          "id": "src-005",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.headers", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/base.py", "line": 56},
+          "rationale": "Origin header is fully client-controlled; it is parsed to its netloc and compared against the origin claim inside the signed build token (authentication logic). Boundary source, but no command propagation at this site.",
+          "evidence": ["binderhub/base.py:50-64 token_origin: `origin_or_host = self.request.headers.get('origin', None)`; `origin_or_host = urllib.parse.urlparse(origin_or_host).netloc`"]
+        },
+        {
+          "id": "src-006",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.headers", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/base.py", "line": 62},
+          "rationale": "Host header is client-controlled and is the fallback origin used in build-token origin validation; boundary source without command flow at this site.",
+          "evidence": ["binderhub/base.py:62 `origin_or_host = self.request.headers.get('host', '')`"]
+        },
+        {
+          "id": "src-007",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.headers", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/base.py", "line": 93},
+          "rationale": "Host and Origin headers re-read solely to enrich an error log message when a build token fails origin validation; log-only use of a boundary source. Flagged low-confidence for the human review gate.",
+          "evidence": ["binderhub/base.py:89-96 `app_log.error(f'Build token from mismatched origin != {origin}: {decoded}; Host={self.request.headers.get(...)}, Origin={...}')`"]
+        },
+        {
+          "id": "src-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.headers", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/base.py", "line": 93},
+          "rationale": "Exact duplicate CSV row of src-007 (same callable, receiver and location binderhub/base.py:93 extracted twice). Consolidated into src-007; this entry is retained only as an auditable exclusion marker to keep the CSV row accounting complete.",
+          "evidence": ["extraction/sources.csv rows 7 and 8 are byte-identical: `request.headers` at `binderhub/base.py:93`"]
+        },
+        {
+          "id": "src-009",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.remote_ip", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/base.py", "line": 118},
+          "rationale": "Client IP used as the rate-limit key (rate_limiter.increment); attacker-influenced boundary input, but the value only drives throttling decisions, never command construction.",
+          "evidence": ["binderhub/base.py:117-127 `request_ip = self.request.remote_ip`; `limit = rate_limiter.increment(request_ip)`"]
+        },
+        {
+          "id": "src-010",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.path", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/base.py", "line": 155},
+          "rationale": "The raw request path is the root attacker input for the entire build flow: get_spec_from_request slices the provider spec out of request.path, the spec is tokenized/unquoted by providers into repo URL and ref, and those values reach the `git ls-remote` argv (repoproviders.py:487-488) and the repo2docker container argv (build.py:146-171, 343). 'tp' asserts the source role is real, not that a vulnerability is confirmed.",
+          "evidence": ["binderhub/base.py:150-157 get_spec_from_request: `idx = self.request.path.index(prefix)`", "binderhub/builder.py:238-239 `prefix = '/build/' + provider_prefix; spec = self.get_spec_from_request(prefix)`", "binderhub/repoproviders.py:487-488 `command = ['git', 'ls-remote', self.repo, self.unresolved_ref]; result = subprocess.run(command, ...)`"]
+        },
+        {
+          "id": "src-011",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.path", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/base.py", "line": 156},
+          "rationale": "The spec slice itself: `spec = self.request.path[idx + len(prefix) + 1:]` returns the raw, un-unquoted spec (kept deliberately because tornado unquotes path captures). This is the exact value handed to provider construction and downstream command arguments.",
+          "evidence": ["binderhub/base.py:155-157 `spec = self.request.path[idx + len(prefix) + 1:]`; docstring: 'Get the original, raw spec, without tornado's unquoting'"]
+        }
+      ]
+    },
+    {
+      "batch_id": "pass2-S2",
+      "description": "source candidates 12-31: binderhub/build.py and binderhub/builder.py",
+      "size": 20,
+      "input_csv": "extraction/sources.csv rows 12-31",
+      "input_rows": [
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.build", -1, 253, "binderhub/build.py:253", "Attribute()"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.build", -1, 440, "binderhub/build.py:440", "Attribute()"],
+        ["Attribute", "source_candidate", "request.uri", "field", "tornado.httputil.HTTPServerRequest", "binderhub.builder", -1, 154, "binderhub/builder.py:154", "Attribute"],
+        ["provider_prefix", "source_candidate", "get", "param", "BuildHandler", "binderhub.builder", 1, 223, "binderhub/builder.py:223", "provider_prefix"],
+        ["_unescaped_spec", "source_candidate", "get", "param", "BuildHandler", "binderhub.builder", 2, 223, "binderhub/builder.py:223", "_unescaped_spec"],
+        ["Attribute()", "source_candidate", "get_spec_from_request", "return", "self", "binderhub.builder", -1, 239, "binderhub/builder.py:239", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_argument", "return", "BuildHandler", "binderhub.builder", -1, 242, "binderhub/builder.py:242", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_provider", "return", "self", "binderhub.builder", -1, 261, "binderhub/builder.py:261", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_repo_url", "return", "provider", "binderhub.builder", -1, 274, "binderhub/builder.py:274", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "provider", "binderhub.builder", -1, 283, "binderhub/builder.py:283", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref_url", "return", "provider", "binderhub.builder", -1, 305, "binderhub/builder.py:305", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_spec", "return", "provider", "binderhub.builder", -1, 306, "binderhub/builder.py:306", "Attribute()"],
+        ["Attribute", "source_candidate", "request.protocol", "field", "tornado.httputil.HTTPServerRequest", "binderhub.builder", -1, 310, "binderhub/builder.py:310", "Attribute"],
+        ["Attribute", "source_candidate", "request.host", "field", "tornado.httputil.HTTPServerRequest", "binderhub.builder", -1, 311, "binderhub/builder.py:311", "Attribute"],
+        ["Attribute()", "source_candidate", "get_build_slug", "return", "provider", "binderhub.builder", -1, 329, "binderhub/builder.py:329", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_build_slug", "return", "provider", "binderhub.builder", -1, 331, "binderhub/builder.py:331", "Attribute()"],
+        ["Attribute", "source_candidate", "request.host", "field", "tornado.httputil.HTTPServerRequest", "binderhub.builder", -1, 382, "binderhub/builder.py:382", "Attribute"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.builder", -1, 472, "binderhub/builder.py:472", "Attribute()"],
+        ["Attribute", "source_candidate", "request.host", "field", "tornado.httputil.HTTPServerRequest", "binderhub.builder", -1, 497, "binderhub/builder.py:497", "Attribute"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.builder", -1, 534, "binderhub/builder.py:534", "Attribute()"]
+      ],
+      "entries": [
+        {
+          "id": "src-012",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/build.py", "line": 253},
+          "rationale": "Parses the Kubernetes API response listing docker-in-docker pods in get_affinity; the cluster API is trusted server-side infrastructure and the parsed node names only feed scheduling affinity. Not an attacker-controlled boundary for CWE-78.",
+          "evidence": ["binderhub/build.py:247-253 `resp = self.api.list_namespaced_pod(...)`; `dind_pods = json.loads(resp.read())`"]
+        },
+        {
+          "id": "src-013",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/build.py", "line": 440},
+          "rationale": "In stream_logs, json.loads is used only to validate that each pod log line is JSON before re-wrapping and forwarding it to the browser event stream. Input is repo2docker build-pod output (display data), never command input for this pass.",
+          "evidence": ["binderhub/build.py:437-453 `line = line.decode('utf-8')`; `try: json.loads(line) except ValueError: ... use the line itself as the message`"]
+        },
+        {
+          "id": "src-014",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.uri", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/builder.py", "line": 154},
+          "rationale": "Request URI is client-controlled and read when a stream closes, but it is used only inside an app_log.warning message; boundary source with log-only use and no command propagation. Low confidence, flagged for review.",
+          "evidence": ["binderhub/builder.py:150-156 `except StreamClosedError: app_log.warning('Stream closed while handling %s', self.request.uri)`"]
+        },
+        {
+          "id": "src-015",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {"package": null, "module": "binderhub.builder", "type": "BuildHandler", "callable": "get", "arg_index": 1, "flow_kind": "param"},
+          "location": {"file": "binderhub/builder.py", "line": 223},
+          "rationale": "provider_prefix is the first URL path capture of route r'/build/([^/]+)/(.+)' and is fully attacker-controlled; it selects which RepoProvider class is instantiated. Direct entry boundary of the build flow that ends in pod command submission.",
+          "evidence": ["binderhub/app.py:795 handler table `(r'/build/([^/]+)/(.+)', BuildHandler)`", "binderhub/builder.py:222-243 `async def get(self, provider_prefix, _unescaped_spec)`; `prefix = '/build/' + provider_prefix`"]
+        },
+        {
+          "id": "src-016",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {"package": null, "module": "binderhub.builder", "type": "BuildHandler", "callable": "get", "arg_index": 2, "flow_kind": "param"},
+          "location": {"file": "binderhub/builder.py", "line": 223},
+          "rationale": "_unescaped_spec is the second URL path capture carrying the repo spec (repo URL / namespace plus ref). Tornado passes it un-unquoted per the regex group; the handler re-extracts the raw spec which providers tokenize into repo URL and unresolved ref - the values that reach git ls-remote argv and repo2docker argv.",
+          "evidence": ["binderhub/app.py:795 `(r'/build/([^/]+)/(.+)', BuildHandler)`", "binderhub/builder.py:238-239 raw spec re-extraction", "binderhub/repoproviders.py:470-474 GitRepoProvider splits and unquotes spec into self.repo / self.unresolved_ref"]
+        },
+        {
+          "id": "src-017",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {"package": null, "module": "binderhub.base", "type": "BaseHandler", "callable": "get_spec_from_request", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 239},
+          "rationale": "Project accessor returning the raw spec sliced from request.path (binderhub/base.py:150-157); the return value is attacker data consumed directly by provider construction in the build flow. Labeled source (rather than summary) because it is the canonical raw-spec accessor on the request boundary.",
+          "evidence": ["binderhub/base.py:150-157 get_spec_from_request body", "binderhub/builder.py:239 `spec = self.get_spec_from_request(prefix)`"]
+        },
+        {
+          "id": "src-018",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {"package": null, "module": "binderhub.builder", "type": "BuildHandler", "callable": "get_argument", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 242},
+          "rationale": "Query argument build_token is client-controlled (tornado unquotes query arguments too). It is cryptographically verified with jwt.decode (HS256, audience = provider spec, server secret) inside check_build_token; no flow into command construction. Boundary source, authentication use.",
+          "evidence": ["binderhub/builder.py:241-243 `build_token = self.get_argument('build_token', None)`; `self.check_build_token(build_token, f'{provider_prefix}/{spec}')`", "binderhub/base.py:78-87 `decoded = jwt.decode(build_token, key=self.settings['build_token_secret'], audience=provider_spec, algorithms=['HS256'])`"]
+        },
+        {
+          "id": "src-019",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {"package": null, "module": "binderhub.base", "type": "BaseHandler", "callable": "get_provider", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 261},
+          "rationale": "get_provider instantiates the provider class with the attacker-controlled spec (`providers[provider_prefix](config=..., spec=spec)`); the returned object's fields (repo, unresolved_ref, namespace, user, gist_id) are derived from the spec. Taint step from request spec into the provider object; a wrapper, not an input boundary itself.",
+          "evidence": ["binderhub/base.py:159-166 `return providers[provider_prefix](config=self.settings['traitlets_config'], spec=spec)`", "binderhub/builder.py:259-261 `provider = self.get_provider(provider_prefix, spec=spec)`"]
+        },
+        {
+          "id": "src-020",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.75,
+          "signature": {"package": null, "module": "binderhub.builder", "type": "RepoProvider", "callable": "get_repo_url", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 274},
+          "rationale": "Provider accessor whose return value becomes Build.repo_url - the trailing repo2docker argv element (build.py:169) and, for GitRepoProvider, an argument of the git ls-remote command. The returned value is spec-derived (GitRepoProvider returns the unquoted arbitrary git URL; Zenodo/Figshare/Dataverse return the raw spec). Propagation step from provider to command parameters.",
+          "evidence": ["binderhub/builder.py:274 `repo_url = self.repo_url = provider.get_repo_url()`", "binderhub/build.py:169 `cmd.append(self.repo_url)` (argv tail)", "binderhub/repoproviders.py:507-508 GitRepoProvider.get_repo_url returns self.repo (unquoted user URL)"]
+        },
+        {
+          "id": "src-021",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.8,
+          "signature": {"package": null, "module": "binderhub.builder", "type": "RepoProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 283},
+          "rationale": "The returned ref becomes Build.ref, passed as the '--ref' repo2docker argv element (build.py:150); for GitRepoProvider the same call is the site that executes `git ls-remote <repo> <ref>` with spec-derived arguments. Strongest single propagation step from request data toward command execution.",
+          "evidence": ["binderhub/builder.py:282-283 `ref = await provider.get_resolved_ref()`", "binderhub/builder.py:404-411 `BuildClass(..., ref=ref, ...)`", "binderhub/build.py:148-155 `cmd = ['jupyter-repo2docker', '--ref', self.ref, ...]`", "binderhub/repoproviders.py:487-488 git ls-remote subprocess inside GitRepoProvider.get_resolved_ref"]
+        },
+        {
+          "id": "src-022",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {"package": null, "module": "binderhub.builder", "type": "RepoProvider", "callable": "get_resolved_ref_url", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 305},
+          "rationale": "The ref URL is interpolated into the server-configured appendix template (`self.settings['appendix'].format(..., ref_url=self.ref_url)`) and the rendered appendix becomes the '--appendix' repo2docker argv element (build.py:156-157). Template is operator config, but the substituted values are request-derived.",
+          "evidence": ["binderhub/builder.py:305 `self.ref_url = await provider.get_resolved_ref_url()`", "binderhub/builder.py:397-402 `appendix = self.settings['appendix'].format(..., repo_url=repo_url, ref_url=self.ref_url)`", "binderhub/build.py:156-157 `if self.appendix: cmd.extend(['--appendix', self.appendix])`"]
+        },
+        {
+          "id": "src-023",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": null, "module": "binderhub.builder", "type": "RepoProvider", "callable": "get_resolved_spec", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 306},
+          "rationale": "Resolved spec is formatted into binder_persistent_request, which is interpolated into the appendix and thus into the '--appendix' argv element; one step further from the command than repo_url/ref, hence lower confidence.",
+          "evidence": ["binderhub/builder.py:306, 319-322 `resolved_spec = await provider.get_resolved_spec()`; `self.binder_persistent_request = 'v2/{provider}/{spec}'.format(...)`", "binderhub/builder.py:397-402 appendix formatting"]
+        },
+        {
+          "id": "src-024",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.protocol", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/builder.py", "line": 310},
+          "rationale": "Request scheme feeds binder_launch_host (fallback when no badge_base_url is configured), which is interpolated into the appendix rendered into the '--appendix' argv element. Boundary source with an observed propagation path toward the build command arguments.",
+          "evidence": ["binderhub/builder.py:308-313 `self.binder_launch_host = badge_base_url or '{proto}://{host}{base_url}'.format(proto=self.request.protocol, host=self.request.host, ...)`", "binderhub/builder.py:397-402 appendix format with binder_url/persistent_binder_url"]
+        },
+        {
+          "id": "src-025",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.host", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/builder.py", "line": 311},
+          "rationale": "Host header is client-controlled and flows into binder_launch_host -> appendix -> '--appendix' argv element of the repo2docker command. Distinct from src-006 (authentication use): this call site has a concrete path into the build command arguments.",
+          "evidence": ["binderhub/builder.py:309-313 host used in binder_launch_host", "binderhub/builder.py:397-402 `appendix = self.settings['appendix'].format(binder_url=self.binder_launch_host + self.binder_request, ...)`", "binderhub/build.py:156-157 appendix appended to cmd"]
+        },
+        {
+          "id": "src-026",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {"package": null, "module": "binderhub.builder", "type": "RepoProvider", "callable": "get_build_slug", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 329},
+          "rationale": "Build slug (user/repo-derived per provider) is formatted into image_name, which becomes the '--image' repo2docker argv element. Note _safe_build_slug applies escapism escaping plus a sha256 suffix before use, limiting (but not eliminating) the injection surface.",
+          "evidence": ["binderhub/builder.py:326-337 `safe_build_slug = _safe_build_slug(provider.get_build_slug(), limit=...)`; `image_name = '{prefix}{build_slug}:{ref}'.format(...)`", "binderhub/build.py:151 `'--image', self.image_name`", "binderhub/builder.py:113-134 _safe_build_slug escaping"]
+        },
+        {
+          "id": "src-027",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": null, "module": "binderhub.builder", "type": "RepoProvider", "callable": "get_build_slug", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 331},
+          "rationale": "Second get_build_slug call site feeds _generate_build_name (pod name and labels) rather than command argv; heavily escaped via _safe_build_slug (ascii-letters+digits with '-' escape char). Object-naming propagation, lower command-injection relevance than src-026.",
+          "evidence": ["binderhub/builder.py:331 `build_name = _generate_build_name(provider.get_build_slug(), ref, prefix='build-')`", "binderhub/builder.py:82-134 escaping in _generate_build_name/_safe_build_slug"]
+        },
+        {
+          "id": "src-028",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.host", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/builder.py", "line": 382},
+          "rationale": "Host header fallback for the 'origin' field of the launch event emitted to the structured event log; event-logging use only at this call site, no command propagation. Low confidence, flagged for review.",
+          "evidence": ["binderhub/builder.py:379-384 `self.event_log.emit('binderhub.jupyter.org/launch', 5, {..., 'origin': self.settings['normalized_origin'] if ... else self.request.host})`"]
+        },
+        {
+          "id": "src-029",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 472},
+          "rationale": "Parses progress events already produced as JSON by the build pod log stream; used to detect 'failure'/'failed' phases for metrics and re-emitted on the event stream. Display/telemetry data, not command input for CWE-78.",
+          "evidence": ["binderhub/builder.py:469-478 `payload = json.loads(event)`; `if payload.get('phase') in ('failure', 'failed'): failed = True`"]
+        },
+        {
+          "id": "src-030",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": "tornado", "module": "tornado.httputil", "type": "HTTPServerRequest", "callable": "request.host", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/builder.py", "line": 497},
+          "rationale": "Same Host-header-as-event-origin pattern as src-028 at the post-build launch event emission; event-logging use only. Low confidence, flagged for review.",
+          "evidence": ["binderhub/builder.py:494-499 event_log.emit with 'origin' fallback to self.request.host"]
+        },
+        {
+          "id": "src-031",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/builder.py", "line": 534},
+          "rationale": "Parses the Kubernetes API response listing singleuser-server pods in launch(); trusted cluster-internal service response used for quota counting (matching image names). No attacker control, no command flow.",
+          "evidence": ["binderhub/builder.py:526-543 `resp = await asyncio.wrap_future(f)`; `pods = json.loads(resp.read())`; quota comparison loop"]
+        }
+      ]
+    },
+    {
+      "batch_id": "pass2-S3",
+      "description": "source candidates 32-48: binderhub/health.py, launcher.py, main.py, registry.py",
+      "size": 17,
+      "input_csv": "extraction/sources.csv rows 32-48",
+      "input_rows": [
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.health", -1, 135, "binderhub/health.py:135", "Attribute()"],
+        ["Attribute()", "source_candidate", "os.getenv", "return", "os", "binderhub.launcher", -1, 43, "binderhub/launcher.py:43", "Attribute()"],
+        ["Attribute()", "source_candidate", "os.getenv", "return", "os", "binderhub.launcher", -1, 49, "binderhub/launcher.py:49", "Attribute()"],
+        ["Attribute()", "source_candidate", "os.getenv", "return", "os", "binderhub.launcher", -1, 88, "binderhub/launcher.py:88", "Attribute()"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.launcher", -1, 120, "binderhub/launcher.py:120", "Attribute()"],
+        ["provider_prefix", "source_candidate", "get", "param", "ParameterizedMainHandler", "binderhub.main", 1, 48, "binderhub/main.py:48", "provider_prefix"],
+        ["_unescaped_spec", "source_candidate", "get", "param", "ParameterizedMainHandler", "binderhub.main", 2, 48, "binderhub/main.py:48", "_unescaped_spec"],
+        ["Attribute()", "source_candidate", "get_spec_from_request", "return", "self", "binderhub.main", -1, 50, "binderhub/main.py:50", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_provider", "return", "self", "binderhub.main", -1, 53, "binderhub/main.py:53", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_argument", "return", "ParameterizedMainHandler", "binderhub.main", -1, 73, "binderhub/main.py:73", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_argument", "return", "ParameterizedMainHandler", "binderhub.main", -1, 76, "binderhub/main.py:76", "Attribute()"],
+        ["user", "source_candidate", "get", "param", "LegacyRedirectHandler", "binderhub.main", 1, 127, "binderhub/main.py:127", "user"],
+        ["repo", "source_candidate", "get", "param", "LegacyRedirectHandler", "binderhub.main", 2, 127, "binderhub/main.py:127", "repo"],
+        ["urlpath", "source_candidate", "get", "param", "LegacyRedirectHandler", "binderhub.main", 3, 127, "binderhub/main.py:127", "urlpath"],
+        ["Attribute()", "source_candidate", "os.environ.get", "return", "os.environ", "binderhub.registry", -1, 96, "binderhub/registry.py:96", "Attribute()"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.registry", -1, 202, "binderhub/registry.py:202", "Attribute()"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.registry", -1, 228, "binderhub/registry.py:228", "Attribute()"]
+      ],
+      "entries": [
+        {
+          "id": "src-032",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/health.py", "line": 135},
+          "rationale": "Parses Kubernetes API pod-listing responses for the health endpoint statistics; trusted cluster-internal service, no attacker control, no command flow.",
+          "evidence": ["binderhub/health.py:118-135 `requests = [asyncio.wrap_future(pool.submit(k8s.list_namespaced_pod, ...)) ...]`; `return [json.loads(resp.read())['items'] for resp in responses]`"]
+        },
+        {
+          "id": "src-033",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {"package": "python-stdlib", "module": "os", "type": null, "callable": "os.getenv", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/launcher.py", "line": 43},
+          "rationale": "JUPYTERHUB_ALLOW_NAMED_SERVERS is operator deployment configuration parsed into a boolean traitlet default; trusted server-side config, no command propagation.",
+          "evidence": ["binderhub/launcher.py:42-47 `allow_named_servers = Bool(os.getenv('JUPYTERHUB_ALLOW_NAMED_SERVERS', 'false') == 'true', config=True, ...)`"]
+        },
+        {
+          "id": "src-034",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {"package": "python-stdlib", "module": "os", "type": null, "callable": "os.getenv", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/launcher.py", "line": 49},
+          "rationale": "JUPYTERHUB_NAMED_SERVER_LIMIT_PER_USER is operator deployment configuration parsed into an integer traitlet default; trusted server-side config.",
+          "evidence": ["binderhub/launcher.py:48-52 `named_server_limit_per_user = Integer(int(os.getenv('JUPYTERHUB_NAMED_SERVER_LIMIT_PER_USER', 0)), config=True)`"]
+        },
+        {
+          "id": "src-035",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {"package": "python-stdlib", "module": "os", "type": null, "callable": "os.getenv", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/launcher.py", "line": 88},
+          "rationale": "JUPYTERHUB_API_URL is the internal Hub API endpoint from the deployment environment; used to build request_url for Hub REST calls. Trusted service config, not attacker input, and never reaches command construction.",
+          "evidence": ["binderhub/launcher.py:87-89 `hub_api_url = os.getenv('JUPYTERHUB_API_URL', '') or self.hub_url_local + 'hub/api/'`"]
+        },
+        {
+          "id": "src-036",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.65,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/launcher.py", "line": 120},
+          "rationale": "Parses the JupyterHub REST API user-data response; the Hub is a trusted internal service. The parsed body feeds server-readiness/quota checks, not command construction, so it is not a CWE-78 source in this pass.",
+          "evidence": ["binderhub/launcher.py:115-121 `resp = await self.api_request('users/%s' % username, method='GET')`; `body = json.loads(resp.body.decode('utf-8'))`"]
+        },
+        {
+          "id": "src-037",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.75,
+          "signature": {"package": null, "module": "binderhub.main", "type": "ParameterizedMainHandler", "callable": "get", "arg_index": 1, "flow_kind": "param"},
+          "location": {"file": "binderhub/main.py", "line": 48},
+          "rationale": "provider_prefix is the first URL path capture of route r'/v2/([^/]+)/(.+)'; fully attacker-controlled and selects the provider class. This handler renders the launch page and mints a build token, so no command sink is reached within it, but it is the same input family that drives the subsequent /build request.",
+          "evidence": ["binderhub/app.py:796 `(r'/v2/([^/]+)/(.+)', ParameterizedMainHandler)`", "binderhub/main.py:48-66 provider construction and provider_spec formatting"]
+        },
+        {
+          "id": "src-038",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.75,
+          "signature": {"package": null, "module": "binderhub.main", "type": "ParameterizedMainHandler", "callable": "get", "arg_index": 2, "flow_kind": "param"},
+          "location": {"file": "binderhub/main.py", "line": 48},
+          "rationale": "_unescaped_spec is the second URL path capture carrying the repo spec; in this handler it feeds provider construction and page rendering (nbviewer URL, social description). The command flow continues only via the later /build request that repeats the spec, hence candidate rather than tp.",
+          "evidence": ["binderhub/main.py:48-81 spec used for provider construction, nbviewer URL assembly", "binderhub/main.py:98-106 build_token minted with audience provider_spec"]
+        },
+        {
+          "id": "src-039",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {"package": null, "module": "binderhub.base", "type": "BaseHandler", "callable": "get_spec_from_request", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/main.py", "line": 50},
+          "rationale": "Same raw-path accessor as in BuildHandler (binderhub/base.py:150-157); here the returned spec feeds provider construction and template rendering only - no command sink exists in ParameterizedMainHandler. Labeled source for boundary completeness of the accessor family.",
+          "evidence": ["binderhub/main.py:49-53 `spec = self.get_spec_from_request(prefix)`; `self.get_provider(provider_prefix, spec=spec)`"]
+        },
+        {
+          "id": "src-040",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": null, "module": "binderhub.base", "type": "BaseHandler", "callable": "get_provider", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/main.py", "line": 53},
+          "rationale": "Provider construction from the attacker spec (same propagation step as src-019); within this handler the provider object is only validated (404/400 errors) and not driven to any command sink, hence lower confidence than the BuildHandler call site.",
+          "evidence": ["binderhub/main.py:52-63 `try: self.get_provider(provider_prefix, spec=spec) except ... raise HTTPError(400, str(e))`"]
+        },
+        {
+          "id": "src-041",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": null, "module": "binderhub.main", "type": "ParameterizedMainHandler", "callable": "get_argument", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/main.py", "line": 73},
+          "rationale": "Query argument filepath is client-controlled (tornado unquotes query arguments); it is embedded into an nbviewer URL that is fetched with a HEAD request for display. SSRF-shaped use, not command input for pass 2; kept as candidate source for cross-pass recall.",
+          "evidence": ["binderhub/main.py:73 `filepath = self.get_argument('filepath', '').lstrip('/')`", "binderhub/main.py:80-96 nbviewer_url assembly and `await client.fetch(request, raise_error=False)`"]
+        },
+        {
+          "id": "src-042",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": null, "module": "binderhub.main", "type": "ParameterizedMainHandler", "callable": "get_argument", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/main.py", "line": 76},
+          "rationale": "Query argument urlpath is client-controlled; when it matches a JupyterLab tree path it overrides filepath, flowing into the same nbviewer URL fetch. Not command input for pass 2.",
+          "evidence": ["binderhub/main.py:76-78 `urlpath = self.get_argument('urlpath', '').lstrip('/')`; `if urlpath.startswith('lab') and '/tree/' in urlpath: filepath = urlpath.split('tree/', 1)[-1]`"]
+        },
+        {
+          "id": "src-043",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": null, "module": "binderhub.main", "type": "LegacyRedirectHandler", "callable": "get", "arg_index": 1, "flow_kind": "param"},
+          "location": {"file": "binderhub/main.py", "line": 127},
+          "rationale": "URL path capture from the legacy route r'/repo/([^/]+)/([^/]+)(/.*)?'; attacker-controlled but used only to construct the /v2/gh/... redirect target. Open-redirect-shaped use, no command propagation.",
+          "evidence": ["binderhub/app.py:797 route", "binderhub/main.py:127-131 `url = '/v2/gh/{user}/{repo}/master'.format(user=user, repo=repo)`; `self.redirect(url)`"]
+        },
+        {
+          "id": "src-044",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": null, "module": "binderhub.main", "type": "LegacyRedirectHandler", "callable": "get", "arg_index": 2, "flow_kind": "param"},
+          "location": {"file": "binderhub/main.py", "line": 127},
+          "rationale": "Second legacy path capture; same redirect-only use as src-043.",
+          "evidence": ["binderhub/main.py:127-131 redirect URL construction with user/repo"]
+        },
+        {
+          "id": "src-045",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": null, "module": "binderhub.main", "type": "LegacyRedirectHandler", "callable": "get", "arg_index": 3, "flow_kind": "param"},
+          "location": {"file": "binderhub/main.py", "line": 127},
+          "rationale": "Optional third path capture appended as a urlpath query parameter on the redirect target (url_concat); redirect-only use. Low confidence, flagged for review.",
+          "evidence": ["binderhub/main.py:129-131 `if urlpath is not None and urlpath.strip('/'): url = url_concat(url, dict(urlpath=urlpath))`"]
+        },
+        {
+          "id": "src-046",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {"package": "python-stdlib", "module": "os.environ", "type": null, "callable": "os.environ.get", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/registry.py", "line": 96},
+          "rationale": "DOCKER_CONFIG is operator environment configuration selecting the docker config.json path (default ~/.docker); trusted filesystem path used for registry credential lookup, no attacker control and no command flow.",
+          "evidence": ["binderhub/registry.py:94-105 `docker_config_path = Unicode(os.path.join(os.environ.get('DOCKER_CONFIG', os.path.expanduser('~/.docker')), 'config.json'), ...)`"]
+        },
+        {
+          "id": "src-047",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/registry.py", "line": 202},
+          "rationale": "Parses the docker registry auth-token endpoint response; the registry and its auth service are operator-configured trusted infrastructure and the token is only placed in an Authorization header. No attacker control, no command flow.",
+          "evidence": ["binderhub/registry.py:193-207 `auth_resp = await client.fetch(auth_req)`; `response_body = json.loads(auth_resp.body.decode('utf-8', 'replace'))`"]
+        },
+        {
+          "id": "src-048",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/registry.py", "line": 228},
+          "rationale": "Parses the registry image-manifest response used to decide whether an image is already built; trusted registry infrastructure, result only compared for existence (bool). No command flow.",
+          "evidence": ["binderhub/registry.py:219-228 `resp = await client.fetch(req)` ... `return json.loads(resp.body.decode('utf-8'))`", "binderhub/builder.py:342-346 `image_manifest = await self.registry.get_image_manifest(...)`; `image_found = bool(image_manifest)`"]
+        }
+      ]
+    },
+    {
+      "batch_id": "pass2-S4",
+      "description": "source candidates 49-74: binderhub/repoproviders.py (provider accessors, external API json.loads, token env reads)",
+      "size": 26,
+      "input_csv": "extraction/sources.csv rows 49-74",
+      "input_rows": [
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 240, "binderhub/repoproviders.py:240", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_spec", "return", "self", "binderhub.repoproviders", -1, 254, "binderhub/repoproviders.py:254", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 296, "binderhub/repoproviders.py:296", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_spec", "return", "self", "binderhub.repoproviders", -1, 310, "binderhub/repoproviders.py:310", "Attribute()"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.repoproviders", -1, 342, "binderhub/repoproviders.py:342", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 364, "binderhub/repoproviders.py:364", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 369, "binderhub/repoproviders.py:369", "Attribute()"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.repoproviders", -1, 413, "binderhub/repoproviders.py:413", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_repo_url", "return", "self", "binderhub.repoproviders", -1, 429, "binderhub/repoproviders.py:429", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_repo_url", "return", "self", "binderhub.repoproviders", -1, 433, "binderhub/repoproviders.py:433", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 504, "binderhub/repoproviders.py:504", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_repo_url", "return", "self", "binderhub.repoproviders", -1, 512, "binderhub/repoproviders.py:512", "Attribute()"],
+        ["Attribute()", "source_candidate", "os.getenv", "return", "os", "binderhub.repoproviders", -1, 550, "binderhub/repoproviders.py:550", "Attribute()"],
+        ["Attribute()", "source_candidate", "os.getenv", "return", "os", "binderhub.repoproviders", -1, 560, "binderhub/repoproviders.py:560", "Attribute()"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.repoproviders", -1, 623, "binderhub/repoproviders.py:623", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 629, "binderhub/repoproviders.py:629", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 641, "binderhub/repoproviders.py:641", "Attribute()"],
+        ["Attribute()", "source_candidate", "os.getenv", "return", "os", "binderhub.repoproviders", -1, 688, "binderhub/repoproviders.py:688", "Attribute()"],
+        ["Attribute()", "source_candidate", "os.getenv", "return", "os", "binderhub.repoproviders", -1, 699, "binderhub/repoproviders.py:699", "Attribute()"],
+        ["Attribute()", "source_candidate", "os.getenv", "return", "os", "binderhub.repoproviders", -1, 709, "binderhub/repoproviders.py:709", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 741, "binderhub/repoproviders.py:741", "Attribute()"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.repoproviders", -1, 857, "binderhub/repoproviders.py:857", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 876, "binderhub/repoproviders.py:876", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 931, "binderhub/repoproviders.py:931", "Attribute()"],
+        ["Attribute()", "source_candidate", "json.loads", "return", "json", "binderhub.repoproviders", -1, 945, "binderhub/repoproviders.py:945", "Attribute()"],
+        ["Attribute()", "source_candidate", "get_resolved_ref", "return", "self", "binderhub.repoproviders", -1, 965, "binderhub/repoproviders.py:965", "Attribute()"]
+      ],
+      "entries": [
+        {
+          "id": "src-049",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "ZenodoProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 240},
+          "rationale": "Zenodo record_id is derived from the effective_url of the DOI redirect for the user-supplied spec; the resolved value flows into resolved_spec/build slug, and ZenodoProvider.get_repo_url returns the raw spec itself as the repo2docker input (see src-020 family). Propagation step from spec-derived external data toward build parameters.",
+          "evidence": ["binderhub/repoproviders.py:230-236 `r = await client.fetch(req)`; `self.record_id = r.effective_url.rsplit('/', maxsplit=1)[1]`", "binderhub/repoproviders.py:248-251 ZenodoProvider.get_repo_url: 'the return value of this function is passed as argument to repo2docker, hence we return the spec as is'"]
+        },
+        {
+          "id": "src-050",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "ZenodoProvider", "callable": "get_resolved_spec", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 254},
+          "rationale": "Concatenates the user spec prefix with the resolved record id into the persistent spec; becomes binder_persistent_request and is interpolated into the appendix ('--appendix' argv) via the builder flow.",
+          "evidence": ["binderhub/repoproviders.py:238-246 `resolved_spec = self.spec.split('zenodo')[0] + 'zenodo.' + self.record_id`", "binderhub/builder.py:397-402 appendix formatting includes persistent_binder_url"]
+        },
+        {
+          "id": "src-051",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "FigshareProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 296},
+          "rationale": "Figshare record_id is extracted by regex from the effective_url of the DOI redirect of the user-supplied spec; same propagation family as Zenodo (src-049), and Figshare get_repo_url also returns the raw spec as repo2docker input.",
+          "evidence": ["binderhub/repoproviders.py:279-292 url_regex match on r.effective_url", "binderhub/repoproviders.py:304-307 FigshareProvider.get_repo_url returns self.spec"]
+        },
+        {
+          "id": "src-052",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "FigshareProvider", "callable": "get_resolved_spec", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 310},
+          "rationale": "Resolved spec built from the user spec prefix plus the regex-extracted article id/version; flows into the persistent binder request and appendix.",
+          "evidence": ["binderhub/repoproviders.py:294-302 `resolved_spec = self.spec.split('figshare')[0] + 'figshare.' + self.record_id`"]
+        },
+        {
+          "id": "src-053",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 342},
+          "rationale": "Parses the Dataverse API response fetched for the user-chosen DOI; the response fields (identifier, id, latestVersion, persistentUrl) are externally controlled content that becomes resolved_spec, resolved_ref_url and record_id - all of which reach build parameters (appendix, ref_url). External-API deserialization boundary with user-chosen target, kept as source for recall.",
+          "evidence": ["binderhub/repoproviders.py:329-342 `r = await client.fetch(req)`; `resp = json.loads(r.body)`", "binderhub/repoproviders.py:345-359 identifier/record_id/resolved_spec/resolved_ref_url built from resp['data'] fields"]
+        },
+        {
+          "id": "src-054",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "DataverseProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 364},
+          "rationale": "CSV row's line 364 sits inside DataverseProvider.get_resolved_spec, which returns self.resolved_spec built from the API response of the user-chosen record. Labeled with the CSV callable get_resolved_ref for traceability; either accessor returns spec-derived data toward build parameters.",
+          "evidence": ["binderhub/repoproviders.py:362-365 `async def get_resolved_spec(self): if not hasattr(self, 'resolved_spec'): await self.get_resolved_ref(); return self.resolved_spec`"]
+        },
+        {
+          "id": "src-055",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "DataverseProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 369},
+          "rationale": "Line 369 sits inside DataverseProvider.get_resolved_ref_url, returning self.resolved_ref_url = resp['data']['persistentUrl'] (external API content for a user-chosen record); ref URLs are interpolated into the appendix that becomes the '--appendix' argv element. CSV callable kept as get_resolved_ref for traceability.",
+          "evidence": ["binderhub/repoproviders.py:367-370 `async def get_resolved_ref_url(self): ... return self.resolved_ref_url`", "binderhub/repoproviders.py:359 `self.resolved_ref_url = resp['data']['persistentUrl']`"]
+        },
+        {
+          "id": "src-056",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 413},
+          "rationale": "Parses the Hydroshare API response for the user-chosen resource id; only a 'modified' start_date string is extracted to build record_id. External-API boundary with user-chosen target, but the parsed content is narrowly consumed, hence low confidence.",
+          "evidence": ["binderhub/repoproviders.py:405-425 `def parse_date(json_body): json_response = json.loads(json_body); date = next(item for item in json_response['dates'] if item['type'] == 'modified')['start_date']`"]
+        },
+        {
+          "id": "src-057",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "HydroshareProvider", "callable": "get_repo_url", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 429},
+          "rationale": "Line 429 sits inside get_resolved_spec delegating to get_repo_url, which returns a URL built from the user-supplied resource id; the URL becomes Build.repo_url (repo2docker argv tail). The resource id is regex-constrained to 32 hex characters ([0-9a-f]{32}) before use - a concrete format restriction that limits the injection surface.",
+          "evidence": ["binderhub/repoproviders.py:427-429 `async def get_resolved_spec(self): return self.get_repo_url()`", "binderhub/repoproviders.py:435-437 `return 'https://www.hydroshare.org/resource/{}'.format(self.resource_id)`", "binderhub/repoproviders.py:389 `url_regex = re.compile(r'.*([0-9a-f]{32}).*')`"]
+        },
+        {
+          "id": "src-058",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "HydroshareProvider", "callable": "get_repo_url", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 433},
+          "rationale": "Line 433 sits inside get_resolved_ref_url which delegates to get_repo_url; used to build the ref URL that feeds the appendix. Same constrained resource-id data as src-057, one further step from the command.",
+          "evidence": ["binderhub/repoproviders.py:431-433 `async def get_resolved_ref_url(self): return self.get_repo_url()`"]
+        },
+        {
+          "id": "src-059",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.75,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "GitRepoProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 504},
+          "rationale": "Line 504 sits inside GitRepoProvider.get_resolved_spec returning f'{self.url}/{self.resolved_ref}', both derived from the URL-decoded user spec. The GitRepoProvider family is the highest-risk propagation step: its __init__ unquotes the spec into an arbitrary repo URL and arbitrary ref, its get_resolved_ref executes `git ls-remote` with them, and its values become repo2docker argv elements. CSV callable kept for traceability.",
+          "evidence": ["binderhub/repoproviders.py:470-474 `self.url, unresolved_ref = self.spec.split('/', 1); self.repo = urllib.parse.unquote(self.url); self.unresolved_ref = urllib.parse.unquote(unresolved_ref)`", "binderhub/repoproviders.py:487-488 `command = ['git', 'ls-remote', self.repo, self.unresolved_ref]; result = subprocess.run(command, ...)`", "binderhub/repoproviders.py:502-505 `return f'{self.url}/{self.resolved_ref}'`"]
+        },
+        {
+          "id": "src-060",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.8,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "GitRepoProvider", "callable": "get_repo_url", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 512},
+          "rationale": "GitRepoProvider.get_repo_url (507-508; line 512 is inside get_resolved_ref_url delegating to it) returns self.repo - the unquoted, arbitrary user-supplied git URL. This value is argument 2 of the `git ls-remote` subprocess and the trailing repo2docker argv element (Build.repo_url). Strongest provider-to-command propagation in the codebase.",
+          "evidence": ["binderhub/repoproviders.py:507-508 `def get_repo_url(self): return self.repo`", "binderhub/repoproviders.py:510-512 `async def get_resolved_ref_url(self): return self.get_repo_url()`", "binderhub/repoproviders.py:473 `self.repo = urllib.parse.unquote(self.url)`", "binderhub/build.py:169 `cmd.append(self.repo_url)`"]
+        },
+        {
+          "id": "src-061",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {"package": "python-stdlib", "module": "os", "type": null, "callable": "os.getenv", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 550},
+          "rationale": "GITLAB_ACCESS_TOKEN is an operator-set credential (OAuth token for the GitLab API); trusted server-side config, never attacker-controlled, no command flow.",
+          "evidence": ["binderhub/repoproviders.py:541-550 `access_token = Unicode(config=True, ...)`; `@default('access_token') def _access_token_default(self): return os.getenv('GITLAB_ACCESS_TOKEN', '')`"]
+        },
+        {
+          "id": "src-062",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {"package": "python-stdlib", "module": "os", "type": null, "callable": "os.getenv", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 560},
+          "rationale": "GITLAB_PRIVATE_TOKEN is an operator-set credential; it feeds the auth dict and the git_credentials string (a fixed 'username=...\\npassword=...' template), trusted server config.",
+          "evidence": ["binderhub/repoproviders.py:552-560 private_token default from `os.getenv('GITLAB_PRIVATE_TOKEN', '')`", "binderhub/repoproviders.py:577-581 `_default_git_credentials` formats the fixed credential template"]
+        },
+        {
+          "id": "src-063",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 623},
+          "rationale": "Parses the GitLab commits API response fetched for the user-chosen namespace and ref; ref_info['id'] becomes resolved_ref, which is passed to Build.ref ('--ref' repo2docker argv element). External-API deserialization boundary with user-chosen repo/ref target.",
+          "evidence": ["binderhub/repoproviders.py:604-616 api_url built from self.namespace/self.unresolved_ref (unquoted user spec, 590-596) and fetched", "binderhub/repoproviders.py:623-625 `ref_info = json.loads(resp.body.decode('utf-8')); self.resolved_ref = ref_info['id']`"]
+        },
+        {
+          "id": "src-064",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.75,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "GitLabRepoProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 629},
+          "rationale": "Line 629 sits inside GitLabRepoProvider.get_resolved_spec returning f'{self.quoted_namespace}/{self.resolved_ref}' - the namespace comes from the unquoted user spec and the resolved ref from the API response; the combination feeds the persistent spec and appendix. CSV callable kept for traceability.",
+          "evidence": ["binderhub/repoproviders.py:590-596 `self.quoted_namespace, unresolved_ref = self.spec.split('/', 1); self.namespace = urllib.parse.unquote(self.quoted_namespace); self.unresolved_ref = urllib.parse.unquote(unresolved_ref)`", "binderhub/repoproviders.py:627-630 `return f'{self.quoted_namespace}/{self.resolved_ref}'`"]
+        },
+        {
+          "id": "src-065",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "GitLabRepoProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 641},
+          "rationale": "Line 641 sits inside GitLabRepoProvider.get_resolved_ref_url returning f'https://{hostname}/{namespace}/tree/{resolved_ref}' - both namespace and resolved ref derive from the user spec/API response; ref URLs feed the appendix ('--appendix' argv). CSV callable kept for traceability.",
+          "evidence": ["binderhub/repoproviders.py:639-642 `return f'https://{self.hostname}/{self.namespace}/tree/{self.resolved_ref}'`"]
+        },
+        {
+          "id": "src-066",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {"package": "python-stdlib", "module": "os", "type": null, "callable": "os.getenv", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 688},
+          "rationale": "GITHUB_CLIENT_ID is an operator-set OAuth credential; trusted server-side config.",
+          "evidence": ["binderhub/repoproviders.py:679-688 client_id default from `os.getenv('GITHUB_CLIENT_ID', '')`"]
+        },
+        {
+          "id": "src-067",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {"package": "python-stdlib", "module": "os", "type": null, "callable": "os.getenv", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 699},
+          "rationale": "GITHUB_CLIENT_SECRET is an operator-set OAuth credential; trusted server-side config.",
+          "evidence": ["binderhub/repoproviders.py:690-699 client_secret default from `os.getenv('GITHUB_CLIENT_SECRET', '')`"]
+        },
+        {
+          "id": "src-068",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {"package": "python-stdlib", "module": "os", "type": null, "callable": "os.getenv", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 709},
+          "rationale": "GITHUB_ACCESS_TOKEN is an operator-set credential; it is placed in the Authorization header and formatted into the fixed git_credentials template. Trusted server-side config.",
+          "evidence": ["binderhub/repoproviders.py:701-709 access_token default from `os.getenv('GITHUB_ACCESS_TOKEN', '')`", "binderhub/repoproviders.py:755-756 `headers['Authorization'] = 'token {token}'.format(token=self.access_token)`"]
+        },
+        {
+          "id": "src-069",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "GitHubRepoProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 741},
+          "rationale": "Line 741 sits inside GitHubRepoProvider.get_resolved_ref_url returning f'https://{hostname}/{user}/{repo}/tree/{resolved_ref}' - user/repo come from the tokenized user spec; ref URLs feed the appendix ('--appendix' argv). CSV callable kept for traceability.",
+          "evidence": ["binderhub/repoproviders.py:739-742 `async def get_resolved_ref_url(self): ... return f'https://{self.hostname}/{self.user}/{self.repo}/tree/{self.resolved_ref}'`", "binderhub/repoproviders.py:731-734 `self.user, self.repo, self.unresolved_ref = tokenize_spec(self.spec)`"]
+        },
+        {
+          "id": "src-070",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 857},
+          "rationale": "Parses the GitHub commits API response fetched for the user-chosen user/repo/ref; ref_info['sha'] becomes resolved_ref, which is passed to Build.ref ('--ref' repo2docker argv element). Note the sha is taken from the response without format re-validation at this site (sha1_validate is only applied in the GitRepoProvider path), so the external response content flows onward as-is.",
+          "evidence": ["binderhub/repoproviders.py:827-830 api_url built from self.user/self.repo/self.unresolved_ref", "binderhub/repoproviders.py:857-864 `ref_info = json.loads(resp.body.decode('utf-8'))`; `self.resolved_ref = ref_info['sha']`"]
+        },
+        {
+          "id": "src-071",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "GitHubRepoProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 876},
+          "rationale": "Line 876 sits inside GitHubRepoProvider.get_resolved_spec returning f'{self.user}/{self.repo}/{self.resolved_ref}' - all three components derive from the user spec and the API response; the resolved spec feeds the persistent binder request and appendix. CSV callable kept for traceability.",
+          "evidence": ["binderhub/repoproviders.py:874-877 `return f'{self.user}/{self.repo}/{self.resolved_ref}'`"]
+        },
+        {
+          "id": "src-072",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "GistRepoProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 931},
+          "rationale": "Line 931 sits inside GistRepoProvider.get_resolved_ref_url returning a URL composed of the user-supplied gist user/id and resolved ref; ref URLs feed the appendix ('--appendix' argv). CSV callable kept for traceability.",
+          "evidence": ["binderhub/repoproviders.py:929-932 `return f'https://{self.hostname}/{self.user}/{self.gist_id}/{self.resolved_ref}'`", "binderhub/repoproviders.py:916-924 gist spec split into user/gist_id/ref"]
+        },
+        {
+          "id": "src-073",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": "python-stdlib", "module": "json", "type": null, "callable": "json.loads", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 945},
+          "rationale": "Parses the GitHub gists API response fetched for the user-chosen gist id; the parsed body drives the secret-gist policy check and the version list from which resolved_ref is chosen, which becomes Build.ref ('--ref' argv). External-API boundary with user-chosen target.",
+          "evidence": ["binderhub/repoproviders.py:938-941 `api_url = f'https://api.github.com/gists/{self.gist_id}'`; `resp = await self.github_api_request(api_url)`", "binderhub/repoproviders.py:945-959 `ref_info = json.loads(resp.body.decode('utf-8'))`; `all_versions = [e['version'] for e in ref_info['history']]`; `self.resolved_ref = self.unresolved_ref`"]
+        },
+        {
+          "id": "src-074",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {"package": null, "module": "binderhub.repoproviders", "type": "GistRepoProvider", "callable": "get_resolved_ref", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 965},
+          "rationale": "Line 965 sits inside GistRepoProvider.get_resolved_spec returning f'{user}/{gist_id}/{resolved_ref}' - user and gist_id come directly from the split of the user spec; the resolved spec feeds the persistent binder request and appendix. CSV callable kept for traceability.",
+          "evidence": ["binderhub/repoproviders.py:963-966 `return f'{self.user}/{self.gist_id}/{self.resolved_ref}'`"]
+        }
+      ]
+    },
+    {
+      "batch_id": "pass2-K1",
+      "description": "sink candidates 1-10: full sinks.csv (executor dispatch, kubernetes pod construction/submission, git ls-remote subprocess)",
+      "size": 10,
+      "input_csv": "extraction/sinks.csv rows 1-10",
+      "input_rows": [
+        ["Attribute()", "sink_candidate", "submit", "argument", "concurrent.futures.Executor", "binderhub.app", 0, 857, "binderhub/app.py:857", "Attribute()"],
+        ["Attribute", "sink_candidate", "V1EnvVar.value", "argument", "kubernetes.client", "binderhub.build", -1, 325, "binderhub/build.py:325", "Attribute"],
+        ["Attribute()", "sink_candidate", "get_cmd", "return", "Build", "binderhub.build", -1, 343, "binderhub/build.py:343", "Attribute()"],
+        ["Attribute()", "sink_candidate", "V1Container.args", "argument", "kubernetes.client", "binderhub.build", -1, 343, "binderhub/build.py:343", "Attribute()"],
+        ["Attribute()", "sink_candidate", "create_namespaced_pod", "argument", "kubernetes.client.CoreV1Api", "binderhub.build", 1, 376, "binderhub/build.py:376", "Attribute()"],
+        ["Attribute()", "sink_candidate", "submit", "argument", "concurrent.futures.Executor", "binderhub.builder", 0, 428, "binderhub/builder.py:428", "Attribute()"],
+        ["Attribute()", "sink_candidate", "submit", "argument", "concurrent.futures.Executor", "binderhub.builder", 0, 461, "binderhub/builder.py:461", "Attribute()"],
+        ["Attribute()", "sink_candidate", "submit", "argument", "concurrent.futures.Executor", "binderhub.builder", 0, 526, "binderhub/builder.py:526", "Attribute()"],
+        ["Attribute()", "sink_candidate", "submit", "argument", "concurrent.futures.Executor", "binderhub.health", 0, 124, "binderhub/health.py:124", "Attribute()"],
+        ["Attribute()", "sink_candidate", "subprocess.run", "argument", "subprocess", "binderhub.repoproviders", 0, 488, "binderhub/repoproviders.py:488", "Attribute()"]
+      ],
+      "entries": [
+        {
+          "id": "snk-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {"package": "python-stdlib", "module": "concurrent.futures", "type": "Executor", "callable": "submit", "arg_index": 0, "flow_kind": "argument"},
+          "location": {"file": "binderhub/app.py", "line": 857},
+          "rationale": "Worker-pool dispatch of Build.cleanup_builds with operator-configured arguments (kube client, build_namespace, build_max_age from settings). No attacker-controlled data crosses this call and an executor dispatch is not command execution; excluded as a CWE-78 sink.",
+          "evidence": ["binderhub/app.py:854-864 `await asyncio.wrap_future(self.executor.submit(lambda: Build.cleanup_builds(self.kube_client, self.build_namespace, self.build_max_age)))`"]
+        },
+        {
+          "id": "snk-002",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {"package": "kubernetes", "module": "kubernetes.client", "type": "V1EnvVar", "callable": "V1EnvVar.value", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/build.py", "line": 325},
+          "rationale": "Environment-variable injection point into the build pod execution environment: GIT_CREDENTIAL_ENV is consumed by git inside the repo2docker container. At this call site the value is provider.git_credentials, built from server-side tokens (os.getenv GITHUB_*/GITLAB_*) via fixed credential templates - no attacker control is evidenced. Retained as a candidate sink (normalized from the CSV keyword-encoding, see deviations) so that any future flow of request data into pod env vars is caught.",
+          "evidence": ["binderhub/build.py:323-325 `if self.git_credentials: env.append(client.V1EnvVar(name='GIT_CREDENTIAL_ENV', value=self.git_credentials))`", "binderhub/repoproviders.py:577-581, 711-722 git_credentials built from operator tokens with fixed templates"]
+        },
+        {
+          "id": "snk-003",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {"package": null, "module": "binderhub.build", "type": "Build", "callable": "get_cmd", "arg_index": null, "flow_kind": "return"},
+          "location": {"file": "binderhub/build.py", "line": 343},
+          "rationale": "Project wrapper that constructs and returns the complete repo2docker command list; the returned list embeds request-derived values: '--ref' (Build.ref), '--appendix' (Build.appendix), '--image' (Build.image_name) and the trailing repo_url. Marking the return value as a sink gives a precise intermediate alert point on the command payload itself.",
+          "evidence": ["binderhub/build.py:146-171 get_cmd body: `cmd = ['jupyter-repo2docker', '--ref', self.ref, '--image', self.image_name, ...]`; `cmd.append(self.repo_url)`", "binderhub/build.py:343 `args=self.get_cmd()`"]
+        },
+        {
+          "id": "snk-004",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {"package": "kubernetes", "module": "kubernetes.client", "type": "V1Container", "callable": "V1Container.args", "arg_index": null, "flow_kind": "field"},
+          "location": {"file": "binderhub/build.py", "line": 343},
+          "rationale": "The container args keyword receives get_cmd() and is the argv actually executed by the build pod; request-derived ref/appendix/image/repo_url are embedded as distinct argv elements. List-form (no shell), so the exposure class is argument injection (CWE-78 family) rather than shell injection. 'tp' asserts that this API genuinely is the pass-2 sink role - it does NOT assert a confirmed exploitable vulnerability (whether argument-level injection is exploitable depends on repo2docker's own argument handling). Normalized from the CSV keyword-encoding, see deviations.",
+          "evidence": ["binderhub/build.py:338-350 `client.V1Container(image=self.build_image, name='builder', args=self.get_cmd(), ...)`", "binderhub/build.py:148-171 command list construction"]
+        },
+        {
+          "id": "snk-005",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {"package": "kubernetes", "module": "kubernetes.client", "type": "CoreV1Api", "callable": "create_namespaced_pod", "arg_index": 1, "flow_kind": "argument"},
+          "location": {"file": "binderhub/build.py", "line": 376},
+          "rationale": "Submits the pod spec (argument 1) that embeds the container argv and env to the Kubernetes API - the execution submission point of the build command. Sink role is genuinely played (argument 1 carries the pod body containing the command); 'tp' marks the role, not a confirmed vulnerability.",
+          "evidence": ["binderhub/build.py:375-380 `ret = self.api.create_namespaced_pod(self.namespace, self.pod, _request_timeout=KUBE_REQUEST_TIMEOUT)`", "binderhub/build.py:327-373 self.pod built with V1Container(args=self.get_cmd(), env=env)"]
+        },
+        {
+          "id": "snk-006",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {"package": "python-stdlib", "module": "concurrent.futures", "type": "Executor", "callable": "submit", "arg_index": 0, "flow_kind": "argument"},
+          "location": {"file": "binderhub/builder.py", "line": 428},
+          "rationale": "build_pool.submit(build.submit) moves the pod-creation coroutine (which embeds the tainted command argv) from the request handler onto a worker thread. Argument 0 is a bound method, so taint does not flow through the argument itself; this dispatch is a propagation step needed for realistic flow modeling rather than a command sink. Re-labeled from the extracted sink_candidate family accordingly.",
+          "evidence": ["binderhub/builder.py:424-430 `pool = self.settings['build_pool']; submit_future = pool.submit(build.submit); IOLoop.current().add_callback(lambda: submit_future)`"]
+        },
+        {
+          "id": "snk-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {"package": "python-stdlib", "module": "concurrent.futures", "type": "Executor", "callable": "submit", "arg_index": 0, "flow_kind": "argument"},
+          "location": {"file": "binderhub/builder.py", "line": 461},
+          "rationale": "Dispatches build.stream_logs, which only reads and forwards pod logs to the event stream; no command execution and no tainted argument crosses the dispatch. Excluded as a CWE-78 sink.",
+          "evidence": ["binderhub/builder.py:458-462 `elif progress['payload'] == 'Running': if log_future is None: log_future = pool.submit(build.stream_logs)`"]
+        },
+        {
+          "id": "snk-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {"package": "python-stdlib", "module": "concurrent.futures", "type": "Executor", "callable": "submit", "arg_index": 0, "flow_kind": "argument"},
+          "location": {"file": "binderhub/builder.py", "line": 526},
+          "rationale": "Dispatches kube.list_namespaced_pod with a fixed label selector and settings-derived namespace for quota counting - a read-only cluster query whose arguments come from server settings. Not a command sink.",
+          "evidence": ["binderhub/builder.py:525-532 `f = pool.submit(kube.list_namespaced_pod, self.settings['build_namespace'], label_selector='app=jupyterhub,component=singleuser-server', ...)`"]
+        },
+        {
+          "id": "snk-009",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {"package": "python-stdlib", "module": "concurrent.futures", "type": "Executor", "callable": "submit", "arg_index": 0, "flow_kind": "argument"},
+          "location": {"file": "binderhub/health.py", "line": 124},
+          "rationale": "Dispatches k8s.list_namespaced_pod with fixed label selectors for health statistics; read-only query, arguments from settings, no command execution.",
+          "evidence": ["binderhub/health.py:118-133 `requests = [asyncio.wrap_future(pool.submit(k8s.list_namespaced_pod, namespace, label_selector=label_selector, ...)) for label_selector in label_selectors]`"]
+        },
+        {
+          "id": "snk-010",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {"package": "python-stdlib", "module": "subprocess", "type": null, "callable": "subprocess.run", "arg_index": 0, "flow_kind": "argument"},
+          "location": {"file": "binderhub/repoproviders.py", "line": 488},
+          "rationale": "Executes `git ls-remote <repo> <ref>` where repo and unresolved_ref come straight from the URL-decoded user spec (GitRepoProvider.__init__ unquotes both). The only local process execution in the non-test package. Invocation is list-form with no shell=True, so the exposure class is argument injection (a rogue value could act as an extra git option/argument, e.g. an attacker-chosen repo URL or ref flag), not shell metacharacter injection; sha1_validate is applied to the resolved output but NOT to the subprocess inputs. 'tp' asserts the sink role is real - it does NOT assert a confirmed exploitable vulnerability.",
+          "evidence": ["binderhub/repoproviders.py:487-488 `command = ['git', 'ls-remote', self.repo, self.unresolved_ref]; result = subprocess.run(command, universal_newlines=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)`", "binderhub/repoproviders.py:470-474 spec unquoted into self.repo / self.unresolved_ref", "binderhub/repoproviders.py:482-494 sha1_validate attempted on unresolved_ref, but on ValueError the raw ref is passed to the command; the resolved stdout is validated afterwards"]
+        }
+      ]
+    }
+  ],
+  "completeness": {
+    "inputs": {
+      "sources_csv": "iris/extraction/sources.csv",
+      "sources_csv_rows": 74,
+      "sinks_csv": "iris/extraction/sinks.csv",
+      "sinks_csv_rows": 10
+    },
+    "total_candidates": 84,
+    "entries_labeled": 84,
+    "entries_with_role_none": 25,
+    "duplicate_rows_consolidated": [
+      {
+        "id": "src-008",
+        "duplicate_of": "src-007",
+        "reason": "extraction/sources.csv rows 7 and 8 are byte-identical (request.headers at binderhub/base.py:93); the label is consolidated into src-007 and src-008 is kept as an auditable none/fp marker"
+      }
+    ],
+    "unprocessed_rows": [],
+    "pass1_placeholder_note": "labels.json carries a Pass 1 block with an empty entries list solely to satisfy the labels_schema.json 'contains pass_id 1' constraint; only Pass 2 was analyzed in this run per the declared scope."
+  },
+  "deviations": [
+    "WORKFLOW.md 4.4.3/7.3 suggests a strict-JSON LLM API call with temperature 0-0.2 and re-asking on non-JSON output; this run labeled batches in-session with the agent model (glm-5.3) and validated the authored JSON structurally against assets/labels_schema.json instead of re-asking.",
+    "WORKFLOW.md 4.4.4 suggests re-asking entries below confidence 0.55; deviation: low-confidence entries were retained with their scores and flagged in label_stats.md / phase1_review.md for the human review gate, keeping the run single-pass and cost-reproducible.",
+    "sinks.csv encodes keyword-position sinks (V1Container.args at build.py:343, V1EnvVar.value at build.py:325) with arg_index -1 and flow_kind 'argument'; labels_schema.json requires arg_index to be an integer >= 0 when flow_kind is 'argument', so these two entries were normalized to flow_kind 'field' with arg_index null. The callable string still encodes the keyword position for query generation.",
+    "Several repoproviders.py source rows carry line numbers that fall inside a neighboring accessor of the CSV-named callable (e.g. 'get_resolved_ref' at line 504 sits inside GitRepoProvider.get_resolved_spec; 'get_repo_url' at 512 sits inside get_resolved_ref_url). The CSV callable is kept as the label signature for traceability and the actually-enclosing method is recorded in evidence; the provider accessor family returns spec-derived data in either case, so the role (summary) is unaffected.",
+    "classification 'tp' is used to assert that an API genuinely plays its labeled role for pass 2 (e.g. snk-010 is a real subprocess sink fed by request data); per the run instructions this never means a confirmed exploitable vulnerability. No PyVul ground-truth files (confirmed_vulns.json, cmd_sinks.csv, cmd_safe_sinks.csv, vulnerability_audit_final_report.md) were read."
+  ]
+}

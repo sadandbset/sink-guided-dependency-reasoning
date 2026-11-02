@@ -1,0 +1,152 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "reviewer": "independent LLM review (glm-5.3 via Claude Code CLI)",
+    "reviewed_at": "2026-10-14",
+    "experiment_dir": "C:/Users/lzh/Desktop/github/PyVul-main/iris_manual/binderhub/iris",
+    "source_dir": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/binderhub_vuln",
+    "inputs_reviewed": [
+      "results/pass2.sarif (3 results, rule py/augur/binderhub/pass2-command-injection)",
+      "report/iris_report.md",
+      "labels/labels.json",
+      "queries/Pass2_CommandInjection.ql",
+      "libraries/MySources.qll / MySinks.qll / MySummaries.qll / MySanitizers.qll",
+      "report/query_generation_notes.md",
+      "source: binderhub/base.py, binderhub/builder.py, binderhub/build.py, binderhub/repoproviders.py"
+    ],
+    "constraints_observed": [
+      "PyVul ground-truth files in the source tree were NOT read",
+      "SARIF, queries, labels, sources and databases were NOT modified",
+      "diagnostic internal-parameter results not counted as formal TP"
+    ]
+  },
+
+  "ground_truth_alignment": {
+    "known_vulnerability": {
+      "cwe": "CWE-78",
+      "commit": "https://github.com/jupyterhub/binderhub/commit/195caac172690456dcdc8cc7a6ca50e05abf8182",
+      "commit_message": "Explicitly separate git-ls-remote options from positional arguments",
+      "function": "GitRepoProvider.get_resolved_ref",
+      "vulnerable_site": "binderhub/repoproviders.py:487-488",
+      "vulnerable_code": "command = [\"git\", \"ls-remote\", self.repo, self.unresolved_ref]; result = subprocess.run(command, ...)",
+      "fix": "insert '--' before the positional arguments so attacker-controlled repo/ref cannot be interpreted as git options (e.g. --upload-pack / -o) yielding RCE in the BinderHub service process",
+      "pre_fix_state_confirmed": "the dataset source tree at binderhub/repoproviders.py:487 matches the pre-fix code (no '--' separator)"
+    },
+    "located_by_formal_run": false,
+    "located_by_labeling_phase": true,
+    "verdict_summary": "正式 pass2 查询未能定位该真实漏洞。3 条 SARIF 告警全部落在 build.py 的 Kubernetes build-pod 路径上，没有一条到达 repoproviders.py:488 的 git ls-remote subprocess sink。但标注阶段（labels.json）正确识别了该漏洞的关键要素：snk-010 将 subprocess.run(arg0) 标为 tp(0.85)，src-010/011 标出了 request.path 原始 spec 源，src-059/060 标出了 GitRepoProvider 的 spec 拆分/unquote 传播。即：标签定位成功，查询数据流建模未连通。",
+    "root_cause_of_miss": [
+      "sink 建模本身是正确的（MySinks.subprocessRunCommand 匹配 repoproviders.py:488 的 arg0，即局部变量 command），问题在传播链断裂。",
+      "污点要进入 command 列表，必须先污染 GitRepoProvider.get_resolved_ref 内部的 self.repo / self.unresolved_ref（repoproviders.py:487）。这些读取发生在 provider 类方法体内的 self 上。",
+      "provider 对象的污点来自 providerConstructionStep（builder.py:261 get_provider 调用返回值），但该污点永远无法流入 provider 方法的 self 形参：builder.py:283 的 `await provider.get_resolved_ref()` 是经 settings['repo_providers'] 字典动态分派的调用（base.py:165-166 `providers[provider_prefix](...)`），CodeQL 无法解析被调函数，因此不存在默认的 receiver→self 形参污点边。",
+      "查询为 Build 侧显式补了同类边（executorDispatchStep: pool.submit(build.submit) → Build.submit 的 self；buildConstructionStep: BuildClass kwargs → Build 对象），但没有为 provider 方法调用补任何 receiver→self 边，也没有为 provider 构造的 spec= kwarg → self.spec → GitRepoProvider.__init__ 的 split/unquote 推导（repoproviders.py:470-474，traitlets 边界对分析不可见）建模。这正是真实漏洞路径所需的唯一缺失边。",
+      "specDerivedAttributeStep 只对'在污点对象引用上直接读取属性'生效。build 流程中唯一这类读取是 builder.py:420 的 provider.git_credentials —— 恰好触发了误报路径；而真正危险的 self.repo / self.unresolved_ref 读取发生在类内 self 上，self 从未被污染，故无法到达。",
+      "误因不是过度清洗：MySanitizers 为空（0 sanitizer），且 sha1_validate 在 ValueError 时放行原始 ref 进入命令，本身也不构成屏障。缺失完全是传播建模问题。",
+      "query_generation_notes.md §7.1 已经预见到这一失效模式（'rely on CodeQL's name-based dynamic dispatch to bind receivers to self parameters; if resolution is narrower than expected, some paths shorten'），但未补充显式的 provider 分派污点边，也未在运行后核验 subprocessRunCommand sink 是否有路径到达。"
+    ],
+    "what_the_alerts_actually_are": "3 条告警均由'对象级污点过近似'驱动：provider 对象因以攻击者 spec 构造而被污染，随后任何命中 specDerivedAttributeStep 名称表的属性读取（git_credentials/ref/repo_url/image_name/appendix）都被视为污染，经 buildConstructionStep/kubeModelStep/executorDispatchStep 流入 build-pod 的 env 与 argv。其中 appendix 一支（binder_persistent_request、binder_launch_host ← request.host/protocol）是真实的数据流，但属于 BinderHub 正常构建管线，非服务进程命令注入。"
+  },
+
+  "alerts": [
+    {
+      "alert_id": "pass2-result-0",
+      "sarif_location": "binderhub/build.py:325:73-93",
+      "sink_kind": "V1EnvVar(name='GIT_CREDENTIAL_ENV', value=self.git_credentials) — envVarValueKeyword (snk-002)",
+      "sink_code": "build.py:323-325  if self.git_credentials: env.append(client.V1EnvVar(name='GIT_CREDENTIAL_ENV', value=self.git_credentials))",
+      "reported_sources": [
+        "base.py:156 request.path 原始 spec（tornadoRequestField）",
+        "builder.py:223 provider_prefix（handlerPathParam）",
+        "builder.py:239 get_spec_from_request 返回值（specAccessorCall）",
+        "builder.py:310 request.protocol（tornadoRequestField）"
+      ],
+      "representative_path": "request.path spec → builder.py:261 get_provider → 污点 provider 对象 → builder.py:420 provider.git_credentials（specDerivedAttributeStep 名称匹配）→ builder.py:404-422 BuildClass(git_credentials=...) → build 对象 → executorDispatchStep → Build.submit self → self.git_credentials → V1EnvVar value",
+      "verdict": "likely_fp",
+      "confidence": 0.9,
+      "checklist": {
+        "1_source_at_attacker_boundary": "是。request.path/provider_prefix 是真实攻击者输入边界，源本身无误。",
+        "2_propagation_real_and_reachable": "否。末段为对象污点过近似：git_credentials 是 RepoProvider 的 traitlets 配置（repoproviders.py:101），由 operator 环境令牌经固定模板生成（GitLab: 577-581 r'username=binderhub\\npassword={token}'，GitHub: 711-722），从未由 spec 派生。specDerivedAttributeStep 是按属性名匹配的（query_generation_notes §7.3 自述），把污点对象上的任意同名属性读取一律视为污染，产生了这条语义上不存在的边。",
+        "3_sink_command_or_arg_injection_danger": "否。写入 build-pod 的 GIT_CREDENTIAL_ENV 值是服务器凭据，非攻击者数据；不存在注入内容。",
+        "4_shell_interpretation_or_dangerous_exec": "无 shell。该值作为 pod 环境变量由 build 容器内的 git 读取，属数据传递而非命令解释。",
+        "5_normal_build_misjudged": "是——本告警正是对 BinderHub 正常 build-pod 凭据注入环节的误报。",
+        "6_validation_normalization_whitelist": "不适用（无攻击者数据）；凭据内容为固定模板 + operator 令牌。",
+        "7_normal_remote_repo_build_vs_service_injection": "属正常构建管线（凭据下发），非 BinderHub 服务进程命令注入；与已知 RCE（git ls-remote 选项注入）无关。"
+      },
+      "rationale": "数据流末端依赖对象级污点近似（污点 provider 对象 ⇒ provider.git_credentials 污染），而 git_credentials 实为 operator 配置。labels.json 中 snk-002 本身也预期该 sink 保持冷态（candidate 0.50，query_generation_notes §6 明确 'expected to stay cold'），本次告警正是该过近似模型引入的新噪声。判定 likely_fp。"
+    },
+    {
+      "alert_id": "pass2-result-1",
+      "sarif_location": "binderhub/build.py:343:30-44",
+      "sink_kind": "V1Container(args=self.get_cmd()) / get_cmd() 返回值 — getCmdResult + containerArgsKeyword (snk-003/snk-004)",
+      "sink_code": "build.py:146-171 get_cmd(): cmd = ['jupyter-repo2docker', '--ref', self.ref, '--image', self.image_name, ...,'--appendix', self.appendix]; cmd.append(self.repo_url)；build.py:340-343 V1Container(args=self.get_cmd(), ...)",
+      "reported_sources": [
+        "base.py:156 request.path 原始 spec",
+        "builder.py:223 provider_prefix",
+        "builder.py:239 get_spec_from_request",
+        "builder.py:310 request.protocol / builder.py:311 request.host"
+      ],
+      "representative_path": "两条真实路径：(a) provider_prefix/spec → builder.py:319-322 binder_persistent_request='v2/{provider}/{spec}' → builder.py:397-402 settings['appendix'].format(persistent_binder_url=...) → BuildClass(appendix=appendix) → get_cmd '--appendix' 元素；(b) request.protocol/host → builder.py:308-313 binder_launch_host（badge_base_url 未配置时的回退）→ appendix 同路。另有 git_credentials 对象污点近似支路（同 result-0，伪路径）。",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "checklist": {
+        "1_source_at_attacker_boundary": "是。spec、provider_prefix、Host 头/protocol 均为真实攻击者可影响的输入。",
+        "2_propagation_real_and_reachable": "部分真实：appendix 一支（binder_persistent_request、binder_launch_host 经 str.format 进入 --appendix 元素）在代码中真实可达（builder.py:319-322, 397-402, 418; build.py:156-157）。git_credentials 支路为对象污点近似（伪）。注意 ref/repo_url 反而未被污染——provider.get_resolved_ref()/get_repo_url() 的返回值因动态分派不可解析而未获污点，故 '--ref' 与尾部 repo_url 元素在本次结果中并非污点载体。",
+        "3_sink_command_or_arg_injection_danger": "低。argv 为列表形式（无 shell），且污点值全部处于选项的 value 位（--appendix 之后的取值元素），argparse 会将其消费为值而非选项；不存在选项注入位。repo_url 虽在 argv 尾部（理论上可被当选项解析，build.py:166-168 注释即指此风险），但它在本结果中未被污染。",
+        "4_shell_interpretation_or_dangerous_exec": "无 shell。命令在 build-pod 容器内执行（隔离的构建环境）。",
+        "5_normal_build_misjudged": "是。这正是 BinderHub 核心构建管线：把含用户影响 URL 的 appendix 传给 repo2docker 属设计行为。",
+        "6_validation_normalization_whitelist": "appendix 为 operator 配置模板，代入值为格式化 URL；host 头无白名单，但消费点是值位 argv 元素，且构建本身在隔离 pod 内执行用户仓库内容。",
+        "7_normal_remote_repo_build_vs_service_injection": "是——该 sink 的执行发生在 build pod（repo2docker 容器）内，属对用户内容/构建参数的正常执行，而非 BinderHub 服务进程的命令注入。已知 RCE 的执行点是服务进程内的 git ls-remote（此处未覆盖）。"
+      },
+      "rationale": "数据流本身（spec/host → appendix → repo2docker argv）真实存在，但 sink 语义为列表形式、值位传参、隔离构建 pod 执行，属 BinderHub 正常构建流程，不构成 CWE-78 服务进程命令/参数注入；亦非已知漏洞位置。残余理论关注点：badge_base_url 未配置时 Host 头可影响 appendix（repo2docker 将其追加到生成的 Dockerfile），但构建 pod 的威胁模型本就接受用户仓库驱动的任意构建行为，故不升格为 TP。判定 likely_fp。"
+    },
+    {
+      "alert_id": "pass2-result-2",
+      "sarif_location": "binderhub/build.py:378:17-25",
+      "sink_kind": "create_namespaced_pod(namespace, self.pod, ...) arg 1 — createNamespacedPodBody (snk-005)",
+      "sink_code": "build.py:327-373 self.pod = V1Pod(... V1PodSpec(containers=[V1Container(args=self.get_cmd(), env=env)]) ...)；build.py:375-380 ret = self.api.create_namespaced_pod(self.namespace, self.pod, _request_timeout=KUBE_REQUEST_TIMEOUT)",
+      "reported_sources": [
+        "base.py:156 request.path 原始 spec",
+        "builder.py:223 provider_prefix",
+        "builder.py:239 get_spec_from_request",
+        "builder.py:310 request.protocol"
+      ],
+      "representative_path": "与 result-1 同源：污点 appendix（binder_persistent_request / binder_launch_host）与污点 git_credentials 经 BuildClass → build 对象 → executorDispatchStep → Build.submit → self.pod（kubeModelStep 将 V1Pod/V1Container 构造的污点 kwarg 传播到 pod 对象）→ create_namespaced_pod arg1。另含 annotations 'binder-repo': self.repo_url 一支。",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "checklist": {
+        "1_source_at_attacker_boundary": "是（同 result-1）。",
+        "2_propagation_real_and_reachable": "同 result-1：appendix 支路真实，git_credentials 支路为对象污点近似；pod 对象的污点经 kubeModelStep（k8s DTO 属性建模）聚合而来。",
+        "3_sink_command_or_arg_injection_danger": "低。pod body 内嵌的容器 argv/env 与 result-0/1 完全同源同语义；提交 pod 本身不是命令注入，pod 中容器参数为列表形式值位传参。",
+        "4_shell_interpretation_or_dangerous_exec": "无 shell。create_namespaced_pod 是 K8s API 调用，pod 在隔离构建环境启动。",
+        "5_normal_build_misjudged": "是——创建 build pod 是 BinderHub 的正常 Kubernetes 操作（build.py:submit 的本职）。",
+        "6_validation_normalization_whitelist": "name/labels 经 _generate_build_name/_safe_build_slug 严格转义（builder.py:82-134）；污点载体仅 appendix/env 值位内容。",
+        "7_normal_remote_repo_build_vs_service_injection": "是——build pod 的创建与执行是正常构建链路，非服务进程命令注入。"
+      },
+      "rationale": "与 result-1 同族：真实的请求衍生数据进入 build-pod 的 argv/annotations 属正常构建管线；提交 pod 不是命令注入 sink 语义下的漏洞。判定 likely_fp。"
+    }
+  ],
+
+  "coverage_assessment": {
+    "sarif_alert_count": 3,
+    "zero_alert_clause": "不适用：SARIF 非零告警（3 条），但其中 0 条对应已知真实漏洞。",
+    "modeled_sinks_vs_alerts": {
+      "subprocessRunCommand (repoproviders.py:488, snk-010, 真实漏洞位置)": "已建模但无任何路径到达（cold）——关键缺口",
+      "getCmdResult (build.py:343, snk-003)": "有告警（result-1）",
+      "containerArgsKeyword (build.py:343, snk-004)": "有告警（result-1 同位置）",
+      "envVarValueKeyword (build.py:325, snk-002)": "有告警（result-0，因对象污点过近似而意外触发，labels 预期应保持冷态）",
+      "createNamespacedPodBody (build.py:378, snk-005)": "有告警（result-2）"
+    },
+    "source_side_coverage": "源建模充分：request.path 原始 spec、路径捕获参数、get_spec_from_request、get_argument、外部 provider API 的 json.loads 均已建模，真实漏洞所需源（raw spec）已在模型内。",
+    "sink_side_coverage": "sink 建模充分：git ls-remote 的 subprocess.run arg0 已在模型内（snk-010, tp 0.85）。",
+    "propagation_gap": "唯一缺口在传播层：provider 对象污点无法进入 provider 类方法体（无 receiver→self 形参边，动态分派不可解析；无 spec= kwarg → self.spec → __init__ unquote 推导建模）。补一条 'provider 方法调用 receiver → 各 provider 类对应方法 self 形参' 的 taint step（或为 get_resolved_ref/get_repo_url 调用点建返回值摘要）即可让真实漏洞路径连通；现有 executorDispatchStep/buildConstructionStep 已为 Build 侧演示了同样的手法。",
+    "other_limitations": [
+      "specDerivedAttributeStep 按属性名而非类型匹配（§7.3 自述），导致 git_credentials 误报（result-0）。",
+      "provider 访问器返回值（get_resolved_ref → Build.ref '--ref'、get_repo_url → 尾部 repo_url，labels src-020/021 已识别）未生成调用点返回值污点边——若补齐，build.py:343 的 '--ref'/repo_url 元素也会成为真实污点载体，但结论不变（值位传参、隔离 pod）。",
+      "sha1_validate/_safe_build_slug/tokenize_spec 未被提取为 sanitizer（labels 注记），本次未影响结果（无 barrier 拦截）。"
+    ]
+  },
+
+  "final_answer": {
+    "did_formal_run_locate_the_real_vulnerability": false,
+    "explanation": "已知真实漏洞是 GitRepoProvider.get_resolved_ref（repoproviders.py:487-488）中 `git ls-remote <repo> <ref>` 缺少 '--' 选项分隔符导致的参数注入（攻击者可让 ref/repo 以 '-' 开头被 git 解释为选项，如 --upload-pack/-o，实现 BinderHub 服务进程内 RCE）。正式 pass2 SARIF 的 3 条告警全部位于 build.py 的 build-pod 路径（V1EnvVar value / V1Container args / create_namespaced_pod body），经逐条复核均为 likely_fp（对象级污点过近似 + 正常构建管线）。真实漏洞位置 repoproviders.py:488 无告警：sink 与 source 都被正确建模，但生成的数据流模型缺少'provider 方法调用 receiver → provider 类方法 self 形参'的污点边（provider 经 settings 字典动态分派，CodeQL 无法解析被调函数；查询只为 Build 侧补了同类边），导致 spec → GitRepoProvider.__init__ unquote → self.repo/self.unresolved_ref → command → subprocess.run 的真实链路断在 builder.py:283 的 `provider.get_resolved_ref()` 调用处。标注阶段（labels.json snk-010/src-010/011/059/060）实际上已正确定位该漏洞的全部要素——即'标签定位成功、查询连通失败'。"
+  }
+}

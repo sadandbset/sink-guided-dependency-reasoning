@@ -1,0 +1,172 @@
+{
+  "step": "Step 1 - Explore and detect",
+  "target": "binderhub",
+  "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\binderhub-db",
+  "source_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\binderhub_vuln",
+  "timestamp": "2026-10-14",
+  "language": "python",
+  "language_evidence": [
+    "codeql-database.yml: primaryLanguage: python",
+    "codeql-database.yml: creationMetadata.cliVersion: 2.25.1",
+    "baseline-info.json: python files under binderhub/ (~7864 LOC)",
+    "setup.py, dev-requirements.txt present at repo root"
+  ],
+  "codeql_environment": {
+    "cli_version": "2.25.1",
+    "python_query_library": "codeql/python-all 7.1.x (7.1.1 and 7.1.2 cached locally; workspace qlpack.yml not yet created, Step 0 pack install is pending in this run)",
+    "api_surface_note": "Extraction queries use only `import python` (python-all) AST APIs verified against the local 7.1.2 library: AstNode.getLocation(), Location.getFile()/getStartLine(), File.getRelativePath(), Call.getFunc()/getArg()/getAKeyword(), Attribute.getName()/getObject(), Name.getId(), Function.getName()/getArg(int)/getScope(), Class.getName()/getABase(), Scope.getEnclosingModule()/getEnclosingScope+(). No AstNode.getFile(), no API::Node vs DataFlow::Node comparison, no QL classes are defined in the extraction queries.",
+    "dbscheme": "semmlecode.python.dbscheme"
+  },
+  "scope": {
+    "passes": [2],
+    "cwes": ["077", "078", "088"],
+    "focus": "Command/Argument Injection (CWE-78 primary, per user instruction)"
+  },
+  "framework_candidates": [
+    {
+      "framework": "tornado",
+      "kind": "web-framework",
+      "confidence": 1.0,
+      "classification": "primary",
+      "evidence": {
+        "import_evidence": {
+          "score": 0.45,
+          "snippets": [
+            "binderhub/app.py:25 `import tornado.web`",
+            "binderhub/app.py:19-24 `from tornado.httpclient import AsyncHTTPClient`, `from tornado.httpserver import HTTPServer`, `import tornado.ioloop`, `import tornado.options`, `import tornado.log`",
+            "binderhub/main.py:9 `from tornado.web import HTTPError, authenticated`",
+            "binderhub/builder.py:17 `from tornado.web import Finish, authenticated`"
+          ]
+        },
+        "route_evidence": {
+          "score": 0.30,
+          "snippets": [
+            "binderhub/app.py:792-797 handler table: (r\"/build/([^/]+)/(.+)\", BuildHandler), (r\"/v2/([^/]+)/(.+)\", ParameterizedMainHandler), (r\"/repo/([^/]+)/([^/]+)(/.*)?\", LegacyRedirectHandler)",
+            "binderhub/base.py:17 `class BaseHandler(HubOAuthenticated, web.RequestHandler)`",
+            "request-verb methods on handler classes: binderhub/main.py:31,48,127; binderhub/builder.py:223; binderhub/base.py:219,241; binderhub/config.py:12; binderhub/health.py:212; binderhub/metrics.py:9"
+          ]
+        },
+        "runtime_bootstrap_evidence": {
+          "score": 0.20,
+          "snippets": [
+            "binderhub/app.py:841 `self.tornado_app = tornado.web.Application(handlers, **self.tornado_settings)`",
+            "binderhub/app.py:879 `tornado.ioloop.IOLoop.current().start()`"
+          ]
+        },
+        "layout_evidence": {
+          "score": 0.05,
+          "snippets": [
+            "single python package binderhub/ with app.py (bootstrap), base.py (handler base), main.py/builder.py (handlers), repoproviders.py (input providers)"
+          ]
+        }
+      }
+    },
+    {
+      "framework": "jupyterhub-services",
+      "kind": "auth/service-glue-library",
+      "confidence": 0.45,
+      "classification": "informational-below-secondary-threshold",
+      "evidence": [
+        "binderhub/base.py:10 `from jupyterhub.services.auth import HubOAuthenticated, HubOAuth`",
+        "binderhub/launcher.py:19-20 `from jupyterhub.traitlets import Callable`, `from jupyterhub.utils import maybe_future`"
+      ]
+    },
+    {
+      "framework": "kubernetes-python-client",
+      "kind": "infrastructure-library",
+      "confidence": 0.45,
+      "classification": "informational-below-secondary-threshold (not a web framework; relevant to CWE-78 sink surface)",
+      "evidence": [
+        "binderhub/build.py:11 `from kubernetes import client, watch`"
+      ]
+    },
+    {
+      "framework": "traitlets",
+      "kind": "config-library",
+      "confidence": 0.45,
+      "classification": "informational-below-secondary-threshold",
+      "evidence": [
+        "binderhub/repoproviders.py:24-25 `from traitlets import Dict, Unicode, Bool, default, List`, `from traitlets.config import LoggingConfigurable`"
+      ]
+    }
+  ],
+  "primary_framework": "tornado",
+  "framework_notes": [
+    "Tornado is the primary web framework (score 1.00 >= 0.75 threshold).",
+    "No references/tornado.md exists in the Augur distribution, so per WORKFLOW.md 4.2.3 source/sink shapes were derived from repository evidence plus references/python.md and references/patterns.md.",
+    "Route registration is via the tornado.web.Application handler tuple table in binderhub/app.py, not decorators; source extraction therefore keys on handler classes (name suffix 'Handler' or 'Handler'-suffixed base) and their request-verb method parameters, plus tornado request accessor calls."
+  ],
+  "references_loaded": [
+    "WORKFLOW.md",
+    "references/patterns.md",
+    "references/python.md",
+    "assets/extraction/README.md",
+    "assets/extraction/extract_sources.ql.tmpl",
+    "assets/extraction/extract_sinks.ql.tmpl",
+    "assets/extraction/python_sources.ql.tmpl",
+    "assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "repo_survey": {
+    "http_routes": [
+      "binderhub/app.py:795 (r\"/build/([^/]+)/(.+)\", BuildHandler) -> BuildHandler.get(provider_prefix, _unescaped_spec) in binderhub/builder.py:223; spec re-extracted raw via BaseHandler.get_spec_from_request (binderhub/base.py:150-157)",
+      "binderhub/app.py:796 (r\"/v2/([^/]+)/(.+)\", ParameterizedMainHandler) -> ParameterizedMainHandler.get(provider_prefix, _unescaped_spec) in binderhub/main.py:48",
+      "binderhub/app.py:797 (r\"/repo/([^/]+)/([^/]+)(/.*)?\", LegacyRedirectHandler) -> LegacyRedirectHandler.get(user, repo, urlpath) in binderhub/main.py:127",
+      "binderhub/app.py:793-794 /metrics MetricsHandler, /versions VersionHandler; /about, Custom404 in base.py"
+    ],
+    "request_input_surfaces": [
+      "query arguments: binderhub/builder.py:242 self.get_argument(\"build_token\", None); binderhub/main.py:73,76 self.get_argument('filepath'/'urlpath')",
+      "raw URL path-derived provider spec: binderhub/base.py:150-157 get_spec_from_request slices self.request.path after the provider prefix",
+      "headers: binderhub/base.py:56-62 self.request.headers.get(\"origin\"/\"host\") in token_origin",
+      "handler fields: self.request.path/uri/host/protocol/remote_ip used across base.py, builder.py, main.py"
+    ],
+    "repo_providers": [
+      "binderhub/repoproviders.py: RepoProvider base plus FakeProvider, ZenodoProvider, FigshareProvider, DataverseProvider, HydroshareProvider, GitRepoProvider, GitLabRepoProvider, GitHubRepoProvider, GistRepoProvider",
+      "GitRepoProvider (binderhub/repoproviders.py:470-474) splits the URL-decoded spec into self.repo (arbitrary git URL) and self.unresolved_ref (arbitrary ref) via urllib.parse.unquote",
+      "GitHubRepoProvider tokenizes spec into user/repo/unresolved_ref (binderhub/repoproviders.py:731-734); GitLabRepoProvider splits namespace/ref (590-596); GistRepoProvider splits user/gist_id/ref (916-924)",
+      "Provider accessors return request-derived values: get_repo_url, get_resolved_ref, get_resolved_spec, get_resolved_ref_url, get_build_slug; env-read config: os.getenv for GITHUB_*/GITLAB_* tokens (repoproviders.py:550,560,688,699,709)"
+    ],
+    "command_execution_surfaces": [
+      "binderhub/repoproviders.py:487-488 GitRepoProvider.get_resolved_ref builds command = [\"git\", \"ls-remote\", self.repo, self.unresolved_ref] and executes it with subprocess.run (list-form, no shell) - primary CWE-78 candidate family",
+      "binderhub/build.py:146-171 Build.get_cmd constructs the jupyter-repo2docker command list from self.ref, self.image_name, self.appendix, self.repo_url",
+      "binderhub/build.py:327-373 Build.submit creates the build pod: client.V1Container(image=..., args=self.get_cmd(), env=[client.V1EnvVar(name='GIT_CREDENTIAL_ENV', value=self.git_credentials)]) inside client.V1Pod, then api.create_namespaced_pod (line 376)",
+      "binderhub/builder.py:397-422 BuildHandler builds appendix via self.settings['appendix'].format(repo_url=..., ref_url=...) and passes repo_url/ref/image_name into BuildClass",
+      "binderhub/builder.py:424-430 build_pool.submit(build.submit) dispatches pod creation onto a worker pool",
+      "binderhub/builder.py:590-594 launcher.launch(...) forwards image/repo_url to JupyterHub REST API (binderhub/launcher.py:149-250) - network API, not a local command execution",
+      "No os.system, os.popen, asyncio.create_subprocess_*, or shell=True usage found in the non-test binderhub package; subprocess usage outside tests: repoproviders.py:488 only (plus versioneer-generated _version.py:79, excluded from extraction scope)"
+    ],
+    "deserialization_boundaries": [
+      "binderhub/repoproviders.py: json.loads(resp.body) on GitHub/GitLab/Gist/Dataverse API responses (lines 342, 623, 857, 945)",
+      "binderhub/registry.py:202,228 and binderhub/health.py:135: json.loads on registry/Kubernetes API responses"
+    ],
+    "excluded_from_extraction": [
+      "binderhub/tests/** (test files, per WORKFLOW.md 4.3.2)",
+      "binderhub/_version.py (versioneer generated code)",
+      "testing/, examples/, doc/, ci/, tools/ (non-application code; outside binderhub/ package)"
+    ]
+  },
+  "extraction_plan": {
+    "pass_key": "command_injection",
+    "source_families": [
+      "parameters (index >= 1, i.e. excluding self) of request-verb methods on handler classes (URL path captures: provider_prefix, spec, user, repo, urlpath)",
+      "tornado request-argument accessor calls (get_argument, get_query_argument, get_body_argument, get_cookie and plural/secure variants)",
+      "self.request.<field> attribute reads (path, uri, query, body, headers, host, protocol, remote_ip, files, cookies, arguments and *_arguments variants)",
+      "environment/config reads (os.getenv, os.environ.get)",
+      "json.loads calls deserializing network responses",
+      "project-internal propagation calls (get_spec_from_request, get_provider, get_repo_url, get_resolved_ref, get_resolved_spec, get_resolved_ref_url, get_build_slug)"
+    ],
+    "sink_families": [
+      "subprocess API calls (run, Popen, call, check_call, check_output, getoutput, getstatusoutput) with command argument at positional index 0",
+      "os command APIs (system, popen, execv*, spawnv*) with command argument at positional index 0",
+      "asyncio.create_subprocess_shell/create_subprocess_exec with command argument at positional index 0",
+      "kubernetes.client constructors carrying command/env values via keywords (V1Container.args, V1Container.command, V1EnvVar.value, V1ExecAction.command)",
+      "kubernetes CoreV1Api.create_namespaced_pod (pod body at positional index 1)",
+      "worker-pool dispatch pool.submit(callable) (executor submit of build command paths)",
+      "Build.get_cmd() repo2docker command-construction wrapper"
+    ],
+    "notes": [
+      "Extraction rules were derived only from repo evidence and the CWE-78 pass focus; no vulnerability ground truth, fix commits, or vulnerability descriptions were consulted.",
+      "subprocess.run in repoproviders.py:488 is list-form (no shell); it is extracted as a candidate for argument injection (CWE-78 family) without any assumption that it is vulnerable.",
+      "Keyword-position sinks are encoded in the callable column as '<Constructor>.<keyword>' (e.g. 'V1Container.args') with arg_index -1; positional sinks use the concrete positional arg_index."
+    ]
+  }
+}
