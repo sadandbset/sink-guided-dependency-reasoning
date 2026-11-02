@@ -1,0 +1,326 @@
+{
+  "triage": {
+    "project": "ansible",
+    "pass": 2,
+    "cwe": "CWE-78 (查询范围收窄为仅 cwe-078)",
+    "analyst": "independent LLM path review (GLM)",
+    "date": "2026-11-02",
+    "query_id": "py/augur/ansible/pass2-command-injection",
+    "database": "dataset/codeql_databases/ansible-db",
+    "sarif": "results/pass2.sarif (15 条正式 path-problem 告警, CodeQL 2.25.1)"
+  },
+  "workspace_notes": [
+    "实验目录在复核过程中被外部重命名（ansible缺失 -> ansible）；本报告使用新路径，所有工作文件（triage_work/）随目录一起保留。",
+    "证据源问题（与 abilian-devtools 同型）：查询针对 CodeQL DB 创建时快照（ansible-db/src.zip）运行。已解压快照并与磁盘树 dataset/codeql_databases/ansible_vuln 逐一 diff：12 个抽查文件中 8 个不一致（cli/__init__.py、plugins/action/__init__.py、modules/command.py、modules/user.py、executor/interpreter_discovery.py、module_utils/basic.py、config/manager.py 等行号/内容均有差异）。所有代码验证一律以 DB 快照为准（解压至 triage_work/snapshot/，未作为修复证据解读磁盘差异，未读取修复提交/真值）。",
+    "iris_report.md 将 15 条告警分类为 13 candidate + 2 likely-fp（test-file heuristic）；本轮为逐条独立路径复核，结论与其启发式分类无关。"
+  ],
+  "key_finding_for_triage": "run_command 的 shell 语义决定了大半结论：basic.py:1893-1909 —— use_unsafe_shell=True 时，若 args 是 list，每个元素先经 shlex_quote 再 join（basic.py:1898，即 P2-SAN-001 屏障证据点），随后 [shell,'-c',args] 或 Popen(shell=True)；只有 args 为字符串时才原样进入 shell（basic.py:1900，无任何引用）。但 P2-008/P2-014/P2-015 sink 模型都在包装函数调用点上触发，位于被调方引用保护之前——因此“污点到达调用点”不等于“污点被 shell 解释”。受污的 argv-list 元素在执行点被引用，不是 CWE-78 注入；受污的字符串参数才是。",
+
+  "alerts": [
+    {
+      "alert_id": 0,
+      "sink_location": "lib/ansible/cli/__init__.py:434:36 (DB 快照)",
+      "sink_code": "cmd = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, stdout=sys.stdout)",
+      "sink_type": "P2-020 Popen shell=True",
+      "source_location": "lib/ansible/cli/__init__.py:419 os.environ['PAGER'] (P2-005 candidate)",
+      "codeflow_summary": "cli/__init__.py:419 os.environ['PAGER'] -> :429 pager_pipe(text, cmd) 形参 -> :434 Popen(cmd, shell=True)",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "PAGER 是控制器本地环境变量，由进程所有者设置。能控制该环境变量者已经拥有用户 shell——无任何远程/请求边界。相邻 :421 Popen('less --version', shell=True) 为固定字面量，未被标记（正确）。",
+        "q2_propagation": "真实且极短：env 值 -> pager_pipe 形参 -> Popen，全部原生数据流。",
+        "q3_sink": "真实 shell=True。但执行的是用户自己配置的分页器——与 less/git 等任何尊重 $PAGER 的工具行为一致。",
+        "q4_content": "是（命令=PAGER 值本身），但无攻击者。",
+        "q5_protection": "无（也无需）。",
+        "q6_business_function": "是：按用户环境配置选择分页器是 CLI 的常规功能。",
+        "q7_overapproximation": "路径真实，但 P2-005（os.environ candidate 级）把操作者自设环境变量当作攻击边界的建模导致告警无安全意义。"
+      }
+    },
+    {
+      "alert_id": 1,
+      "sink_location": "lib/ansible/plugins/action/__init__.py:1112:47 (DB 快照)",
+      "sink_code": "res = self._low_level_execute_command(cmd, sudoable=sudoable, in_data=in_data)",
+      "sink_type": "P2-014 _low_level_execute_command arg0",
+      "source_locations": [
+        "lib/ansible/config/manager.py:219 os.getenv('ANSIBLE_CONFIG') (P2-012/P2-005 candidate) [cf0/cf3]",
+        "lib/ansible/config/manager.py:497 context.CLIARGS (P2-002 candidate) [cf1/cf2]"
+      ],
+      "codeflow_summary": "ANSIBLE_CONFIG env / CLIARGS -> config 值 -> executor/module_common.py:607 interpreter_out -> :1216 shebang -> modify_module -> action/__init__.py:1064 shebang -> :1077 interpreter -> :1078 async_cmd -> :1092 cmd(' '.join) -> :1112 sink",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "两个 source 都是控制器侧操作者输入：ANSIBLE_CONFIG 环境变量、ansible CLI 参数（CLIARGS）。能设置它们的人就是运行 ansible 的人。",
+        "q2_propagation": "传播链真实（config 值 -> 解释器 shebang -> async 模块命令），全部原生数据流，无合成边（MySummaries 为 none()，已核实 QLL）。但传播的语义是“解释器选择”。",
+        "q3_sink": "_low_level_execute_command -> exec_command 在受管主机上执行（ssh 远端登录 shell）。真实命令执行，但执行位置是操作者自己选择的目标主机。",
+        "q4_content": "是：interpreter 字符串（源自 config）位于 async_cmd 头部。但 interpreter 配置（ansible_python_interpreter 家族）是文档化功能。",
+        "q5_protection": "无引用，但输入边界本身即操作者配置。",
+        "q6_business_function": "是：INTERPRETER_PYTHON/解释器发现配置决定模块执行解释器，是 Ansible 核心配置功能。",
+        "q7_overapproximation": "candidate 级 source（P2-002/P2-005）过宽：操作者 CLI/env/config 被当作污点边界。"
+      }
+    },
+    {
+      "alert_id": 2,
+      "sink_location": "lib/ansible/plugins/action/__init__.py:1264:60 (DB 快照)",
+      "sink_code": "rc, stdout, stderr = self._connection.exec_command(cmd, in_data=in_data, sudoable=sudoable)",
+      "sink_type": "P2-015 exec_command arg0",
+      "source_location": "lib/ansible/plugins/action/__init__.py:1112 res = _low_level_execute_command(...) 返回值 (P2-026 tp：远程命令输出)",
+      "codeflow_summary": "action/__init__.py:1112 res(模块执行远程输出) -> :1115/:1175 _filter_non_json_lines -> :1179 json 解码 -> :1168 wrap_var -> reboot.py:187 find_result(_execute_module('find') 结果) -> :198 full_path=[x['path'] for x in find_result['files']] -> :201 full_path[0] -> :326 shutdown_command -> :328 reboot_command -> :333 _low_level_execute_command -> :1211 -> :1264 exec_command",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "reasoning": {
+        "q1_source_boundary": "形式上成立：source 是模块执行输出（P2-026 tp 标签），即受管主机控制的字节。标签威胁模型明确把远程输出当不可信。",
+        "q2_propagation": "真实：find 模块在受管主机上运行，其 files[].path 由主机侧产生；控制器不做内容校验（仅 :199 判非空）。",
+        "q3_sink": "真实：exec_command 将 reboot_command 经远端 shell 执行，且 reboot 动作 sudoable=True（:1243-1247 可叠加 become）。",
+        "q4_content": "是：主机返回的路径字符串直接成为被 shell 解释的命令前缀。",
+        "q5_protection": "薄弱：find pattern 约束（文件名须匹配 shutdown_bin）只限制真实文件系统产生的值；说谎的主机可返回任意 files 列表。无引用/白名单。",
+        "q6_business_function": "用 find 定位 shutdown 再执行是 reboot 模块设计，但“主机侧返回值未加引用直接进 shell”是实现选择。",
+        "q7_overapproximation": "路径真实非近似。判 uncertain 的原因：唯一可行的攻击者是说谎/被攻陷的受管主机，而注入的命令仍执行在同一主机、同一控制器通道上（该通道本来就以同等权限运行 playbook 指定的任意命令）——除“由主机而非操作者选择命令”外无权限提升。Ansible 文档化的信任立场将模块输出视为可信。"
+      }
+    },
+    {
+      "alert_id": 3,
+      "sink_location": "lib/ansible/modules/command.py:346:43 (DB 快照)",
+      "sink_code": "rc, out, err = module.run_command(args, executable=executable, use_unsafe_shell=shell, ...)",
+      "sink_type": "P2-008 run_command arg0, 动态 use_unsafe_shell=shell (K-89 tp 行)",
+      "source_location": "lib/ansible/modules/command.py:277 module.params['_raw_params'] (P2-001 tp)",
+      "codeflow_summary": "basic.py:387/393 模块参数通道(_load_params/AnsibleModule.params) -> command.py:277 args=_raw_params -> :296-299(shell=False 时 shlex.split；shell=True 保持字符串) -> :346 run_command(args, use_unsafe_shell=shell)",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "module.params 是 playbook/CLI 作者指定的参数。对 command/shell 模块而言 _raw_params 就是“要执行的命令本身”——playbook 作者本来就能指定任意命令（shell 模块的存在意义）。",
+        "q2_propagation": "真实：参数 JSON 从控制器经模块通道进入，_load_params 解码（basic.py:399 Decoding-JSON），到 args。",
+        "q3_sink": "真实：use_unsafe_shell=shell 动态标志（shell=_uses_shell）。shell 模块路径（字符串参数）确实经 shell 执行；command 模块路径 shlex.split 成 argv 无 shell。",
+        "q4_content": "是，但“被注入的命令”就是作者写的命令。",
+        "q5_protection": "argv 分支有 shlex.split；shell 分支无引用（by design，raw 语义）。",
+        "q6_business_function": "完全成立：ansible shell/command 模块的核心文档化功能就是执行 playbook 指定的命令。无 playbook 之外的攻击者。",
+        "q7_overapproximation": "路径真实；P2-001 把模块参数当 tp source 的建模在本站点退化为“功能自证”。"
+      }
+    },
+    {
+      "alert_id": 4,
+      "sink_location": "lib/ansible/executor/interpreter_discovery.py:68:49 (DB 快照)",
+      "sink_code": "res = action._low_level_execute_command(shell_bootstrap, sudoable=False)",
+      "sink_type": "P2-014 _low_level_execute_command arg0",
+      "source_locations": [
+        "lib/ansible/config/manager.py:219 os.getenv('ANSIBLE_CONFIG') [cf0/cf1/cf3]",
+        "lib/ansible/config/manager.py:497 context.CLIARGS (P2-002 candidate) [cf2/cf3]"
+      ],
+      "codeflow_summary": "ANSIBLE_CONFIG env / CLIARGS -> config(INTERPRETER_PYTHON_FALLBACK) -> interpreter_discovery.py:59 bootstrap_python_list -> :64 command_list=[\"command -v '%s'\" % py ...] -> :65 shell_bootstrap -> :68 sink",
+      "verdict": "likely_fp",
+      "confidence": "medium-high",
+      "reasoning": {
+        "q1_source_boundary": "不成立：INTERPRETER_PYTHON_FALLBACK 值来自操作者的 ansible.cfg/env/CLI——控制器侧配置。",
+        "q2_propagation": "真实：config 值 -> bootstrap 列表 -> 'command -v %s' 模板 -> shell_bootstrap -> 远端 shell 执行。",
+        "q3_sink": "真实（远端 shell）。",
+        "q4_content": "是：py 值进入命令串。:64 的 '%s' 单引号不是转义（值含 ' 可逃逸），但值的来源是操作者配置。",
+        "q5_protection": "单引号模板（非 shlex_quote），弱；但输入边界即操作者。",
+        "q6_business_function": "是：解释器发现按设计探测候选解释器路径（探测目标主机的 PATH），配置项文档化。",
+        "q7_overapproximation": "非近似，路径真实；source 建模（env/CLIARGS candidate）把操作者配置当攻击边界。"
+      }
+    },
+    {
+      "alert_id": 5,
+      "sink_location": "lib/ansible/executor/interpreter_discovery.py:96:53 (DB 快照)",
+      "sink_code": "res = action._low_level_execute_command(found_interpreters[0], sudoable=False, in_data=platform_script)",
+      "sink_type": "P2-014 _low_level_execute_command arg0",
+      "source_location": "lib/ansible/plugins/action/__init__.py:1264 exec_command 返回 stdout / :1112 res (P2-018/026 tp：远程输出)",
+      "codeflow_summary": "action/__init__.py:1264 stdout -> :1286/:1289 out -> interpreter_discovery.py:68 res['stdout'] -> :70 raw_stdout -> :72 foundre.match -> :80 found_interpreters=[interp.strip() for interp in match.groups()[1].splitlines() if interp.startswith('/')] -> :96 sink",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "reasoning": {
+        "q1_source_boundary": "形式上成立：受管主机对 'command -v' 探测的 stdout 完全由主机侧控制（PATH 内容、可执行文件名、或说谎主机的任意伪造输出）。",
+        "q2_propagation": "真实：远程 stdout -> 正则 groups -> 过滤 -> found_interpreters[0] 作为命令执行。",
+        "q3_sink": "真实：_low_level_execute_command -> exec_command，远端 shell（local 连接时 Popen(shell=True)）。sudoable=False（无 become）。",
+        "q4_content": "是：主机控制的字符串（须以 / 开头）成为被 shell 解释的命令。",
+        "q5_protection": "仅格式过滤：foundre 正则要求 PLATFORM/FOUND/ENDFOUND 框架 + startswith('/')。无引用/白名单——过滤抬高了门槛但不阻止含元字符的绝对路径字符串。",
+        "q6_business_function": "解释器发现是文档化功能（Ansible 明确说明 discovery 信任目标环境/PATH）。",
+        "q7_overapproximation": "路径真实。判 uncertain：与 alert 2 同型——主机控制的字符串由控制器通道在**同一主机**上以连接用户权限执行；说谎主机无净收益，但目标机上低权限用户可借 PATH 植入获得以连接用户身份执行代码（同主机横向，有限）。"
+      }
+    },
+    {
+      "alert_id": 6,
+      "sink_location": "test/support/integration/plugins/modules/postgresql_db.py:453:31 (DB 快照)",
+      "sink_code": "p2 = subprocess.Popen(cmd, stdin=p1.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, env=env)",
+      "sink_type": "P2-020 Popen shell=True",
+      "source_location": "postgresql_db.py:533 AnsibleModule params -> :545 target_opts（由 dump_extra_args 等 module 参数拼成）(P2-001 tp)",
+      "codeflow_summary": "module params -> :545 target_opts -> :633 db_restore(...) -> :446 cmd += \" {0} \".format(target_opts) -> :453 Popen(cmd, shell=True)",
+      "verdict": "likely_fp",
+      "confidence": "medium-high",
+      "reasoning": {
+        "q1_source_boundary": "module.params（playbook 作者）。dump_extra_args/target_opts 是文档化模块参数，语义就是“传给 pg_dump/psql 的额外参数”。",
+        "q2_propagation": "真实：target_opts 未加引用拼进 shell 字符串。",
+        "q3_sink": "真实 shell=True（db_restore 压缩分支）。",
+        "q4_content": "是：代码层面确为未引用插值（对比 :405/:407/:463 的 target 有 shlex_quote，target_opts/host/port/user 无）。",
+        "q5_protection": "无（target 被引用，但 target_opts 没有）。",
+        "q6_business_function": "该模块位于 test/support/integration/（集成测试夹具，非随包分发的生产模块）；extra-args 参数按设计即原始 CLI 参数。攻击者=playbook 作者=操作者。",
+        "q7_overapproximation": "非近似；但 source 建模（模块参数=tp）在此退化为功能自证，测试位置进一步降低意义。代码可加固（对 target_opts 引用），但不构成漏洞。"
+      }
+    },
+    {
+      "alert_id": 7,
+      "sink_location": "test/support/integration/plugins/modules/postgresql_db.py:497:45 (DB 快照)",
+      "sink_code": "rc, stderr, stdout = module.run_command(cmd, use_unsafe_shell=True, environ_update=env)",
+      "sink_type": "P2-008 run_command 字符串 arg0, use_unsafe_shell=True",
+      "source_location": "同 alert 6：module params -> :545 target_opts -> :364 db_dump(target_opts)",
+      "codeflow_summary": "module params -> target_opts -> db_dump :397 cmd += target_opts -> :405 f-string -> :409 do_with_password -> :497 run_command(cmd, use_unsafe_shell=True)（字符串形式，basic.py:1900 无引用）",
+      "verdict": "likely_fp",
+      "confidence": "medium-high",
+      "reasoning": {
+        "q1_q2_q3_q4": "同 alert 6：路径真实、字符串形式无引用、真实 shell 执行；source 为 playbook 作者的文档化参数。",
+        "q5_protection": "target 有 shlex_quote；target_opts/host/port/user(:484-488) 无——可加固点。",
+        "q6_business_function": "同 alert 6（test-support 模块 + 文档化 extra-args 参数）。",
+        "q7_overapproximation": "非近似；边界不成立。"
+      }
+    },
+    {
+      "alert_id": 8,
+      "sink_location": "lib/ansible/plugins/action/raw.py:42:55 (DB 快照)",
+      "sink_code": "result.update(self._low_level_execute_command(self._task.args.get('_raw_params'), executable=executable))",
+      "sink_type": "P2-014 _low_level_execute_command arg0",
+      "source_location": "raw.py:42 self._task.args.get('_raw_params') (P2-004 candidate：task args)",
+      "codeflow_summary": "task.args['_raw_params'] -> :42 sink（单步直达，源节点即 sink 实参）",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "task.args 来自 playbook——raw 模块的 _raw_params 就是“要在目标机上执行的原始命令”。playbook 作者可执行任意命令是 Ansible 的基本能力。",
+        "q2_propagation": "真实且直接。",
+        "q3_sink": "真实：raw 动作把命令原样交给远端 shell（:1254 注释明言刻意避开 executable 干扰 raw 动作）。",
+        "q4_content": "是：命令=参数本身。",
+        "q5_protection": "无（by design）。",
+        "q6_business_function": "完全是：raw 模块的文档化功能即执行原始命令（无需目标机 Python）。",
+        "q7_overapproximation": "路径真实；P2-004（task.args candidate）在该站点即功能本体。"
+      }
+    },
+    {
+      "alert_id": 9,
+      "sink_location": "lib/ansible/plugins/action/reboot.py:222:58 (DB 快照)",
+      "sink_code": "command_result = self._low_level_execute_command(boot_time_command, sudoable=self.DEFAULT_SUDOABLE)",
+      "sink_type": "P2-014 _low_level_execute_command arg0",
+      "source_location": "reboot.py:214 boot_time_command = self._task.args.get('boot_time_command') (P2-004 candidate)",
+      "codeflow_summary": "task.args['boot_time_command'] -> :214 boot_time_command -> :222 sink",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "playbook 作者的 reboot 模块文档化选项（boot_time_command，:216-219 有 check_type_str 校验类型但不消毒内容）。",
+        "q2_q3_q4": "传播真实直达；sink 真实（远端 shell）；内容=作者指定的命令。",
+        "q5_protection": "仅类型检查。",
+        "q6_business_function": "是：boot_time_command 是 reboot 动作的公开参数（用于读取启动时间的命令由用户指定）。",
+        "q7_overapproximation": "路径真实；task.args 建模在此为功能自证。"
+      }
+    },
+    {
+      "alert_id": 10,
+      "sink_location": "lib/ansible/plugins/action/reboot.py:264:62 (DB 快照)",
+      "sink_code": "command_result = self._low_level_execute_command(test_command, sudoable=self.DEFAULT_SUDOABLE)",
+      "sink_type": "P2-014 _low_level_execute_command arg0",
+      "source_location": "reboot.py:260 test_command = self._task.args.get('test_command', ...) (P2-004 candidate)",
+      "codeflow_summary": "task.args['test_command'] -> :260 test_command -> :264 sink",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_q2_q3_q4": "同 alert 9：playbook 文档化参数（reboot 后验证命令）直达真实 shell sink。",
+        "q5_protection": "无。",
+        "q6_business_function": "是：test_command 是 reboot 动作公开参数。",
+        "q7_overapproximation": "路径真实；功能自证。"
+      }
+    },
+    {
+      "alert_id": 11,
+      "sink_location": "lib/ansible/plugins/action/reboot.py:333:61 (DB 快照)",
+      "sink_code": "reboot_result = self._low_level_execute_command(reboot_command, sudoable=self.DEFAULT_SUDOABLE)",
+      "sink_type": "P2-014 _low_level_execute_command arg0",
+      "source_location": "action/__init__.py:1112 模块执行远程输出 (P2-026 tp) —— 经 find 模块 files[].path",
+      "codeflow_summary": "同 alert 2 的完整链：模块远程输出 -> reboot.py:187 find_result -> :198 full_path -> :201 -> :326 shutdown_command -> :328 reboot_command -> :333 sink（sudoable=True，可叠加 become）",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "reasoning": {
+        "q1_q2_q3_q4_q5": "同 alert 2：主机控制的 find 返回路径未加引用进入 reboot 命令，经远端 shell（可 root）执行；仅 find-pattern 与非空校验。",
+        "q6_business_function": "定位 shutdown 并执行是 reboot 设计；“主机侧返回值直接进 shell”是实现选择。",
+        "q7_overapproximation": "路径真实。uncertain 理由同 alert 2：唯一攻击者（说谎的受管主机）无净权限提升——注入命令仍执行于同一主机、同一通道；Ansible 信任立场视模块输出为可信。"
+      }
+    },
+    {
+      "alert_id": 12,
+      "sink_location": "lib/ansible/modules/rpm_key.py:206:54 (DB 快照)",
+      "sink_code": "rc, stdout, stderr = self.module.run_command(cmd, use_unsafe_shell=True)",
+      "sink_type": "P2-008 run_command arg0, use_unsafe_shell=True",
+      "source_location": "rpm_key.py:101 key = module.params['key'] (P2-001 tp) -> :117 keyfile = key（本地文件路径分支）",
+      "codeflow_summary": "module params['key'] -> :101 key -> :117 keyfile(os.path.isfile 分支；fetch_key 分支为 mkstemp 随机名) -> :172 getkeyid -> :173 [gpg, '--no-tty', ..., keyfile] 列表 -> :205 execute_command -> :206 run_command(cmd, use_unsafe_shell=True)",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "module.params['key']——playbook 作者指定的密钥 URL/keyid/文件路径。",
+        "q2_propagation": "真实：key 作为 keyfile 进入 argv 列表末元素。",
+        "q3_sink": "调用点被 P2-008 命中，但被调方语义决定安全性：cmd 恒为 list（:173/:182/:225），basic.py:1897-1898 在 unsafe-shell 分支对每个 list 元素 shlex_quote 后再 join——keyfile 被引用，无 shell 元字符解释。P2-SAN-001 屏障的证据点正在 basic.py:1915-1916 一带（本快照为 :1898）。",
+        "q4_content": "内容受影响但被引用（引号内原样传递给 gpg/rpm 参数）。字符串形式的 cmd（:216 固定字面量拼接）不含污点。",
+        "q5_protection": "双重：shlex_quote 逐元素引用（执行点）+ keyfile 须是已存在文件（:116）或 mkstemp 随机名。",
+        "q6_business_function": "rpm_key 导入 GPG 密钥的文档化功能。",
+        "q7_overapproximation": "sink 模型在包装调用点触发、位于被调方引用保护之前——对 list 实参过度近似（这正是 run_command argv 形式的既定安全语义）。"
+      }
+    },
+    {
+      "alert_id": 13,
+      "sink_location": "hacking/test-module.py:232:28 (DB 快照)",
+      "sink_code": "cmd = subprocess.Popen(invoke, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)",
+      "sink_type": "P2-020 Popen shell=True",
+      "source_locations": [
+        "config/manager.py:219 ANSIBLE_CONFIG env / :497 CLIARGS [cf0-cf2]",
+        "hacking/test-module.py:139/:143 loader.load_from_file(args)/load(args)（YAML 参数文件，P2-049 json.load 同族）[cf3]"
+      ],
+      "codeflow_summary": "env/CLIARGS/YAML -> module_common.modify_module -> test-module.py:157 (module_data, module_style, shebang) -> :270 boilerplate_module/... -> :285/:218 modfile(生成模块文件路径) -> :228 invoke -> :232 Popen(invoke, shell=True)",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "hacking/test-module.py 是开发者本地测试工具（hacking/ 目录，不随包分发）。输入是开发者自己的 CLI 参数/env/本地 YAML 文件。",
+        "q2_propagation": "真实（配置 -> shebang -> 生成的模块文件路径 -> invoke）。",
+        "q3_sink": "真实 shell=True，本地执行。",
+        "q4_content": "invoke 由 modfile 路径与解释器拼成，内容受输入影响但输入即开发者本人。",
+        "q5_protection": "无（:181/:226 还有裸 os.system(\"chmod +x %s\" % modfile)——同级别的开发者代码风格）。",
+        "q6_business_function": "是：该脚本的存在目的就是在本地跑通被测模块。",
+        "q7_overapproximation": "路径真实；source 建模（env/CLI/YAML candidate 级）在纯开发工具上无安全意义。"
+      }
+    },
+    {
+      "alert_id": 14,
+      "sink_location": "lib/ansible/modules/user.py:596:44 (DB 快照)",
+      "sink_code": "return self.module.run_command(cmd, use_unsafe_shell=use_unsafe_shell, data=data)",
+      "sink_type": "P2-008 run_command arg0, 动态 use_unsafe_shell 标志（notes §7 预告的 FP 位点）",
+      "source_location": "user.py:3006 AnsibleModule params -> :499 self.name = module.params['name'] (P2-001 tp)",
+      "codeflow_summary": "module params['name'] -> :499 user.name -> :3163 -> :1027/:1032 chown 命令 cmd.append(self.name) -> :1036 execute_command -> :589 -> :595 cmd=[str(x) for x in cmd] -> :596 run_command(cmd, use_unsafe_shell=use_unsafe_shell)",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "module.params['name']——playbook 作者的用户名参数。",
+        "q2_propagation": "真实：用户名进入 argv 列表。",
+        "q3_sink": "调用点被动态标志命中，但两点使其非 shell 执行：(a) 全文件 grep 证实 execute_command 的 50+ 个调用无一传 use_unsafe_shell=True（默认 False → argv 模式，无 shell）；(b) 即便为 True，cmd 为 list，basic.py:1898 逐元素 shlex_quote。",
+        "q4_content": "用户名作为单个 argv 元素传递。",
+        "q5_protection": "argv 列表形式 + 执行点引用；另有 :595 的元素 str 化。",
+        "q6_business_function": "user 模块创建/管理用户的文档化功能。",
+        "q7_overapproximation": "是：动态标志按“可能为真”接受（为 K-89 command.py:359 的真实动态位召回而设），在恒为 False 且 argv 形式的 user.py 上产生已知 FP（notes §7 明确预告）。"
+      }
+    }
+  ],
+  "summary": {
+    "total_formal_alerts": 15,
+    "likely_tp": 0,
+    "likely_fp": 12,
+    "uncertain": 3,
+    "uncertain_alert_ids": [2, 5, 11],
+    "fp_alert_ids": [0, 1, 3, 4, 6, 7, 8, 9, 10, 12, 13, 14],
+    "notes": [
+      "15 条均为正式 Pass2_CommandInjection.ql path-problem 结果（诊断查询 Pass2_DiagnosticParameter 未计入）。",
+      "3 条 uncertain（2/5/11）同属一类：P2-018/026 远程输出 source（受管主机控制）-> 未加引用的命令字符串 -> 在同一受管主机上经控制器通道 shell 执行。代码路径全部真实（原生数据流）；判 uncertain 而非 tp 的核心原因是唯一可行的攻击者（说谎的受管主机）无法越过既有信任边界获得净收益，而 Ansible 的文档化信任立场视模块输出为可信；判 uncertain 而非 fp 是因为主机侧低权限用户借 PATH/文件名影响输出仍可造成同主机有限横向（alert 5 场景）。",
+      "12 条 likely_fp 的成因分布：(a) sink 在包装调用点触发而引用保护在被调方内部——run_command list 实参在 basic.py:1898 被逐元素 shlex_quote（alert 12、14；alert 7 例外为字符串形式但 source 是操作者）；(b) source 为操作者侧边界（模块参数/task args/CLI/env/config/playbook = 功能自证：alert 1/3/4/6/7/8/9/10）；(c) 开发者工具（alert 13）与操作者环境变量（alert 0）。",
+      "与 iris_report.md 的关系：报告的 13 candidate + 2 likely-fp（test-file heuristic）为启发式分类；本轮逐条路径复核后为 12 fp + 3 uncertain + 0 tp，与其结论方向一致但更精细。",
+      "证据源纪律：所有行号验证均基于 ansible-db/src.zip 快照（磁盘 ansible_vuln 树与其分歧，8/12 抽查文件不一致）；快照解压于 triage_work/snapshot/（隔离目录）；未读取 PyVul 真值（ansible-db/、ansible_vuln/ 下的 cmd_sinks*.csv 等）、修复提交与 CVE 公告；未修改原始 SARIF、标签或查询。",
+      "工作目录在复核中途被外部从 ansible缺失 重命名为 ansible（事实记录，不影响复核内容）。"
+    ]
+  },
+  "constraints": {
+    "pyvul_ground_truth_read": false,
+    "original_sarif_modified": false,
+    "labels_modified": false,
+    "queries_modified": false,
+    "diagnostic_results_used_as_tp": false
+  }
+}

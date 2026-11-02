@@ -1,0 +1,189 @@
+{
+  "project": "ansible",
+  "generated_at": "2026-10-14",
+  "pipeline": {
+    "tool": "augur-0.3.0",
+    "phase": 1,
+    "steps": ["step1_explore_and_detect", "step2_extract_candidates"],
+    "pass_scope": {
+      "passes": [2],
+      "cwes": ["78"],
+      "focus": "OS Command Injection (Pass 2 restricted to CWE-78 by user request)"
+    }
+  },
+  "toolchain": {
+    "codeql_cli": "2.25.1",
+    "python_query_pack": "codeql/python-all 7.0.4 (pinned in iris/qlpack.yml; API surface cross-checked against installed 7.1.x layout)",
+    "database": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ansible-db",
+    "database_source_root": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ansible_vuln",
+    "database_primary_language": "python",
+    "database_source_sha": "578fa17af58ae665cc652c530f1de6562659665c",
+    "database_baseline_loc": 190401
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "codeql-database.yml primaryLanguage: python",
+      "lib/ansible/**/*.py package layout with setup.py and requirements.txt",
+      "no go.mod / pom.xml / package.json / .csproj build manifests for other languages"
+    ]
+  },
+  "framework": {
+    "primary": {
+      "name": "ansible (in-house CLI/plugin automation framework, not a web framework)",
+      "confidence": 0.9,
+      "evidence": {
+        "import_evidence": [
+          "49 files under lib/ import ansible.module_utils.basic (AnsibleModule)",
+          "94 files import ansible.utils.display.Display",
+          "7 plugin files reference ConnectionBase"
+        ],
+        "layout_evidence": [
+          "lib/ansible/plugins/{action,become,cache,callback,cliconf,connection,filter,httpapi,inventory,lookup,netconf,shell,strategy,terminal,vars} plugin loader architecture",
+          "lib/ansible/modules/ (71 packaged modules), lib/ansible/executor/, lib/ansible/cli/"
+        ],
+        "bootstrap_evidence": [
+          "CLI entry points under lib/ansible/cli/ and bin-style scripts in hacking/",
+          "connection plugins subclass ConnectionBase and implement exec_command/put_file/fetch_file"
+        ]
+      },
+      "scoring_rationale": "import +0.45, layout +0.05, bootstrap +0.20, plus 0.20 from Ansible-specific handler shapes (AnsibleModule ctor, plugin exec_command protocol) normalized to 0.90"
+    },
+    "web_frameworks": {
+      "flask": 0.0,
+      "django": 0.0,
+      "fastapi": 0.0,
+      "note": "0 files under lib/ import flask/django/fastapi; no route decorators; no request-handler source shapes. Web framework references not loaded."
+    }
+  },
+  "references_loaded": [
+    "references/patterns.md",
+    "references/python.md"
+  ],
+  "references_missing": [
+    "No references/<framework>.md exists for Ansible in augur-0.3.0. Per WORKFLOW.md 4.2.3, source/sink shapes were derived from repository evidence; every Ansible-specific rule is recorded below with its generalization rationale."
+  ],
+  "input_boundaries": [
+    {
+      "family": "AnsibleModule parameters (module-side)",
+      "api": "AnsibleModule(argument_spec, ...) constructor; AnsibleModule.params attribute; module_utils.basic._load_params()",
+      "evidence": [
+        "lib/ansible/module_utils/basic.py:370 _load_params() reads sys.argv[1] (file or raw arg) or sys.stdin buffer, then json.loads -> params['ANSIBLE_MODULE_ARGS']",
+        "lib/ansible/module_utils/basic.py:1281 AnsibleModule._load_params sets self.params = _load_params()",
+        "43 packaged module files instantiate AnsibleModule; 41 read module.params (470 .params accesses under lib/ansible/modules)"
+      ],
+      "generalization_rationale": "Same pattern class as web 'request object accessors': a constructor that parses external input into a params object, plus attribute reads of that object. Matched syntactically (name 'AnsibleModule' / attribute 'params' in files that construct AnsibleModule or are module_utils/basic.py) because Python dynamic dispatch cannot type the receiver."
+    },
+    {
+      "family": "task / playbook arguments (controller-side)",
+      "api": "task.args attribute reads (self._task.args, task.args, self.task.args, _task.args); ansible.context.CLIARGS",
+      "evidence": [
+        "lib/ansible/executor/task_executor.py:509-558 self._task.args consumed and merged with variable_params/module_defaults",
+        "183 task-args attribute reads under lib/ansible (action plugins, executor, playbook)",
+        "lib/ansible/plugins/action/command.py:20 self._task.args carries _raw_params for command/shell tasks"
+      ],
+      "generalization_rationale": "Playbook/inventory data is the controller-side untrusted-input boundary for automation content. Receiver constrained to task-shaped names (task/_task/self._task/self.task) and to lib/ansible/** paths to avoid unrelated .args reads."
+    },
+    {
+      "family": "environment variables",
+      "api": "os.environ attribute reads, os.getenv() calls",
+      "evidence": [
+        "62 os.environ/os.getenv uses under lib/ (config/manager.py:213 ANSIBLE_CONFIG, modules/systemd.py:360 XDG_RUNTIME_DIR, ...)"
+      ],
+      "generalization_rationale": "Standard language-level source family from references/python.md; no Ansible-specific extension."
+    },
+    {
+      "family": "command line arguments",
+      "api": "sys.argv attribute reads; context.CLIARGS reads",
+      "evidence": [
+        "24 sys.argv uses under lib/ (module_utils/basic.py:389-395, cli/tools)",
+        "ansible.context.CLIARGS is the parsed global CLI arg store"
+      ],
+      "generalization_rationale": "Standard CLI source family; CLIARGS added as the project's parsed-CLI accessor."
+    },
+    {
+      "family": "standard input",
+      "api": "sys.stdin attribute reads (covers sys.stdin.buffer, .read())",
+      "evidence": [
+        "lib/ansible/module_utils/basic.py:401-403 reads sys.stdin/stdin.buffer for module args",
+        "lib/ansible/cli/vault.py:324 sys.stdin.read()"
+      ],
+      "generalization_rationale": "Standard stdin source family."
+    },
+    {
+      "family": "remote host / external output (network received data)",
+      "api": "exec_command / _exec_command / _low_level_execute_command definitions (return values); json.loads/json.load calls",
+      "evidence": [
+        "lib/ansible/plugins/connection/__init__.py:135,271 ConnectionBase.exec_command is the remote-command protocol; overrides in ssh.py:1262, paramiko_ssh.py:374, local.py:64",
+        "lib/ansible/plugins/action/__init__.py:1212 _low_level_execute_command returns rc/stdout/stderr of remote commands",
+        "json.loads on remote output: lib/ansible/executor/interpreter_discovery.py:103 json.loads(res.get('stdout')), module_utils/connection.py:164, facts/other/facter.py:80, facts/system/local.py:80 (38 json.loads/json.load calls under lib/)"
+      ],
+      "generalization_rationale": "Return values of the remote-execution protocol are the network-received-data boundary; json.loads is included as the deserialization transfer point for that data (bounded: 38 call sites under lib/)."
+    }
+  ],
+  "execution_apis": [
+    {
+      "family": "subprocess stdlib",
+      "api": ["subprocess.Popen", "subprocess.run", "subprocess.call", "subprocess.check_call", "subprocess.check_output"],
+      "evidence": "42 subprocess exec-family call sites under lib/ (module_utils/basic.py:2020 inside run_command, plugins/connection/local.py:97, ssh.py:577/888/1342/1353, winrm.py:364, executor/task_executor.py:1111, galaxy, parsing/vault, plugins/lookup/lines.py:56 and pipe.py:70 with shell=True, utils/cmd_functions.py:44); one from-import style in utils/galaxy.py:24",
+      "notes": "Argument index 0 carries the command. shell=True keyword and sequence-vs-scalar arg0 recorded in the exec_mode column. os.system/os.popen: only 2 os.system sites, both in hacking/test-module.py (dev harness) - family still emitted; os.popen has 0 occurrences."
+    },
+    {
+      "family": "AnsibleModule.run_command (module-side wrapper)",
+      "api": "AnsibleModule.run_command(args, ..., use_unsafe_shell=False, ...)",
+      "evidence": "lib/ansible/module_utils/basic.py:1842 definition; 295 call sites across modules and module_utils (facts, service, package managers); 35 call sites pass use_unsafe_shell=True (shell=True path via shlex/stringify); string+use_unsafe_shell=False path re-splits with shlex and expands ~ and env vars (basic.py:1937-1941)",
+      "notes": "Argument index 0 (args) is the command; exec_mode column distinguishes use_unsafe_shell=True vs False/default and sequence vs scalar arg0. This is the dominant CWE-78 sink surface for module-side code."
+    },
+    {
+      "family": "connection plugin exec_command (remote execution protocol)",
+      "api": "Connection.exec_command(cmd, in_data=None, sudoable=True) / _exec_command",
+      "evidence": "ConnectionBase protocol in plugins/connection/__init__.py:135; overrides local.py:64 (local subprocess.Popen, shell= for str cmd), ssh.py:1262 (runs local ssh binary with cmd), paramiko_ssh.py:374; 14 call sites (e.g. plugins/action/__init__.py:1250 self._connection.exec_command(cmd, ...))",
+      "notes": "Argument index 0 (cmd) is the remote command string; receiver text recorded. Execution is remote by design but cmd construction happens on the controller - injection here still yields CWE-78."
+    },
+    {
+      "family": "action plugin _low_level_execute_command",
+      "api": "ActionBase._low_level_execute_command(cmd, sudoable=True, in_data=None, ...)",
+      "evidence": "lib/ansible/plugins/action/__init__.py:1212 definition; 23 call sites (152, 394, 453, 730-754, 852, 1112, ...) including keyword form cmd=cmd at line 152",
+      "notes": "Argument index 0 (cmd, also passed as cmd= kwarg - recorded in exec_mode); builds become/sudo and shell prefixes then delegates to connection.exec_command."
+    },
+    {
+      "family": "pexpect",
+      "api": "pexpect.run / pexpect._run / pexpect.spawn / pexpect.spawnu",
+      "evidence": "lib/ansible/modules/expect.py:202,207 (pexpect.run / pexpect._run with module args); lib/ansible/plugins/connection/winrm.py:335 pexpect.spawn(command, kinit_cmdline)",
+      "notes": "Argument index 0 is the command (winrm passes the kinit argv as arg 1 - noted for the labeling stage)."
+    },
+    {
+      "family": "internal wrappers (summary candidates)",
+      "api": "functions whose parameter is passed directly into any exec-family call",
+      "evidence": "lib/ansible/utils/cmd_functions.py:44 run_cmd(cmdargs) -> subprocess.Popen(cmdargs); plugins/connection/local.py:64 exec_command(cmd) -> subprocess.Popen(cmd); plugins/connection/ssh.py:1155 _run(cmd,...) -> subprocess.Popen(cmd)",
+      "notes": "Emitted as wrapper_definition rows with the parameter position; direct pass-through only (bounded recall, documented) - indirect flows will be recovered in the taint pass via summaries."
+    }
+  ],
+  "excluded_from_candidates": [
+    "unit/integration tests: paths matching test/%, %/test/%, %/tests/% are excluded from both queries",
+    "lib/ansible/plugins/test/** is excluded by the %/test/% pattern (Jinja2 test plugins, not unit tests; no command-execution surface observed there - accepted loss)",
+    "hacking/** is kept (not a test fixture tree; hacking/test-module.py contains os.system on a module path and sys.argv handling - kept as candidates, expected to be FP-filtered later)",
+    "os.exec*/os.spawn*/commands.getoutput: 0 occurrences under lib/ - family not emitted",
+    "pure logging/display helpers (display.py, callback plugins output) are not extracted as sources or sinks"
+  ],
+  "design_caution": [
+    "Ansible's command/shell/remote-execution functionality is a designed feature: a source-sink pair here is a candidate for review, not automatically a vulnerability. Both extraction queries therefore preserve call signature, dangerous argument position, execution mode (shell=True / use_unsafe_shell=True / argv vs scalar), receiver text, file and line so the labeling and triage stages can judge intent."
+  ],
+  "extraction_strategy": {
+    "avoid_overextraction": "No indiscriminate all-function-parameter extraction. Sources are limited to the six boundary families above; sinks are limited to the six exec families plus bounded direct pass-through wrapper definitions.",
+    "volume_estimate": {
+      "sources": "~470 .params reads + ~62 env reads + ~24 argv reads + 43 AnsibleModule ctor sites + 38 json.loads sites + 183 task-args reads + 6 remote-exec definitions",
+      "sinks": "~42 subprocess sites + 295 run_command sites + 14 exec_command sites + 23 _low_level sites + 3 pexpect sites + 2 os.system sites + wrapper definitions"
+    },
+    "api_name_conventions": {
+      "AnsibleModule.run_command": "attribute-name match on any receiver (only one run_command definition exists in the repo, basic.py:1842); receiver text kept in the receiver column",
+      "Connection.exec_command / ActionBase._low_level_execute_command": "attribute-name match; these are the plugin protocol method names from plugins/connection/__init__.py and plugins/action/__init__.py"
+    }
+  },
+  "next_steps": [
+    "step2 (this run): extraction queries written to iris/extraction/sources.ql and iris/extraction/sinks.ql; CodeQL execution deferred per user instruction",
+    "step3: LLM labeling of candidate CSVs (not started)",
+    "codeql pack install was NOT re-run in this step; the workspace qlpack.yml pins codeql/python-all 7.0.4"
+  ]
+}

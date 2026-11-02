@@ -1,0 +1,1406 @@
+{
+ "version": "1.0.0",
+ "metadata": {
+  "run_id": "ansible-iris-manual-phase1-step3-pass2-cwe78",
+  "generated_at": "2026-10-14T00:00:00Z",
+  "language": "python",
+  "framework": "ansible (in-house CLI/plugin automation framework; not a web framework)",
+  "model": "glm-5.3",
+  "project": "ansible",
+  "notes": [
+   "Labeling performed by glm-5.3 running as the Claude Code CLI agent (lead) plus 8 fork subagents of the same model; every judgment is LLM-authored against the real source tree at dataset/codeql_databases/ansible_vuln (read-only).",
+   "Deterministic single-pass judgment; no sampling temperature applies (CLI agent reasoning, not a temperature-sampled API completion).",
+   "Scope: Pass 2 restricted to CWE-78 (OS command injection) per user request. Pass 1 is a schema-compatibility placeholder with empty entries, per user instruction.",
+   "labels_raw_pass2.json contains all 1665 per-candidate-row labels (1249 source rows + 416 sink rows from iris/extraction/*.csv, none skipped); labels.json contains the deduplicated signature-level view.",
+   "One sanitizer entry (shlex_quote) was added from LLM source reading rather than the candidate CSVs; evidence: lib/ansible/module_utils/basic.py:1915-1916, lib/ansible/plugins/action/__init__.py:1037.",
+   "Batches: S1 module_params (561), S2 cli_args (363), S3 task_args/env/stdin (283), S4 remote/deserialized (42), K1 run_command (323), K2 subprocess (38), K3 action/connection layer (40), K4 pexpect/wrappers (15). Per-batch judgment files: iris/labels/_work/out_*.jsonl; rubric: iris/labels/_work/rubric.md.",
+   "PyVul ground truth and fix commits were not consulted; source tree and databases unmodified."
+  ]
+ },
+ "passes": [
+  {
+   "pass_id": 1,
+   "focus": "Path Traversal (placeholder - not analyzed in this run; Pass 2/CWE-78 only per user scope)",
+   "cwes": [
+    "022",
+    "023",
+    "036",
+    "073"
+   ],
+   "entries": []
+  },
+  {
+   "pass_id": 2,
+   "focus": "Command/Argument Injection (Pass 2, restricted to CWE-78 OS command injection by user request; CWE-77/88 semantics noted in rationales where relevant)",
+   "cwes": [
+    "078"
+   ],
+   "entries": [
+    {
+     "id": "P2-001",
+     "role": "source",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.basic",
+      "type": "AnsibleModule",
+      "callable": "AnsibleModule.params",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 1281
+     },
+     "rationale": "Deduplicated from 510 candidate row(s) [S-62..S-1249]; classification distribution: tp 510. Context class: module_params. Representative judgments: S-62 (tp, conf 0.75): Module-side input boundary: AnsibleModule.params holds controller/playbook-supplied values parsed from stdin/argv JSON (basic.py:370-417, 1288). Playbook author is normally the local admin, but roles/playbooks from untru; S-63 (tp, conf 0.75): Module-side input boundary: AnsibleModule.params holds controller/playbook-supplied values parsed from stdin/argv JSON (basic.py:370-417, 1288). Playbook author is normally the local admin, but roles/playbooks from untru; S-64 (tp, conf 0.75): Module-side input boundary: AnsibleModule.params holds controller/playbook-supplied values parsed from stdin/argv JSON (basic.py:370-417, 1288). Playbook author is normally the local admin, but roles/playbooks from untru",
+     "evidence": [
+      "basic.py:1288 — self.params = _load_params()",
+      "basic.py:370-417 — stdin/argv JSON parse",
+      "basic.py:507-508/1259-1272/1377-1389/1477 — params consumption sites",
+      "lib/ansible/module_utils/basic.py — module-side file, constructs AnsibleModule",
+      "lib/ansible/modules/apt.py — module-side file, constructs AnsibleModule",
+      "lib/ansible/modules/apt_key.py — module-side file, constructs AnsibleModule",
+      "lib/ansible/modules/apt_repository.py — module-side file, constructs AnsibleModule",
+      "lib/ansible/modules/assemble.py — module-side file, constructs AnsibleModule"
+     ]
+    },
+    {
+     "id": "P2-002",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.57,
+     "signature": {
+      "package": null,
+      "module": "ansible.context",
+      "type": null,
+      "callable": "ansible.context.CLIARGS",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "lib/ansible/context.py",
+      "line": 25
+     },
+     "rationale": "Deduplicated from 332 candidate row(s) [S-5..S-1160]; classification distribution: candidate 332. Context class: cli_args. Representative judgments: S-26 (candidate, conf 0.60): Controller-side CLI option read ansible.context.CLIARGS['module_name'] at lib/ansible/cli/adhoc.py:67; local-admin CLI input - real but weak CWE-78 boundary (kept for recall); value becomes the ad-hoc task's module name/; S-27 (candidate, conf 0.60): Controller-side CLI option read ansible.context.CLIARGS['module_name'] at lib/ansible/cli/adhoc.py:69; local-admin CLI input - real but weak CWE-78 boundary (kept for recall); value becomes the ad-hoc task's module name/; S-28 (candidate, conf 0.60): Controller-side CLI option read ansible.context.CLIARGS['module_name'] at lib/ansible/cli/adhoc.py:69; local-admin CLI input - real but weak CWE-78 boundary (kept for recall); value becomes the ad-hoc task's module name/",
+     "evidence": [
+      "lib/ansible/cli/__init__.py:236 — op = context.CLIARGS",
+      "lib/ansible/cli/__init__.py:443 — options = context.CLIARGS",
+      "lib/ansible/cli/adhoc.py:103 — hosts = self.get_host_list(inventory, context.CLIARGS['subset'], pattern)",
+      "lib/ansible/cli/adhoc.py:105 — if context.CLIARGS['subset']:",
+      "lib/ansible/cli/adhoc.py:112 — if context.CLIARGS['listhosts']:",
+      "lib/ansible/cli/adhoc.py:119 — if context.CLIARGS['module_name'] in C.MODULE_REQUIRE_ARGS and not context.CLIARGS['module_args']:",
+      "lib/ansible/cli/adhoc.py:120 — err = \"No argument passed to %s module\" % context.CLIARGS['module_name']",
+      "lib/ansible/cli/adhoc.py:126 — if context.CLIARGS['module_name'] in C._ACTION_IMPORT_PLAYBOOK:"
+     ]
+    },
+    {
+     "id": "P2-003",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.62,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.basic",
+      "type": "AnsibleModule",
+      "callable": "run_command",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 1842
+     },
+     "rationale": "Deduplicated from 251 candidate row(s) [K-29..K-416]; classification distribution: candidate 250, tp 1. Context class: use_unsafe_shell=False_or_default;arg0=scalar_or_unknown. Representative judgments: K-89 (tp, conf 0.75): THE command-module execution point (command.py:359; CSV line 346): module.run_command(args, executable=executable, use_unsafe_shell=shell) with args = module.params['_raw_params'] and shell flag selecting the unsafe path; K-46 (candidate, conf 0.65): AnsibleModule.run_command (basic.py:1842) with default use_unsafe_shell=False: string arg0 is shlex.split then argv exec, expandvars/expanduser per element (basic.py:1930-1941) - no shell metachar interpretation; CWE-88-; K-47 (candidate, conf 0.65): AnsibleModule.run_command (basic.py:1842) with default use_unsafe_shell=False: string arg0 is shlex.split then argv exec, expandvars/expanduser per element (basic.py:1930-1941) - no shell metachar interpretation; CWE-88-",
+     "evidence": [
+      "lib/ansible/module_utils/basic.py:1015-1020 - attrcmd = self.get_bin_path('lsattr', False); run_command(attrcmd)",
+      "lib/ansible/module_utils/basic.py:990-1005 - attrcmd = [attrcmd, '%s%s' % (attr_mod, attributes), b_path]",
+      "lib/ansible/module_utils/facts/hardware/aix.py:102 - run_command call site (arg0 shape per file-level trace: facts commands: lists [netstat_path,'-nr'], [entstat_path, device], [lsattr_path,'-El', device] where device values are parsed from ifconfig output (aix.py:38,106,124) - output-derived argv elements)",
+      "lib/ansible/module_utils/facts/hardware/aix.py:116 - run_command call site (arg0 shape per file-level trace: facts commands: lists [netstat_path,'-nr'], [entstat_path, device], [lsattr_path,'-El', device] where device values are parsed from ifconfig output (aix.py:38,106,124) - output-derived argv elements)",
+      "lib/ansible/module_utils/facts/hardware/aix.py:121 - run_command call site (arg0 shape per file-level trace: facts commands: lists [netstat_path,'-nr'], [entstat_path, device], [lsattr_path,'-El', device] where device values are parsed from ifconfig output (aix.py:38,106,124) - output-derived argv elements)",
+      "lib/ansible/module_utils/facts/hardware/aix.py:161 - run_command call site (arg0 shape per file-level trace: facts commands: lists [netstat_path,'-nr'], [entstat_path, device], [lsattr_path,'-El', device] where device values are parsed from ifconfig output (aix.py:38,106,124) - output-derived argv elements)",
+      "lib/ansible/module_utils/facts/hardware/aix.py:185 - run_command call site (arg0 shape per file-level trace: facts commands: lists [netstat_path,'-nr'], [entstat_path, device], [lsattr_path,'-El', device] where device values are parsed from ifconfig output (aix.py:38,106,124) - output-derived argv elements)",
+      "lib/ansible/module_utils/facts/hardware/aix.py:224 - run_command call site (arg0 shape per file-level trace: facts commands: lists [netstat_path,'-nr'], [entstat_path, device], [lsattr_path,'-El', device] where device values are parsed from ifconfig output (aix.py:38,106,124) - output-derived argv elements)"
+     ]
+    },
+    {
+     "id": "P2-004",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.68,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.action.__init__",
+      "type": "task",
+      "callable": "task.args",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "lib/ansible/executor/task_executor.py",
+      "line": 509
+     },
+     "rationale": "Deduplicated from 182 candidate row(s) [S-14..S-1192]; classification distribution: candidate 167, tp 9, fp 6. Context class: task_args_playbook. Representative judgments: S-833 (tp, conf 0.80): raw action passes task arg _raw_params STRAIGHT into _low_level_execute_command (remote shell exec). Direct playbook-arg -> shell-command path; designed feature of raw, but the exact CWE-78 source->sink shape.; S-836 (tp, conf 0.75): Task arg reboot_command (string-type validated only, then split) reaches _low_level_execute_command at reboot.py:333 — remote shell exec of playbook-provided command.; S-838 (tp, conf 0.75): Second reboot_command read (shutdown path) flows to _low_level_execute_command — same playbook-arg -> shell path.",
+     "evidence": [
+      "lib/ansible/executor/task_executor.py:488-491 — include_args = self._task.args.copy(); include_file = include_args.pop('_raw_params') (CSV 490)",
+      "lib/ansible/executor/task_executor.py:492-500 — include_args from self._task.args.copy(); include_file = pop('_raw_params') templated (CSV 500)",
+      "lib/ansible/executor/task_executor.py:509-511 — '_variable_params' in self._task.args / isinstance check (CSV 510)",
+      "lib/ansible/executor/task_executor.py:509-511 — variable_params isinstance check (CSV 511)",
+      "lib/ansible/executor/task_executor.py:509-558 — task-args merge/handler region (CSV 546)",
+      "lib/ansible/executor/task_executor.py:509-558 — task-args merge/handler region (CSV 547)",
+      "lib/ansible/executor/task_executor.py:515 — variable_params.update(self._task.args) (CSV 517, adjacent)",
+      "lib/ansible/executor/task_executor.py:516 — write self._task.args = variable_params"
+     ]
+    },
+    {
+     "id": "P2-005",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.53,
+     "signature": {
+      "package": null,
+      "module": "os",
+      "type": null,
+      "callable": "os.environ",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "lib/ansible/config/manager.py",
+      "line": 213
+     },
+     "rationale": "Deduplicated from 64 candidate row(s) [S-9..S-1208]; classification distribution: candidate 43, fp 17, unknown 3, tp 1. Context class: environment. Representative judgments: S-10 (tp, conf 0.70): PAGER env value flows directly into Popen(shell=True) via CLI.pager_pipe (cli/__init__.py:419->434). Genuine env->shell CWE-78 path in semantics; attacker must control the local admin's environment, so trust is candidate; S-12 (fp, conf 0.65): Line is an environment WRITE (LESS defaults), not an input read — not a taint source.; S-20 (candidate, conf 0.60): EDITOR env feeds vault editor command as an argv list via shlex.split (no shell); local-admin env, argv semantics.",
+     "evidence": [
+      "hacking/backport/backport_of_line_adder.py:235 — GITHUB_TOKEN credential read in dev tool",
+      "lib/ansible/cli/__init__.py:415 — membership test 'PAGER' in os.environ; value not read here",
+      "lib/ansible/cli/__init__.py:419 — os.environ['PAGER'] passed to CLI.pager_pipe",
+      "lib/ansible/cli/__init__.py:431 — membership test 'LESS' not in os.environ",
+      "lib/ansible/cli/__init__.py:432 — write os.environ['LESS'] = CLI.LESS_OPTS",
+      "lib/ansible/cli/__init__.py:434 — pager_pipe runs subprocess.Popen(cmd, shell=True)",
+      "lib/ansible/cli/config.py:103 — write os.environ['ANSIBLE_CONFIG'] (CSV line 98, drift +5)",
+      "lib/ansible/cli/config.py:151 — raise AnsibleError('Option not implemented yet') precedes the editor code"
+     ]
+    },
+    {
+     "id": "P2-006",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.basic",
+      "type": "AnsibleModule",
+      "callable": "AnsibleModule",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 441
+     },
+     "rationale": "Deduplicated from 49 candidate row(s) [S-60..S-1226]; classification distribution: candidate 49. Context class: module_params_stdin_argv. Representative judgments: S-60 (candidate, conf 0.60): AnsibleModule(argument_spec, ...) construction; ctor invokes _load_params() (basic.py:499/1288) which parses external stdin/argv JSON into self.params. Returned object holds the parsed external input; object-level source; S-61 (candidate, conf 0.60): AnsibleModule(argument_spec, ...) construction; ctor invokes _load_params() (basic.py:499/1288) which parses external stdin/argv JSON into self.params. Returned object holds the parsed external input; object-level source; S-71 (candidate, conf 0.60): AnsibleModule(argument_spec, ...) construction; ctor invokes _load_params() (basic.py:499/1288) which parses external stdin/argv JSON into self.params. Returned object holds the parsed external input; object-level source",
+     "evidence": [
+      "basic.py:1288 — self.params = _load_params()",
+      "basic.py:499 — self._load_params() in __init__",
+      "lib/ansible/modules/apt.py — constructs AnsibleModule (grep-confirmed)",
+      "lib/ansible/modules/apt_key.py — constructs AnsibleModule (grep-confirmed)",
+      "lib/ansible/modules/apt_repository.py — constructs AnsibleModule (grep-confirmed)",
+      "lib/ansible/modules/assemble.py — constructs AnsibleModule (grep-confirmed)",
+      "lib/ansible/modules/async_status.py — constructs AnsibleModule (grep-confirmed)",
+      "lib/ansible/modules/blockinfile.py — constructs AnsibleModule (grep-confirmed)"
+     ]
+    },
+    {
+     "id": "P2-007",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.48,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.basic",
+      "type": "AnsibleModule",
+      "callable": "run_command",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 1842
+     },
+     "rationale": "Deduplicated from 37 candidate row(s) [K-41..K-361]; classification distribution: candidate 37. Context class: use_unsafe_shell=False_or_default;arg0=sequence. Representative judgments: K-62 (candidate, conf 0.50): AnsibleModule.run_command (basic.py:1842) with default use_unsafe_shell=False and list arg0: pure argv-list execution (basic.py:1928-1943) - argument injection (CWE-88) surface only; argv-list form is itself the sanitize; K-63 (candidate, conf 0.50): AnsibleModule.run_command (basic.py:1842) with default use_unsafe_shell=False and list arg0: pure argv-list execution (basic.py:1928-1943) - argument injection (CWE-88) surface only; argv-list form is itself the sanitize; K-64 (candidate, conf 0.50): AnsibleModule.run_command (basic.py:1842) with default use_unsafe_shell=False and list arg0: pure argv-list execution (basic.py:1928-1943) - argument injection (CWE-88) surface only; argv-list form is itself the sanitize",
+     "evidence": [
+      "lib/ansible/module_utils/facts/hardware/darwin.py:53 - run_command call site (arg0 shape per file-level trace: ['/usr/sbin/system_profiler','SPHardwareDataType'], 'sysctl hw.model', vm_stat_command string (darwin.py:53,65,99))",
+      "lib/ansible/module_utils/facts/hardware/linux.py:648 - run_command call site (arg0 shape per file-level trace: facts commands: strings '%s -s %s' % (dmi_bin, v) and '%s %s' % (vgs_path, lvm_util_options) from get_bin_path binaries and constants (linux.py:383,823,836,845))",
+      "lib/ansible/module_utils/facts/hardware/linux.py:708 - run_command call site (arg0 shape per file-level trace: facts commands: strings '%s -s %s' % (dmi_bin, v) and '%s %s' % (vgs_path, lvm_util_options) from get_bin_path binaries and constants (linux.py:383,823,836,845))",
+      "lib/ansible/module_utils/facts/hardware/sunos.py:126 - run_command call site (arg0 shape per file-level trace: literal/bin-path commands: '/usr/bin/kstat cpu_info', ['/usr/sbin/prtconf'], '/usr/sbin/swap -s', prtdiag_path, '/usr/bin/kstat -p unix:...' (sunos.py:75,126,132,178,272))",
+      "lib/ansible/module_utils/facts/network/aix.py:106 - run_command call site (arg0 shape per file-level trace: lists [netstat_path,'-nr'], [uname_path,'-W'], [ifconfig_path, ifconfig_options], [entstat_path, device], [lsattr_path,'-El', device] - devices parsed from ifconfig output (aix.py:38,67,69,106,124))",
+      "lib/ansible/module_utils/facts/network/aix.py:124 - run_command call site (arg0 shape per file-level trace: lists [netstat_path,'-nr'], [uname_path,'-W'], [ifconfig_path, ifconfig_options], [entstat_path, device], [lsattr_path,'-El', device] - devices parsed from ifconfig output (aix.py:38,67,69,106,124))",
+      "lib/ansible/module_utils/facts/network/aix.py:38 - run_command call site (arg0 shape per file-level trace: lists [netstat_path,'-nr'], [uname_path,'-W'], [ifconfig_path, ifconfig_options], [entstat_path, device], [lsattr_path,'-El', device] - devices parsed from ifconfig output (aix.py:38,67,69,106,124))",
+      "lib/ansible/module_utils/facts/network/aix.py:67 - run_command call site (arg0 shape per file-level trace: lists [netstat_path,'-nr'], [uname_path,'-W'], [ifconfig_path, ifconfig_options], [entstat_path, device], [lsattr_path,'-El', device] - devices parsed from ifconfig output (aix.py:38,67,69,106,124))"
+     ]
+    },
+    {
+     "id": "P2-008",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.72,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.basic",
+      "type": "AnsibleModule",
+      "callable": "run_command",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 1842
+     },
+     "rationale": "Deduplicated from 34 candidate row(s) [K-36..K-303]; classification distribution: tp 33, unknown 1. Context class: use_unsafe_shell=True;arg0=scalar_or_unknown. Representative judgments: K-100 (tp, conf 0.85): AnsibleModule.run_command (basic.py:1842): use_unsafe_shell=True + string arg0 -> Popen(shell=True) via basic.py:1912-1927 (full shell metachar interpretation). arg0: self._read_user_execute() (cron.py:510-524): \"su %s -; K-101 (tp, conf 0.85): AnsibleModule.run_command (basic.py:1842): use_unsafe_shell=True + string arg0 -> Popen(shell=True) via basic.py:1912-1927 (full shell metachar interpretation). arg0: self._write_execute(path) (cron.py:526-534): \"chown q; K-280 (tp, conf 0.85): AnsibleModule.run_command (basic.py:1842): use_unsafe_shell=True + string arg0 -> Popen(shell=True) via basic.py:1912-1927 (full shell metachar interpretation). arg0: execute_command(cmd) wrapper body (rpm_key.py:205-206",
+     "evidence": [
+      "lib/ansible/module_utils/facts/hardware/aix.py:152-154 - cmd built from get_bin_path(\"lsvg\")/get_bin_path(\"xargs\")",
+      "lib/ansible/module_utils/facts/hardware/hpux.py:59-154 - all use_unsafe_shell=True calls take string-literal commands (e.g. \"ioscan -FkCprocessor | wc -l\", \"/usr/contrib/bin/machinfo | grep Intel\", \"echo 'phys_mem_pages/D' | adb ... | awk {print $2}\")",
+      "lib/ansible/module_utils/facts/system/distribution.py:561 - run_command(r\"/usr/sbin/swlist |egrep ...\", use_unsafe_shell=True)",
+      "lib/ansible/module_utils/facts/system/service_mgr.py:91 - run_command(\"ps -p 1 -o comm|tail -n 1\", use_unsafe_shell=True)",
+      "lib/ansible/modules/cron.py:317 - run_command(self._write_execute(path), use_unsafe_shell=True)",
+      "lib/ansible/modules/cron.py:517-523 - shlex_quote(self.user) in all branches",
+      "lib/ansible/modules/cron.py:529-531 - shlex_quote(user)/shlex_quote(path) in chown/su string",
+      "lib/ansible/modules/cron.py:587 - user = module.params[\"user\"]"
+     ]
+    },
+    {
+     "id": "P2-009",
+     "role": "source",
+     "classification": "tp",
+     "confidence": 0.69,
+     "signature": {
+      "package": null,
+      "module": "json",
+      "type": null,
+      "callable": "json.loads",
+      "arg_index": 0,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/executor/interpreter_discovery.py",
+      "line": 103
+     },
+     "rationale": "Deduplicated from 32 candidate row(s) [S-1..S-1190]; classification distribution: tp 22, candidate 10. Context class: deserialized_remote_or_external_data. Representative judgments: S-16 (tp, conf 0.80): _parse_returned_data() at lib/ansible/plugins/action/__init__.py:1179 parses module execution stdout (res['stdout'] from _low_level_execute_command) into the module result dict — remote command output; the code explicitl; S-58 (tp, conf 0.80): GalaxyAPI._call_galaxy parses the response body of every Galaxy API call: data = json.loads(resp_data) at lib/ansible/galaxy/api.py:388 with resp_data = to_text(resp.read()) from open_url() — direct network-received JSON; S-59 (tp, conf 0.80): GalaxyAPI.authenticate() parses the token endpoint response: data = json.loads(to_text(resp.read())) at lib/ansible/galaxy/api.py:439 from open_url POST to the Galaxy tokens URL — network-received JSON; parsed access_tok",
+     "evidence": [
+      "fallback path at 420-423 — safe_eval(value, dict()) for non-JSON strings",
+      "grep 'from_json(' lib/ansible — no call sites found",
+      "lib/ansible/cli/scripts/ansible_connection_cli_stub.py:130-148 — (s, addr) = self.sock.accept(); data = recv_data(s); request = json.loads(to_text(data))",
+      "lib/ansible/cli/scripts/ansible_connection_cli_stub.py:148 — resp = self.srv.handle_request(data) (socket recv)",
+      "lib/ansible/cli/scripts/ansible_connection_cli_stub.py:285-298 — child runs process.run(), parent os.fdopen(r) then json.loads(rfd.read(), cls=AnsibleJSONDecoder)",
+      "lib/ansible/executor/interpreter_discovery.py:103-106 — platform_info = json.loads(res.get('stdout')); _get_linux_distro(platform_info)",
+      "lib/ansible/executor/interpreter_discovery.py:97-99 — res = action._low_level_execute_command(found_interpreters[0], sudoable=False, in_data=platform_script)",
+      "lib/ansible/executor/task_executor.py:1112-1116 — p = subprocess.Popen([python, ansible_connection, ...])"
+     ]
+    },
+    {
+     "id": "P2-010",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.57,
+     "signature": {
+      "package": null,
+      "module": "sys",
+      "type": null,
+      "callable": "sys.argv",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 389
+     },
+     "rationale": "Deduplicated from 31 candidate row(s) [S-46..S-1125]; classification distribution: candidate 20, tp 11. Context class: cli_args. Representative judgments: S-141 (tp, conf 0.70): CSV row anchors the start of _load_params; the actual sys.argv reads are basic.py:389-397: argv[1] (args file path or raw JSON args buffer) is the module-arguments channel from the controller - the primary module-side in; S-142 (tp, conf 0.70): See S-141: _load_params argv/stdin channel; argv[1] supplies the module args buffer parsed at basic.py:407.; S-143 (tp, conf 0.70): See S-141: _load_params argv/stdin channel; argv[1] supplies the module args buffer parsed at basic.py:407.",
+     "evidence": [
+      "hacking/backport/backport_of_line_adder.py:229 — len(sys.argv) != 3",
+      "hacking/backport/backport_of_line_adder.py:229-231 — len(sys.argv) != 3 / sys.argv[1].isnumeric() guard",
+      "hacking/backport/backport_of_line_adder.py:247 — pr_num = normalize_pr_url(sys.argv[1], only_number=True)",
+      "hacking/backport/backport_of_line_adder.py:251 — print('Could not load PR {0}'.format(sys.argv[1]))",
+      "hacking/backport/backport_of_line_adder.py:252 — if sys.argv[2] == 'auto':",
+      "hacking/backport/backport_of_line_adder.py:267 — pr_num = normalize_pr_url(sys.argv[2], ...)",
+      "hacking/backport/backport_of_line_adder.py:268 — pr_url = normalize_pr_url(sys.argv[2], ...)",
+      "hacking/backport/backport_of_line_adder.py:273 — print('Could not load PR {0}'.format(sys.argv[2]))"
+     ]
+    },
+    {
+     "id": "P2-011",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.59,
+     "signature": {
+      "package": null,
+      "module": "subprocess",
+      "type": null,
+      "callable": "subprocess.Popen",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/parsing/vault/__init__.py",
+      "line": 469
+     },
+     "rationale": "Deduplicated from 21 candidate row(s) [K-23..K-373]; classification distribution: candidate 12, tp 6, fp 3. Context class: no_explicit_shell;arg0=scalar_or_unknown. Representative judgments: K-84 (tp, conf 0.75): module_utils/basic.py:2016 in run_command(): cmd = subprocess.Popen(args, **kwargs) with kwargs['shell']=shell set dynamically from use_unsafe_shell (basic.py:1911-1927) — this is the central execution point of AnsibleMo; K-246 (tp, conf 0.75): plugins/connection/local.py:97: Popen(cmd, shell=isinstance(cmd, (text_type, binary_type)), executable=executable, ...) — dynamic shell flag: a string cmd from Connection.exec_command is executed with shell=True on the l; K-306 (tp, conf 0.75): plugins/connection/ssh.py:888 in Connection._bare_run: Popen(cmd, stdin=slave, ...) — no local shell kwarg, but cmd is the ssh invocation whose final argv element is the remote command string; the remote shell executes i",
+     "evidence": [
+      "lib/ansible/cli/pull.py:229-242 — cmd string built from context.CLIARGS values then run_cmd(cmd, live=True)",
+      "lib/ansible/module_utils/basic.py:1994-1996 — kwargs = dict(executable=executable, shell=shell, ...) with shell set at 1911/1927",
+      "lib/ansible/module_utils/basic.py:2016 — cmd = subprocess.Popen(args, **kwargs)",
+      "lib/ansible/module_utils/distro/_distro.py:1064,1100 — cmd = ('lsb_release', '-a') / ('uname', '-rs') fixed literals",
+      "lib/ansible/module_utils/distro/_distro.py:131-132 — process = subprocess.Popen(stdout=subprocess.PIPE, *popenargs, **kwargs)",
+      "lib/ansible/module_utils/service.py:196-203 — if not isinstance(cmd, list): cmd = shlex.split(...); run_cmd = [to_bytes(c) ...]",
+      "lib/ansible/module_utils/service.py:207 — p = subprocess.Popen(run_cmd, shell=False, ...)",
+      "lib/ansible/modules/async_wrapper.py:154 — script = subprocess.Popen(cmd, shell=False, ...)"
+     ]
+    },
+    {
+     "id": "P2-012",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.51,
+     "signature": {
+      "package": null,
+      "module": "os",
+      "type": null,
+      "callable": "os.getenv",
+      "arg_index": 0,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/modules/systemd.py",
+      "line": 360
+     },
+     "rationale": "Deduplicated from 20 candidate row(s) [S-432..S-1202]; classification distribution: candidate 19, fp 1. Context class: environment. Representative judgments: S-658 (candidate, conf 0.55): Environment read at lib/ansible/plugins/callback/junit.py:159: `self._output_dir = os.getenv('JUNIT_OUTPUT_DIR', os.path.expanduser('~/.ansible.log'))`. Local-process boundary: env is set by the user/service invoking ans; S-659 (candidate, conf 0.55): Environment read at lib/ansible/plugins/callback/junit.py:160: `self._task_class = os.getenv('JUNIT_TASK_CLASS', 'False').lower()`. Local-process boundary: env is set by the user/service invoking ansible (config-style in; S-660 (candidate, conf 0.55): Environment read at lib/ansible/plugins/callback/junit.py:161: `self._task_relative_path = os.getenv('JUNIT_TASK_RELATIVE_PATH', '')`. Local-process boundary: env is set by the user/service invoking ansible (config-style",
+     "evidence": [
+      "hacking/build_library/.../file_deprecated_issues.py:30 — GITHUB_TOKEN credential read in dev tool",
+      "lib/ansible/config/manager.py:213 — os.getenv('ANSIBLE_CONFIG') config-path resolution (CSV line 219, drift -6)",
+      "lib/ansible/modules/systemd.py:360 — if os.getenv('XDG_RUNTIME_DIR') is None:",
+      "lib/ansible/modules/yum.py:830 — old_proxy_env = [os.getenv('http_proxy'), os.getenv('https_proxy')] (CSV 824, drift +6)",
+      "lib/ansible/modules/yum.py:830 — proxy env reads (CSV 824, drift +6)",
+      "lib/ansible/modules/yum.py:859 — if os.getenv('{0}_proxy') membership-style check (CSV 853, drift +6)",
+      "lib/ansible/modules/yum.py:860 — del os.environ[..._proxy] (CSV 853, drift +6)",
+      "lib/ansible/plugins/callback/junit.py:159 — self._output_dir = os.getenv('JUNIT_OUTPUT_DIR', os.path.expanduser('~/.ansible.log'))"
+     ]
+    },
+    {
+     "id": "P2-013",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.54,
+     "signature": {
+      "package": null,
+      "module": "sys",
+      "type": null,
+      "callable": "sys.stdin",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 401
+     },
+     "rationale": "Deduplicated from 17 candidate row(s) [S-18..S-1189]; classification distribution: candidate 15, tp 2. Context class: stdin. Representative judgments: S-145 (tp, conf 0.70): CSV line sits inside _load_params (argv[1]/args-file branch); the stdin read at 401-403 is the module-args channel that feeds json.loads -> ANSIBLE_MODULE_ARGS — the module-side external input boundary.; S-146 (tp, conf 0.70): Region is _load_params argv/stdin ingestion of module arguments — the module-side external input channel (sys.argv[1] path shown at CSV line; stdin default path 3 lines below).; S-18 (candidate, conf 0.65): stdin access at lib/ansible/parsing/vault/__init__.py:1042: `or arbitrary binary data.`. Local stdin boundary.",
+     "evidence": [
+      "lib/ansible/cli/scripts/ansible_connection_cli_stub.py:226 — stdin = sys.stdin.buffer (CSV 227)",
+      "lib/ansible/cli/scripts/ansible_connection_cli_stub.py:228 — stdin = sys.stdin (CSV 229)",
+      "lib/ansible/cli/vault.py:250 — sys.stdin.isatty() interactivity check",
+      "lib/ansible/cli/vault.py:324 — stdin_text = sys.stdin.read() (vault secret/data from stdin)",
+      "lib/ansible/cli/vault.py:422 — sys.stdin.isatty() interactivity check",
+      "lib/ansible/executor/process/worker.py:66-68 — stdin fd plumbing (CSV 77)",
+      "lib/ansible/executor/process/worker.py:66-68 — sys.stdin.isatty()/fileno()/dup() fd preservation (CSV 77)",
+      "lib/ansible/executor/process/worker.py:66-79 — stdin fd preservation region (CSV 79)"
+     ]
+    },
+    {
+     "id": "P2-014",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.action",
+      "type": "ActionBase",
+      "callable": "_low_level_execute_command",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/action/__init__.py",
+      "line": 1212
+     },
+     "rationale": "Deduplicated from 15 candidate row(s) [K-11..K-275]; classification distribution: tp 14, fp 1. Context class: cmd_positional_arg0;sudoable=False_or_default. Representative judgments: K-19 (tp, conf 0.90): Module execution in _execute_module: cmd = self._connection._shell.build_module_command(environment_string, shebang, cmd, arg_path=...) built from interpreter/module path and task-sourced module args, then _low_level_exe; K-272 (tp, conf 0.90): raw action plugin: self._low_level_execute_command(self._task.args.get('_raw_params'), executable=executable) — task argument _raw_params (and executable) passed directly as the remote command string. Textbook controller; K-13 (tp, conf 0.85): _remote_chmod: cmd = self._connection._shell.chmod(paths, mode) executed via _low_level_execute_command; paths arrive from action callers (remote file paths derived from task/module args). Remote shell execution of arg0.",
+     "evidence": [
+      "lib/ansible/executor/interpreter_discovery.py:66-68 — command_list = [\"command -v '%s'\" % py ...]; shell_bootstrap = ...; res = action._low_level_execute_command(shell_bootstrap, sudoable=False)",
+      "lib/ansible/executor/interpreter_discovery.py:82-96 — found_interpreters from res['stdout'] match; res = action._low_level_execute_command(found_interpreters[0], sudoable=False, in_data=platform_script)",
+      "lib/ansible/plugins/action/__init__.py:1102-1112 — cmd = shell.build_module_command(...); res = self._low_level_execute_command(cmd, sudoable=sudoable, in_data=in_data)",
+      "lib/ansible/plugins/action/__init__.py:1265 — exec_command(cmd, ...)",
+      "lib/ansible/plugins/action/__init__.py:388 — remote_tmp from get_shell_option",
+      "lib/ansible/plugins/action/__init__.py:393-394 — cmd = shell.mkdtemp(...); result = self._low_level_execute_command(cmd, sudoable=False)",
+      "lib/ansible/plugins/action/__init__.py:452-453 — cmd = shell.remove(tmp_path, recurse=True); tmp_rm_res = self._low_level_execute_command(cmd, sudoable=False)",
+      "lib/ansible/plugins/action/__init__.py:729-730 — cmd = shell.chmod(paths, mode); res = self._low_level_execute_command(cmd, sudoable=sudoable)"
+     ]
+    },
+    {
+     "id": "P2-015",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.78,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.connection",
+      "type": "Connection",
+      "callable": "exec_command",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/__init__.py",
+      "line": 135
+     },
+     "rationale": "Deduplicated from 7 candidate row(s) [K-2..K-311]; classification distribution: tp 7. Context class: remote_command_string. Representative judgments: K-21 (tp, conf 0.85): self._connection.exec_command(cmd, in_data=in_data, sudoable=sudoable) at action/__init__.py:1265 (CSV says 1264): arg0 cmd is the assembled command string leaving the action layer for the connection layer — local connec; K-259 (tp, conf 0.85): chan.exec_command(cmd) at paramiko_ssh.py:407: paramiko channel exec request — cmd is executed by the remote SSH server through the user's login shell. Genuine remote shell execution endpoint for arg0.; K-2 (tp, conf 0.80): Call self._connection.exec_command(cmd) inside _exec_cli_command: arg0 cmd is the remote network-device CLI command string; network modules build it from module params and it is executed on the device via the persistent ",
+     "evidence": [
+      "lib/ansible/module_utils/connection.py:96 — out = connection.exec_command(command)",
+      "lib/ansible/plugins/action/__init__.py:1265 — exec_command(cmd, in_data=in_data, sudoable=sudoable)",
+      "lib/ansible/plugins/connection/__init__.py:135 — exec_command is the remote-command protocol",
+      "lib/ansible/plugins/connection/__init__.py:272 — return self._local.exec_command(cmd, in_data, sudoable)",
+      "lib/ansible/plugins/connection/local.py:97-99 — Popen(cmd, shell=isinstance(cmd, (text_type, binary_type)))",
+      "lib/ansible/plugins/connection/paramiko_ssh.py:407 — chan.exec_command(cmd)",
+      "lib/ansible/plugins/connection/ssh.py:1221 — (returncode, stdout, stderr) = self.exec_command('dd if=%s bs=%s' % (in_path, BUFSIZE), sudoable=False)",
+      "lib/ansible/plugins/connection/ssh.py:1231 — (returncode, stdout, stderr) = self.exec_command('dd of=%s bs=%s%s' % (out_path, BUFSIZE, count), in_data=in_data, sudoable=False)"
+     ]
+    },
+    {
+     "id": "P2-016",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.55,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.connection",
+      "type": "Connection",
+      "callable": "exec_command",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/__init__.py",
+      "line": 135
+     },
+     "rationale": "Deduplicated from 5 candidate row(s) [K-245..K-376]; classification distribution: fp 5. Context class: remote_command_string. Representative judgments: K-245 (fp, conf 0.55): super(Connection, self).exec_command(cmd, ...) at local.py:67 delegates to the abstract ConnectionBase.exec_command (connection/__init__.py:135, @ensure_connect @abstractmethod — no execution); cmd's real execution path ; K-258 (fp, conf 0.55): super(Connection, self).exec_command(cmd, ...) at paramiko_ssh.py:377 (CSV says 375) targets the abstract ConnectionBase protocol method (no-op); actual execution of cmd happens via chan.exec_command at 407 in the same m; K-271 (fp, conf 0.55): super(Connection, self).exec_command(cmd, ...) at psrp.py:419 delegates to the abstract ConnectionBase protocol method (no-op); cmd is actually executed via _exec_psrp_script later in the same method. Not an independent ",
+     "evidence": [
+      "lib/ansible/plugins/connection/__init__.py:135 — abstract protocol method",
+      "lib/ansible/plugins/connection/local.py:67 — super().exec_command(cmd, in_data=in_data, sudoable=sudoable)",
+      "lib/ansible/plugins/connection/paramiko_ssh.py:377 — super().exec_command(cmd, in_data=in_data, sudoable=sudoable)",
+      "lib/ansible/plugins/connection/psrp.py:419 — super().exec_command(cmd, in_data=in_data, sudoable=sudoable)",
+      "lib/ansible/plugins/connection/ssh.py:1265 — super().exec_command(cmd, in_data=in_data, sudoable=sudoable)",
+      "lib/ansible/plugins/connection/winrm.py:552 — super().exec_command(cmd, in_data=in_data, sudoable=sudoable)"
+     ]
+    },
+    {
+     "id": "P2-017",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.79,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.connection",
+      "type": "Connection",
+      "callable": "exec_command",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/__init__.py",
+      "line": 135
+     },
+     "rationale": "Deduplicated from 5 candidate row(s) [K-244..K-375]; classification distribution: tp 5. Context class: direct_param_passthrough_to_exec. Representative judgments: K-244 (tp, conf 0.80): local.py Connection.exec_command(self, cmd, ...) at 64 passes cmd (param 1) to subprocess.Popen(cmd, shell=isinstance(cmd, (text_type, binary_type))) at 97-99 — string commands get shell=True. Direct param passthrough to; K-257 (tp, conf 0.80): paramiko_ssh.py Connection.exec_command(self, cmd, ...) (def at 374; CSV says 372) converts cmd to bytes and passes it to chan.exec_command(cmd) at 407 — the SSH channel exec request; direct param passthrough to remote e; K-270 (tp, conf 0.80): psrp.py Connection.exec_command(self, cmd, ...) at 418: cmd (param 1) is either base64-decoded to a PowerShell script or used directly as 'script = cmd + exit $LASTEXITCODE', then executed via self._exec_psrp_script(scri",
+     "evidence": [
+      "lib/ansible/plugins/connection/local.py:64 — def exec_command(self, cmd, in_data=None, sudoable=True)",
+      "lib/ansible/plugins/connection/local.py:97-99 — Popen(cmd, shell=isinstance(cmd, (text_type, binary_type)), executable=executable)",
+      "lib/ansible/plugins/connection/paramiko_ssh.py:374-407 — def exec_command(self, cmd, ...): ... chan.exec_command(cmd)",
+      "lib/ansible/plugins/connection/paramiko_ssh.py:399 — cmd = to_bytes(cmd, errors='surrogate_or_strict')",
+      "lib/ansible/plugins/connection/psrp.py:418 — def exec_command(self, cmd, in_data=None, sudoable=True)",
+      "lib/ansible/plugins/connection/psrp.py:444-446 — script = to_text(u\"%s\\nexit $LASTEXITCODE\" % cmd); rc, stdout, stderr = self._exec_psrp_script(script, in_data)",
+      "lib/ansible/plugins/connection/ssh.py:1155-1158 — _run returns self._bare_run(cmd, in_data, ...)",
+      "lib/ansible/plugins/connection/ssh.py:1262-1298 — def exec_command(self, cmd, ...): ... (returncode, stdout, stderr) = self._run(cmd, in_data, sudoable=sudoable)"
+     ]
+    },
+    {
+     "id": "P2-018",
+     "role": "source",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.connection",
+      "type": "Connection",
+      "callable": "exec_command",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/__init__.py",
+      "line": 135
+     },
+     "rationale": "Deduplicated from 5 candidate row(s) [S-676..S-1185]; classification distribution: tp 5. Context class: remote_host_output. Representative judgments: S-676 (tp, conf 0.70): local connection exec_command (def at lib/ansible/plugins/connection/local.py:64) runs Popen(cmd, shell=isinstance(cmd, str)) and returns (p.returncode, stdout, stderr) — for the local transport this IS the target-host c; S-697 (tp, conf 0.70): paramiko connection exec_command (def at lib/ansible/plugins/connection/paramiko_ssh.py:374; CSV 372 points at the surrounding super() call) opens an SSH session channel and executes cmd on the remote host, returning (re; S-762 (tp, conf 0.70): psrp connection exec_command (def at lib/ansible/plugins/connection/psrp.py:418) executes cmd as a PowerShell script in the WinRM runspace (base64-decoding -EncodedCommand payloads at 422-424) and returns the remote resu",
+     "evidence": [
+      "lib/ansible/plugins/connection/local.py:64-67 — def exec_command(self, cmd, in_data=None, sudoable=True)",
+      "lib/ansible/plugins/connection/local.py:97-105 — p = subprocess.Popen(cmd, shell=isinstance(cmd, (text_type, binary_type)), ...)",
+      "lib/ansible/plugins/connection/paramiko_ssh.py:374-387 — def exec_command; chan = self.ssh.get_transport().open_session()",
+      "lib/ansible/plugins/connection/paramiko_ssh.py:394-400 — chan.exec_command(cmd) region returns remote output tuple",
+      "lib/ansible/plugins/connection/psrp.py:418-424 — def exec_command; b_command = base64.b64decode(cmd.split(' ')[-1]); script = to_text(b_command, 'utf-16-le')",
+      "lib/ansible/plugins/connection/ssh.py:1148-1153 — _run returns _bare_run(cmd, ...) output tuple",
+      "lib/ansible/plugins/connection/ssh.py:1230-1231 — (returncode, stdout, stderr) = self.exec_command('dd of=%s ...') inside _file_transport_command",
+      "lib/ansible/plugins/connection/ssh.py:1262 — def exec_command(self, cmd, in_data=None, sudoable=True)"
+     ]
+    },
+    {
+     "id": "P2-019",
+     "role": "sink",
+     "classification": "fp",
+     "confidence": 0.64,
+     "signature": {
+      "package": null,
+      "module": "subprocess",
+      "type": null,
+      "callable": "subprocess.Popen",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/utils/display.py",
+      "line": 226
+     },
+     "rationale": "Deduplicated from 4 candidate row(s) [K-107..K-360]; classification distribution: fp 4. Context class: no_explicit_shell;arg0=sequence. Representative judgments: K-107 (fp, conf 0.65): utils/display.py:226: Popen([self.b_cowsay, '-l'], ...) — fixed program (cowsay path from get_bin_path) and fixed literal argument, argv, no shell. No attacker-controlled component.; K-304 (fp, conf 0.65): plugins/connection/ssh.py:577: Popen([\"sshpass\"], ...) — availability probe for the sshpass binary; fixed single-element argv, no shell, no untrusted data.; K-316 (fp, conf 0.65): utils/ssh_functions.py:43: Popen([b_ssh_exec, '-o', 'ControlPersist'], ...) — fixed capability probe of the ssh binary; argv, no shell, no untrusted data.",
+     "evidence": [
+      "lib/ansible/executor/task_executor.py:1109-1113 — p = subprocess.Popen([python, ansible_connection, to_text(os.getppid()), to_text(task_uuid)], stdin=slave, ...)",
+      "lib/ansible/plugins/connection/ssh.py:577 — p = subprocess.Popen([\"sshpass\"], stdin=subprocess.PIPE, ...)",
+      "lib/ansible/utils/display.py:226 — cmd = subprocess.Popen([self.b_cowsay, \"-l\"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)",
+      "lib/ansible/utils/ssh_functions.py:43 — cmd = subprocess.Popen([b_ssh_exec, '-o', 'ControlPersist'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)"
+     ]
+    },
+    {
+     "id": "P2-020",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": null,
+      "module": "subprocess",
+      "type": null,
+      "callable": "subprocess.Popen",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/cli/__init__.py",
+      "line": 421
+     },
+     "rationale": "Deduplicated from 4 candidate row(s) [K-7..K-266]; classification distribution: tp 3, fp 1. Context class: shell=True;arg0=scalar_or_unknown. Representative judgments: K-223 (tp, conf 0.85): plugins/lookup/lines.py:56: Popen(term, cwd=..., shell=True, ...) — direct shell=True execution of the lookup `term`, which is playbook-supplied data (lookup terms are authored in playbooks/roles, which may come from unt; K-266 (tp, conf 0.85): plugins/lookup/pipe.py:70: Popen(term, cwd=..., shell=True, ...) after term = str(term) — direct shell=True execution of playbook-supplied lookup term (pipe lookup runs arbitrary shell commands by design, e.g. with chain; K-7 (fp, conf 0.80): cli/__init__.py:421 in CLI.pager(): Popen('less --version', shell=True) — arg0 is a fixed string literal, no attacker-influenced component reaches this shell execution. Shell semantics present but no input flow.",
+     "evidence": [
+      "lib/ansible/cli/__init__.py:419 — CLI.pager_pipe(text, os.environ['PAGER']) supplies cmd from env",
+      "lib/ansible/cli/__init__.py:421 — p = subprocess.Popen('less --version', shell=True, ...) literal command",
+      "lib/ansible/cli/__init__.py:434 — cmd = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, ...)",
+      "lib/ansible/plugins/lookup/lines.py:50-56 — for term in terms: p = subprocess.Popen(term, cwd=self._loader.get_basedir(), shell=True, ...)",
+      "lib/ansible/plugins/lookup/pipe.py:68-70 — term = str(term); p = subprocess.Popen(term, cwd=self._loader.get_basedir(), shell=True, ...)"
+     ]
+    },
+    {
+     "id": "P2-021",
+     "role": "sink",
+     "classification": "fp",
+     "confidence": 0.59,
+     "signature": {
+      "package": null,
+      "module": "subprocess",
+      "type": null,
+      "callable": "subprocess.call",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/parsing/vault/__init__.py",
+      "line": 841
+     },
+     "rationale": "Deduplicated from 4 candidate row(s) [K-26..K-278]; classification distribution: fp 3, candidate 1. Context class: no_explicit_shell;arg0=sequence. Representative judgments: K-26 (fp, conf 0.65): parsing/vault/__init__.py:818 in _shred_file(): subprocess.call(['shred', tmp_path]) — fixed program literal plus a tempfile.mkstemp-generated path; no shell, no attacker-controlled component.; K-277 (fp, conf 0.60): module_utils/common/respawn.py:43: subprocess.call([interpreter_path, '--'], stdin=stdin_read) — interpreter_path is the module's own interpreter path (sys.executable / respawn-detected), argv, no shell, no attacker-cont; K-278 (fp, conf 0.60): module_utils/common/respawn.py:62: subprocess.call([interpreter_path, '-c', 'import {0}'.format(module_name)]) — module_name comes from the internal respawn-probe module list (module_utils/common/respawn.py internals), n",
+     "evidence": [
+      "lib/ansible/cli/config.py:125-126 — (entry, value) = context.CLIARGS['setting'].split('=')",
+      "lib/ansible/cli/config.py:131-139 — subprocess.call(['ansible', '-m', 'ini_file', ..., '-a', '\"dest=%s ... value=%s backup=yes\"' % (...)])",
+      "lib/ansible/module_utils/common/respawn.py:43 — rc = subprocess.call([interpreter_path, '--'], stdin=stdin_read)",
+      "lib/ansible/module_utils/common/respawn.py:62 — rc = subprocess.call([interpreter_path, '-c', 'import {0}'.format(module_name)])",
+      "lib/ansible/parsing/vault/__init__.py:818 — r = subprocess.call(['shred', tmp_path]); tmp_path from tempfile.mkstemp at :827 of _edit_file_helper"
+     ]
+    },
+    {
+     "id": "P2-022",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.58,
+     "signature": {
+      "package": null,
+      "module": "subprocess",
+      "type": null,
+      "callable": "subprocess.check_call",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/galaxy/collection/concrete_artifact_manager.py",
+      "line": 352
+     },
+     "rationale": "Deduplicated from 3 candidate row(s) [K-90..K-267]; classification distribution: candidate 2, fp 1. Context class: no_explicit_shell;arg0=scalar_or_unknown. Representative judgments: K-267 (fp, conf 0.70): module_utils/facts/system/pkg_mgr.py:108: subprocess.check_call(rpm_query) with rpm_query = '/usr/bin/rpm -q --whatprovides /usr/bin/apt-get'.split() — fixed literal command, no shell. No untrusted input.; K-90 (candidate, conf 0.55): galaxy/collection/concrete_artifact_manager.py:352 in _extract_collection_from_git(): subprocess.check_call(git_clone_cmd) with git_clone_cmd = ('git','clone',git_url,checkout_path) — argv, no shell. git_url comes from p; K-91 (candidate, conf 0.50): galaxy/collection/concrete_artifact_manager.py:364: subprocess.check_call(git_switch_cmd) with git_switch_cmd = ('git','checkout', to_text(version)) — argv, no shell; version originates from galaxy requirements (external",
+     "evidence": [
+      "lib/ansible/galaxy/collection/concrete_artifact_manager.py:343 — name, version, git_url, fragment = parse_scm(repo_url, coll_ver)",
+      "lib/ansible/galaxy/collection/concrete_artifact_manager.py:350-352 — git_clone_cmd = 'git', 'clone', git_url, to_text(b_checkout_path); subprocess.check_call(git_clone_cmd)",
+      "lib/ansible/galaxy/collection/concrete_artifact_manager.py:362-364 — git_switch_cmd = 'git', 'checkout', to_text(version); subprocess.check_call(git_switch_cmd, cwd=b_checkout_path)",
+      "lib/ansible/module_utils/facts/system/pkg_mgr.py:103,108 — rpm_query = '/usr/bin/rpm -q --whatprovides /usr/bin/apt-get'.split(); subprocess.check_call(rpm_query, stdout=null, stderr=null)"
+     ]
+    },
+    {
+     "id": "P2-023",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.action",
+      "type": "ActionBase",
+      "callable": "_low_level_execute_command",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/action/__init__.py",
+      "line": 1212
+     },
+     "rationale": "Deduplicated from 2 candidate row(s) [K-10..K-282]; classification distribution: tp 2. Context class: cmd_via_keyword;sudoable=True. Representative judgments: K-10 (tp, conf 0.85): _remote_file_exists: cmd = self._connection._shell.exists(path) then _low_level_execute_command(cmd=cmd, sudoable=True); path comes from action callers (task/module paths), and the shell plugin interpolates it into a rem; K-282 (tp, conf 0.75): script action: self._low_level_execute_command(cmd=script_cmd, in_data=exec_data, sudoable=True, chdir=chdir) — script_cmd is the shell-plugin-built module command (with PowerShell wrapper on Windows); the script content",
+     "evidence": [
+      "lib/ansible/plugins/action/__init__.py:1265 — exec_command(cmd, ...)",
+      "lib/ansible/plugins/action/__init__.py:151-152 — cmd = self._connection._shell.exists(path); result = self._low_level_execute_command(cmd=cmd, sudoable=True)",
+      "lib/ansible/plugins/action/script.py:138-142 — script_cmd = self._connection._shell.build_module_command(...); result.update(self._low_level_execute_command(cmd=script_cmd, in_data=exec_data, sudoable=True, chdir=chdir))"
+     ]
+    },
+    {
+     "id": "P2-024",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.5,
+     "signature": {
+      "package": null,
+      "module": "subprocess",
+      "type": null,
+      "callable": "subprocess.call",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/parsing/vault/__init__.py",
+      "line": 875
+     },
+     "rationale": "Deduplicated from 2 candidate row(s) [K-27..K-93]; classification distribution: candidate 2. Context class: no_explicit_shell;arg0=scalar_or_unknown. Representative judgments: K-27 (candidate, conf 0.50): parsing/vault/__init__.py:852 in _edit_file_helper(): subprocess.call(cmd) where cmd = shlex.split(os.environ.get('EDITOR','vi')) + [tmp_path] (built by _editor_shell_command at 1125-1129). EDITOR env var influences the ; K-93 (candidate, conf 0.50): cli/config.py:159 in execute_edit(): subprocess.call(editor) where editor = shlex.split(os.environ.get('EDITOR','vi')) + [self.config_file]. EDITOR env var (local admin) influences argv; shlex-split argv execution withou",
+     "evidence": [
+      "lib/ansible/cli/config.py:157-159 — editor = shlex.split(os.environ.get('EDITOR', 'vi')); editor.append(self.config_file); subprocess.call(editor)",
+      "lib/ansible/parsing/vault/__init__.py:1125-1129 — env_editor = os.environ.get('EDITOR', 'vi'); editor = shlex.split(env_editor); editor.append(filename)",
+      "lib/ansible/parsing/vault/__init__.py:852 — subprocess.call(cmd)"
+     ]
+    },
+    {
+     "id": "P2-025",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.action",
+      "type": "ActionBase",
+      "callable": "_low_level_execute_command",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/action/__init__.py",
+      "line": 1212
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-20..K-20]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-20 (tp, conf 0.80): ActionBase._low_level_execute_command definition (action/__init__.py:1212; CSV says 1211): param cmd (index 1) is optionally wrapped and passed to self._connection.exec_command(cmd, ...) at 1265 — the central action-laye",
+     "evidence": [
+      "lib/ansible/plugins/action/__init__.py:1212 — def _low_level_execute_command(self, cmd, sudoable=True, in_data=None, ...)",
+      "lib/ansible/plugins/action/__init__.py:1265 — rc, stdout, stderr = self._connection.exec_command(cmd, in_data=in_data, sudoable=sudoable)"
+     ]
+    },
+    {
+     "id": "P2-026",
+     "role": "source",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.action",
+      "type": "ActionBase",
+      "callable": "_low_level_execute_command",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/action/__init__.py",
+      "line": 1212
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [S-17..S-17]; classification distribution: tp 1. Context class: remote_host_output. Representative judgments: S-17 (tp, conf 0.70): ActionBase._low_level_execute_command (def at lib/ansible/plugins/action/__init__.py:1212) returns dict(rc, stdout, stdout_lines, stderr, stderr_lines) built from self._connection.exec_command output at line 1265 — remot",
+     "evidence": [
+      "lib/ansible/plugins/action/__init__.py:1265 — rc, stdout, stderr = self._connection.exec_command(cmd, in_data=in_data, sudoable=sudoable)",
+      "lib/ansible/plugins/action/__init__.py:1290 — return dict(rc=rc, stdout=out, stdout_lines=out.splitlines(), stderr=err, ...)"
+     ]
+    },
+    {
+     "id": "P2-027",
+     "role": "source",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.basic",
+      "type": "AnsibleModule",
+      "callable": "_load_params",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 488
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [S-148..S-148]; classification distribution: tp 1. Context class: module_params_stdin_argv. Representative judgments: S-148 (tp, conf 0.85): AnsibleModule.__init__ calls self._load_params() (on-disk basic.py:499; DB coord 488) — the point where external module input (stdin/argv JSON) is loaded. Returns params['ANSIBLE_MODULE_ARGS'] (basic.py:370-417).",
+     "evidence": [
+      "basic.py:1288 — self.params = _load_params()",
+      "basic.py:370-417 — _load_params reads sys.argv[1]/sys.stdin, json.loads, returns ANSIBLE_MODULE_ARGS"
+     ]
+    },
+    {
+     "id": "P2-028",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.basic",
+      "type": "AnsibleModule",
+      "callable": "run_command",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 1842
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-83..K-83]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-83 (tp, conf 0.80): Definition of AnsibleModule.run_command itself (basic.py:1842; CSV line 1824): parameter 'args' (index 1) is normalized (string->shlex.split, list elements quoted when unsafe) and passed to subprocess.Popen at basic.py:2",
+     "evidence": [
+      "lib/ansible/module_utils/basic.py:1842 - def run_command(self, args, ...)",
+      "lib/ansible/module_utils/basic.py:2016 - cmd = subprocess.Popen(args, **kwargs) with shell=shell dynamic"
+     ]
+    },
+    {
+     "id": "P2-029",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": null,
+      "module": "ansible.cli.__init__",
+      "type": "CLI",
+      "callable": "CLI.pager_pipe",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/cli/__init__.py",
+      "line": 429
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-8..K-8]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-8 (tp, conf 0.75): CLI.pager_pipe(text, cmd) passes its cmd parameter (arg index 1) directly to subprocess.Popen(cmd, shell=True) at cli/__init__.py:439 — the function is both the wrapper edge and the shell execution point. Callers pass os",
+     "evidence": [
+      "lib/ansible/cli/__init__.py:421 — CLI.pager_pipe(text, os.environ['PAGER']) caller passes PAGER env value",
+      "lib/ansible/cli/__init__.py:429 — def pager_pipe(text, cmd)",
+      "lib/ansible/cli/__init__.py:434 — CLI.pager_pipe(text, 'less') fixed-pager fallback",
+      "lib/ansible/cli/__init__.py:439 — cmd = subprocess.Popen(cmd, shell=True, stdin=subprocess.PIPE, stdout=sys.stdout)"
+     ]
+    },
+    {
+     "id": "P2-030",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": null,
+      "module": "ansible.parsing.vault.__init__",
+      "type": "ClientScriptVaultSecret",
+      "callable": "ClientScriptVaultSecret._run",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/parsing/vault/__init__.py",
+      "line": 499
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-24..K-24]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-24 (tp, conf 0.70): ClientScriptVaultSecret._run(command) (vault/__init__.py:499, param arg 1) passes command directly to subprocess.Popen(command, stdout=PIPE, stderr=PIPE) at vault/__init__.py:501, no shell. Command is the argv list [file",
+     "evidence": [
+      "lib/ansible/parsing/vault/__init__.py:499 — def _run(self, command)",
+      "lib/ansible/parsing/vault/__init__.py:501 — p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) (no shell)",
+      "lib/ansible/parsing/vault/__init__.py:508-512 — _build_command: [self.filename] + ['--vault-id', self._vault_id]"
+     ]
+    },
+    {
+     "id": "P2-031",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.connection.ssh",
+      "type": "Connection",
+      "callable": "Connection._bare_run",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/ssh.py",
+      "line": 830
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-305..K-305]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-305 (tp, conf 0.80): Connection._bare_run(cmd, in_data, sudoable, checkrc) (ssh.py:830, param arg 1) is the ssh executor: cmd is normalized to bytes/list (ssh.py:856-859) and passed to subprocess.Popen later in the same function (ssh.py:1310",
+     "evidence": [
+      "lib/ansible/plugins/connection/ssh.py:1310,1321 — p = subprocess.Popen(cmd...) inside _bare_run",
+      "lib/ansible/plugins/connection/ssh.py:830 — def _bare_run(self, cmd, in_data, sudoable=True, checkrc=True)",
+      "lib/ansible/plugins/connection/ssh.py:833-834 — display_cmd = ' '.join(shlex_quote(...) ) — quoting is log-only",
+      "lib/ansible/plugins/connection/ssh.py:856-859 — if isinstance(cmd, (text_type, binary_type)): cmd = to_bytes(cmd) else: cmd = list(map(to_bytes, cmd))"
+     ]
+    },
+    {
+     "id": "P2-032",
+     "role": "source",
+     "classification": "tp",
+     "confidence": 0.65,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.connection.__init__",
+      "type": "ConnectionBase",
+      "callable": "ConnectionBase.exec_command",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/__init__.py",
+      "line": 135
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [S-3..S-3]; classification distribution: tp 1. Context class: remote_host_output. Representative judgments: S-3 (tp, conf 0.65): ConnectionBase.exec_command is the abstract remote-execution protocol at lib/ansible/plugins/connection/__init__.py:135; its documented return is (rc, stdout, stderr) of a command run on the remote host, and every concre",
+     "evidence": [
+      "lib/ansible/plugins/connection/__init__.py:135-146 — @abstractmethod exec_command; ':returns: a tuple of (return code, stdout, stderr)'"
+     ]
+    },
+    {
+     "id": "P2-033",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": null,
+      "module": "ansible.modules.group",
+      "type": "Group",
+      "callable": "Group.execute_command",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/modules/group.py",
+      "line": 143
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-163..K-163]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-163 (tp, conf 0.75): Group.execute_command(cmd) (group.py:143, param arg 1) is a direct passthrough: return self.module.run_command(cmd) with default use_unsafe_shell=False. Callers pass argv lists such as [self.module.get_bin_path('groupdel",
+     "evidence": [
+      "lib/ansible/modules/group.py:143-144 — def execute_command(self, cmd): return self.module.run_command(cmd)",
+      "lib/ansible/modules/group.py:152-153 — cmd = [self.module.get_bin_path(command_name, True), self.name] (name from module.params, group.py:137)"
+     ]
+    },
+    {
+     "id": "P2-034",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.connection.__init__",
+      "type": "NetworkConnectionBase",
+      "callable": "NetworkConnectionBase.exec_command",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/__init__.py",
+      "line": 304
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-3..K-3]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-3 (tp, conf 0.75): NetworkConnectionBase.exec_command(self, cmd, in_data, sudoable) (def at connection/__init__.py:271; CSV row says 304 — line offset) passes cmd (param 1) to self._local.exec_command(cmd, in_data, sudoable) at 272, which ",
+     "evidence": [
+      "CSV location 304 does not match; actual def verified at 271",
+      "lib/ansible/plugins/connection/__init__.py:271-272 — def exec_command(self, cmd, in_data=None, sudoable=True): return self._local.exec_command(cmd, in_data, sudoable)"
+     ]
+    },
+    {
+     "id": "P2-035",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.6,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.connection.__init__",
+      "type": "NetworkConnectionBase",
+      "callable": "NetworkConnectionBase.exec_command",
+      "arg_index": 2,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/__init__.py",
+      "line": 304
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-4..K-4]; classification distribution: fp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-4 (fp, conf 0.60): NetworkConnectionBase.exec_command param in_data (index 2) flows only to the in_data (stdin payload) position of self._local.exec_command — never the command position; not a CWE-78-relevant flow step.",
+     "evidence": [
+      "lib/ansible/plugins/connection/__init__.py:271-272 — in_data passed as arg 1 (stdin), not arg 0 (cmd)"
+     ]
+    },
+    {
+     "id": "P2-036",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.55,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.connection.__init__",
+      "type": "NetworkConnectionBase",
+      "callable": "NetworkConnectionBase.exec_command",
+      "arg_index": 3,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/__init__.py",
+      "line": 304
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-5..K-5]; classification distribution: fp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-5 (fp, conf 0.55): NetworkConnectionBase.exec_command param sudoable (index 3) is a boolean privilege-escalation flag forwarded positionally; never part of a command string.",
+     "evidence": [
+      "lib/ansible/plugins/connection/__init__.py:271-272 — sudoable bool forwarded as arg 2"
+     ]
+    },
+    {
+     "id": "P2-037",
+     "role": "source",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.connection.__init__",
+      "type": "NetworkConnectionBase",
+      "callable": "NetworkConnectionBase.exec_command",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/__init__.py",
+      "line": 304
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [S-4..S-4]; classification distribution: tp 1. Context class: remote_host_output. Representative judgments: S-4 (tp, conf 0.70): NetworkConnectionBase.exec_command (def actually at lib/ansible/plugins/connection/__init__.py:271; CSV row points to 304) returns self._local.exec_command(cmd, in_data, sudoable) — for network devices the command output",
+     "evidence": [
+      "lib/ansible/plugins/connection/__init__.py:271-272 — def exec_command(...); return self._local.exec_command(cmd, in_data, sudoable)"
+     ]
+    },
+    {
+     "id": "P2-038",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.facts.other.ohai",
+      "type": "OhaiFactCollector",
+      "callable": "OhaiFactCollector.run_ohai",
+      "arg_index": 2,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/facts/other/ohai.py",
+      "line": 41
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-248..K-248]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-248 (tp, conf 0.70): OhaiFactCollector.run_ohai(self, module, ohai_path) (ohai.py:41; CSV argIndex 2 = ohai_path incl. self) passes ohai_path directly to module.run_command(ohai_path) at ohai.py:42. ohai_path comes from module.get_bin_path('",
+     "evidence": [
+      "lib/ansible/module_utils/facts/other/ohai.py:37 — ohai_path = module.get_bin_path('ohai') (PATH-resolved, not raw param)",
+      "lib/ansible/module_utils/facts/other/ohai.py:41-42 — def run_ohai(self, module, ohai_path): rc, out, err = module.run_command(ohai_path)"
+     ]
+    },
+    {
+     "id": "P2-039",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": null,
+      "module": "ansible.modules.rpm_key",
+      "type": "RpmKey",
+      "callable": "RpmKey.execute_command",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/modules/rpm_key.py",
+      "line": 205
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-279..K-279]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-279 (tp, conf 0.80): RpmKey.execute_command(cmd) (rpm_key.py:205, param arg 1) forwards cmd into self.module.run_command(cmd, use_unsafe_shell=True) at rpm_key.py:206 — a passthrough into the shell=True execution path. Callers build concaten",
+     "evidence": [
+      "lib/ansible/modules/rpm_key.py:198-199 — is_keyid(keystr) validates user-provided key strings from module.params",
+      "lib/ansible/modules/rpm_key.py:205-206 — def execute_command(self, cmd): rc, stdout, stderr = self.module.run_command(cmd, use_unsafe_shell=True)",
+      "lib/ansible/modules/rpm_key.py:214 — cmd = self.rpm + ' -q  gpg-pubkey' (string concatenation caller)"
+     ]
+    },
+    {
+     "id": "P2-040",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": null,
+      "module": "ansible.parsing.vault.__init__",
+      "type": "ScriptVaultSecret",
+      "callable": "ScriptVaultSecret._run",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/parsing/vault/__init__.py",
+      "line": 466
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-22..K-22]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-22 (tp, conf 0.70): ScriptVaultSecret._run(command) (vault/__init__.py:466, param arg 1) passes command directly to subprocess.Popen(command, stdout=subprocess.PIPE) at vault/__init__.py:469 with no shell. _build_command returns [self.filen",
+     "evidence": [
+      "lib/ansible/parsing/vault/__init__.py:462-463 — _build_command returns [self.filename] (argv list, admin-config path)",
+      "lib/ansible/parsing/vault/__init__.py:466 — def _run(self, command)",
+      "lib/ansible/parsing/vault/__init__.py:469 — p = subprocess.Popen(command, stdout=subprocess.PIPE) (no shell)"
+     ]
+    },
+    {
+     "id": "P2-041",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": null,
+      "module": "ansible.modules.service",
+      "type": "Service",
+      "callable": "Service.execute_command",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/modules/service.py",
+      "line": 217
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-288..K-288]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-288 (tp, conf 0.75): Service.execute_command(cmd, daemonize=False) (service.py:225; CSV line 217 points into the same method region) passes cmd to self.module.run_command(cmd, environ_update=lang_env) at service.py:233 with default use_unsaf",
+     "evidence": [
+      "lib/ansible/modules/service.py:225 — def execute_command(self, cmd, daemonize=False) (CSV col8=217; actual def line 225)",
+      "lib/ansible/modules/service.py:232-233 — lang_env = dict(LANG='C',...); return self.module.run_command(cmd, environ_update=lang_env)"
+     ]
+    },
+    {
+     "id": "P2-042",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": null,
+      "module": "ansible.modules.subversion",
+      "type": "Subversion",
+      "callable": "Subversion._exec",
+      "arg_index": 2,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/modules/subversion.py",
+      "line": 151
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-320..K-320]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-320 (tp, conf 0.75): Subversion._exec(args, check_rc=True) (subversion.py:151; CSV argIndex 2 = args incl. self) builds bits = [svn_path, '--non-interactive', '--no-auth-cache', ...] + ['--username', self.username] / ['--password', self.pass",
+     "evidence": [
+      "lib/ansible/modules/subversion.py:139-141 — self.username/self.password assigned from module params in __init__",
+      "lib/ansible/modules/subversion.py:151-173 — _exec builds argv bits including --username/--password from self.username/self.password and extends with args",
+      "lib/ansible/modules/subversion.py:174 — rc, out, err = self.module.run_command(bits, check_rc, data=stdin_data)"
+     ]
+    },
+    {
+     "id": "P2-043",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": null,
+      "module": "ansible.plugins.terminal.__init__",
+      "type": "TerminalBase",
+      "callable": "TerminalBase._exec_cli_command",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/terminal/__init__.py",
+      "line": 68
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-1..K-1]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-1 (tp, conf 0.80): TerminalBase._exec_cli_command(self, cmd) at terminal/__init__.py:68 passes cmd (param 1) directly to self._connection.exec_command(cmd) at line 74 — direct param passthrough into the exec-family protocol; taint crossing",
+     "evidence": [
+      "lib/ansible/plugins/terminal/__init__.py:68-74 — def _exec_cli_command(self, cmd, check_rc=True): return self._connection.exec_command(cmd)"
+     ]
+    },
+    {
+     "id": "P2-044",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": null,
+      "module": "ansible.modules.user",
+      "type": "User",
+      "callable": "User.execute_command",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/modules/user.py",
+      "line": 589
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-369..K-369]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-369 (tp, conf 0.75): User.execute_command(cmd, use_unsafe_shell=False, data=None, obey_checkmode=True) (user.py:601; CSV line 589 points into the enclosing region) casts cmd to a string list and forwards it to self.module.run_command(cmd, us",
+     "evidence": [
+      "lib/ansible/modules/user.py:601 — def execute_command(self, cmd, use_unsafe_shell=False, data=None, obey_checkmode=True) (CSV col8=589; actual def line 601)",
+      "lib/ansible/modules/user.py:605-607 — cmd = [str(x) for x in cmd]; return self.module.run_command(cmd, use_unsafe_shell=use_unsafe_shell, data=data)"
+     ]
+    },
+    {
+     "id": "P2-045",
+     "role": "source",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.basic",
+      "type": "AnsibleModule",
+      "callable": "_load_params",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 1279
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [S-157..S-157]; classification distribution: tp 1. Context class: module_params_stdin_argv. Representative judgments: S-157 (tp, conf 0.85): self.params = _load_params() (on-disk basic.py:1288; DB coord 1279) — assignment of the parsed external input (stdin/argv JSON -> ANSIBLE_MODULE_ARGS, basic.py:370-417). Literal module input parse point.",
+     "evidence": [
+      "basic.py:1288 — self.params = _load_params()",
+      "basic.py:370-417 — _load_params reads sys.argv[1]/sys.stdin, json.loads, returns ANSIBLE_MODULE_ARGS"
+     ]
+    },
+    {
+     "id": "P2-046",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.connection",
+      "type": null,
+      "callable": "exec_command",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/connection.py",
+      "line": 93
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-94..K-94]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-94 (tp, conf 0.80): Module-side helper exec_command(module, command) at module_utils/connection.py:93 passes command (param index 1) to connection.exec_command(command) at 96 over the persistent-connection socket; taint from module params c",
+     "evidence": [
+      "lib/ansible/module_utils/connection.py:93-96 — def exec_command(module, command): ... out = connection.exec_command(command)"
+     ]
+    },
+    {
+     "id": "P2-047",
+     "role": "source",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.connection",
+      "type": null,
+      "callable": "exec_command",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/connection.py",
+      "line": 93
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [S-211..S-211]; classification distribution: tp 1. Context class: remote_host_output. Representative judgments: S-211 (tp, conf 0.70): Module-side exec_command helper at lib/ansible/module_utils/connection.py:93: out = connection.exec_command(command) over the persistent-connection socket, returns (0, out, '') — for network modules this relays the remot",
+     "evidence": [
+      "lib/ansible/module_utils/connection.py:93-99 — def exec_command(module, command); out = connection.exec_command(command); return 0, out, ''"
+     ]
+    },
+    {
+     "id": "P2-048",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": null,
+      "module": "ansible.modules.apt_repository",
+      "type": "get_add_ppa_signing_key_callback",
+      "callable": "get_add_ppa_signing_key_callback._run_command",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/modules/apt_repository.py",
+      "line": 501
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-77..K-77]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-77 (tp, conf 0.75): Nested closure _run_command(command) (apt_repository.py:501, param arg 0 — no self in a nested function) passes command straight to module.run_command(command, check_rc=True) at apt_repository.py:502 with default use_uns",
+     "evidence": [
+      "lib/ansible/modules/apt_repository.py:493-497 — ppa source lines (module params) expanded via _expand_ppa feeding commands into this callback",
+      "lib/ansible/modules/apt_repository.py:501-502 — def _run_command(command): module.run_command(command, check_rc=True)"
+     ]
+    },
+    {
+     "id": "P2-049",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "package": null,
+      "module": "json",
+      "type": null,
+      "callable": "json.load",
+      "arg_index": 0,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/cache/jsonfile.py",
+      "line": 60
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [S-656..S-656]; classification distribution: candidate 1. Context class: deserialized_remote_or_external_data. Representative judgments: S-656 (candidate, conf 0.60): jsonfile cache plugin _load parses a local cache file: json.load(f, cls=AnsibleJSONDecoder) at lib/ansible/plugins/cache/jsonfile.py:60 — cache content is fact/vars data previously collected (often from remote hosts) per",
+     "evidence": [
+      "lib/ansible/plugins/cache/jsonfile.py:57-60 — codecs.open(filepath) then json.load(f, cls=AnsibleJSONDecoder)"
+     ]
+    },
+    {
+     "id": "P2-050",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "package": "pexpect",
+      "module": "pexpect",
+      "type": null,
+      "callable": "pexpect._run",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/modules/expect.py",
+      "line": 209
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-120..K-120]; classification distribution: candidate 1. Context class: argv_command. Representative judgments: K-120 (candidate, conf 0.60): pexpect._run(args, ...) at expect.py:209 is the pexpect<4 fallback receiving the same args = module.params['command'] (expect.py:150) with _spawn=pexpect.spawn. Identical semantics to K-119: argv execution without a shel",
+     "evidence": [
+      "lib/ansible/modules/expect.py:150 — args = module.params['command']",
+      "lib/ansible/modules/expect.py:209 — b_out, rc = pexpect._run(args, ..., _spawn=pexpect.spawn, echo=echo)"
+     ]
+    },
+    {
+     "id": "P2-051",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "package": "pexpect",
+      "module": "pexpect",
+      "type": null,
+      "callable": "pexpect.run",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/modules/expect.py",
+      "line": 202
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-119..K-119]; classification distribution: candidate 1. Context class: argv_command. Representative judgments: K-119 (candidate, conf 0.60): pexpect.run(args, ...) at expect.py:202 receives args = module.params['command'] (expect.py:150) with no validation or quoting beyond an empty-string check (expect.py:166). pexpect.run/spawn use argv semantics without a ",
+     "evidence": [
+      "lib/ansible/modules/expect.py:150 — args = module.params['command'] (raw module param)",
+      "lib/ansible/modules/expect.py:166 — only check: if args.strip() == '': fail_json('no command given')",
+      "lib/ansible/modules/expect.py:202 — b_out, rc = pexpect.run(args, timeout=timeout, withexitstatus=True, ...)"
+     ]
+    },
+    {
+     "id": "P2-052",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.5,
+     "signature": {
+      "package": "pexpect",
+      "module": "pexpect",
+      "type": null,
+      "callable": "pexpect.spawn",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "lib/ansible/plugins/connection/winrm.py",
+      "line": 335
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-372..K-372]; classification distribution: candidate 1. Context class: argv_command. Representative judgments: K-372 (candidate, conf 0.50): pexpect.spawn(command, kinit_cmdline, ...) at winrm.py:335 runs the Kerberos kinit: command = kinit_cmdline.pop(0) = self._kinit_cmd, and kinit_cmdline was extended with shlex.split(kinit_args) plus principal (winrm.py:3",
+     "evidence": [
+      "lib/ansible/plugins/connection/winrm.py:309-318 — kinit_cmdline = [self._kinit_cmd] + shlex.split(kinit_args) + [principal] from admin connection options",
+      "lib/ansible/plugins/connection/winrm.py:332-333 — command = kinit_cmdline.pop(0)",
+      "lib/ansible/plugins/connection/winrm.py:335 — child = pexpect.spawn(command, kinit_cmdline, timeout=60, env=krb5env, echo=False)"
+     ]
+    },
+    {
+     "id": "P2-053",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": null,
+      "module": "ansible.utils.galaxy",
+      "type": "scm_archive_resource",
+      "callable": "scm_archive_resource.run_scm_cmd",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "lib/ansible/utils/galaxy.py",
+      "line": 43
+     },
+     "rationale": "Deduplicated from 1 candidate row(s) [K-130..K-130]; classification distribution: tp 1. Context class: direct_param_passthrough_to_exec. Representative judgments: K-130 (tp, conf 0.70): Nested run_scm_cmd(cmd, tempdir) (galaxy.py:43, param arg 0) passes cmd directly to Popen(cmd, cwd=tempdir, stdout=PIPE, stderr=PIPE) at galaxy.py:46 (from-import of Popen, galaxy.py:24). Callers pass argv lists for git/",
+     "evidence": [
+      "lib/ansible/utils/galaxy.py:24 — from subprocess import Popen (from-import style)",
+      "lib/ansible/utils/galaxy.py:39-41 — scm_archive_resource callers build git/hg argv from src/name/version",
+      "lib/ansible/utils/galaxy.py:43-46 — def run_scm_cmd(cmd, tempdir): popen = Popen(cmd, cwd=tempdir, stdout=PIPE, stderr=PIPE)"
+     ]
+    },
+    {
+     "id": "P2-SAN-001",
+     "role": "sanitizer",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": null,
+      "module": "ansible.module_utils.six.moves",
+      "type": null,
+      "callable": "shlex_quote",
+      "arg_index": 0,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "lib/ansible/module_utils/basic.py",
+      "line": 1916
+     },
+     "rationale": "pipes/shlex quote re-exported via ansible.module_utils.six.moves. Proven shell-metacharacter neutralizer in two CWE-78-relevant uses: basic.py:1915-1916 quotes every list element before the shell join for run_command(use_unsafe_shell=True, list), and action/__init__.py:1037 quotes module argument values into the controller-built module command line. Return value is shell-safe. Added by the lead labeler from source reading; not part of the extraction candidate CSVs.",
+     "evidence": [
+      "lib/ansible/module_utils/basic.py:1916 - args = b\" \".join([to_bytes(shlex_quote(x), ...) for x in args])",
+      "lib/ansible/plugins/action/__init__.py:1037 - args_data += '%s=%s ' % (k, shlex_quote(text_type(v)))",
+      "lib/ansible/module_utils/basic.py:179 - from ansible.module_utils.six.moves import ... shlex_quote"
+     ]
+    }
+   ]
+  }
+ ]
+}
