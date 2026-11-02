@@ -1,0 +1,1148 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "run_id": "django-pass5-cwe89-20261020",
+    "generated_at": "2026-10-20T11:39:27+00:00",
+    "language": "python",
+    "framework": "django",
+    "model": "glm-5.3",
+    "project": "django",
+    "notes": [
+      "Pass 5 (CWE-89 SQL Injection) candidate labeling only; 2609 source rows + 608 sink rows = 3217 candidates, all covered via 33 semantic groups (dedup) - see labels/labels_raw_pass5.json for the full row-to-group audit mapping.",
+      "Evidence verification basis: the CodeQL database source snapshot (django-db/src.zip, Django 4.2.0-alpha0, creation sha eb3699ea). IMPORTANT: the on-disk working tree at the source directory is stock Django 2.2.4 (git 8687fbe) and does NOT match the extraction CSV line numbers; all file:line evidence in these labels refers to the database snapshot, which the CSV rows match exactly (spot-verified at createcachetable.py:120/127, utils.py:66-107, compiler.py:1395/1657, query.py:1284/1670/1995, expressions.py:1049, sql/query.py:85/152).",
+      "This run is an in-context LLM labeling session (model glm-5.3 operating the Claude Code agent harness); no external LLM API calls were made. 12 batches were processed; per-batch scope and row counts are recorded in labels_raw_pass5.json.",
+      "pass 1 block: present with zero entries solely to satisfy the labels_schema.json 'passes contains pass_id=1' constraint; no pass-1 labeling was performed in this run.",
+      "Key semantic findings: (1) no framework request path feeds raw SQL text - request-derived values (admin ChangeList filters/search/ordering, auth, generic views) flow into ORM filter()/order_by() channels that compile to parameterized SQL; (2) the raw-SQL APIs (QuerySet.raw/extra, RawSQL, RawQuery(Set)) are genuine sinks but have no non-test call sites in this snapshot; (3) dynamic SQL in backends is built from quote_name-quoted identifiers, settings/DB-derived names, or CLI input - operator/DB trust level; (4) quote_name does NOT escape embedded quotes ('%s' wrapping only) and is therefore recorded as a candidate sanitizer, not a trusted barrier; (5) the bound-parameter argument is the proven sanitizer channel.",
+      "Extraction match_kind is 'ast' for all rows (receiver-name-agnostic matching); name-collision false positives (CLI .execute(), Redis pipeline.execute, error-message %-formatting) were identified and labeled none/fp individually."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "22",
+        "23",
+        "36",
+        "73"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 5,
+      "focus": "SQL Injection",
+      "cwes": [
+        "89"
+      ],
+      "entries": [
+        {
+          "id": "p5-sink-001",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0
+          },
+          "rationale": "The <obj>.execute(sql, ...) call sites across django/db (ORM compilers, schema editors, backend base/introspection/creation/operations, GIS backends, sqlite _functions, cache backend) are the framework's genuine raw-SQL execution channel: SQL text is argument 0. Verified dynamic instances interpolate only quote_name()-quoted identifiers, settings/DB-derived names, or keep values in the bound-params argument; many instances are static literal SQL (PRAGMA/SET probes). The signature is a true SQL-text sink for pass 5; whether any instance's SQL text carries request-influenced data is resolved by the Phase 2 taint query - in this snapshot no framework request path feeds raw SQL text.",
+          "evidence": [
+            "covers 220 sink rows (receiver names cursor/curs/conn/self/schema_editor) across 46 files",
+            "ORM endpoint: cursor.execute(sql, params) django/db/models/sql/compiler.py:1395 and :1657 (parameterized by construction)",
+            "schema editor funnel: cursor.execute(sql, params) django/db/backends/base/schema.py:199",
+            "introspection: cursor.execute('PRAGMA table_info(%s)' % quote_name(table_name)) django/db/backends/sqlite3/introspection.py:94",
+            "static literal instances: django/db/backends/base/features.py:363-370 ROLLBACK_TEST probes, sqlite3/base.py:170/173 PRAGMA constants"
+          ],
+          "location": {
+            "file": "django/db/models/sql/compiler.py",
+            "line": 1395
+          }
+        },
+        {
+          "id": "p5-sink-002",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.utils"
+          },
+          "rationale": "CursorWrapper.execute(sql, params=None) is the central PEP-249 funnel every backend cursor goes through (django/db/backends/utils.py:66); sql is parameter 1 (after self) and is forwarded verbatim to the driver cursor via _execute. A tainted string reaching this parameter is executed as SQL. CursorDebugWrapper.execute (utils.py:101) subclasses and delegates - same signature, deduplicated into this entry.",
+          "evidence": [
+            "def execute(self, sql, params=None): return self._execute_with_wrappers(sql, params, many=False, executor=self._execute) - django/db/backends/utils.py:66",
+            "covers sink rows for CursorWrapper.execute / CursorDebugWrapper.execute definitions (utils.py:66, 101)",
+            "_execute forwards verbatim: self.cursor.execute(sql) / (sql, params) - utils.py:82-89"
+          ],
+          "location": {
+            "file": "django/db/backends/utils.py",
+            "line": 66
+          }
+        },
+        {
+          "id": "p5-sink-003",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "executemany",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.utils"
+          },
+          "rationale": "CursorWrapper.executemany(sql, param_list) (utils.py:71; CursorDebugWrapper.executemany at :105, deduplicated) forwards the SQL text parameter to the driver cursor.executemany - genuine bulk SQL-text sink; param_list is the bound channel.",
+          "evidence": [
+            "def executemany(self, sql, param_list) - django/db/backends/utils.py:71",
+            "driver call: self.cursor.executemany(sql, param_list) - utils.py:94"
+          ],
+          "location": {
+            "file": "django/db/backends/utils.py",
+            "line": 71
+          }
+        },
+        {
+          "id": "p5-sink-004",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "callproc",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.utils"
+          },
+          "rationale": "CursorWrapper.callproc(procname, params, kparams) - procname (parameter 1) names a stored procedure and becomes part of the executed statement, so it is SQL structure; the params argument is the bound channel. No attacker-reachable call site exists in this snapshot (cx_Oracle-oriented API), kept as sink for recall.",
+          "evidence": [
+            "def callproc(self, procname, params=None, kparams=None) - utils.py:48",
+            "driver calls self.cursor.callproc(procname[, params]) - utils.py:59-64"
+          ],
+          "location": {
+            "file": "django/db/backends/utils.py",
+            "line": 48
+          }
+        },
+        {
+          "id": "p5-sum-005",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "_execute",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.utils"
+          },
+          "rationale": "CursorWrapper._execute / _executemany are the wrapper glue that carries (sql, params) from CursorWrapper.execute to the driver cursor (utils.py:82-94); modeled as taint step so wrapper chains reach the labeled sink.",
+          "evidence": [
+            "_execute(self, sql, params, *ignored_wrapper_args) - utils.py:82",
+            "also covers _executemany (utils.py:91) and the _execute_with_wrappers indirection (utils.py:76)"
+          ],
+          "location": {
+            "file": "django/db/backends/utils.py",
+            "line": 82
+          }
+        },
+        {
+          "id": "p5-sink-006",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.sqlite3.base"
+          },
+          "rationale": "SQLiteCursorWrapper.execute(query, params=None) (sqlite3/base.py:353) converts %s placeholders to ? via convert_query and calls Database.Cursor.execute. convert_query is placeholder syntax conversion only - NOT a taint barrier for SQL text.",
+          "evidence": [
+            "def execute(self, query, params=None) - sqlite3/base.py:353",
+            "convert_query: FORMAT_QMARK_REGEX.sub('?', query).replace('%%', '%') - sqlite3/base.py:363-364"
+          ],
+          "location": {
+            "file": "django/db/backends/sqlite3/base.py",
+            "line": 353
+          }
+        },
+        {
+          "id": "p5-sink-007",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "executemany",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.sqlite3.base"
+          },
+          "rationale": "SQLiteCursorWrapper.executemany(query, param_list) (sqlite3/base.py:359) - same channel as execute; query parameter is SQL text.",
+          "evidence": [
+            "def executemany(self, query, param_list) - sqlite3/base.py:359"
+          ],
+          "location": {
+            "file": "django/db/backends/sqlite3/base.py",
+            "line": 359
+          }
+        },
+        {
+          "id": "p5-sink-008",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.mysql.base"
+          },
+          "rationale": "MySQLdb CursorWrapper.execute(query, args=None) (mysql/base.py:72) forwards (query, args) directly to the MySQLdb driver cursor - query parameter is SQL text.",
+          "evidence": [
+            "def execute(self, query, args=None): return self.cursor.execute(query, args) - mysql/base.py:72-75"
+          ],
+          "location": {
+            "file": "django/db/backends/mysql/base.py",
+            "line": 72
+          }
+        },
+        {
+          "id": "p5-sink-009",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "executemany",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.mysql.base"
+          },
+          "rationale": "MySQLdb CursorWrapper.executemany(query, args) (mysql/base.py:83) - bulk SQL-text channel.",
+          "evidence": [
+            "def executemany(self, query, args) - mysql/base.py:83"
+          ],
+          "location": {
+            "file": "django/db/backends/mysql/base.py",
+            "line": 83
+          }
+        },
+        {
+          "id": "p5-sink-010",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.oracle.base"
+          },
+          "rationale": "Oracle FormatStylePlaceholderCursor.execute(query, params=None) (oracle/base.py:552) rewrites :name placeholders via _fix_for_params and calls the cx_Oracle driver cursor. Placeholder normalization does not sanitize SQL text - query parameter remains the SQL-text sink.",
+          "evidence": [
+            "def execute(self, query, params=None): query, params = self._fix_for_params(query, params, unify_by_values=True) - oracle/base.py:552-556"
+          ],
+          "location": {
+            "file": "django/db/backends/oracle/base.py",
+            "line": 552
+          }
+        },
+        {
+          "id": "p5-sink-011",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "executemany",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.oracle.base"
+          },
+          "rationale": "Oracle FormatStylePlaceholderCursor.executemany (oracle/base.py:558) - bulk SQL-text channel.",
+          "evidence": [
+            "def executemany(self, query, params=None) - oracle/base.py:558"
+          ],
+          "location": {
+            "file": "django/db/backends/oracle/base.py",
+            "line": 558
+          }
+        },
+        {
+          "id": "p5-sum-012",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "execute_sql",
+            "flow_kind": "param",
+            "module": "django.db.models.sql.compiler"
+          },
+          "rationale": "SQLCompiler.execute_sql / SQLInsertCompiler.execute_sql (compiler.py:1365, 1647) propagate the ORM-compiled (sql, params) pair to cursor.execute - summary step so ORM flows connect to the execute sink. Compiled SQL is parameterized by construction.",
+          "evidence": [
+            "sql, params = self.as_sql(); cursor.execute(sql, params) - compiler.py:1382, 1395",
+            "insert loop: for sql, params in self.as_sql(): cursor.execute(sql, params) - compiler.py:1656-1657"
+          ],
+          "location": {
+            "file": "django/db/models/sql/compiler.py",
+            "line": 1365
+          }
+        },
+        {
+          "id": "p5-sink-013",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "raw",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.models.query"
+          },
+          "rationale": "QuerySet.raw(raw_query, params=(), ...) (query.py:1284) is the public raw-SQL API: raw_query (parameter 1 after self) is executed verbatim via RawQuerySet -> sql.RawQuery -> RawQuery._execute_query -> cursor.execute(self.sql, params); only params is bound. Downstream applications passing request data as raw_query are injectable; no such call site exists in non-test framework code in this snapshot.",
+          "evidence": [
+            "def raw(self, raw_query, params=(), translations=None, using=None) - query.py:1284",
+            "execution chain: RawQuerySet.__init__ -> sql.RawQuery(sql=raw_query, ...) -> self.cursor.execute(self.sql, params) - sql/query.py:152"
+          ],
+          "location": {
+            "file": "django/db/models/query.py",
+            "line": 1284
+          }
+        },
+        {
+          "id": "p5-sink-014",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "extra",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.models.query"
+          },
+          "rationale": "QuerySet.extra(select, where, params, tables, order_by, select_params) (query.py:1670) injects caller-supplied SQL fragments directly into the ORM query: select (param 1), where (2), tables (4), order_by (5) become SQL text; params (3) and select_params (6) are the bound channel. Fragment parameters are genuine SQL-structure sinks (documented unsafe API for user input).",
+          "evidence": [
+            "def extra(self, select=None, where=None, params=None, tables=None, order_by=None, select_params=None) - query.py:1670-1678",
+            "clone.query.add_extra(select, select_params, where, params, tables, order_by) - query.py:1684"
+          ],
+          "location": {
+            "file": "django/db/models/query.py",
+            "line": 1670
+          }
+        },
+        {
+          "id": "p5-sink-015",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.models.expressions"
+          },
+          "rationale": "RawSQL(sql, params, output_field) (expressions.py:1049) embeds sql (parameter 1) verbatim into the compiled query - as_sql returns ('(%s)' % self.sql, self.params); params (2) is bound.",
+          "evidence": [
+            "class RawSQL(Expression): def __init__(self, sql, params, output_field=None) - expressions.py:1048-1052",
+            "as_sql: return '(%s)' % self.sql, self.params - expressions.py:1058-1059"
+          ],
+          "location": {
+            "file": "django/db/models/expressions.py",
+            "line": 1049
+          }
+        },
+        {
+          "id": "p5-sink-016",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.models.sql.query"
+          },
+          "rationale": "RawQuery.__init__(sql, using, params) (sql/query.py:85) stores sql (parameter 1) for verbatim execution in _execute_query; params (parameter 3) is bound.",
+          "evidence": [
+            "class RawQuery: def __init__(self, sql, using, params=()) - sql/query.py:82-85",
+            "self.cursor.execute(self.sql, params) - sql/query.py:152"
+          ],
+          "location": {
+            "file": "django/db/models/sql/query.py",
+            "line": 85
+          }
+        },
+        {
+          "id": "p5-sink-017",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.models.query"
+          },
+          "rationale": "RawQuerySet.__init__(raw_query, ...) (query.py:1995) routes raw_query (parameter 1) into sql.RawQuery; params (parameter 4) is bound.",
+          "evidence": [
+            "def __init__(self, raw_query, model=None, query=None, params=(), ...) - query.py:1995",
+            "self.query = query or sql.RawQuery(sql=raw_query, using=self.db, params=params) - query.py:2009"
+          ],
+          "location": {
+            "file": "django/db/models/query.py",
+            "line": 1995
+          }
+        },
+        {
+          "id": "p5-sum-018",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "_execute_query",
+            "flow_kind": "param",
+            "module": "django.db.models.sql.query"
+          },
+          "rationale": "RawQuery._execute_query (sql/query.py:135) is the glue carrying self.sql/self.params to connection.cursor().execute - summary step for the raw() execution chain.",
+          "evidence": [
+            "self.cursor = connection.cursor(); self.cursor.execute(self.sql, params) - sql/query.py:151-152"
+          ],
+          "location": {
+            "file": "django/db/models/sql/query.py",
+            "line": 135
+          }
+        },
+        {
+          "id": "p5-sink-019",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.db.backends.base.schema"
+          },
+          "rationale": "BaseDatabaseSchemaEditor.execute(sql, params=()) (base/schema.py:170) is the DDL funnel used by every migration; sql (parameter 1 after self) is str()-cast and passed to cursor.execute. Callers across all schema editors %-interpolate quote_name-quoted identifiers into sql; collect_sql mode interpolates quote_value()-treated params.",
+          "evidence": [
+            "def execute(self, sql, params=()) ... sql = str(sql) ... cursor.execute(sql, params) - base/schema.py:170-199",
+            "collect path: (sql % tuple(map(self.quote_value, params))) - base/schema.py:193"
+          ],
+          "location": {
+            "file": "django/db/backends/base/schema.py",
+            "line": 170
+          }
+        },
+        {
+          "id": "p5-sum-020",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "callable": "alter_field",
+            "flow_kind": "param"
+          },
+          "rationale": "Schema-editor mutation methods (create_model, delete_model, add_field, remove_field, alter_field, add_index, remove_index, add_constraint, alter_db_table, _alter_field, _remake_table, __exit__/deferred_sql, plus postgresql/mysql/sqlite3/oracle/GIS overrides) route model-metadata-derived table/column identifiers into SchemaEditor.execute - summary edges keep migration-state to DDL flows connected. Identifiers are framework/model-derived (operator trust), quoted via quote_name inside the template constructors.",
+          "evidence": [
+            "covers 45 sink-csv wrapper-definition rows + 195 source-csv call rows across base and backend schema editors",
+            "representative: self.execute(sql, params) callers at base/schema.py:445-1135; spatialite/schema.py:69-188; oracle/schema.py:56-237"
+          ],
+          "location": {
+            "file": "django/db/backends/base/schema.py",
+            "line": 437
+          }
+        },
+        {
+          "id": "p5-sum-021",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "get_table_description",
+            "flow_kind": "param"
+          },
+          "rationale": "DatabaseIntrospection methods (get_table_list, get_table_description, get_relations, get_constraints, get_sequences, get_primary_key_columns, get_storage_engine, get_geometry_type, get_field_type, _get_column_collations) propagate cursor + table_name/index parameters into information_schema/PRAGMA/SHOW SQL. Injection-shaped %-interpolation but inputs are DB-derived introspection names (second-order taint) usually quote_name-quoted; some sites use bound parameters instead. Retained as summary for second-order flow; manual review flagged.",
+          "evidence": [
+            "'PRAGMA table_info(%s)' % self.connection.ops.quote_name(table_name) - sqlite3/introspection.py:94",
+            "'SHOW INDEX FROM %s' % self.connection.ops.quote_name(table_name) - mysql/introspection.py:310",
+            "bound-parameter variant: cursor.execute(type_query, [table_name]) - mysql/introspection.py:289; postgresql/introspection.py:57"
+          ],
+          "location": {
+            "file": "django/db/backends/sqlite3/introspection.py",
+            "line": 88
+          }
+        },
+        {
+          "id": "p5-sum-022",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "_execute_create_test_db",
+            "flow_kind": "param"
+          },
+          "rationale": "Test-database creation wrappers (_execute_create_test_db, _create_test_db, _destroy_test_db, _clone_test_db, _database_exists, _execute_statements) build CREATE/DROP DATABASE/USER DDL from settings-derived names via quote_name'd %-formatting. Operator-level trust (settings.DATABASES and test runner config); summary edges only.",
+          "evidence": [
+            "cursor.execute('CREATE DATABASE %(dbname)s %(suffix)s' % parameters) - base/creation.py:186",
+            "DROP DATABASE %(dbname)s % test_db_params - base/creation.py:224, postgresql/creation.py:83",
+            "template % parameters in _execute_statements - oracle/creation.py:325-330"
+          ],
+          "location": {
+            "file": "django/db/backends/base/creation.py",
+            "line": 185
+          }
+        },
+        {
+          "id": "p5-sum-023",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "execute_sql_flush",
+            "flow_kind": "param"
+          },
+          "rationale": "Backend operations helpers (execute_sql_flush, last_insert_id, __foreign_key_constraints, _get_sequence_name, __references_graph, _quote_params_for_last_executed_query, _get_postgis_func/_get_spatialite_func) propagate backend-generated SQL or model/DB-derived identifiers into the execute funnel. Inputs are framework-generated (operator/DB trust).",
+          "evidence": [
+            "execute_sql_flush executes a backend-generated sql_list - base/operations.py:441-449",
+            "cursor.execute('\"%s\".currval' % sq_name) with DB-derived sq_name - oracle/operations.py:341",
+            "'SELECT %s' % func with constant spatial function names - spatialite/operations.py:151, postgis/operations.py:328"
+          ],
+          "location": {
+            "file": "django/db/backends/base/operations.py",
+            "line": 441
+          }
+        },
+        {
+          "id": "p5-sum-024",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "check_constraints",
+            "flow_kind": "param"
+          },
+          "rationale": "Connection-state wrappers whose parameters can reach SQL text: check_constraints(table_names) -> 'PRAGMA foreign_key_check(%s)' % quote_name(table_name) (sqlite3/base.py:235-238), _savepoint(sid) -> ops.savepoint_create_sql(sid), ensure_timezone, disable/enable_constraint_checking. sid is a framework-generated counter; table_names are DB/introspection-derived. Summary edges retained with manual-review flag (second-order).",
+          "evidence": [
+            "_savepoint: cursor.execute(self.ops.savepoint_create_sql(sid)) - base/base.py:368-370",
+            "check_constraints -> PRAGMA foreign_key_check(%s) % quote_name(table_name) - sqlite3/base.py:235-238"
+          ],
+          "location": {
+            "file": "django/db/backends/sqlite3/base.py",
+            "line": 221
+          }
+        },
+        {
+          "id": "p5-none-025",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "init_connection_state",
+            "flow_kind": "param"
+          },
+          "rationale": "Wrappers executing only static literal SQL (init_connection_state, is_usable, mysql_server_data, get_new_connection, prepare_database, _start_transaction_under_autocommit, feature probes supports_transactions/supports_json_field/supports_collation_on_charfield, get_hstore_oids/get_citext_oids): their parameters do not influence SQL text - not pass-5 sinks. The genuine execute calls inside them are covered by the execute call-site entry.",
+          "evidence": [
+            "static statements: 'ALTER SESSION SET NLS_TERRITORY = AMERICA' - oracle/base.py:267; 'PRAGMA foreign_keys = ON' - sqlite3/base.py:170",
+            "feature probes execute literals ROLLBACK_TEST - base/features.py:363-370"
+          ],
+          "location": {
+            "file": "django/db/backends/postgresql/base.py",
+            "line": 250
+          }
+        },
+        {
+          "id": "p5-none-026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "percent_format",
+            "flow_kind": "unknown",
+            "module": "django.core.management"
+          },
+          "rationale": "String constructions producing error/log/stdout messages, not SQL: management/__init__.py:116 ('Unknown command: %r'), :165 (f-string TypeError message), :185 (options error), management/base.py:411 (stderr formatting), sql/query.py:149 (RuntimeError 'Unexpected params type: %s'). Name-collision false positives of the sql_percent_format/sql_fstring extraction families.",
+          "evidence": [
+            "raise CommandError('Unknown command: %r' % command_name) - management/__init__.py:116",
+            "raise RuntimeError('Unexpected params type: %s' % params_type) - sql/query.py:149"
+          ],
+          "location": {
+            "file": "django/core/management/__init__.py",
+            "line": 116
+          }
+        },
+        {
+          "id": "p5-none-027",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "percent_format",
+            "flow_kind": "unknown"
+          },
+          "rationale": "SQL template constructions (% / f-string / concat) across backends: interpolations are quote_name()-quoted identifiers, settings/DB-derived names, or preserve %%s bound placeholders (cache db.py:144-196, mysql/schema.py, GIS DDL templates, check_constraints REFERRING joins). Construction nodes are not execution APIs - the built strings flow into the execute-family sinks already labeled, and %-formatting taint propagation is standard CodeQL modeling; no separate sink entry is warranted.",
+          "evidence": [
+            "quote_name'd: 'PRAGMA foreign_key_check(%s)' % quote_name(table_name) - sqlite3/base.py:236",
+            "bound placeholder preserved: 'UPDATE %s SET %s = %%s WHERE %s = %%s' % (table, quote_name(...)) - cache/backends/db.py:170-171",
+            "GIS DDL templates: self.sql_add_spatial_index % {...} - gis schema editors"
+          ],
+          "location": {
+            "file": "django/db/backends/sqlite3/base.py",
+            "line": 236
+          }
+        },
+        {
+          "id": "p5-none-028",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "django.core.management"
+          },
+          "rationale": ".execute() calls that are CLI command dispatch, not database cursors: management/__init__.py:198 (command.execute(*args, **defaults)), :446 (utility.execute()), management/base.py:402 (self.execute(*args, **cmd_options)), runserver.py:74 / createsuperuser.py:88 / sqlmigrate.py:38 (super().execute(...) on BaseCommand). Method-name collision with cursor.execute.",
+          "evidence": [
+            "return command.execute(*args, **defaults) - management/__init__.py:198",
+            "utility.execute() (ManagementUtility CLI bootstrap) - management/__init__.py:446"
+          ],
+          "location": {
+            "file": "django/core/management/__init__.py",
+            "line": 198
+          }
+        },
+        {
+          "id": "p5-sum-029",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "call_command",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "django.core.management"
+          },
+          "rationale": "CLI dispatch wrappers (call_command, execute_from_command_line, run_from_argv) propagate operator-supplied command names/options into management command handlers; commands such as createcachetable (CLI tablename -> quote_name'd DDL), loaddata, sqlmigrate and flush reach the SQL layer. Operator-level trust boundary (manage.py is run by the deployment operator with DB credentials) - classification 'candidate' pending manual review of any environment where commands are exposed to less-trusted callers.",
+          "evidence": [
+            "call_command(command_name, *args, **options) -> command.execute(*args, **defaults) - management/__init__.py:87-198",
+            "covers 3 sink-csv wrapper definitions + 14 source-csv call rows (call_command call sites)"
+          ],
+          "location": {
+            "file": "django/core/management/__init__.py",
+            "line": 87
+          }
+        },
+        {
+          "id": "p5-none-030",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "django.core.cache.backends.redis"
+          },
+          "rationale": "pipeline.execute() in django/core/cache/backends/redis.py:148 flushes a Redis command pipeline (set_many wrapper at :138 likewise) - Redis protocol, no SQL. Method-name collision with cursor.execute.",
+          "evidence": [
+            "pipeline.mset(...); pipeline.execute() - redis.py:141-148"
+          ],
+          "location": {
+            "file": "django/core/cache/backends/redis.py",
+            "line": 148
+          }
+        },
+        {
+          "id": "p5-none-031",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "register",
+            "flow_kind": "param",
+            "module": "django.db.backends.sqlite3._functions"
+          },
+          "rationale": "register() in django/db/backends/sqlite3/_functions.py registers Python callables as SQLite SQL functions via connection.create_function/create_aggregate - function registration, not SQL text execution.",
+          "evidence": [
+            "connection.create_aggregate('STDDEV_SAMP', 1, StdDevSamp) - _functions.py:80"
+          ],
+          "location": {
+            "file": "django/db/backends/sqlite3/_functions.py",
+            "line": 40
+          }
+        },
+        {
+          "id": "p5-sum-032",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "callable": "_base_set",
+            "flow_kind": "param",
+            "module": "django.core.cache.backends.db"
+          },
+          "rationale": "DatabaseCache methods (get_many, _base_set, _base_delete_many, has_key, _cull, clear) build cache SQL with quote_name'd table/column identifiers and pass keys/values through the bound-parameter argument ([key] / [b64encoded, exp, key]); cache keys are make_and_validate_key()'d. Summary edges from the cache API to the execute funnel; value channel is parameterized.",
+          "evidence": [
+            "cursor.execute('SELECT %s, %s FROM %s WHERE %s = %%s' % (quote_name(...)...), [key]) - db.py:143-152",
+            "'INSERT INTO %s (%s, %s, %s) VALUES (%%s, %%s, %%s)' % (table, quote_name(...)), [key, b64encoded, exp] - db.py:188-196"
+          ],
+          "location": {
+            "file": "django/core/cache/backends/db.py",
+            "line": 116
+          }
+        },
+        {
+          "id": "p5-sum-033",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "create_table",
+            "flow_kind": "param"
+          },
+          "rationale": "Management-command SQL wrappers: createcachetable.create_table(database, tablename, dry_run) builds CREATE TABLE/INDEX DDL %-interpolating the CLI-supplied tablename (quote_name'd via qn) and executes it (createcachetable.py:64-127); loaddata.reset_sequences and sites.create_default_site execute backend-generated sequence-reset SQL. CLI/operator trust - the tablename is the only externally supplied identifier; kept 'candidate' for manual review.",
+          "evidence": [
+            "full_statement = ['CREATE TABLE %s (' % qn(tablename)] ... curs.execute(full_statement) - createcachetable.py:100-127",
+            "sequence_sql from connection.ops.sequence_reset_sql(no_style(), models) - loaddata.py:131-137, sites/management.py:41-47"
+          ],
+          "location": {
+            "file": "django/core/management/commands/createcachetable.py",
+            "line": 56
+          }
+        },
+        {
+          "id": "p5-sum-034",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "database_forwards",
+            "flow_kind": "param"
+          },
+          "rationale": "Migration operations (RunSQL._run_sql, postgres CreateExtension/Collation/database_forwards, model/field operations) forward migration-defined SQL and identifiers into schema_editor.execute. Migration content is developer-authored (operator trust); extension/collation names are quote_name'd before interpolation.",
+          "evidence": [
+            "schema_editor.execute(sql, params=params) - migrations/operations/special.py:129",
+            "'CREATE EXTENSION IF NOT EXISTS %s' % schema_editor.quote_name(self.name) - contrib/postgres/operations.py:27-30",
+            "'CREATE COLLATION %(name)s (%(args)s)' % {...quote_name...} - contrib/postgres/operations.py:193-200"
+          ],
+          "location": {
+            "file": "django/db/migrations/operations/special.py",
+            "line": 119
+          }
+        },
+        {
+          "id": "p5-san-035",
+          "role": "sanitizer",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 1
+          },
+          "rationale": "The params/bound argument of the execute family (argument 1 at call sites, parameter 2 in wrapper definitions; likewise executemany param_list and callproc params) is the prepared-statement channel: values are substituted by the DB driver and cannot alter SQL text. This is the primary proven SQL-injection barrier for pass 5 - model as isBarrier at the bound-parameter positions so taint flowing into params does not reach the SQL-text sink.",
+          "evidence": [
+            "cursor.execute(sql, params) ORM endpoint - compiler.py:1395/1657",
+            "cache values bound: [key], [b64encoded, exp, key] - cache/backends/db.py:151/172/185/196",
+            "bound introspection: cursor.execute(type_query, [table_name]) - mysql/introspection.py:289"
+          ],
+          "location": {
+            "file": "django/db/models/sql/compiler.py",
+            "line": 1395
+          }
+        },
+        {
+          "id": "p5-san-036",
+          "role": "sanitizer",
+          "classification": "candidate",
+          "confidence": 0.4,
+          "signature": {
+            "callable": "quote_name",
+            "flow_kind": "return"
+          },
+          "rationale": "connection.ops.quote_name wraps identifiers in backend-specific quotes before %-interpolation into SQL text. Verified implementations do NOT escape embedded quote characters (sqlite3/postgresql: '\"%s\"' % name; mysql: '`%s`' % name) - quoting is adequate only for framework-controlled identifier character sets (model field names, introspected table names), NOT a strict input sanitizer. Recorded as sanitizer 'candidate' with manual-review flag: safe for the identifier families used at the observed call sites, unsafe as a general barrier for arbitrary attacker text.",
+          "evidence": [
+            "sqlite3: return '\"%s\"' % name (no embedded-quote escaping) - sqlite3/operations.py:189-192",
+            "mysql: return '`%s`' % name - mysql/operations.py quote_name",
+            "used at: sqlite3/introspection.py:94, mysql/introspection.py:310, createcachetable.py:77-100 (qn), postgres/operations.py:29/196"
+          ],
+          "location": {
+            "file": "django/db/backends/sqlite3/operations.py",
+            "line": 189
+          }
+        },
+        {
+          "id": "p5-src-037",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "GET",
+            "flow_kind": "field"
+          },
+          "rationale": "request.GET (parsed QUERY_STRING via QueryDict) is the primary attacker-controlled input boundary of the framework's HTTP surface; attribute reads in admin ChangeList/autocompletion, generic date views, i18n and middleware are genuine pass-5 source nodes. Downstream framework consumption compiles to parameterized ORM SQL (admin filters/ordering), so sources are real but the observed channels are safe.",
+          "evidence": [
+            "self.params = dict(request.GET.items()) - admin/views/main.py:112",
+            "covers 38 http_request/request_param rows for request.GET"
+          ],
+          "location": {
+            "file": "django/contrib/admin/views/main.py",
+            "line": 112
+          }
+        },
+        {
+          "id": "p5-src-038",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "POST",
+            "flow_kind": "field"
+          },
+          "rationale": "request.POST (parsed request body via QueryDict/multipart) - attacker-controlled HTTP input boundary; read sites in admin options (form data, action selections), middleware and auth.",
+          "evidence": [
+            "covers 51 http_request/request_param rows for request.POST"
+          ],
+          "location": {
+            "file": "django/contrib/admin/options.py",
+            "line": 1548
+          }
+        },
+        {
+          "id": "p5-src-039",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "META",
+            "flow_kind": "field"
+          },
+          "rationale": "request.META (WSGI environ-derived headers/CGI vars) - attacker-influenced HTTP header boundary (including CSRF_COOKIE populated from cookie/header). Read sites in csrf/cache/common middleware, debug views, admin.",
+          "evidence": [
+            "request.META['CSRF_COOKIE'] - middleware/csrf.py:261-262",
+            "covers 47 http_request/request_param rows for request.META"
+          ],
+          "location": {
+            "file": "django/middleware/csrf.py",
+            "line": 262
+          }
+        },
+        {
+          "id": "p5-src-040",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "COOKIES",
+            "flow_kind": "field"
+          },
+          "rationale": "request.COOKIES - attacker-controlled cookie boundary (session/csrf/cache-key material); framework consumers feed cache keys (validated) and session lookups, not raw SQL.",
+          "evidence": [
+            "covers 8 rows for request.COOKIES"
+          ],
+          "location": {
+            "file": "django/middleware/cache.py",
+            "line": 94
+          }
+        },
+        {
+          "id": "p5-src-041",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "FILES",
+            "flow_kind": "field"
+          },
+          "rationale": "request.FILES - multipart-uploaded file metadata/content boundary; consumed by multipart parser and file storage, no observed path into SQL text.",
+          "evidence": [
+            "covers 5 rows for request.FILES"
+          ],
+          "location": {
+            "file": "django/views/generic/edit.py",
+            "line": 52
+          }
+        },
+        {
+          "id": "p5-src-042",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "environ",
+            "flow_kind": "field",
+            "module": "django.core.handlers.wsgi"
+          },
+          "rationale": "The raw WSGI environ dict is the lowest-trust input boundary of the framework: WSGIRequest.__init__ derives request.META/GET/POST from it; environ.get/keys reads in handlers (wsgi.py:144 environ.get('wsgi.file_wrapper')) and dev servers are genuine source nodes. Covers environ field reads and environ-derived accessor helpers.",
+          "evidence": [
+            "environ.get('wsgi.file_wrapper') - core/handlers/wsgi.py:144",
+            "covers 27 http_request rows (environ reads + wsgi accessors)"
+          ],
+          "location": {
+            "file": "django/core/handlers/wsgi.py",
+            "line": 144
+          }
+        },
+        {
+          "id": "p5-src-043",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "get_bytes_from_wsgi",
+            "flow_kind": "return",
+            "module": "django.core.handlers.wsgi"
+          },
+          "rationale": "get_bytes_from_wsgi(environ, ...) returns raw WSGI environ values (QUERY_STRING et al.) - direct attacker-controlled bytes at the parse boundary (used for QueryDict construction).",
+          "evidence": [
+            "raw_query_string = get_bytes_from_wsgi(self.environ, 'QUERY_STRING', '') - WSGIRequest parse path"
+          ],
+          "location": {
+            "file": "django/core/handlers/wsgi.py",
+            "line": 159
+          }
+        },
+        {
+          "id": "p5-src-044",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "return"
+          },
+          "rationale": "request.GET/POST/META/COOKIES.get(key) accessor calls return attacker-influenced values (search query, filters, page vars, header keys) - the highest-signal source shape in the framework (43 rows). Also covers .getlist() (2 rows).",
+          "evidence": [
+            "to_field = request.GET.get(TO_FIELD_VAR) - admin/views/main.py:106",
+            "covers 52 request_param rows (get/getlist)"
+          ],
+          "location": {
+            "file": "django/contrib/admin/options.py",
+            "line": 2198
+          }
+        },
+        {
+          "id": "p5-src-045",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "items",
+            "flow_kind": "return"
+          },
+          "rationale": "Whole-mapping reads of request input: dict(request.GET.items()) in admin ChangeList (self.params drives ORM lookups), request.POST.copy(), request.GET.urlencode() - attacker-controlled dict content as source.",
+          "evidence": [
+            "self.params = dict(request.GET.items()) - admin/views/main.py:112",
+            "covers 13 rows (items/copy/urlencode)"
+          ],
+          "location": {
+            "file": "django/contrib/admin/views/main.py",
+            "line": 112
+          }
+        },
+        {
+          "id": "p5-src-046",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "request",
+            "flow_kind": "param"
+          },
+          "rationale": "The `request` parameter of framework HTTP handler functions/methods (323 handlers: admin ModelAdmin views, middleware __call__/process_request/process_view, CBV get/post/dispatch, auth views, staticfiles serve, admindocs, GIS sitemaps) is the request object itself entering each handler - the external input boundary at parameter level. Position varies (0 for functions, 1 after self for methods) so arg_index is left unset; match by parameter name 'request'.",
+          "evidence": [
+            "covers 631 param rows across 79 files (admin options 196, messages api, debug views, sites, csrf, ...)",
+            "representative consumers: ChangeList.__init__ request.GET parsing (admin/views/main.py:95-112)"
+          ],
+          "location": {
+            "file": "django/contrib/auth/admin.py",
+            "line": 117
+          }
+        },
+        {
+          "id": "p5-src-047",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "kwargs",
+            "flow_kind": "field"
+          },
+          "rationale": "self.kwargs in generic views carries URL route parameters (pk/slug/year/month/day/week) - attacker-controlled path segments; consumed via queryset.filter(pk=...) (parameterized ORM).",
+          "evidence": [
+            "pk = self.kwargs.get(self.pk_url_kwarg) - views/generic/detail.py:34",
+            "covers 30 param rows (self.kwargs reads)"
+          ],
+          "location": {
+            "file": "django/views/generic/detail.py",
+            "line": 34
+          }
+        },
+        {
+          "id": "p5-src-048",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "options",
+            "flow_kind": "field"
+          },
+          "rationale": "options[...] reads inside BaseCommand.handle() (204 rows) are the management-CLI input boundary: real external input, but supplied by the operator running manage.py (typically with direct DB credentials). The SQL-relevant consumers (createcachetable tablename -> quote_name'd DDL) show injection-shaped flow under operator trust. Kept as source 'candidate' for manual review of threat-model assumptions.",
+          "evidence": [
+            "options['database'], positional tablename -> create_table DDL - createcachetable.py handle()",
+            "covers 204 cli rows (options reads)"
+          ],
+          "location": {
+            "file": "django/core/management/commands/createcachetable.py",
+            "line": 43
+          }
+        },
+        {
+          "id": "p5-none-049",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "add_argument",
+            "flow_kind": "argument",
+            "arg_index": 0
+          },
+          "rationale": "parser.add_argument(...) registrations (179 rows) declare CLI options; they are parser configuration, not data-flow source nodes. The actual CLI values surface via the options-dict reads labeled separately.",
+          "evidence": [
+            "parser.add_argument('args', metavar='table_name'...) - createcachetable.py:21-25"
+          ],
+          "location": {
+            "file": "django/core/management/commands/createcachetable.py",
+            "line": 21
+          }
+        },
+        {
+          "id": "p5-src-050",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "argv",
+            "flow_kind": "field"
+          },
+          "rationale": "sys.argv reads (10 rows, management bootstrap and autoreload) - CLI input boundary at process level; operator trust, same 'candidate' treatment as the options family.",
+          "evidence": [
+            "covers 10 cli rows (argv)"
+          ],
+          "location": {
+            "file": "django/core/management/__init__.py",
+            "line": 207
+          }
+        },
+        {
+          "id": "p5-none-051",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "open",
+            "flow_kind": "argument",
+            "arg_index": 0
+          },
+          "rationale": "open() calls (36 rows: template loading, file storage, translation catalogs, fixture files, dev utilities) - file paths/contents are a path-traversal (pass 1) concern; for pass 5 no observed path carries file content into SQL text construction. Fixture data deserialized by loaddata enters the ORM insert path as bound parameters.",
+          "evidence": [
+            "loaddata fixture reading -> serializers -> model instances -> parameterized inserts - management/commands/loaddata.py"
+          ],
+          "location": {
+            "file": "django/utils/archive.py",
+            "line": 194
+          }
+        },
+        {
+          "id": "p5-none-052",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "read",
+            "flow_kind": "return"
+          },
+          "rationale": "obj.read() calls (65 rows) return file/stream content; for pass 5 no observed flow into SQL text (request stream -> QueryDict/POST parsing; cache filebased content; template sources). Retained as fp for pass 5; relevant for other passes.",
+          "evidence": [
+            "self._stream.read(*args, **kwargs) - http/request.py:404"
+          ],
+          "location": {
+            "file": "django/http/request.py",
+            "line": 404
+          }
+        },
+        {
+          "id": "p5-none-053",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "environ",
+            "flow_kind": "field"
+          },
+          "rationale": "os.environ / os.environ.get reads (57 rows: settings bootstrap DJANGO_SETTINGS_MODULE, COLORS, autoreload, test runner) - process-environment boundary under operator control; no pass-5 relevance observed (DB config comes from settings.DATABASES, also operator-level).",
+          "evidence": [
+            "covers 57 env rows"
+          ],
+          "location": {
+            "file": "django/conf/__init__.py",
+            "line": 236
+          }
+        },
+        {
+          "id": "p5-none-054",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "settings",
+            "flow_kind": "field"
+          },
+          "rationale": "settings.<ATTR> reads (499 rows across ~100 attributes) - operator-level configuration (LazySettings). The DB-relevant consumers (settings.DATABASES NAME/TIME_ZONE, settings.USE_TZ in oracle NLS SQL, cache table name) are deployment-config trust, not attacker input; the test-db DDL built from them is quote_name'd.",
+          "evidence": [
+            "'CREATE DATABASE %(dbname)s %(suffix)s' % parameters with quote_name'd dbname from settings - base/creation.py:186-196",
+            "covers 499 config rows"
+          ],
+          "location": {
+            "file": "django/db/backends/base/creation.py",
+            "line": 186
+          }
+        },
+        {
+          "id": "p5-none-056",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "_reset_sequences",
+            "flow_kind": "param",
+            "module": "django.test.testcases"
+          },
+          "rationale": "django/test/testcases.py is shipped framework test infrastructure (TransactionTestCase). _reset_sequences executes backend-generated sequence-reset SQL (connection.ops.sequence_reset_sql from model metadata); the execute row at :1232 is the same test-only path. Reachable only inside the project's own test suite - test-file FP per the pass heuristics; evidence retained, not counted as a production vulnerability.",
+          "evidence": [
+            "sequence_sql = connection.ops.sequence_reset_sql(no_style(), models); cursor.execute(line) - testcases.py:1222-1232"
+          ],
+          "location": {
+            "file": "django/test/testcases.py",
+            "line": 1222
+          }
+        },
+        {
+          "id": "p5-none-055",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "register",
+            "flow_kind": "argument",
+            "arg_index": 0
+          },
+          "rationale": "internal_transfer calls into non-SQL wrapper functions (FieldListFilter.register in admin filters, warning/context-manager __exit__ in test utils, system-check registrations, message helpers): no SQL semantics on either end - extraction-family noise for pass 5.",
+          "evidence": [
+            "covers 115 internal_transfer rows targeting non-SQL wrappers"
+          ],
+          "location": {
+            "file": "django/contrib/admin/filters.py",
+            "line": 253
+          }
+        }
+      ]
+    }
+  ]
+}

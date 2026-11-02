@@ -1,0 +1,252 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-20",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SQL_Injection\\django\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the django_vuln source tree. The CodeQL database django-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded django-db. The database metadata sourceLocationPrefix matches the explored tree (creation sha eb3699e), so file/line evidence below refers to the same snapshot the database was built from. IMPORTANT: this target is NOT a Django application - it is the Django web framework source itself (version 2.2.4), so the audit target's own code is the framework layer that parses HTTP input (django/http, django/core/handlers) and generates/executes SQL (django/db, django/contrib/gis/db)."
+  },
+  "target": {
+    "project": "django",
+    "projectDescription": "Django 2.2.4 (django/__init__.py VERSION = (2, 2, 4, \"final\", 0)) - the Django web framework source tree: WSGI request parsing (django/http/request.py QueryDict/HttpHeaders, django/core/handlers/wsgi.py), the ORM and query compiler (django/db/models), the multi-backend SQL execution layer (django/db/backends for sqlite3/mysql/postgresql/oracle plus django/contrib/gis/db/backends), the schema-editor DDL engine used by migrations (django/db/backends/base/schema.py), the admin application (django/contrib/admin) whose ChangeList feeds request.GET filter/search/ordering values into the data access layer, the management command CLI framework (django/core/management), and the DB cache backend (django/core/cache/backends/db.py).",
+    "pass": 5,
+    "cwes": ["CWE-089"],
+    "focus": "SQL Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\django_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (django-db/codeql-database.yml)",
+      "the database source archive (src.zip, 2767 files) covers 864 .py files under django/ plus 1883 under tests/, 2 under docs/, 7 under .github, and repo-root setup.py / .pre-commit-config.yaml / .readthedocs.yml",
+      "setup.py with 'Programming Language :: Python' classifiers; tox.ini, Gruntfile.js and package.json only drive the JS toolchain"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\django_vuln\\django-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\django_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "eb3699ea775548a22e0407ad12bf8cbdeaf95ff5",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:15:48.914241500Z"
+    },
+    "baselineLinesOfCode": 365061,
+    "finalised": true,
+    "locationNote": "django-db is nested inside the source tree; it was excluded from all exploration and will be excluded from extraction result rows via the path filter in both queries. Because the database snapshot also covers tests/ (1883 files), docs/ and js_tests/, both queries filter /tests/, /django-db/, /docs/, /js_tests/, /node_modules/ and /fixtures/ paths so candidate rows come from the framework source under django/ (plus repo-root setup.py) only."
+  },
+  "toolchain": {
+    "qlpack": "iris/django-cwe89 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (E:\\codeql)",
+    "compatibilityBasis": "API facts used by the generated queries were cross-checked against the cached python-all 7.1.2 library sources: AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), Call.getPositionalArg/getFunc, Function.getAnArg/getName/getEnclosingScope, Parameter.getName/isSelf/getPosition (semmle/python/Function.qll), Attribute.getName/getObject, Subscript.getObject, BinaryExpr.getOp with Mod/Add, StringLiteral (semmle/python/Exprs.qll:535), Fstring (semmle/python/Exprs.qll:627), class Class. The two queries reuse the structural shapes already proven on this same CLI + pack combination in the arches CWE-89 run of this series (moduleHintOf/receiverHint/receiverHintOfCall/calledNameOf helpers, bindingset[path] excludedPath, AST-cast matching with unbound receivers, no QL classes, no API::Node-to-DataFlow::Node assignment). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name. No template placeholders remain. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "django (the framework itself is the audit target, not an application framework dependency)",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package +0.45: the repository IS Django - django/__init__.py:3 VERSION = (2, 2, 4, \"final\", 0); setup.py reads django.VERSION; the django/ package tree (864 .py files in the database snapshot)",
+            "route/decorator +0.30: framework route machinery itself - django/urls/resolvers.py, path()/re_path() in django/urls/; CBV machinery in django/views/generic/base.py (View.setup binds self.request/self.kwargs); admin ModelAdmin view methods (changelist_view/add_view/change_view in django/contrib/admin/options.py)",
+            "runtime/bootstrap +0.20: WSGI entry point django/core/handlers/wsgi.py WSGIHandler + WSGIRequest.__init__ (environ parse, lines 67-106); manage.py-style bootstrap lives in django/core/management/__init__.py execute_from_command_line",
+            "directory/layout +0.05: django/{http,core,db,views,contrib,template,middleware,forms,urls} layout"
+          ]
+        },
+        {
+          "name": "django management CLI (infrastructure built by the audit target)",
+          "kind": "cli",
+          "confidence": 1.0,
+          "evidence": [
+            "django/core/management/base.py BaseCommand with add_arguments(self, parser) and handle(self, *args, **options); 182 parser.add_argument(...) registrations and 166 options[...] reads across django/core/management/commands and contrib apps (inspectdb, createcachetable, sqlmigrate, flush, loaddata, dumpdata, dbshell, createsuperuser, ...)",
+            "commands that build SQL from CLI/DB-derived values: inspectdb (introspection SQL), createcachetable.py (cache table DDL), sqlmigrate.py (migration SQL), flush.py (sql_flush), loaddata.py (fixture file input)"
+          ]
+        },
+        { "name": "flask", "confidence": 0.0, "evidence": [] },
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] },
+        { "name": "django-rest-framework", "confidence": 0.0, "evidence": ["no 'rest_framework' import anywhere in the tree - request.data / request.query_params / DRF serializer sources are NOT observed and NOT emitted"] }
+      ]
+    },
+    "selected": "django (primary, confidence 1.0 - it is the framework source under audit) + django management commands (CLI)",
+    "notes": "references/django.md was loaded in addition to references/python.md and references/patterns.md. Its detection heuristics (django imports, urlpatterns, class-based views) are self-referential here because the target is the framework source itself. Its source cues map onto the framework's own input parse layer: the WSGI environ -> WSGIRequest (request.GET/POST/COOKIES/META populated from environ, request.headers via HttpHeaders) and the QueryDict parser; request-state reads and handler parameters in contrib.admin / contrib.auth / generic views are the framework code that consumes them. Its sink cues (cursor.execute, .raw) are observed as framework internals: cursor.execute is the dominant channel, and .raw()/.extra()/RawSQL/RawQuery/RawQuerySet exist as framework API definitions (no call sites in non-test framework code) - they are extracted as sql_api_def rows instead of call sites."
+  },
+  "inputBoundaryInventory": {
+    "summary": "This audit target is the framework layer, so input boundaries are the framework's own parse points, not application endpoints: (1) the WSGI HTTP surface - django/core/handlers/wsgi.py WSGIRequest.__init__ (environ['REQUEST_METHOD'], environ.get('CONTENT_TYPE'), self.environ['wsgi.input'], get_bytes_from_wsgi(self.environ, 'QUERY_STRING')) and django/http/request.py HttpHeaders.__init__/QueryDict.__init__ turn the raw environ into request.META/GET/POST/headers; downstream framework code that consumes request state sits in contrib.admin (39 reads in options.py, 6 in views/main.py: ChangeList collects dict(request.GET.items()) at :70, the search query request.GET.get(SEARCH_VAR) at :80 and the ORDER_VAR ordering at :370-393), contrib.auth views, generic views (self.request/self.kwargs), middleware (csrf: 16 request reads, common, sessions, auth) and views/i18n/debug; (2) the CLI surface of django management commands (add_argument/options, 182/166 sites) - commands such as inspectdb, createcachetable, sqlmigrate, flush and loaddata drive the SQL layer; (3) the filesystem: open() (85 sites in django/) - template loading, file storage, translation catalogs, and loaddata fixture files (json/xml/zip content deserialized into ORM model instances); (4) the database itself: introspection table/column names and ORM values re-interpolated into PRAGMA/information_schema SQL (intermediate propagation, not external input); (5) settings/os.environ: operator-level trust (settings.DATABASES credentials consumed by backends, 465 settings.<ATTR> reads, 22 os.environ reads). The dominant SQL execution channels are the ORM compilers (cursor.execute(sql, params) in django/db/models/sql/compiler.py:1100/:1335), the central CursorWrapper (django/db/backends/utils.py:66-89 execute/executemany/callproc over driver cursors), the backend-specific cursor wrappers (sqlite3 SQLiteCursorWrapper, mysql CursorWrapper, oracle FormatStylePlaceholderCursor with _fix_for_params), the schema editor's execute (django/db/backends/base/schema.py:116, used by migrations), the GIS backends and the DB cache backend. Roughly 224 execute-family call sites exist under django/; the ORM filter()/exclude()/order_by() path used by the admin ChangeList compiles to parameterized SQL and is not modeled as a raw sink, while introspection/DDL/PRAGMA code frequently %-interpolates identifiers (quoted via quote_name) directly into the SQL text.",
+    "sourceFamilies": [
+      {
+        "family": "wsgi_environ_state",
+        "evidence": [
+          "django/core/handlers/wsgi.py:68-106 WSGIRequest.__init__: script_name = get_script_name(environ); path_info = get_path_info(environ); self.environ = environ; self.META = environ; self.method = environ['REQUEST_METHOD'].upper(); content_type = cgi.parse_header(environ.get('CONTENT_TYPE', '')); content_length = int(environ.get('CONTENT_LENGTH')); self._stream = LimitedStream(self.environ['wsgi.input'], ...); raw_query_string = get_bytes_from_wsgi(self.environ, 'QUERY_STRING', ''); return QueryDict(raw_query_string, ...) (:105-106)",
+          "django/http/request.py:374-392 HttpHeaders.__init__(self, environ): for header, value in environ.items(): ... - the header parse boundary behind request.headers",
+          "django/http/request.py:410-435 QueryDict.__init__ (query_string parsed with limited_parse_qsl) - the GET/POST parse boundary",
+          "WSGI environ reads (environ[...], environ.get(...), environ.items(), self.environ[...], calls receiving environ positionally) are emitted as http_request rows; the raw WSGI environ is the lowest trust boundary in this architecture"
+        ]
+      },
+      {
+        "family": "http_request_state",
+        "evidence": [
+          "request attribute usage census in non-test framework code: request.POST 56, request.GET 29, request.META 36, request.COOKIES 7, request.FILES 5, plus 18 self.request.<field> reads in class-based views (django/views/generic/dates.py, list.py, edit.py, base.py)",
+          "django/contrib/admin/views/main.py:61-80 ChangeList.__init__: self.page_num = int(request.GET.get(PAGE_VAR, 0)); self.params = dict(request.GET.items()); self.query = request.GET.get(SEARCH_VAR, ''); to_field = request.GET.get(TO_FIELD_VAR)",
+          "django/contrib/admin/options.py:1186-1360: IS_POPUP_VAR in request.POST; to_field = request.POST.get(TO_FIELD_VAR); data = request.POST.copy(); selected = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)",
+          "django/contrib/admin/sites.py:295: script_name = request.META['SCRIPT_NAME']; django/views/generic/dates.py:39/88/140/186: year = self.request.GET['year'] (subscript reads)",
+          "request.body: NO read sites in non-test framework code (only defined and mentioned in comments) - no http_body family emitted; request.headers: property defined (django/http/request.py:71) but NO read sites - not emitted; request.user/method/path/LANGUAGE_CODE are framework-computed identity/state and not emitted"
+        ]
+      },
+      {
+        "family": "request_param_reads",
+        "evidence": [
+          "request.<field>.get(...)/.getlist(...) census: request.META.get 20, request.GET.get 12, request.POST.get 11, request.COOKIES.get 3, request.POST.getlist 2, self.request.*.get 6",
+          "request.<field>[...] subscripts: request.META['SCRIPT_NAME'] (admin/sites.py:295), request.GET['year']/['month']/['day']/['week'] (views/generic/dates.py:39-186)",
+          "whole-mapping reads: dict(request.GET.items()) (admin/views/main.py:70), request.POST.copy() (admin/options.py:1360, 4 sites), request.GET.urlencode() (admin/options.py:1038) - emitted as http_request rows with arg_index -1"
+        ]
+      },
+      {
+        "family": "handler_entry_points",
+        "evidence": [
+          "323 functions/methods with a `request` parameter in non-test framework code; emitted shapes: plain functions whose parameter 0 is `request`, and class methods whose parameter 1 (after self) is `request` - covers CBV http verbs (def get(self, request, ...)), ModelAdmin view methods (changelist_view(self, request, extra_context=None), add_view/change_view/delete_view/response_add in django/contrib/admin/options.py), middleware __call__/process_request, and dispatch",
+          "URL route parameter extraction is modeled by the handler parameter family plus the self.kwargs family (generic views): django/views/generic/dates.py:36-186 self.kwargs['year']/['month']/['day']/['week']; django/views/generic/detail.py:33-34 pk = self.kwargs.get(self.pk_url_kwarg); slug = self.kwargs.get(self.slug_url_kwarg); django/views/generic/list.py:60 self.kwargs.get(page_kwarg) or self.request.GET.get(page_kwarg)",
+          "dispatch()/as_view() plumbing is intentionally not treated as a handler"
+        ]
+      },
+      {
+        "family": "cli_management_commands",
+        "evidence": [
+          "django/core/management/base.py BaseCommand + create_parser; 182 parser.add_argument(...) registrations and 166 options[...] reads across django/core/management/commands/*.py and contrib/*/management/commands/*.py",
+          "sys.argv read sites (5) in django/core/management/__init__.py and dev utilities",
+          "commands reaching the SQL layer: createcachetable.py (cache table DDL via cursor), inspectdb.py (introspection SQL per table), sqlmigrate.py (renders migration SQL), flush.py (connection.ops.sql_flush -> executes), loaddata.py (fixture file input)"
+        ]
+      },
+      {
+        "family": "file_input",
+        "evidence": [
+          "85 open(...) call sites in non-test framework code: template source loading (django/template/loaders), file storage (django/core/files/storage.py), translation catalogs (django/utils/translation), cached template loaders, fixture deserialization (django/core/serializers/python.py json.py xml.py)",
+          "django/core/management/commands/loaddata.py reads fixture files (open/archive) and deserializes their content into model instances - file-content -> ORM boundary",
+          "<obj>.read() calls are emitted as file rows (return value carries file content)"
+        ]
+      },
+      {
+        "family": "config_settings",
+        "evidence": [
+          "465 settings.<ATTR> reads in non-test framework code (django.conf settings, LazySettings) - operator-level trust: settings.DATABASES consumed by backends (django/db/backends/base/base.py), settings.DEFAULT_CHARSET into QueryDict parsing, settings.CACHES/INSTALLED_APPS/USE_TZ",
+          "22 os.environ reads (django/conf/__init__.py, settings bootstrap paths) - operator-level trust boundary"
+        ]
+      },
+      {
+        "family": "internal_transfer_to_sql_layer",
+        "evidence": [
+          "wrapper-chain hand-offs: CursorWrapper.execute(sql, params) -> _execute_with_wrappers(sql, params, ...) -> _execute -> self.cursor.execute(sql, params) (django/db/backends/utils.py:66-89); SchemaEditor.execute(sql, params) -> connection.cursor().execute (django/db/backends/base/schema.py:116+); SQLiteCursorWrapper.execute(query, params) -> Database.Cursor.execute(self, query, params) (django/db/backends/sqlite3/base.py:379-387)",
+          "introspection hand-offs: connection.introspection.get_table_list(cursor), get_table_description(cursor, table_name) etc. whose bodies execute information_schema/PRAGMA SQL (django/db/backends/*/introspection.py, django/contrib/gis/db/backends/*/introspection.py)",
+          "ORM compiler hand-offs: SQLInsertCompiler.execute_sql -> cursor.execute(sql, params) (django/db/models/sql/compiler.py:1327-1335)",
+          "direct .execute(...) call sites themselves are NOT internal_transfer rows (they are sink sql_text/bound_params rows); only calls into named wrapper functions (name != execute/executemany/callproc) become transfer rows"
+        ]
+      },
+      {
+        "family": "db_content_intermediate",
+        "evidence": [
+          "django/db/backends/mysql/introspection.py:81/:193: cursor.execute(\"SELECT * FROM %s LIMIT 1\" % self.connection.ops.quote_name(table_name)) - table_name comes from introspection (get_table_list results), i.e. DB-derived identifiers interpolated into SQL text",
+          "django/db/backends/sqlite3/introspection.py:210/:223/:378/:399: cursor.execute('PRAGMA table_info(%s)' % self.connection.ops.quote_name(name)) - same shape",
+          "django/db/backends/base/creation.py:156: cursor.execute('CREATE DATABASE %(dbname)s %(suffix)s' % parameters) - dbname/suffix from settings/config at this boundary",
+          "these are intermediate propagation candidates (injection-shaped, not request-controlled at the boundary); kept for labeling triage, not presumed vulnerable"
+        ]
+      }
+    ],
+    "sinkFamilies": {
+      "channelInventory": {
+        "ormCompilerCursorExecute": "django/db/models/sql/compiler.py:1100 (SQLCompiler.execute_sql: cursor.execute(sql, params)) and :1335 (SQLInsertCompiler.execute_sql) - the endpoint of all ORM-generated SQL, parameterized by construction",
+        "djangoDbCursorWrapper": "django/db/backends/utils.py:15-89 CursorWrapper.execute(sql, params=None)/executemany(sql, param_list)/callproc(procname, params, kparams) -> _execute_with_wrappers -> _execute -> self.cursor.execute; CursorDebugWrapper (:92-116) overrides for logging - the central PEP-249 funnel every backend goes through",
+        "backendCursorWrappers": "SQLiteCursorWrapper.execute/executemany (django/db/backends/sqlite3/base.py:379-387, converts %s -> ? via convert_query before Database.Cursor.execute), mysql CursorWrapper.execute/executemany (django/db/backends/mysql/base.py:67-84), oracle FormatStylePlaceholderCursor.execute/executemany (django/db/backends/oracle/base.py:505-524, _fix_for_params) - driver-level execute call sites exist as Database.Cursor.execute(self, query, params) etc.",
+        "schemaEditorExecute": "BaseDatabaseSchemaEditor.execute(sql, params=()) (django/db/backends/base/schema.py:116) with 66 self.execute(...) call sites across base/mysql/oracle/sqlite3/gis schema editors - DDL construction with %-interpolated identifiers (quoted via quote_name)",
+        "schemaDefRows": "framework raw SQL channel API definitions extracted as sql_api_def rows: QuerySet.raw (django/db/models/query.py:781, raw_query at param 1), QuerySet.extra (:1087, fragment params select/where/tables/order_by at 1/2/4/5, bound params/select_params at 3/6), RawSQL.__init__ (django/db/models/expressions.py:686, sql at 1, params at 2), RawQuery.__init__ (django/db/models/sql/query.py:71, sql at 1, params at 3), RawQuerySet.__init__ (django/db/models/query.py:1330, raw_query at 1, params at 4)",
+        "gisAndCache": "django/contrib/gis/db/backends/*/schema.py|introspection.py|operations.py and django/core/cache/backends/db.py (5 connection.cursor() blocks with %s-parameterized cache SQL)",
+        "callproc": "CursorWrapper.callproc(procname, params, kparams) (django/db/backends/utils.py:48-64) - stored procedure channel; procname (arg 0 at call sites) affects SQL structure and is modeled as sql_text",
+        "djangoOrm": "Django ORM filter()/exclude()/order_by()/Q objects as used by the admin ChangeList (django/contrib/admin/views/main.py:418 qs.filter(**remaining_lookup_params), :436 qs.order_by(*ordering)) compile to parameterized SQL - NOT a raw-SQL sink; the request-derived filter/order values reaching this channel are captured as source rows, and the ORM internals appear only via construction candidates inside executing functions",
+        "absentChannels": "NOT OBSERVED in this snapshot (2.2.4): QuerySet.from_statement(), cursor.executescript(), SQLAlchemy (text()/from_statement()), psycopg2 mogrify execution, connection.execute(). Manager.raw()/Manager.extra() have no def sites (QuerySet methods are copied onto Manager at runtime). No sink rules were fabricated for these; they are recorded here as absent."
+      },
+      "dynamicSqlSites": [
+        "django/db/backends/base/creation.py:156 (cursor.execute('CREATE DATABASE %(dbname)s %(suffix)s' % parameters)) and :275 (cursor.execute(\"DROP DATABASE %s\" % (...))) - %-formatting directly as the execute argument",
+        "django/db/backends/mysql/introspection.py:81,193 (\"SELECT * FROM %s LIMIT 1\" % quote_name(table_name), \"SHOW INDEX FROM %s\" % quote_name(table_name))",
+        "django/db/backends/sqlite3/base.py:297 (cursor.execute('PRAGMA foreign_key_check(%s)' % table_name))",
+        "django/db/backends/sqlite3/introspection.py:210,223,378,399 ('PRAGMA table_info(%s)' / 'PRAGMA foreign_key_list(%s)' / 'PRAGMA index_list(%s)' / 'PRAGMA index_info(%s)' % quote_name(...))",
+        "django/db/backends/oracle/operations.py:268 (cursor.execute('\"%s\".currval' % sq_name))",
+        "django/db/backends/oracle/schema.py:114 (self.execute(\"UPDATE %s set %s=%s\" % (...))) and :168 (self.execute('ALTER TABLE %(table)s MODIFY %(column)s DROP IDENTITY' % {...}))",
+        "django/db/backends/mysql/schema.py:50 (self.execute('UPDATE %(table)s SET %(column)s = %%s' % {...}) - mixed: %-formatted identifiers with a %%s placeholder preserved for the bound channel)",
+        "django/db/backends/base/schema.py:796/:826 (sql % {...} on variable templates inside the schema editor - variable-template %-formatting, see uncoveredCases) and :758 (self.execute(self._create_fk_sql(...)))",
+        "django/contrib/gis/db/backends/mysql/schema.py:32,51 and oracle/schema.py:39 (self.sql_add_spatial_index % {...} / sql_drop_spatial_index % {...} - GIS DDL templates)",
+        "django/contrib/gis/db/backends/base/operations.py:91-102 ('%s(%%s, %s)' % (spatial_function_name(...), f.srid) - GIS function SQL built with a preserved bound placeholder)",
+        "variable-template %-interpolation sites not matching the literal-template construction shape: django/db/backends/base/schema.py:132 (sql % tuple(map(self.quote_value, params))), django/db/backends/oracle/operations.py:412, django/db/backends/sqlite3/operations.py:155 (sql % params), django/db/models/constraints.py:40/:86, django/db/models/indexes.py:68, django/db/models/sql/query.py:119/:266 (self.sql % self.params / sql % params)"
+      ],
+      "parameterizedSites": "Fully parameterized (placeholder SQL text + bound argument tuple/list at argument index 1) and therefore modeled with a companion bound_params row rather than as dynamic SQL: the ORM compilers (django/db/models/sql/compiler.py:1100,1335 cursor.execute(sql, params)), the cache backend (django/core/cache/backends/db.py, e.g. :68+ SELECT ... WHERE cache_key = %s with [key]), introspection queries (django/db/backends/sqlite3/introspection.py:139,165 SELECT ... FROM sqlite_master WHERE tbl_name = %s, [table]), postgresql/creation.py:33 (SELECT 1 FROM pg_catalog.pg_database WHERE datname = %s, [strip_quotes(database_name)]), oracle operations via _fix_for_params, and the schema editor's collected_sql path.",
+      "sanitizingShapes": "Identifier quoting via connection.ops.quote_name before %-interpolation (mysql/sqlite3 introspection PRAGMA/SHOW sites); SQLiteCursorWrapper.convert_query (%s -> ?, %% -> %, django/db/backends/sqlite3/base.py:390-391); oracle _fix_for_params/_param_generator placeholder normalization; PEP-249 bound parameters at execute argument index 1 throughout the ORM compilers and cache backend; admin ChangeList ordering values are int()-parsed before use (django/contrib/admin/views/main.py:388-391: idx = int(idx) except ValueError: continue), and ChangeList filters/search/ordering reach the DB through ORM filter()/order_by() which compile to parameterized SQL. These are recorded as context for the later labeling/filtering stages; sanitizer modeling is not part of this extraction round."
+    },
+    "nonVulnerabilityNote": "The %-interpolated DDL/introspection SQL in the backends is driven by DB-derived table/column identifiers and settings/config values (operator/DB trust level), usually quote_name-quoted; the management-command SQL is operator CLI input; the request-derived values observed in framework code (admin ChangeList, auth views, generic views) flow into ORM filter()/order_by() channels, which compile to parameterized SQL, with the ordering index additionally int()-validated. No framework request path was observed feeding request text directly into raw SQL construction in this snapshot; all dynamic-SQL families above are recorded as candidates for the labeling step to triage, not presumed vulnerable."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution is deferred to the next round per the task contract (generation only).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO sink or source row is expected to resolve at API level: all SQL execution flows through local cursor variables and wrapper chains that API graphs cannot bind to django.db or driver members, and the WSGI request object / environ / options / settings are framework-injected values, not module members. The column is kept for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, request/field/settings/options name conventions). All execute/executemany/callproc matches are receiver-name-agnostic (any <obj>.execute(...) matches), which tolerates cursor aliasing (cursor, self.cursor, schema_editor, wrapper chains) but cannot prove the receiver is a database cursor - name-collision noise is possible and is left to the labeling step."
+    },
+    "flowKinds": {
+      "sources": ["http_request", "request_param", "param", "cli", "env", "file", "config", "internal_transfer"],
+      "sinks": ["sql_text", "bound_params", "sql_percent_format", "sql_format_call", "sql_fstring", "sql_concat", "internal_sql_wrapper", "sql_api_def"]
+    },
+    "exclusions": [
+      "paths containing /tests/ (1883 files of the database snapshot; excluded per the workflow noise rules)",
+      "/django-db/ (the CodeQL database directory nested inside the source tree)",
+      "/docs/, /js_tests/, /node_modules/, /fixtures/ (non-framework trees)"
+    ],
+    "expectedVolume": "roughly 3500-5500 source rows (request attribute reads ~150, request .get()/.getlist()/subscript reads ~100, whole-mapping reads ~30, handler parameters ~800-1000 across 323 handler functions, WSGI environ reads ~30, cli add_argument/options/handle ~500, env ~25, file open/read ~180, config settings reads ~465, internal_transfer call args ~500-1500) and roughly 500-900 sink rows (224 execute-family call sites + bound_params companion rows + construction nodes inside SQL wrapper functions + wrapper function rows + ~30 sql_api_def rows). This is in line with prior projects in this series (maltrail 617/52, pgadmin4 2150/61, arches ~1500-2500/~200-400)."
+  },
+  "uncoveredCases": [
+    "Positional-argument scan cap: the environ-receiving-call family and the internal_transfer family enumerate argument positions 0-9 (i is bound by range membership before the indexed Call.getPositionalArg(i) lookup, because the index parameter of getPositionalArg is a checked/total-function input in QL); calls with more than 10 positional arguments would not be scanned. No such call was observed on the SQL-relevant paths in this snapshot.",
+    "request.body / request.headers: neither has read sites in non-test framework code (request.headers property defined at django/http/request.py:71 but unused); no http_body family and no header-specific family were emitted. request.user / request.method / request.path / request.LANGUAGE_CODE are framework-computed or container state and are not emitted.",
+    "Handler detection is name- and position-based: functions whose request parameter is not named `request` (or CBV methods where it is not at position 1) are not captured; middleware __call__(self, request) IS captured (it is a genuine request boundary).",
+    "QueryDict accessor methods beyond .get/.getlist/.items/.copy/.urlencode (keys(), values(), lists(), pop(), setlist(), iteration) are not emitted as separate families; `PAGE_VAR in request.GET` containment checks are Compare nodes and are not captured.",
+    "Keyword-argument hand-offs into SQL wrapper functions (e.g. any **options propagation into execute(sql, params=...)) are not captured by internal_transfer (positional arguments only).",
+    "Direct .execute(...) call sites are modeled as sink rows, not as internal_transfer rows: callsSqlWrapper deliberately excludes wrapper functions named execute/executemany/callproc so the same call site is not double-modeled as a transfer.",
+    "Variable-template %-formatting (sql % {...} / sql % tuple(...) where the template is a variable, e.g. django/db/backends/base/schema.py:132/:796/:826, oracle/operations.py:412, sqlite3/operations.py:155, models/constraints.py:40/:86, models/indexes.py:68, models/sql/query.py:119/:266) is NOT captured by the construction family (which requires a literal template on the left of %); these sites are still represented by their execute rows and listed in detection.json dynamicSqlSites.",
+    "Cross-function construction (SQL built in one function, executed in another) is not traced at extraction time; the construction family only covers constructions directly executed as argument 0 or located inside a function that directly executes SQL.",
+    "Dynamic receiver identity: <obj>.execute(...) matching is syntactic; whether the receiver is a django.db cursor, a driver cursor or an unrelated object with an execute method is not resolved. In this snapshot every .execute( site found by grep in django/ is a database cursor, but the query tolerates collisions by design.",
+    "Manager.raw()/Manager.extra(): QuerySet methods are copied onto Manager at runtime (django/db/models/manager.py); no def sites exist on Manager, so sql_api_def rows cover the QuerySet definitions only - Manager-side call sites in downstream applications would rely on the QuerySet rows plus label-time aliasing.",
+    "GIS backends (django/contrib/gis/db/backends/*) are covered by the same AST-level execute-member and construction shapes; spatial SQL function construction in base/operations.py:91-102 mixes %-formatted identifiers with preserved %%s bound placeholders - the construction row and the bound channel are emitted from the same expression only when shapes match.",
+    "Django ORM model-manager calls (filter()/exclude()/order_by()/Q) and the URL router (django/urls) are framework-internal and not extracted; the ORM raw channels are covered as sql_api_def definitions instead of call sites (no .raw()/.extra()/RawSQL() call sites exist in non-test framework code).",
+    "Fixture deserialization (loaddata) and file-content flows are captured as file rows (open/.read) but the file-content -> ORM -> SQL data flow is not traced at extraction time.",
+    "Compile/runtime validation of both queries is deferred with execution: per the task contract, CodeQL was not invoked in this round (no query run, no bqrs decode, no query compile). The queries reuse the exact structural shapes (helpers, bindingset annotations, AST-cast matching, no QL classes, moduleHint naming) that compiled and ran clean against CodeQL CLI 2.25.1 + codeql/python-all 7.1.x in the arches CWE-89 run of this series."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/references/django.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: sql_sinks.csv, sql_sinks_new.csv, enhanced_sql_sinks.csv and sql_injection_audit_report.md at the django_vuln repo root were NOT opened during this step (they were only listed to be explicitly avoided); candidate families are derived from repository evidence and the loaded language/pattern/django references only. django-db was used solely to read codeql-database.yml and src.zip path listing (metadata/scope) and was otherwise excluded. Project source, the database, and the Augur installation were not modified. Only the three Phase-1 Step-1/2 artifacts under iris_manual/SQL_Injection/django/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). CodeQL execution and LLM labeling are deferred to later steps per the task contract; run_manifest.json and summary.md belong to Step 0 / post-execution steps and were not fabricated."
+  }
+}

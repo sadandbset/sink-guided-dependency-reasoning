@@ -1,0 +1,1173 @@
+{
+  "pass_id": 5,
+  "focus": "SQL Injection",
+  "cwes": [
+    "89"
+  ],
+  "model": "glm-5.3",
+  "labeling_mode": "in-context LLM labeling performed by the glm-5.3 agent session (Claude Code harness); no external LLM API calls; temperature-free deterministic annotation from verified snapshot evidence",
+  "run_id": "django-pass5-cwe89-20261020",
+  "generated_at": "2026-10-20T11:39:27+00:00",
+  "inputs": {
+    "sources_csv": "extraction/sources.csv",
+    "sinks_csv": "extraction/sinks.csv",
+    "source_rows": 2609,
+    "sink_rows": 608,
+    "total_candidates": 3217
+  },
+  "batches": [
+    {
+      "batch_id": "B01",
+      "description": "Central SQL execution funnel: CursorWrapper/CursorDebugWrapper definitions and driver call sites (django/db/backends/utils.py)",
+      "groups": [
+        "G1-execute-callsite",
+        "G2a-cursorwrapper-def",
+        "G2b-callproc",
+        "G2c-wrapper-glue",
+        "GB-boundparams-san"
+      ],
+      "input_candidate_rows": 327
+    },
+    {
+      "batch_id": "B02",
+      "description": "Backend driver cursor wrappers: sqlite3 SQLiteCursorWrapper, mysql CursorWrapper, oracle FormatStylePlaceholderCursor",
+      "groups": [
+        "G3-sqlite-wrapper",
+        "G4-mysql-wrapper",
+        "G5-oracle-wrapper"
+      ],
+      "input_candidate_rows": 12
+    },
+    {
+      "batch_id": "B03",
+      "description": "ORM raw-SQL APIs and compiler execution path",
+      "groups": [
+        "G6-compiler",
+        "G7-orm-raw-apis"
+      ],
+      "input_candidate_rows": 19
+    },
+    {
+      "batch_id": "B04",
+      "description": "Schema editor / DDL funnel and schema wrapper families",
+      "groups": [
+        "G8-schemaeditor-execute",
+        "G9-schema-summary"
+      ],
+      "input_candidate_rows": 242
+    },
+    {
+      "batch_id": "B05",
+      "description": "Introspection, test-db creation, backend operations, connection-state wrappers",
+      "groups": [
+        "G10-introspection-summary",
+        "G11-creation-summary",
+        "G12-ops-summary",
+        "G13a-connstate",
+        "G13b-static-fp"
+      ],
+      "input_candidate_rows": 195
+    },
+    {
+      "batch_id": "B06",
+      "description": "Construction nodes, CLI/Redis/register name collisions, cache backends, management SQL commands, migration ops",
+      "groups": [
+        "G14-msg-fp",
+        "G15-sql-construction",
+        "G16-cliexecute-fp",
+        "G17-cli-dispatch",
+        "G18-redis-fp",
+        "G19-register-fp",
+        "G20-cache-summary",
+        "G21-mgmtsql-summary",
+        "G23-migration-ops"
+      ],
+      "input_candidate_rows": 353
+    },
+    {
+      "batch_id": "B07",
+      "description": "HTTP request attribute and accessor source families",
+      "groups": [
+        "P1-request-field",
+        "P2-wsgi-environ",
+        "P3-request-get",
+        "P4-map-ops"
+      ],
+      "input_candidate_rows": 241
+    },
+    {
+      "batch_id": "B08",
+      "description": "Handler parameter sources (request parameter, URL kwargs)",
+      "groups": [
+        "P5-handler-request",
+        "P6-url-kwargs"
+      ],
+      "input_candidate_rows": 661
+    },
+    {
+      "batch_id": "B09",
+      "description": "CLI source family (options/add_argument/argv)",
+      "groups": [
+        "P7-cli-options",
+        "P8-addargument-fp",
+        "P9-cli-argv"
+      ],
+      "input_candidate_rows": 393
+    },
+    {
+      "batch_id": "B10",
+      "description": "File / environment / config source families",
+      "groups": [
+        "P10-file-open",
+        "P11-file-read",
+        "P12-os-environ",
+        "P13-settings"
+      ],
+      "input_candidate_rows": 657
+    },
+    {
+      "batch_id": "B11",
+      "description": "internal_transfer call rows (SQL-layer and non-SQL wrappers)",
+      "groups": [
+        "G17-cli-dispatch",
+        "G21-mgmtsql-summary",
+        "G10-introspection-summary",
+        "G23-migration-ops",
+        "G9-schema-summary",
+        "G11-creation-summary",
+        "G12-ops-summary",
+        "G20-cache-summary",
+        "G6-compiler",
+        "G13a-connstate",
+        "P15-internal-other"
+      ],
+      "input_candidate_rows": 780
+    },
+    {
+      "batch_id": "B12",
+      "description": "Sanitizer determination and cross-family consistency review (quote_name evidence, bound-parameter channel)",
+      "groups": [],
+      "input_candidate_rows": 0
+    }
+  ],
+  "batch_policy": "B01-B10 partition the candidate rows by family (each row examined once from its own CSV's perspective); B11 re-examines the internal_transfer source rows whose targets are SQL-layer wrappers (already seen from the definition side in B01-B06) from the call-site perspective; B12 is the sanitizer/consistency review pass with no direct row input. Batch row totals therefore intentionally exceed the 3217 unique candidates; the per-group coverage below is the authoritative disjoint accounting.",
+  "coverage": {
+    "dedup_policy": "one labels.json entry per semantic API signature/group; every CSV row is assigned to exactly one group; groups are keyed by (module family, callable role, flow kind); row counts, distinct-file counts and sample locations are recorded per group",
+    "exclusion_policy": "rows are never dropped: 'none'/fp labels keep the audit trail; name-collision rows (CLI execute, redis pipeline, message formatting, parser registration) are explicitly labeled rather than silently excluded",
+    "groups": [
+      {
+        "group_id": "G1-execute-callsite",
+        "csv": "sinks",
+        "rows": 220,
+        "distinct_files": 46,
+        "top_files": [
+          "django/db/backends/base/schema.py",
+          "django/db/backends/sqlite3/base.py",
+          "django/core/cache/backends/db.py",
+          "django/db/backends/sqlite3/schema.py",
+          "django/db/backends/sqlite3/introspection.py",
+          "django/db/backends/mysql/introspection.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/sqlite3/_functions.py:85",
+          "django/contrib/gis/db/backends/postgis/base.py:26",
+          "django/db/backends/base/base.py:370",
+          "django/db/backends/base/base.py:374",
+          "django/db/backends/base/base.py:378",
+          "django/db/backends/postgresql/base.py:246",
+          "django/db/backends/postgresql/base.py:314",
+          "django/db/backends/postgresql/base.py:315"
+        ],
+        "label_entry_ids": [
+          "p5-sink-001"
+        ]
+      },
+      {
+        "group_id": "G10-introspection-summary",
+        "csv": "sinks+sources",
+        "rows": 78,
+        "distinct_files": 17,
+        "top_files": [
+          "django/contrib/gis/db/backends/mysql/introspection.py",
+          "django/contrib/gis/db/backends/postgis/introspection.py",
+          "django/contrib/gis/db/backends/spatialite/introspection.py",
+          "django/core/management/commands/inspectdb.py",
+          "django/db/backends/base/introspection.py",
+          "django/db/backends/mysql/introspection.py",
+          "django/db/backends/oracle/introspection.py",
+          "django/db/backends/postgresql/introspection.py"
+        ],
+        "sample_locations": [
+          "django/contrib/gis/db/backends/mysql/introspection.py:13",
+          "django/contrib/gis/db/backends/postgis/introspection.py:16",
+          "django/contrib/gis/db/backends/postgis/introspection.py:35",
+          "django/db/backends/sqlite3/introspection.py:76",
+          "django/core/management/commands/inspectdb.py:81",
+          "django/core/management/commands/inspectdb.py:99",
+          "django/core/management/commands/inspectdb.py:99",
+          "django/core/management/commands/inspectdb.py:105"
+        ],
+        "label_entry_ids": [
+          "p5-sum-021"
+        ]
+      },
+      {
+        "group_id": "G11-creation-summary",
+        "csv": "sinks+sources",
+        "rows": 57,
+        "distinct_files": 8,
+        "top_files": [
+          "django/db/backends/base/creation.py",
+          "django/db/backends/mysql/creation.py",
+          "django/db/backends/oracle/creation.py",
+          "django/db/backends/postgresql/creation.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/oracle/creation.py:322",
+          "django/db/backends/postgresql/creation.py:34",
+          "django/db/backends/postgresql/creation.py:58",
+          "django/db/backends/mysql/creation.py:31",
+          "django/db/backends/oracle/creation.py:287",
+          "django/db/backends/oracle/creation.py:287",
+          "django/db/backends/oracle/creation.py:287",
+          "django/db/backends/oracle/creation.py:287"
+        ],
+        "label_entry_ids": [
+          "p5-sum-022"
+        ]
+      },
+      {
+        "group_id": "G12-ops-summary",
+        "csv": "sinks+sources",
+        "rows": 25,
+        "distinct_files": 9,
+        "top_files": [
+          "django/contrib/gis/db/backends/postgis/operations.py",
+          "django/contrib/gis/db/backends/spatialite/operations.py",
+          "django/db/backends/base/operations.py",
+          "django/db/backends/oracle/operations.py",
+          "django/db/backends/sqlite3/operations.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/sqlite3/operations.py:142",
+          "django/db/backends/sqlite3/operations.py:197",
+          "django/contrib/gis/db/backends/postgis/operations.py:322",
+          "django/db/backends/base/operations.py:441",
+          "django/db/backends/sqlite3/operations.py:156",
+          "django/db/backends/sqlite3/operations.py:178",
+          "django/db/backends/sqlite3/operations.py:181",
+          "django/contrib/gis/db/backends/postgis/operations.py:192"
+        ],
+        "label_entry_ids": [
+          "p5-sum-023"
+        ]
+      },
+      {
+        "group_id": "G13a-connstate",
+        "csv": "sinks+sources",
+        "rows": 22,
+        "distinct_files": 9,
+        "top_files": [
+          "django/contrib/gis/db/backends/spatialite/base.py",
+          "django/db/backends/base/base.py",
+          "django/db/backends/mysql/base.py",
+          "django/db/backends/oracle/base.py",
+          "django/db/backends/postgresql/base.py",
+          "django/db/backends/sqlite3/base.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/base/base.py:368",
+          "django/db/backends/base/base.py:372",
+          "django/db/backends/base/base.py:376",
+          "django/db/backends/postgresql/base.py:239",
+          "django/db/backends/base/base.py:263",
+          "django/db/backends/base/base.py:403",
+          "django/db/backends/base/base.py:416",
+          "django/db/backends/base/base.py:432"
+        ],
+        "label_entry_ids": [
+          "p5-sum-024"
+        ]
+      },
+      {
+        "group_id": "G13b-static-fp",
+        "csv": "sinks",
+        "rows": 13,
+        "distinct_files": 10,
+        "top_files": [
+          "django/db/backends/sqlite3/base.py",
+          "django/db/backends/mysql/base.py",
+          "django/contrib/postgres/signals.py",
+          "django/contrib/gis/db/backends/postgis/base.py",
+          "django/db/backends/postgresql/base.py",
+          "django/contrib/gis/db/backends/spatialite/base.py"
+        ],
+        "sample_locations": [
+          "django/contrib/gis/db/backends/postgis/base.py:22",
+          "django/db/backends/postgresql/base.py:317",
+          "django/db/backends/sqlite3/base.py:166",
+          "django/db/backends/sqlite3/base.py:330",
+          "django/contrib/gis/db/backends/spatialite/base.py:70",
+          "django/db/backends/oracle/base.py:260",
+          "django/db/backends/mysql/base.py:256",
+          "django/db/backends/mysql/base.py:398"
+        ],
+        "label_entry_ids": [
+          "p5-none-025"
+        ]
+      },
+      {
+        "group_id": "G14-msg-fp",
+        "csv": "sinks",
+        "rows": 5,
+        "distinct_files": 3,
+        "top_files": [
+          "django/core/management/__init__.py",
+          "django/core/management/base.py",
+          "django/db/models/sql/query.py"
+        ],
+        "sample_locations": [
+          "django/core/management/__init__.py:116",
+          "django/core/management/__init__.py:165",
+          "django/core/management/__init__.py:185",
+          "django/core/management/base.py:411",
+          "django/db/models/sql/query.py:149"
+        ],
+        "label_entry_ids": [
+          "p5-none-026"
+        ]
+      },
+      {
+        "group_id": "G15-sql-construction",
+        "csv": "sinks",
+        "rows": 103,
+        "distinct_files": 30,
+        "top_files": [
+          "django/core/cache/backends/db.py",
+          "django/db/backends/sqlite3/introspection.py",
+          "django/core/management/commands/createcachetable.py",
+          "django/db/backends/sqlite3/schema.py",
+          "django/db/backends/oracle/schema.py",
+          "django/db/backends/base/schema.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/sqlite3/base.py:236",
+          "django/db/backends/sqlite3/base.py:249",
+          "django/db/backends/sqlite3/base.py:256",
+          "django/db/backends/sqlite3/base.py:265",
+          "django/db/backends/sqlite3/base.py:294",
+          "django/db/backends/sqlite3/base.py:313",
+          "django/db/backends/oracle/base.py:273",
+          "django/db/backends/oracle/base.py:287"
+        ],
+        "label_entry_ids": [
+          "p5-none-027"
+        ]
+      },
+      {
+        "group_id": "G16-cliexecute-fp",
+        "csv": "sinks",
+        "rows": 9,
+        "distinct_files": 5,
+        "top_files": [
+          "django/core/management/__init__.py",
+          "django/contrib/auth/management/commands/createsuperuser.py",
+          "django/core/management/commands/runserver.py",
+          "django/core/management/commands/sqlmigrate.py",
+          "django/core/management/base.py"
+        ],
+        "sample_locations": [
+          "django/core/management/__init__.py:198",
+          "django/core/management/__init__.py:446",
+          "django/core/management/base.py:402",
+          "django/contrib/auth/management/commands/createsuperuser.py:86",
+          "django/contrib/auth/management/commands/createsuperuser.py:88",
+          "django/core/management/commands/runserver.py:68",
+          "django/core/management/commands/runserver.py:74",
+          "django/core/management/commands/sqlmigrate.py:33"
+        ],
+        "label_entry_ids": [
+          "p5-none-028"
+        ]
+      },
+      {
+        "group_id": "G17-cli-dispatch",
+        "csv": "sinks+sources",
+        "rows": 17,
+        "distinct_files": 7,
+        "top_files": [
+          "django/core/management/__init__.py",
+          "django/core/management/base.py",
+          "django/core/management/commands/testserver.py",
+          "django/db/backends/base/creation.py",
+          "django/test/runner.py",
+          "django/test/testcases.py",
+          "scripts/manage_translations.py"
+        ],
+        "sample_locations": [
+          "django/core/management/__init__.py:87",
+          "django/core/management/__init__.py:443",
+          "django/core/management/base.py:385",
+          "django/db/backends/base/creation.py:79",
+          "django/db/backends/base/creation.py:96",
+          "scripts/manage_translations.py:102",
+          "scripts/manage_translations.py:104"
+        ],
+        "label_entry_ids": [
+          "p5-sum-029"
+        ]
+      },
+      {
+        "group_id": "G18-redis-fp",
+        "csv": "sinks",
+        "rows": 2,
+        "distinct_files": 1,
+        "top_files": [
+          "django/core/cache/backends/redis.py"
+        ],
+        "sample_locations": [
+          "django/core/cache/backends/redis.py:138",
+          "django/core/cache/backends/redis.py:148"
+        ],
+        "label_entry_ids": [
+          "p5-none-030"
+        ]
+      },
+      {
+        "group_id": "G19-register-fp",
+        "csv": "sinks",
+        "rows": 1,
+        "distinct_files": 1,
+        "top_files": [
+          "django/db/backends/sqlite3/_functions.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/sqlite3/_functions.py:40"
+        ],
+        "label_entry_ids": [
+          "p5-none-031"
+        ]
+      },
+      {
+        "group_id": "G20-cache-summary",
+        "csv": "sinks+sources",
+        "rows": 27,
+        "distinct_files": 2,
+        "top_files": [
+          "django/core/cache/backends/db.py"
+        ],
+        "sample_locations": [
+          "django/core/cache/backends/db.py:55",
+          "django/core/cache/backends/db.py:113",
+          "django/core/cache/backends/db.py:214",
+          "django/core/cache/backends/db.py:235",
+          "django/core/cache/backends/db.py:53",
+          "django/core/cache/backends/db.py:53",
+          "django/core/cache/backends/db.py:98",
+          "django/core/cache/backends/db.py:103"
+        ],
+        "label_entry_ids": [
+          "p5-sum-032"
+        ]
+      },
+      {
+        "group_id": "G21-mgmtsql-summary",
+        "csv": "sinks+sources",
+        "rows": 12,
+        "distinct_files": 6,
+        "top_files": [
+          "django/contrib/sites/management.py",
+          "django/core/management/commands/createcachetable.py",
+          "django/core/management/commands/flush.py",
+          "django/core/management/commands/loaddata.py"
+        ],
+        "sample_locations": [
+          "django/core/management/commands/createcachetable.py:56",
+          "django/core/management/commands/loaddata.py:129",
+          "django/contrib/sites/management.py:11",
+          "django/core/management/commands/createcachetable.py:49",
+          "django/core/management/commands/createcachetable.py:49",
+          "django/core/management/commands/createcachetable.py:49",
+          "django/core/management/commands/createcachetable.py:54"
+        ],
+        "label_entry_ids": [
+          "p5-sum-033"
+        ]
+      },
+      {
+        "group_id": "G23-migration-ops",
+        "csv": "sinks+sources",
+        "rows": 177,
+        "distinct_files": 11,
+        "top_files": [
+          "django/contrib/postgres/operations.py",
+          "django/db/migrations/executor.py",
+          "django/db/migrations/migration.py",
+          "django/db/migrations/operations/fields.py",
+          "django/db/migrations/operations/models.py",
+          "django/db/migrations/operations/special.py"
+        ],
+        "sample_locations": [
+          "django/contrib/postgres/operations.py:21",
+          "django/contrib/postgres/operations.py:39",
+          "django/contrib/postgres/operations.py:50",
+          "django/contrib/postgres/operations.py:187",
+          "django/db/migrations/executor.py:395",
+          "django/db/migrations/executor.py:395",
+          "django/db/migrations/operations/fields.py:94",
+          "django/db/migrations/operations/fields.py:95"
+        ],
+        "label_entry_ids": [
+          "p5-sum-034"
+        ]
+      },
+      {
+        "group_id": "G24-testinfra-fp",
+        "csv": "sinks",
+        "rows": 2,
+        "distinct_files": 1,
+        "top_files": [
+          "django/test/testcases.py"
+        ],
+        "sample_locations": [
+          "django/test/testcases.py:1222",
+          "django/test/testcases.py:1232"
+        ],
+        "label_entry_ids": [
+          "p5-none-056"
+        ]
+      },
+      {
+        "group_id": "G2a-cursorwrapper-def",
+        "csv": "sinks",
+        "rows": 6,
+        "distinct_files": 1,
+        "top_files": [
+          "django/db/backends/utils.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/utils.py:66",
+          "django/db/backends/utils.py:71",
+          "django/db/backends/utils.py:101",
+          "django/db/backends/utils.py:101",
+          "django/db/backends/utils.py:105",
+          "django/db/backends/utils.py:105"
+        ],
+        "label_entry_ids": [
+          "p5-sink-002",
+          "p5-sink-003"
+        ]
+      },
+      {
+        "group_id": "G2b-callproc",
+        "csv": "sinks",
+        "rows": 5,
+        "distinct_files": 1,
+        "top_files": [
+          "django/db/backends/utils.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/utils.py:48",
+          "django/db/backends/utils.py:48",
+          "django/db/backends/utils.py:59",
+          "django/db/backends/utils.py:61",
+          "django/db/backends/utils.py:64"
+        ],
+        "label_entry_ids": [
+          "p5-sink-004"
+        ]
+      },
+      {
+        "group_id": "G2c-wrapper-glue",
+        "csv": "sinks",
+        "rows": 2,
+        "distinct_files": 1,
+        "top_files": [
+          "django/db/backends/utils.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/utils.py:82",
+          "django/db/backends/utils.py:91"
+        ],
+        "label_entry_ids": [
+          "p5-sum-005"
+        ]
+      },
+      {
+        "group_id": "G3-sqlite-wrapper",
+        "csv": "sinks",
+        "rows": 4,
+        "distinct_files": 1,
+        "top_files": [
+          "django/db/backends/sqlite3/base.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/sqlite3/base.py:353",
+          "django/db/backends/sqlite3/base.py:353",
+          "django/db/backends/sqlite3/base.py:359",
+          "django/db/backends/sqlite3/base.py:359"
+        ],
+        "label_entry_ids": [
+          "p5-sink-006",
+          "p5-sink-007"
+        ]
+      },
+      {
+        "group_id": "G4-mysql-wrapper",
+        "csv": "sinks",
+        "rows": 4,
+        "distinct_files": 1,
+        "top_files": [
+          "django/db/backends/mysql/base.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/mysql/base.py:72",
+          "django/db/backends/mysql/base.py:72",
+          "django/db/backends/mysql/base.py:83",
+          "django/db/backends/mysql/base.py:83"
+        ],
+        "label_entry_ids": [
+          "p5-sink-008",
+          "p5-sink-009"
+        ]
+      },
+      {
+        "group_id": "G5-oracle-wrapper",
+        "csv": "sinks",
+        "rows": 4,
+        "distinct_files": 1,
+        "top_files": [
+          "django/db/backends/oracle/base.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/oracle/base.py:552",
+          "django/db/backends/oracle/base.py:552",
+          "django/db/backends/oracle/base.py:558",
+          "django/db/backends/oracle/base.py:558"
+        ],
+        "label_entry_ids": [
+          "p5-sink-010",
+          "p5-sink-011"
+        ]
+      },
+      {
+        "group_id": "G6-compiler",
+        "csv": "sinks+sources",
+        "rows": 10,
+        "distinct_files": 2,
+        "top_files": [
+          "django/db/models/sql/compiler.py"
+        ],
+        "sample_locations": [
+          "django/db/models/sql/compiler.py:1365",
+          "django/db/models/sql/compiler.py:1647",
+          "django/db/models/sql/compiler.py:1347",
+          "django/db/models/sql/compiler.py:1363",
+          "django/db/models/sql/compiler.py:1677",
+          "django/db/models/sql/compiler.py:1678"
+        ],
+        "label_entry_ids": [
+          "p5-sum-012"
+        ]
+      },
+      {
+        "group_id": "G7-orm-raw-apis",
+        "csv": "sinks",
+        "rows": 9,
+        "distinct_files": 3,
+        "top_files": [
+          "django/db/models/query.py",
+          "django/db/models/sql/query.py",
+          "django/db/models/expressions.py"
+        ],
+        "sample_locations": [
+          "django/db/models/expressions.py:1049",
+          "django/db/models/sql/query.py:85",
+          "django/db/models/sql/query.py:135",
+          "django/db/models/query.py:1284",
+          "django/db/models/query.py:1670",
+          "django/db/models/query.py:1670",
+          "django/db/models/query.py:1670",
+          "django/db/models/query.py:1670"
+        ],
+        "label_entry_ids": [
+          "p5-sink-013",
+          "p5-sink-014",
+          "p5-sink-015",
+          "p5-sink-016",
+          "p5-sink-017",
+          "p5-sum-018"
+        ]
+      },
+      {
+        "group_id": "G8-schemaeditor-execute",
+        "csv": "sinks",
+        "rows": 2,
+        "distinct_files": 1,
+        "top_files": [
+          "django/db/backends/base/schema.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/base/schema.py:170",
+          "django/db/backends/base/schema.py:170"
+        ],
+        "label_entry_ids": [
+          "p5-sink-019"
+        ]
+      },
+      {
+        "group_id": "G9-schema-summary",
+        "csv": "sinks+sources",
+        "rows": 240,
+        "distinct_files": 17,
+        "top_files": [
+          "django/contrib/gis/db/backends/oracle/schema.py",
+          "django/contrib/gis/db/backends/spatialite/schema.py",
+          "django/db/backends/base/schema.py",
+          "django/db/backends/mysql/schema.py",
+          "django/db/backends/oracle/schema.py",
+          "django/db/backends/postgresql/schema.py",
+          "django/db/backends/sqlite3/schema.py"
+        ],
+        "sample_locations": [
+          "django/contrib/gis/db/backends/spatialite/schema.py:68",
+          "django/contrib/gis/db/backends/spatialite/schema.py:84",
+          "django/contrib/gis/db/backends/spatialite/schema.py:91",
+          "django/contrib/gis/db/backends/spatialite/schema.py:112",
+          "django/contrib/gis/db/backends/spatialite/schema.py:85",
+          "django/contrib/gis/db/backends/spatialite/schema.py:97",
+          "django/contrib/gis/db/backends/spatialite/schema.py:97",
+          "django/contrib/gis/db/backends/spatialite/schema.py:110"
+        ],
+        "label_entry_ids": [
+          "p5-sum-020"
+        ]
+      },
+      {
+        "group_id": "GB-boundparams-san",
+        "csv": "sinks",
+        "rows": 94,
+        "distinct_files": 25,
+        "top_files": [
+          "django/db/backends/base/schema.py",
+          "django/db/backends/utils.py",
+          "django/core/cache/backends/db.py",
+          "django/db/backends/oracle/introspection.py",
+          "django/db/backends/mysql/introspection.py",
+          "django/db/backends/sqlite3/base.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/postgresql/base.py:246",
+          "django/db/backends/sqlite3/base.py:255",
+          "django/db/backends/sqlite3/base.py:353",
+          "django/db/backends/sqlite3/base.py:355",
+          "django/db/backends/sqlite3/base.py:357",
+          "django/db/backends/sqlite3/base.py:359",
+          "django/db/backends/sqlite3/base.py:361",
+          "django/db/backends/oracle/base.py:286"
+        ],
+        "label_entry_ids": [
+          "p5-san-035"
+        ]
+      },
+      {
+        "group_id": "P1-request-field",
+        "csv": "sources",
+        "rows": 149,
+        "distinct_files": 27,
+        "top_files": [
+          "django/contrib/admin/options.py",
+          "django/middleware/csrf.py",
+          "django/contrib/auth/admin.py",
+          "django/views/generic/dates.py",
+          "django/contrib/admin/views/autocomplete.py",
+          "django/views/debug.py"
+        ],
+        "sample_locations": [
+          "django/contrib/admin/actions.py:43",
+          "django/contrib/auth/admin.py:163",
+          "django/contrib/auth/admin.py:193",
+          "django/contrib/auth/admin.py:193",
+          "django/contrib/auth/admin.py:227",
+          "django/contrib/auth/admin.py:227",
+          "django/contrib/auth/admin.py:228",
+          "django/contrib/auth/admin.py:228"
+        ],
+        "label_entry_ids": [
+          "p5-src-037",
+          "p5-src-038",
+          "p5-src-039",
+          "p5-src-040",
+          "p5-src-041"
+        ]
+      },
+      {
+        "group_id": "P10-file-open",
+        "csv": "sources",
+        "rows": 36,
+        "distinct_files": 22,
+        "top_files": [
+          "django/core/management/commands/makemessages.py",
+          "django/core/cache/backends/filebased.py",
+          "django/core/management/commands/makemigrations.py",
+          "django/core/management/templates.py",
+          "django/utils/archive.py",
+          "django/core/files/base.py"
+        ],
+        "sample_locations": [
+          "django/utils/archive.py:194",
+          "django/utils/archive.py:230",
+          "django/core/files/base.py:112",
+          "django/core/management/commands/compilemessages.py:23",
+          "django/views/debug.py:417",
+          "django/template/backends/dummy.py:29",
+          "django/contrib/gis/geos/factory.py:11",
+          "django/contrib/sessions/backends/file.py:82"
+        ],
+        "label_entry_ids": [
+          "p5-none-051"
+        ]
+      },
+      {
+        "group_id": "P11-file-read",
+        "csv": "sources",
+        "rows": 65,
+        "distinct_files": 32,
+        "top_files": [
+          "django/http/multipartparser.py",
+          "django/views/debug.py",
+          "django/contrib/gis/geos/geometry.py",
+          "django/test/runner.py",
+          "django/core/management/commands/makemessages.py",
+          "django/db/backends/oracle/operations.py"
+        ],
+        "sample_locations": [
+          "django/utils/archive.py:216",
+          "django/core/files/base.py:60",
+          "django/test/client.py:85",
+          "django/test/client.py:330",
+          "django/core/management/commands/compilemessages.py:13",
+          "django/views/debug.py:395",
+          "django/views/debug.py:402",
+          "django/views/debug.py:418"
+        ],
+        "label_entry_ids": [
+          "p5-none-052"
+        ]
+      },
+      {
+        "group_id": "P12-os-environ",
+        "csv": "sources",
+        "rows": 57,
+        "distinct_files": 19,
+        "top_files": [
+          "django/core/management/__init__.py",
+          "django/contrib/auth/management/commands/createsuperuser.py",
+          "django/core/management/color.py",
+          "django/utils/autoreload.py",
+          "django/conf/__init__.py",
+          "django/core/management/utils.py"
+        ],
+        "sample_locations": [
+          "django/conf/__init__.py:69",
+          "django/conf/__init__.py:69",
+          "django/conf/__init__.py:236",
+          "django/conf/__init__.py:236",
+          "django/core/management/__init__.py:261",
+          "django/core/management/__init__.py:261",
+          "django/core/management/__init__.py:304",
+          "django/core/management/__init__.py:307"
+        ],
+        "label_entry_ids": [
+          "p5-none-053"
+        ]
+      },
+      {
+        "group_id": "P13-settings",
+        "csv": "sources",
+        "rows": 499,
+        "distinct_files": 144,
+        "top_files": [
+          "django/core/checks/security/base.py",
+          "django/middleware/csrf.py",
+          "django/utils/translation/trans_real.py",
+          "django/test/utils.py",
+          "django/test/client.py",
+          "django/contrib/sessions/middleware.py"
+        ],
+        "sample_locations": [
+          "django/contrib/admin/migrations/0001_initial.py:9",
+          "django/contrib/admin/migrations/0001_initial.py:59",
+          "django/db/models/fields/__init__.py:817",
+          "django/db/models/fields/__init__.py:1352",
+          "django/db/models/fields/__init__.py:1472",
+          "django/db/models/fields/__init__.py:1529",
+          "django/core/management/__init__.py:77",
+          "django/core/management/__init__.py:266"
+        ],
+        "label_entry_ids": [
+          "p5-none-054"
+        ]
+      },
+      {
+        "group_id": "P15-internal-other",
+        "csv": "sources",
+        "rows": 115,
+        "distinct_files": 43,
+        "top_files": [
+          "django/core/checks/security/base.py",
+          "django/contrib/admin/filters.py",
+          "django/test/testcases.py",
+          "django/contrib/gis/management/commands/inspectdb.py",
+          "django/test/utils.py",
+          "django/contrib/contenttypes/apps.py"
+        ],
+        "sample_locations": [
+          "django/db/models/fields/__init__.py:843",
+          "django/core/management/__init__.py:440",
+          "django/contrib/sites/admin.py:5",
+          "django/contrib/redirects/admin.py:5",
+          "django/contrib/auth/admin.py:28",
+          "django/contrib/auth/admin.py:43",
+          "django/contrib/flatpages/admin.py:7",
+          "django/contrib/contenttypes/apps.py:21"
+        ],
+        "label_entry_ids": [
+          "p5-none-055"
+        ]
+      },
+      {
+        "group_id": "P2-wsgi-environ",
+        "csv": "sources",
+        "rows": 27,
+        "distinct_files": 5,
+        "top_files": [
+          "django/core/handlers/wsgi.py",
+          "django/db/backends/oracle/base.py",
+          "django/core/servers/basehttp.py",
+          "django/contrib/staticfiles/handlers.py",
+          "django/test/testcases.py"
+        ],
+        "sample_locations": [
+          "django/db/backends/oracle/base.py:37",
+          "django/core/servers/basehttp.py:124",
+          "django/contrib/staticfiles/handlers.py:79",
+          "django/test/testcases.py:1690",
+          "django/core/handlers/wsgi.py:68",
+          "django/core/handlers/wsgi.py:71",
+          "django/core/handlers/wsgi.py:72",
+          "django/core/handlers/wsgi.py:81"
+        ],
+        "label_entry_ids": [
+          "p5-src-042",
+          "p5-src-043"
+        ]
+      },
+      {
+        "group_id": "P3-request-get",
+        "csv": "sources",
+        "rows": 52,
+        "distinct_files": 24,
+        "top_files": [
+          "django/contrib/admin/options.py",
+          "django/utils/cache.py",
+          "django/middleware/common.py",
+          "django/views/i18n.py",
+          "django/middleware/csrf.py",
+          "django/test/client.py"
+        ],
+        "sample_locations": [
+          "django/contrib/admin/actions.py:43",
+          "django/contrib/admin/views/autocomplete.py:77",
+          "django/views/generic/base.py:241",
+          "django/core/servers/basehttp.py:127",
+          "django/utils/cache.py:171",
+          "django/utils/cache.py:172",
+          "django/utils/cache.py:176",
+          "django/utils/cache.py:177"
+        ],
+        "label_entry_ids": [
+          "p5-src-044"
+        ]
+      },
+      {
+        "group_id": "P4-map-ops",
+        "csv": "sources",
+        "rows": 13,
+        "distinct_files": 5,
+        "top_files": [
+          "django/views/debug.py",
+          "django/contrib/admin/options.py",
+          "django/contrib/auth/admin.py",
+          "django/contrib/admin/views/main.py",
+          "django/http/request.py"
+        ],
+        "sample_locations": [
+          "django/contrib/auth/admin.py:228",
+          "django/views/debug.py:159",
+          "django/views/debug.py:196",
+          "django/views/debug.py:377",
+          "django/views/debug.py:378",
+          "django/views/debug.py:379",
+          "django/contrib/admin/views/main.py:112",
+          "django/contrib/admin/options.py:1173"
+        ],
+        "label_entry_ids": [
+          "p5-src-045"
+        ]
+      },
+      {
+        "group_id": "P5-handler-request",
+        "csv": "sources",
+        "rows": 631,
+        "distinct_files": 79,
+        "top_files": [
+          "django/contrib/admin/options.py",
+          "django/contrib/messages/api.py",
+          "django/views/debug.py",
+          "django/contrib/admin/sites.py",
+          "django/utils/cache.py",
+          "django/middleware/csrf.py"
+        ],
+        "sample_locations": [
+          "django/contrib/messages/storage/__init__.py:5",
+          "django/utils/translation/__init__.py:246",
+          "django/utils/translation/__init__.py:246",
+          "django/contrib/auth/__init__.py:57",
+          "django/contrib/auth/__init__.py:64",
+          "django/contrib/auth/__init__.py:94",
+          "django/contrib/auth/__init__.py:94",
+          "django/contrib/auth/__init__.py:94"
+        ],
+        "label_entry_ids": [
+          "p5-src-046"
+        ]
+      },
+      {
+        "group_id": "P6-url-kwargs",
+        "csv": "sources",
+        "rows": 30,
+        "distinct_files": 8,
+        "top_files": [
+          "django/contrib/admindocs/views.py",
+          "django/views/generic/dates.py",
+          "django/template/defaulttags.py",
+          "django/urls/resolvers.py",
+          "django/views/generic/detail.py",
+          "django/template/library.py"
+        ],
+        "sample_locations": [
+          "django/views/generic/base.py:130",
+          "django/views/generic/dates.py:39",
+          "django/views/generic/dates.py:39",
+          "django/views/generic/dates.py:89",
+          "django/views/generic/dates.py:89",
+          "django/views/generic/dates.py:142",
+          "django/views/generic/dates.py:142",
+          "django/views/generic/dates.py:189"
+        ],
+        "label_entry_ids": [
+          "p5-src-047"
+        ]
+      },
+      {
+        "group_id": "P7-cli-options",
+        "csv": "sources",
+        "rows": 204,
+        "distinct_files": 42,
+        "top_files": [
+          "django/core/management/commands/migrate.py",
+          "django/core/management/commands/makemessages.py",
+          "django/core/management/commands/dumpdata.py",
+          "django/core/management/commands/makemigrations.py",
+          "django/db/migrations/state.py",
+          "django/contrib/staticfiles/management/commands/collectstatic.py"
+        ],
+        "sample_locations": [
+          "django/db/models/aggregates.py:133",
+          "django/db/models/aggregates.py:135",
+          "django/core/management/base.py:427",
+          "django/core/management/base.py:427",
+          "django/core/management/base.py:431",
+          "django/core/management/base.py:433",
+          "django/core/management/base.py:437",
+          "django/core/management/base.py:439"
+        ],
+        "label_entry_ids": [
+          "p5-src-048"
+        ]
+      },
+      {
+        "group_id": "P8-addargument-fp",
+        "csv": "sources",
+        "rows": 179,
+        "distinct_files": 37,
+        "top_files": [
+          "django/test/runner.py",
+          "django/core/management/commands/makemessages.py",
+          "django/contrib/gis/management/commands/ogrinspect.py",
+          "django/core/management/commands/migrate.py",
+          "django/core/management/commands/dumpdata.py",
+          "django/core/management/commands/makemigrations.py"
+        ],
+        "sample_locations": [
+          "django/core/management/__init__.py:376",
+          "django/core/management/__init__.py:377",
+          "django/core/management/__init__.py:378",
+          "django/core/management/base.py:352",
+          "django/core/management/base.py:375",
+          "django/core/management/base.py:611",
+          "django/core/management/base.py:661",
+          "django/contrib/auth/management/commands/changepassword.py:24"
+        ],
+        "label_entry_ids": [
+          "p5-none-049"
+        ]
+      },
+      {
+        "group_id": "P9-cli-argv",
+        "csv": "sources",
+        "rows": 10,
+        "distinct_files": 4,
+        "top_files": [
+          "django/utils/autoreload.py",
+          "django/core/management/commands/makemessages.py",
+          "setup.py",
+          "django/core/management/__init__.py"
+        ],
+        "sample_locations": [
+          "django/core/management/__init__.py:207",
+          "django/utils/autoreload.py:229",
+          "django/utils/autoreload.py:247",
+          "django/utils/autoreload.py:254",
+          "django/utils/autoreload.py:258",
+          "django/utils/autoreload.py:261",
+          "django/core/management/commands/makemessages.py:380",
+          "django/core/management/commands/makemessages.py:380"
+        ],
+        "label_entry_ids": [
+          "p5-src-050"
+        ]
+      }
+    ],
+    "total_rows_assigned": 3217
+  },
+  "verification_basis": [
+    "django-db/src.zip (CodeQL DB source snapshot, Django 4.2.0-alpha0, sha eb3699ea) - file/line evidence matches the extraction CSVs",
+    "on-disk working tree is stock Django 2.2.4 (git 8687fbe034a) and does NOT match CSV line numbers; labels were verified exclusively against the DB snapshot",
+    "no PyVul ground truth (sql_sinks*.csv, enhanced_sql_sinks.csv, sql_injection_audit_report.md) was opened"
+  ],
+  "role_counts": {
+    "source": 13,
+    "sink": 16,
+    "sanitizer": 2,
+    "summary": 12,
+    "none": 13
+  },
+  "classification_counts": {
+    "tp": 37,
+    "fp": 13,
+    "candidate": 6,
+    "unknown": 0
+  }
+}

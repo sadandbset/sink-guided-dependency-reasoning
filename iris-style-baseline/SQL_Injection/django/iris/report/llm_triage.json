@@ -1,0 +1,143 @@
+{
+  "triage_metadata": {
+    "task": "Independent LLM path re-review of Augur/IRIS Pass 5 CWE-89 SQL Injection formal analysis results for the django_vuln project, plus real-vulnerability hit analysis",
+    "reviewer": "independent LLM path reviewer",
+    "date": "2026-10-20",
+    "experiment_dir": "C:/Users/lzh/Desktop/github/PyVul-main/iris_manual/SQL_Injection/django/iris",
+    "source_db": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/django_vuln/django-db",
+    "sarif_reviewed": "results/pass5.sarif",
+    "formal_rule_id": "py/augur/django/pass5-sql-injection",
+    "analyzed_snapshot_version": "Django 4.2.0-alpha0 (verified from django-db/src.zip django/__init__.py: VERSION = (4, 2, 0, 'alpha', 0))",
+    "on_disk_tree_version": "Django 2.2.4 (differs from the CodeQL DB snapshot; the query ran against the DB snapshot, so all line evidence below cites the snapshot)",
+    "ground_truth_isolation": "PyVul ground truth (sql_sinks.csv, sql_sinks_new.csv, enhanced_sql_sinks.csv, sql_injection_audit_report.md, present in the django_vuln source dir), CVE descriptions beyond the user-provided JSON, and fix commits were NOT read. Only pass5.sarif, iris_report.md, labels.json (metadata inspection only), query_generation_notes.md, and the real Python source in the DB snapshot were consulted.",
+    "modifications": "None. Formal SARIF, original labels, and CodeQL queries were not modified."
+  },
+
+  "sarif_triage": {
+    "sarif_file": "results/pass5.sarif",
+    "runs": 1,
+    "tool": "CodeQL",
+    "registered_rules": [
+      {
+        "ruleId": "py/augur/django/pass5-sql-injection",
+        "name": "py/augur/django/pass5-sql-injection"
+      }
+    ],
+    "formal_result_count": 0,
+    "results_with_other_rule_ids": 0,
+    "execution_successful": true,
+    "notifications_summary": {
+      "count": 2799,
+      "descriptor_ids": [
+        "py/baseline/expected-extracted-files",
+        "js/baseline/expected-extracted-files",
+        "cli/file-coverage-baseline",
+        "cli/platform"
+      ],
+      "assessment": "All toolExecutionNotifications are file-coverage / platform baseline diagnostics, level 'none'. They are NOT CWE-89 taint findings and are excluded from formal triage. No diagnostics-query results (e.g. a pass5-sql-injection-diag rule) and no native CodeQL py/sql-injection baseline results are mixed into this SARIF: the results array is empty and the only registered rule is the Pass 5 formal rule."
+    },
+    "conclusion": "CodeQL 分析成功，但本轮没有命中正式 SQL 注入污点路径。",
+    "per_alert_triage": [],
+    "per_alert_triage_note": "No results with ruleId py/augur/django/pass5-sql-injection exist in the SARIF, so there are no codeFlows to review and no likely_tp / likely_fp / uncertain verdicts to assign. No vulnerability is fabricated.",
+    "consistency_check": {
+      "iris_report_md": "report/iris_report.md shows empty finding tables (Raw/Likely TP/Candidate/Likely FP all zero) — consistent with the 0-result SARIF.",
+      "query_modeling": "Per report/query_generation_notes.md, the Pass 5 query models 11 source families (request boundary: GET/POST/META/COOKIES/FILES reads, WSGI environ, get_bytes_from_wsgi, QueryDict accessors, handler request params, URL kwargs), 16 sink families (execute-family SQL-text args and ORM raw-surface sql/fragment parameters), and bound-parameter-only sanitizers. The query targets the 4.2.0-alpha0 DB snapshot. Given 0 results, no source-sink path in the framework+tests code base of the snapshot connects any request-boundary input to a raw-SQL text position."
+    }
+  },
+
+  "real_vulnerability_hit_analysis": {
+    "task": "Determine whether the real vulnerabilities (user-provided PyVul-style commit records) were hit by the Pass 5 formal analysis.",
+    "overall_verdict": "0 of 4 real vulnerability commits were hit. The Pass 5 formal query returned zero results, and for each candidate the analyzed snapshot either already contains the security fix, contains only parameter-bound flows, or does not contain the vulnerable code at all.",
+    "hits": [
+      {
+        "commit": "https://github.com/django/django/commit/5e2f4ddf2940704a26a4ac782b851989668d74db",
+        "cwe": "CWE-89",
+        "cve": "CVE-2022-34265",
+        "function_name": "_convert_field_to_tz",
+        "hit_by_pass5": false,
+        "verdict": "not_hit_and_not_a_miss",
+        "function_presence_in_snapshot": {
+          "present": true,
+          "location": "django/db/backends/mysql/operations.py:92-99 (snapshot)",
+          "matches_code_before": "Yes — the snapshot contains the exact code_before: 'def _convert_field_to_tz(self, sql, params, tzname)' with body 'return f\"CONVERT_TZ({sql}, %s, %s)\", (*params, self.connection.timezone_name, self._prepare_tzname_delta(tzname))'. The 5e2f4ddf rename to _convert_sql_to_tz has NOT been applied in this 4.2.0-alpha0 snapshot."
+        },
+        "analysis": [
+          "This commit is a naming refactor ('Refs CVE-2022-34265 -- Unified ... hook names'), not the security fix itself. The actual CVE-2022-34265 fix (regex whitelist validating lookup_type before its f-string interpolation into EXTRACT(...)) IS present in the analyzed snapshot: mysql/operations.py:42 defines '_extract_format_re = _lazy_re_compile(r\"[A-Z_]+\")' and mysql/operations.py:63-66 does 'lookup_type = lookup_type.upper(); if not self._extract_format_re.fullmatch(lookup_type): raise ValueError(...)' before 'return f\"EXTRACT({lookup_type} FROM {sql})\"'. The exploitable pre-fix pattern does not exist in the analyzed DB.",
+          "Within _convert_field_to_tz itself, the only externally influenced value, tzname, is passed as a BOUND parameter: the template 'CONVERT_TZ({sql}, %s, %s)' places {sql} (the ORM-compiled column expression, not attacker text) in the SQL string and pushes tzname/timezone_name into the params tuple. No taint reaches the SQL text channel here; the bound-parameter channel is by design not a SQL-text sink.",
+          "The CVE is a framework-gadget vulnerability: exploitation requires APPLICATION code to pass untrusted data as kind/lookup_name to Trunc()/Extract(). The analyzed DB contains only the Django framework and its own tests; no HTTP-request-boundary source (request.GET/POST/... , environ, URL kwargs) flows into Extract(lookup_name=...) or Trunc(kind=...) anywhere in the snapshot. Hence the Pass 5 query legitimately finds no path.",
+          "Sink reality check: even if a tainted lookup_name existed, the sink chain would be real (Extract.as_sql -> connection.ops.datetime_extract_sql -> date_extract_sql -> f-string EXTRACT text -> compiled SQL -> cursor.execute), but the snapshot's regex whitelist (mysql/operations.py:64) acts as a sanitizer exactly on this fragment, and no source-to-here path exists."
+        ],
+        "source_evidence": "No source: no request-derived value reaches datetime_extract_sql's lookup_type or Trunc's kind in the snapshot (framework + tests only).",
+        "sink_evidence": "django/db/backends/mysql/operations.py:66 (snapshot) — EXTRACT f-string; guarded by :63-65 validation.",
+        "barrier_evidence": "mysql/operations.py:42 + :63-65 (_extract_format_re whitelist on lookup_type); mysql/operations.py:94-98 (tzname as bound %s parameter).",
+        "confidence": "high"
+      },
+      {
+        "commit": "https://github.com/django/django/commit/5f0829a27e85d89ad8c433f5c6a7a7d17c9e9292",
+        "cwe": "CWE-89",
+        "cve": "MySQL typecasting issue fixed 2013 (Django 1.4.11 / 1.5.6 / 1.6.3)",
+        "function_name": "get_prep_value",
+        "hit_by_pass5": false,
+        "verdict": "not_hit_vulnerable_code_absent",
+        "function_presence_in_snapshot": {
+          "present": "vulnerable version NOT present",
+          "location": "django/db/models/fields/__init__.py:1860-1864 (snapshot)",
+          "matches_code_before": "No — the snapshot already contains the code_after shape: 'value = super().get_prep_value(value); if value is None: return None; return str(value)'. The vulnerable code_before (returning the raw value with no type coercion) does not exist in the analyzed 4.2.0-alpha0 snapshot."
+        },
+        "analysis": [
+          "The affected line (Django <= 1.6.2) predates the snapshot by roughly nine major versions; FilePathField.get_prep_value in the snapshot is the fixed, str-coercing version.",
+          "The 2013 MySQL typecasting issue is fundamentally a type-coercion / filter-bypass weakness (a non-string-typed value compared against a string column could make MySQL cast the column side), not a taint-flow SQL injection: no attacker-controlled text ever enters SQL syntax. Even on a vulnerable 1.6-era tree, a CWE-89 taint query correctly would not and should not flag get_prep_value, because the value is always delivered as a bound parameter, never interpolated into SQL text.",
+          "Pass 5 returned zero formal results, so this is trivially not hit."
+        ],
+        "source_evidence": "N/A — no path exists in the formal results.",
+        "sink_evidence": "N/A — values from get_prep_value are used as bound parameters, not SQL text.",
+        "barrier_evidence": "Parameter binding throughout the ORM value channel (compiler.py execute(sql, params) in the snapshot).",
+        "confidence": "high"
+      },
+      {
+        "commit": "https://github.com/django/django/commit/985434fb1d6bf2335bf96c6ebf91c3674f1f399f",
+        "cwe": "CWE-89",
+        "cve": "MySQL typecasting issue fixed 2013 (backport to 1.5.x)",
+        "function_name": "get_prep_value",
+        "hit_by_pass5": false,
+        "verdict": "not_hit_vulnerable_code_absent",
+        "function_presence_in_snapshot": {
+          "present": "vulnerable version NOT present",
+          "location": "django/db/models/fields/__init__.py:1860-1864 (snapshot, FilePathField.get_prep_value with str coercion)",
+          "matches_code_before": "No — same as the 1.6.x entry: the snapshot contains the post-fix code_after."
+        },
+        "analysis": [
+          "Backport commit for the same 2013 issue; identical reasoning to the 1.6.x entry above. The vulnerable code is absent from the analyzed snapshot, the issue is not a taint-flow SQL injection, and the formal Pass 5 result set is empty.",
+          "Note: the code_before snippet in the user-provided record (GenericIPAddressField-style body with clean_ipv6_address) still exists in the snapshot at django/db/models/fields/__init__.py:2148-2155, but the surrounding Field/CharField get_prep_value chain now coerces values to text, which is exactly what the 2013 fix added; the snippet alone does not reproduce the vulnerability."
+        ],
+        "source_evidence": "N/A.",
+        "sink_evidence": "N/A.",
+        "barrier_evidence": "Value channel is bound-parameter only.",
+        "confidence": "high"
+      },
+      {
+        "commit": "https://github.com/django/django/commit/aa80f498de6d687e613860933ac58433ab71ea4b",
+        "cwe": "CWE-89",
+        "cve": "MySQL typecasting issue fixed 2013 (backport to 1.4.x)",
+        "function_name": "get_prep_value",
+        "hit_by_pass5": false,
+        "verdict": "not_hit_vulnerable_code_absent",
+        "function_presence_in_snapshot": {
+          "present": "vulnerable version NOT present",
+          "location": "django/db/models/fields/__init__.py:1860-1864 (snapshot, fixed str-coercing version)",
+          "matches_code_before": "No — smart_unicode/six-era code is long gone; the snapshot is 4.2.0-alpha0 with the modern fixed implementation."
+        },
+        "analysis": [
+          "Backport commit for the same 2013 issue; identical reasoning. Vulnerable code absent from the analyzed snapshot, the issue is a type-conversion weakness rather than a taint-flow SQL injection, and Pass 5 formal results are empty."
+        ],
+        "source_evidence": "N/A.",
+        "sink_evidence": "N/A.",
+        "barrier_evidence": "Value channel is bound-parameter only.",
+        "confidence": "high"
+      }
+    ],
+    "summary": "Pass 5 formal results: 0 alerts, so none of the 4 real-vulnerability commits were hit. For CVE-2022-34265 the analyzed 4.2.0-alpha0 snapshot already contains the security fix (_extract_format_re whitelist at mysql/operations.py:42/63-66), the cited _convert_field_to_tz code_before exists but passes tzname only as a bound parameter, and no request-boundary source reaches kind/lookup_name in the framework-only code base. For the three 2013 MySQL typecasting commits, the vulnerable code is absent from the snapshot (fixed long before 4.2.0-alpha0) and the issue is not a taint-flow SQL injection in the first place. Detecting CVE-2022-34265's gadget with a request-source taint query would require either a pre-fix (pre-3.2.14/4.0.6) snapshot or application-level code passing request data into Trunc()/Extract(), neither of which is present."
+  },
+
+  "final_statement": "CodeQL 分析成功，但本轮没有命中正式 SQL 注入污点路径。SARIF 中仅存在基线/文件覆盖率诊断通知，无任何 ruleId 为 py/augur/django/pass5-sql-injection 的结果，也没有诊断查询结果或原生 CodeQL 基线结果混入 Pass 5 正式结果。未虚构任何漏洞；真实漏洞命中分析结论为 0/4 命中。"
+}
