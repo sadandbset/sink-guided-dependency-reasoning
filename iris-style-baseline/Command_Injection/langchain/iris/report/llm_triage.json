@@ -1,0 +1,299 @@
+{
+  "triage_id": "langchain-iris-pass2-llm-triage-20261015-r2",
+  "reviewed_at": "2026-10-15",
+  "reviewer": "independent LLM review (Claude, GLM-5.3)",
+  "scope": {
+    "sarif": "results/pass2.sarif (regenerated 2026-10-15 13:27, 8 results; pre-fix 3-result run archived as results/pass2.sarif.orig)",
+    "rule_ids": ["py/augur/langchain/pass2-command-injection"],
+    "alert_count": 8,
+    "source_snapshot": "dataset/codeql_databases/langchain_vuln (commit 61938a02a1e76fa6c6e8203c98a9344a179c810d)",
+    "inputs_used": [
+      "results/pass2.sarif",
+      "report/iris_report.md",
+      "labels/labels.json",
+      "report/query_generation_notes.md",
+      "langchain/agents/agent.py",
+      "langchain/agents/agent_toolkits/jira/toolkit.py",
+      "langchain/tools/base.py",
+      "langchain/tools/jira/tool.py",
+      "langchain/tools/jira/prompt.py",
+      "langchain/tools/python/tool.py",
+      "langchain/tools/shell/tool.py",
+      "langchain/utilities/bash.py",
+      "langchain/utilities/python.py",
+      "langchain/utilities/jira.py"
+    ],
+    "modified_artifacts": "none this round (SARIF/QLL/queries/labels untouched by the review)",
+    "run_context": "This SARIF was produced after the MySummaries.qll pydantic-boundary patch (3 taint hops) and a forced --rerun; see report/miss_diagnosis.md for the pre-fix miss analysis."
+  },
+  "verdict_summary": {
+    "likely_tp": 1,
+    "likely_fp": 7,
+    "uncertain": 0,
+    "likely_tp_alerts": ["langchain/utilities/jira.py:192 (JiraAPIWrapper.other exec)"],
+    "fp_grouping": "7 alerts sit on the framework's intentional, documented unsafe command/code-execution tool surfaces (ShellTool/BashProcess subprocess shell chain: bash.py:73/77/102 + shell/tool.py:69; PythonREPL exec chain: python.py:19 + tools/python/tool.py:58; PythonAstREPLTool: tools/python/tool.py:108)"
+  },
+  "cross_alert_observations": [
+    "All 8 alerts share one entry edge: the AgentAction.tool_input attribute read at agents/agent.py:822 (src-r004) inside ExceptionTool().run(output.tool_input, ...) of the OutputParserException handler, propagated by the src-r057 fan-out summary (BaseTool.run tool_input -> every BaseTool subclass _run arg-1 param). ExceptionTool._run (agent.py:601-610) only echoes its input; the runtime-real dispatch to these tools is agent.py:850-851 (tool.run(agent_action.tool_input) with a dict-lookup receiver that static analysis cannot resolve). So every rendered codeFlow's first hop is a summary artifact, while the analogous genuine dispatch edge exists in source.",
+    "The alerts form 4 chains, each anchored by the same source site: (a) JIRA: jira/tool.py:51 -> jira.py:196/204/190 -> exec jira.py:192 [alert 3, REAL VULNERABILITY]; (b) Shell: shell/tool.py:69 -> bash.py:61 -> 73 -> 77 (subprocess.run shell=True) and persistent variant 97 -> 102 (sendline) [alerts 0/1/2/7]; (c) PythonREPL: tools/python/tool.py:58 -> python.py:14 -> 19 (exec) [alerts 4/5]; (d) PythonAstREPL: tools/python/tool.py:108 only [alert 6] — its deeper exec/eval (lines 117/123/130) is still unreachable due to the ast.parse/ast.unparse library barrier.",
+    "Within each chain the wrapper-param alerts are path prefixes of the argument-flow alerts (bash.py:73 is one hop short of bash.py:77; tools/python/tool.py:58 one hop short of python.py:19; shell/tool.py:69 three hops short of bash.py:77). They are redundant with, not independent of, the deeper alerts.",
+    "bash.py:102 (persistent sendline) additionally requires BashProcess(persistent=True); ShellTool's default factory constructs BashProcess(return_err_output=True) with persistent defaulting to False, so this branch needs explicit developer configuration.",
+    "The JIRA chain is qualitatively different from the other three: it is the only one whose sink executes input that the tool's declared function does not require to be code. See alert 3 rationale."
+  ],
+  "alerts": [
+    {
+      "alert_index": 0,
+      "rule_id": "py/augur/langchain/pass2-command-injection",
+      "file": "langchain/utilities/bash.py",
+      "line": 73,
+      "sink_label": "snk-r04",
+      "sink": "Parameter `command` of BashProcess._run; the actual execution is two lines below, subprocess.run(command, shell=True, ...) at bash.py:76-82 (reported separately as alert 1).",
+      "source": "AgentAction.tool_input read at agents/agent.py:822 (src-r004), ExceptionTool dispatch branch.",
+      "path": [
+        "agents/agent.py:822 output.tool_input (source)",
+        "tools/base.py:256 BaseTool.run tool_input param",
+        "summary src-r057 fan-out -> ShellTool._run commands param (tools/shell/tool.py:69)",
+        "summary (patch) ShellTool._run commands -> BashProcess.run commands (bash.py:61)",
+        "summary snk-r03 BashProcess.run -> _run command param (bash.py:73, this sink)"
+      ],
+      "codeflow_verdict": "Path prefix of alert 1; the runtime-real entry is agent.py:850-851 (LLM selecting the 'terminal' tool), not the rendered 822 ExceptionTool branch. The internal hops (ShellTool -> BashProcess) are real source code but were only connected by the patched summary because the self.process pydantic Field call is not natively resolved.",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "rationale": {
+        "q1_source_attacker_influenced": "Yes under the prompt-injection threat model (tool_input is LLM-chosen).",
+        "q2_llm_output_influences_tool_args": "Yes semantically; no on the rendered edge (receiver is ExceptionTool).",
+        "q3_source_reaches_exec_sink": "Yes via the real 851 dispatch when the LLM selects the terminal tool; the alert itself stops one hop before subprocess.run.",
+        "q4_propagation_evidence": "Real code for ShellTool._run -> self.process.run -> BashProcess.run -> _run (shell/tool.py:73, bash.py:61-71); the cross-object hop required the patched summary (pydantic Field call unresolved natively).",
+        "q5_sink_executes_commands": "Yes, downstream at bash.py:76 subprocess.run(command, shell=True) with a joined string command.",
+        "q6_command_string_untrusted": "Yes — commands is tool_input, joined via ';'.join(commands) at bash.py:65 unmodified.",
+        "q7_validation_or_blockers": "None effective (ShellInput._validate_commands only normalizes str->list and warns 'no safeguards', x-r002).",
+        "q8_framework_provided_feature": "Yes — ShellTool is the documented terminal tool with a built-in unsafe-by-default warning; upstream never treated it as a fixable vulnerability.",
+        "q9_codeflow_real_path": "No as rendered (822 -> ExceptionTool fan-out artifact); the analogous real path exists via 851.",
+        "q10_overapproximation_fp": "Yes — receiver-blind fan-out entry; and this alert is a redundant prefix of alert 1."
+      }
+    },
+    {
+      "alert_index": 1,
+      "rule_id": "py/augur/langchain/pass2-command-injection",
+      "file": "langchain/utilities/bash.py",
+      "line": 77,
+      "sink_label": "snk-r06",
+      "sink": "subprocess.run(command, shell=True, check=True, stdout=PIPE, stderr=STDOUT) argument at bash.py:76-82 — actual shell command execution.",
+      "source": "Same as alert 0 (agent.py:822).",
+      "path": [
+        "agents/agent.py:822 output.tool_input (source)",
+        "tools/base.py:256 BaseTool.run tool_input param",
+        "tools/shell/tool.py:69 ShellTool._run commands param",
+        "utilities/bash.py:61 BashProcess.run commands param",
+        "utilities/bash.py:73 BashProcess._run command param",
+        "utilities/bash.py:77 subprocess.run(command, shell=True) argument (sink)"
+      ],
+      "codeflow_verdict": "First alert in this run whose codeFlow reaches the actual command-execution instruction. Entry edge still the 822 fan-out artifact (real entry: 850-851); all middle hops are genuine source code, connected by the patched ShellTool->BashProcess and labeled BashProcess.run->_run summaries.",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "rationale": {
+        "q1_source_attacker_influenced": "Yes under the prompt-injection threat model.",
+        "q2_llm_output_influences_tool_args": "Yes semantically (LLM-chosen terminal tool input); no on the rendered 822 edge.",
+        "q3_source_reaches_exec_sink": "Yes — complete chain to subprocess.run with shell=True.",
+        "q4_propagation_evidence": "Genuine: shell/tool.py:73 self.process.run(commands); bash.py:63-71 (isinstance -> ';'.join -> dispatch to _run); bash.py:76 subprocess.run(command). The cross-object hop needed the patched summary (pydantic Field call).",
+        "q5_sink_executes_commands": "Yes — subprocess.run with shell=True executes the string through the system shell.",
+        "q6_command_string_untrusted": "Yes — command is the ';'.join of the agent-dispatched tool input, unmodified.",
+        "q7_validation_or_blockers": "None (see alert 0; no whitelist/escaping anywhere in BashProcess).",
+        "q8_framework_provided_feature": "Yes — intentional documented terminal tool ('Run shell commands on this <platform> machine.', shell/tool.py:61) with the built-in 'no safeguards by default. Use at your own risk.' warning (shell/tool.py:33-35).",
+        "q9_codeflow_real_path": "Partially: the sink half of the path is genuine and complete; the entry hop (822) is a fan-out artifact — the real entry (850-851) is not in the codeFlow.",
+        "q10_overapproximation_fp": "Entry-side over-approximation only; the taint chain itself is semantically real under the threat model."
+      },
+      "notes": "Under a strict prompt-injection taint model this is a complete, real path (tp); classified likely_fp because the sink is the framework's intentional, documented shell-execution feature (q7/q8), not a defect upstream ever fixed."
+    },
+    {
+      "alert_index": 2,
+      "rule_id": "py/augur/langchain/pass2-command-injection",
+      "file": "langchain/utilities/bash.py",
+      "line": 102,
+      "sink_label": "snk-r08",
+      "sink": "self.process.sendline(command) argument in BashProcess._run_persistent (bash.py:102) — writes the command into a running persistent bash session.",
+      "source": "Same as alert 0 (agent.py:822).",
+      "path": [
+        "agents/agent.py:822 output.tool_input (source)",
+        "tools/base.py:256 BaseTool.run tool_input param",
+        "tools/shell/tool.py:69 ShellTool._run commands param",
+        "utilities/bash.py:61 BashProcess.run commands param",
+        "utilities/bash.py:97 BashProcess._run_persistent command param",
+        "utilities/bash.py:102 sendline(command) argument (sink)"
+      ],
+      "codeflow_verdict": "Same chain shape as alert 1 through bash.py:61, then the persistent branch (bash.py:66-69: if self.process is not None -> _run_persistent). Entry hop is the 822 fan-out artifact.",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "rationale": {
+        "q1_source_attacker_influenced": "Yes under the prompt-injection threat model.",
+        "q2_llm_output_influences_tool_args": "Yes semantically; no on the rendered edge.",
+        "q3_source_reaches_exec_sink": "Yes, but only under an additional precondition: this branch requires BashProcess(persistent=True) (bash.py:43-45). ShellTool's default factory (shell/tool.py:39-41) constructs BashProcess(return_err_output=True) with persistent defaulting to False, so a developer must opt in to persistent mode.",
+        "q4_propagation_evidence": "Genuine: bash.py:63-71 dispatch, bash.py:97-115 _run_persistent body, sendline(command) at :102. Cross-object hop via patched summary.",
+        "q5_sink_executes_commands": "Yes — sendline feeds the command to the already-running bash (equivalent of shell execution; pexpect session spawned at bash.py:52 with a fixed literal argv).",
+        "q6_command_string_untrusted": "Yes — command is the joined agent-dispatched tool input.",
+        "q7_validation_or_blockers": "None (no content checks anywhere in the chain).",
+        "q8_framework_provided_feature": "Yes — same documented ShellTool surface; persistent mode is a configuration option of the same intentional feature.",
+        "q9_codeflow_real_path": "Partially — sink half genuine; entry hop is the fan-out artifact; plus the persistent=True configuration precondition.",
+        "q10_overapproximation_fp": "Entry-side over-approximation plus an unmodeled configuration precondition (path only taken when persistent=True)."
+      }
+    },
+    {
+      "alert_index": 3,
+      "rule_id": "py/augur/langchain/pass2-command-injection",
+      "file": "langchain/utilities/jira.py",
+      "line": 192,
+      "sink_label": "snk-r11",
+      "sink": "exec(f\"result = {query}\", context) first argument in JiraAPIWrapper.other (jira.py:190-194) — arbitrary Python code execution of the interpolated input.",
+      "source": "AgentAction.tool_input read at agents/agent.py:822 (src-r004), ExceptionTool dispatch branch; the runtime-real entry is agent.py:850-851 dispatching to the JiraAction tool the LLM selected.",
+      "path": [
+        "agents/agent.py:822 output.tool_input (source)",
+        "tools/base.py:256 BaseTool.run tool_input param",
+        "tools/jira/tool.py:51 JiraAction._run instructions param (fan-out summary)",
+        "utilities/jira.py:196 JiraAPIWrapper.run query param (patched pydantic-boundary summary: JiraAction._run -> self.api_wrapper.run)",
+        "utilities/jira.py:204 self.other(query) call argument (native)",
+        "utilities/jira.py:190 JiraAPIWrapper.other query param (native)",
+        "utilities/jira.py:192 exec(f\"result = {query}\") f-string argument (native, sink)"
+      ],
+      "codeflow_verdict": "The most complete path in this run: from jira.py:196 onward every step is genuine native dataflow (mode dispatch at :203-204 -> other param at :190 -> f-string interpolation at :192). The only summary edges are the entry fan-out (822 -> JiraAction._run) and the patched JiraAction -> JiraAPIWrapper.run hop. The entry site shown (822, ExceptionTool branch) is an artifact, but the real dispatch (agent.py:850-851, LLM selecting the 'Catch all Jira API call' tool) is verified reachable in source: JiraAPIWrapper.operations registers mode 'other' (jira.py:43), JiraToolkit.from_jira_api_wrapper instantiates a JiraAction per operation including mode='other' (toolkit.py:17-27), and initialize_agent exposes toolkit.get_tools() to the agent (documented usage in tools/jira/tool.py:13-29).",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "rationale": {
+        "q1_source_attacker_influenced": "Yes under the prompt-injection threat model: tool_input comes from the LLM parsing (AgentOutputParser.parse), and prompts embed user/external content. The JIRA catch-all prompt even instructs the LLM to supply 'a line of python code' (prompt.py JIRA_CATCH_ALL_PROMPT), so the code reaching exec is LLM-authored text influenced by the user's task and any injected content.",
+        "q2_llm_output_influences_tool_args": "Yes — JiraAction._run receives the agent-dispatched instructions verbatim and forwards them as the `query` of api_wrapper.run('other', query).",
+        "q3_source_reaches_exec_sink": "Yes — the chain agent dispatch -> JiraAction._run(instructions) -> JiraAPIWrapper.run(mode='other', query) -> other(query) -> exec(f\"result = {query}\") is fully present in source and reachable whenever the agent picks the 'other'-mode Jira tool (registered by default from JiraAPIWrapper.operations).",
+        "q4_propagation_evidence": "Strong: every hop has direct source evidence (jira/tool.py:49-55; jira.py:196-204 mode dispatch; jira.py:190-194 exec). The only modeled (non-native) edges are the virtual-dispatch fan-out and the JiraAction -> api_wrapper pydantic Field call, both backed by real call sites.",
+        "q5_sink_executes_commands": "Yes — builtin exec of an f-string that embeds the raw input: arbitrary Python code execution, not merely shell argument injection.",
+        "q6_command_string_untrusted": "Yes — the executed code string is exactly the attacker-influenceable tool input; nothing is parsed, filtered, or restricted before interpolation.",
+        "q7_validation_or_blockers": "None — other() does no validation; the mode dispatch only routes; JiraAction adds no checks; BaseTool._parse_input is type-validation only (x-r003).",
+        "q8_framework_provided_feature": "No — this is the discriminator vs. the other 7 alerts. The 'other' mode is registered as a 'Catch all Jira API call' whose declared purpose is invoking atlassian-python-api Jira functions; executing arbitrary Python via exec is not the tool's declared function (contrast: every sibling mode — jql/get_projects/create_issue/create_page — parses structured input rather than evaluating it). Code execution here is an implementation artifact, not an offered capability, and it is not documented as an unsafe-by-design feature the way ShellTool/PythonREPL are (no warning, no 'use at your own risk').",
+        "q9_codeflow_real_path": "Substantially yes: sink-side steps (jira.py:196 -> 204 -> 190 -> 192) are genuine native flow; the entry hop (822) is the fan-out artifact, with the real entry (850-851) verified in source but not statically resolved.",
+        "q10_overapproximation_fp": "The entry edge is over-approximated, but the semantic chain is real end-to-end; no over-approximation is needed for the hop that matters (mode='other' dispatch -> exec)."
+      },
+      "notes": "Highest-severity finding of the run: arbitrary code execution (exec of raw interpolated input) reachable from agent-dispatched, attacker-influenceable input, on a code path whose declared function is API wrapping, not code execution."
+    },
+    {
+      "alert_index": 4,
+      "rule_id": "py/augur/langchain/pass2-command-injection",
+      "file": "langchain/utilities/python.py",
+      "line": 19,
+      "sink_label": "snk-r15",
+      "sink": "exec(command, self.globals, self.locals) in PythonREPL.run (python.py:14-25) — arbitrary Python code execution.",
+      "source": "Same entry as all alerts (agent.py:822); real entry agent.py:850-851 when the LLM selects the 'Python_REPL' tool.",
+      "path": [
+        "agents/agent.py:822 output.tool_input (source)",
+        "tools/base.py:256 BaseTool.run tool_input param",
+        "tools/python/tool.py:58 PythonREPLTool._run query param (fan-out summary)",
+        "utilities/python.py:14 PythonREPL.run command param (patched pydantic-boundary summary)",
+        "utilities/python.py:19 exec(command, ...) argument (native, sink)"
+      ],
+      "codeflow_verdict": "Complete chain to the exec instruction. Entry hop is the 822 fan-out artifact; the PythonREPLTool -> PythonREPL hop needed the patched summary (self.python_repl is a pydantic Field attribute); the final hop to exec is native.",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "rationale": {
+        "q1_source_attacker_influenced": "Yes under the prompt-injection threat model.",
+        "q2_llm_output_influences_tool_args": "Yes semantically (LLM-chosen Python_REPL tool input); no on the rendered 822 edge.",
+        "q3_source_reaches_exec_sink": "Yes — complete chain to exec(command) when the agent selects Python_REPL.",
+        "q4_propagation_evidence": "Genuine: tools/python/tool.py:64 self.python_repl.run(query) (after cosmetic sanitize_input); utilities/python.py:14-19. Cross-object hop via patched summary.",
+        "q5_sink_executes_commands": "Yes — builtin exec of the raw command string in the module's globals/locals.",
+        "q6_command_string_untrusted": "Yes — command is the agent-dispatched tool input, only cosmetically normalized.",
+        "q7_validation_or_blockers": "None effective — sanitize_input (tools/python/tool.py:25-40) strips surrounding whitespace/backticks/leading 'python' token only (x-r001).",
+        "q8_framework_provided_feature": "Yes — PythonREPLTool is the documented intentional Python shell ('A Python shell. Use this to execute python commands.'); executing LLM-supplied Python is its declared purpose; upstream never treated it as a fixable vulnerability.",
+        "q9_codeflow_real_path": "Partially — sink side genuine and complete; entry hop is the fan-out artifact.",
+        "q10_overapproximation_fp": "Entry-side over-approximation only; the chain is semantically real under the threat model."
+      }
+    },
+    {
+      "alert_index": 5,
+      "rule_id": "py/augur/langchain/pass2-command-injection",
+      "file": "langchain/tools/python/tool.py",
+      "line": 58,
+      "sink_label": "snk-r18",
+      "sink": "Parameter `query` of PythonREPLTool._run (wrapper-param sink); the actual exec is at utilities/python.py:19, reported separately as alert 4.",
+      "source": "Same entry (agent.py:822).",
+      "path": [
+        "agents/agent.py:822 output.tool_input (source)",
+        "tools/base.py:256 BaseTool.run tool_input param",
+        "tools/python/tool.py:58 PythonREPLTool._run query param (sink)"
+      ],
+      "codeflow_verdict": "Path prefix of alert 4; entry hop is the 822 fan-out artifact (ExceptionTool never dispatches to PythonREPLTool at runtime).",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "rationale": {
+        "q1_source_attacker_influenced": "Yes under the threat model.",
+        "q2_llm_output_influences_tool_args": "Yes semantically; no on the rendered edge.",
+        "q3_source_reaches_exec_sink": "Yes via the real 851 dispatch (completed by alert 4's chain).",
+        "q4_propagation_evidence": "BaseTool.run -> _run dispatch is real code (base.py:250-279); the 822 -> PythonREPLTool hop itself is the fan-out artifact.",
+        "q5_sink_executes_commands": "Yes, downstream (utilities/python.py:19 exec).",
+        "q6_command_string_untrusted": "Yes — query is the agent-dispatched tool input.",
+        "q7_validation_or_blockers": "None effective (cosmetic sanitize_input only, x-r001).",
+        "q8_framework_provided_feature": "Yes — intentional documented Python-REPL tool.",
+        "q9_codeflow_real_path": "No as rendered (822 -> ExceptionTool fan-out); real analog exists via 851.",
+        "q10_overapproximation_fp": "Yes — receiver-blind fan-out + wrapper-param anchoring; redundant prefix of alert 4."
+      }
+    },
+    {
+      "alert_index": 6,
+      "rule_id": "py/augur/langchain/pass2-command-injection",
+      "file": "langchain/tools/python/tool.py",
+      "line": 108,
+      "sink_label": "snk-r20",
+      "sink": "Parameter `query` of PythonAstREPLTool._run; the actual executions are in the same method at lines 117/123/130 (exec/eval of ast.unparse output) but those sink labels did not fire — taint stops at the parameter because propagation through ast.parse/ast.unparse library calls is not modeled.",
+      "source": "Same entry (agent.py:822).",
+      "path": [
+        "agents/agent.py:822 output.tool_input (source)",
+        "tools/base.py:256 BaseTool.run tool_input param",
+        "tools/python/tool.py:108 PythonAstREPLTool._run query param (sink)"
+      ],
+      "codeflow_verdict": "Path prefix with no deeper alert: the ast-library barrier (query -> ast.parse -> ast.unparse -> exec) blocks the modeled chain short of the exec instructions. Entry hop is the 822 fan-out artifact.",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "rationale": {
+        "q1_source_attacker_influenced": "Yes under the threat model.",
+        "q2_llm_output_influences_tool_args": "Yes semantically; no on the rendered edge.",
+        "q3_source_reaches_exec_sink": "Yes in source (query is ast.parsed then exec'd/eval'd at lines 117/123/130), but the alert's own codeFlow stops at the parameter.",
+        "q4_propagation_evidence": "BaseTool.run -> _run dispatch is real; the 822 -> PythonAstREPLTool hop is the fan-out artifact.",
+        "q5_sink_executes_commands": "Yes, downstream within the same method (exec/eval at :117/:123/:130).",
+        "q6_command_string_untrusted": "Yes — the parsed code derives entirely from the tool input.",
+        "q7_validation_or_blockers": "None effective — sanitize_input is cosmetic; ast.parse enforces syntax only; the root_validator checks interpreter version, not input.",
+        "q8_framework_provided_feature": "Yes — intentional documented Python-REPL tool ('A Python shell...').",
+        "q9_codeflow_real_path": "No as rendered; the deeper exec sites are not connected by the analysis.",
+        "q10_overapproximation_fp": "Yes — fan-out entry + wrapper-param anchoring; truncated before any execution instruction."
+      }
+    },
+    {
+      "alert_index": 7,
+      "rule_id": "py/augur/langchain/pass2-command-injection",
+      "file": "langchain/tools/shell/tool.py",
+      "line": 69,
+      "sink_label": "snk-r25",
+      "sink": "Parameter `commands` of ShellTool._run; the actual execution is at utilities/bash.py:76 (subprocess.run shell=True) / :102 (sendline), reported as alerts 1/2.",
+      "source": "Same entry (agent.py:822).",
+      "path": [
+        "agents/agent.py:822 output.tool_input (source)",
+        "tools/base.py:256 BaseTool.run tool_input param",
+        "tools/shell/tool.py:69 ShellTool._run commands param (sink)"
+      ],
+      "codeflow_verdict": "Path prefix of alerts 0/1/2; entry hop is the 822 fan-out artifact.",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "rationale": {
+        "q1_source_attacker_influenced": "Yes under the threat model.",
+        "q2_llm_output_influences_tool_args": "Yes semantically; no on the rendered edge.",
+        "q3_source_reaches_exec_sink": "Yes via the real 851 dispatch (completed by alerts 1/2).",
+        "q4_propagation_evidence": "BaseTool.run -> _run dispatch is real; 822 -> ShellTool hop is the fan-out artifact.",
+        "q5_sink_executes_commands": "Yes, downstream (bash.py:76/102).",
+        "q6_command_string_untrusted": "Yes — commands is the agent-dispatched tool input.",
+        "q7_validation_or_blockers": "None effective (x-r002: ShellInput validator only normalizes and warns 'no safeguards').",
+        "q8_framework_provided_feature": "Yes — the canonical documented terminal tool with built-in unsafe-by-default warning.",
+        "q9_codeflow_real_path": "No as rendered; real analog exists via 851.",
+        "q10_overapproximation_fp": "Yes — receiver-blind fan-out + wrapper-param anchoring; redundant prefix of alerts 1/2."
+      }
+    }
+  ],
+  "method_limitations_observed": [
+    "Every codeFlow's entry is the agent.py:822 ExceptionTool branch + receiver-blind src-r057 fan-out; the genuine dispatch edge (agent.py:850-851, tool.run(agent_action.tool_input) via name_to_tool_map) remains statically unresolved — the one edge needed for runtime-true codeFlows.",
+    "Cross-object hops (Tool._run -> utility wrapper) only propagate because of the 3 pydantic-boundary summary hops patched into MySummaries.qll after the miss diagnosis; native dataflow cannot resolve calls on pydantic Field attributes (self.api_wrapper / self.python_repl / self.process).",
+    "PythonAstREPLTool's internal exec/eval (tools/python/tool.py:117/123/130, snk-r21/22/23) remains unreached: taint does not propagate through ast.parse/ast.unparse library calls.",
+    "The _arun wrappers (snk-r19/r26) remain unreachable: the fan-out summary only covers methods named _run, and all labeled source sites call .run."
+  ]
+}

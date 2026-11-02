@@ -1,0 +1,47 @@
+{
+  "language": "python",
+  "language_evidence": {
+    "database_metadata": "codeql-database.yml: primaryLanguage: python",
+    "file_extensions": ".py sources under langchain/ (single-language package layout)",
+    "build_manifest": "pyproject.toml (poetry), poetry.lock at repo root"
+  },
+  "framework_candidates": [
+    {
+      "framework": "none (library, not a web app)",
+      "confidence": 0.0,
+      "evidence": [
+        "No web framework imports (no fastapi/django/flask/gin/spring/express/aspnet) in the package source",
+        "LangChain itself is the framework under test: the input boundaries are the library APIs (Chain/AgentExecutor/BaseTool/LLM), not HTTP routes",
+        "Augur framework reference set has no langchain reference; references/python.md + references/patterns.md were used to derive boundaries from repository code, per WORKFLOW.md 4.2.3 fallback"
+      ]
+    }
+  ],
+  "domain": "LLM application framework",
+  "domain_evidence": [
+    "langchain/agents/**: agent loop, MRKL/structured-chat/react/openai-functions output parsers producing AgentAction.tool_input",
+    "langchain/chains/**, langchain/tools/**, langchain/llms/**, langchain/chat_models/**",
+    "Execution surfaces verified in source: langchain/utilities/bash.py (BashProcess, subprocess.run shell=True, pexpect), langchain/tools/shell/tool.py (ShellTool), langchain/utilities/python.py + langchain/tools/python/tool.py (PythonREPL exec/eval), langchain/utilities/jira.py (exec f-string), langchain/llms/beam.py (subprocess.run shell=True), langchain/server.py (subprocess.run list form)"
+  ],
+  "pass_scope": {
+    "pass_id": 2,
+    "cwes": ["077", "078", "088"],
+    "focus": "Command/Argument Injection"
+  },
+  "references_loaded": [
+    "WORKFLOW.md",
+    "references/patterns.md",
+    "references/python.md",
+    "assets/extraction/README.md",
+    "assets/extraction/python_sources.ql.tmpl",
+    "assets/extraction/python_sinks.ql.tmpl",
+    "assets/extraction/extract_sources.ql.tmpl",
+    "assets/extraction/extract_sinks.ql.tmpl",
+    "assets/labels_schema.json"
+  ],
+  "framework_reference_loaded": null,
+  "assumptions": [
+    "No web framework detected; source candidates derived from library entrypoints (tool/chain/LLM boundaries) per the no-framework fallback rule",
+    "LLM output is modeled as an untrusted input carrier (prompt injection) in addition to user-facing chain/tool inputs",
+    "Tests and fixtures excluded from candidate extraction"
+  ]
+}
