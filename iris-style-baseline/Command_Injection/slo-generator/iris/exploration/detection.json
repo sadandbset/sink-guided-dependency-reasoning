@@ -1,0 +1,308 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-16",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\slo-generator\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (exploration + candidate extraction query generation only; no CodeQL run, no LLM labeling yet) against the slo-generator_vuln source tree. The CodeQL database slo-generator-db was created from the same tree (sourceLocationPrefix matches, creation sha 50ce1bf), so file/line evidence below is verified against the database snapshot. Scope narrowed to Pass 2 / CWE-78 (Command/Argument Injection)."
+  },
+  "target": {
+    "project": "slo-generator",
+    "projectDescription": "Google's SLO (Service Level Objective) generator: reads SLO and shared YAML configs (local file, GCS URL, or request-supplied string), resolves a metric backend class and exporter classes by name, computes SLO/error-budget reports, and exports them to monitoring stacks (Cloud Monitoring, Datadog, Dynatrace, Prometheus, Elasticsearch, BigQuery, Pub/Sub). Three entry surfaces: a click CLI (slo_generator/cli.py), a Functions Framework (Flask) HTTP/CloudEvent API (slo_generator/api/main.py), and a config migrator (slo_generator/migrations/migrator.py).",
+    "pass": 2,
+    "cwes": ["CWE-78"],
+    "focus": "Command/Argument Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\slo-generator_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (slo-generator-db/codeql-database.yml)",
+      "31 .py files under slo_generator/ (api/, backends/ 6, exporters/ 7, migrations/), plus cli.py, compute.py, constants.py, report.py, utils.py; samples/custom/ plugin samples; setup.py; tests/unit/",
+      "setup.py packaging with install_requires (click, pyyaml, google-api-python-client, prometheus-http-client, ...)"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\slo-generator-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\slo-generator_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "50ce1bf81d7c6a97da52cf167b1d3ee8100ddd90",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-26T10:42:41.613769400Z"
+    },
+    "baselineLinesOfCode": 3803,
+    "finalised": true
+  },
+  "toolchain": {
+    "qlpack": "iris/slo-generator-cwe78 (dependencies: codeql/python-all: \"*\")",
+    "packResolutionExpected": "codeql/python-all resolved from the local user pack cache (codeql/python-all 7.1.1 at C:\\Users\\lzh\\.codeql\\packages)",
+    "codeqlCli": "2.25.1 (E:\\codeql)"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "flask",
+          "confidence": 0.7,
+          "evidence": [
+            "import evidence (+0.45): api/main.py:26 'from flask import jsonify'",
+            "route/decorator evidence (+0.0): no @app.route / Flask app object in project source; request handling is delegated to Functions Framework",
+            "runtime/bootstrap evidence (+0.20): api/main.py:14-18 docstring 'Functions Framework API (Flask)'; cli.py:136 'from functions_framework._cli import _cli' + cli.py:140-143 ctx.invoke(_cli, ...) launches the framework serving run_compute/run_export",
+            "directory/layout evidence (+0.05): slo_generator/api/ dedicated API package"
+          ]
+        },
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] },
+        { "name": "django", "confidence": 0.0, "evidence": [] }
+      ]
+    },
+    "selected": "none primary; flask secondary (0.70, below the 0.75 primary threshold)",
+    "notes": "flask.md was loaded because Flask scored as a secondary candidate, but its route-handler model does not apply: the project never creates a Flask app or registers routes itself. The externally reachable HTTP surface is Functions Framework, which dispatches to module-level target functions (run_compute / run_export) whose name arrives through the GOOGLE_FUNCTION_TARGET environment variable set at cli.py:139. Source/sink shapes are therefore derived from repository evidence per references/python.md and references/patterns.md (language reference path), with flask.md consulted only for its request-object source cues (request.get_json/get_data/data).",
+    "customBoundaryEvidence": [
+      "api/main.py:41 'def run_compute(request):' and api/main.py:80 'def run_export(request):' - Functions Framework entry points (flask.Request in http signature mode, cloudevent.CloudEvent in cloudevent mode)",
+      "api/main.py:37 'API_SIGNATURE_TYPE = os.environ[GOOGLE_FUNCTION_SIGNATURE_TYPE]' - signature mode from environment",
+      "cli.py:37-49 '@click.group(invoke_without_command=True) def main(ctx, version)' - click CLI root",
+      "cli.py:52-77 '@main.command() ... def compute(slo_config, config, export, delete, timestamp)' - click-injected CLI values",
+      "cli.py:118-143 '@main.command() ... def api(ctx, config, signature_type, target)' - click options with envvar='CONFIG_PATH' / envvar='GOOGLE_FUNCTION_SIGNATURE_TYPE'",
+      "cli.py:146-185 '@main.command() ... def migrate(**kwargs)' -> migrator.do_migrate(**kwargs)",
+      "utils.py:301-349 import_cls / import_dynamic - config-controlled dynamic class loading (core class or plugin path)"
+    ]
+  },
+  "inputBoundaryInventory": {
+    "summary": "External data enters through five faces: (1) the Functions Framework API: the raw request body (request.get_data() in http mode), the decoded JSON body (request.get_json()), CloudEvent fields (request.data base64 payload, request[\"time\"], request[\"id\"]) become the SLO config string parsed by yaml.safe_load (api/main.py:54-61) or the exported SLO report (api/main.py:92-94); (2) configuration files: local YAML paths, GCS gs:// URLs, or string content, all funneled through utils.load_config/parse_config with ${VAR} environment-variable substitution inside values (utils.py:132), and yaml.load with the unsafe yaml.Loader in the migrator (migrator.py:229/264); (3) environment variables (CONFIG_PATH, EXPORTERS_PATH, GOOGLE_FUNCTION_* , DEBUG, MIN_VALID_EVENTS, ...); (4) CLI arguments through click-decorated commands; (5) remote service data (GCS blob content, backend API responses decoded with json.loads). Command execution: there is NOT a single subprocess/os.system/os.popen/exec*/spawn* call site in project source. The only code-execution-shaped boundary is name-based dynamic resolution: config-controlled class/method names flow into importlib.import_module + getattr (utils.py:337), getattr(instance, method) (report.py:204), getattr(sys.modules[__name__], f\"..._{version}\") (migrator.py:78/87/139) and getattr(self.client, method) (dynatrace.py:296), followed by invocation of the resolved object.",
+    "sourceFamilies": [
+      {
+        "family": "http_request",
+        "evidence": [
+          "api/main.py:54 'data = str(request.get_data().decode(\\'utf-8\\'))' - raw request body becomes the SLO config string",
+          "api/main.py:92 'slo_report = request.get_json()' - JSON request body",
+          "api/main.py:59/94 'request.data' - CloudEvent base64 payload attribute",
+          "api/main.py:58 'datetime.strptime(request[\"time\"], TIME_FORMAT)' and api/main.py:60 'request[\"id\"]' - CloudEvent subscript fields"
+        ]
+      },
+      {
+        "family": "config_decode",
+        "evidence": [
+          "api/main.py:61 'slo_config = load_config(data)' - request body string parsed as YAML inside load_config",
+          "utils.py:145 'data = yaml.safe_load(content)' - config decode (safe loader)",
+          "api/main.py:94 'slo_report = yaml.safe_load(base64.b64decode(request.data))'",
+          "migrator.py:118 'yaml.util.load_yaml_guess_indent(slo_config_str)' - round-trip YAML parse",
+          "migrator.py:229/263-264 'yaml.load(conf, Loader=yaml.Loader)' - unsafe Loader on migration input files",
+          "dynatrace.py:339, prometheus.py:151, cloud_service_monitoring.py:683, bigquery.py:166 'json.loads(...)' - remote response decode",
+          "api/main.py:59/94 'base64.b64decode(request.data)' - CloudEvent payload decode"
+        ]
+      },
+      {
+        "family": "file_input",
+        "evidence": [
+          "utils.py:141-142 'with Path(path).open(encoding=\\'utf8\\') as config: content = config.read()' - config file read",
+          "migrator.py:117 'slo_config_str = source_path.open().read()'",
+          "migrator.py:228/263 'with open(exp_path, encoding=\\'utf8\\') as conf:' - exporter / error-budget policy files",
+          "utils.py:58 'Path(path).glob(\\'*.yaml\\')' and utils.py:479 'Path(source).rglob(f\\'*.{ext}\\')' - config directory listing"
+        ]
+      },
+      {
+        "family": "remote_data",
+        "evidence": [
+          "utils.py:77 'path.startswith(\\'gs://\\')' + utils.py:84 'parse_config(content=download_gcs_file(str(path)), ctx=ctx)'",
+          "utils.py:450 'blob.download_as_string(client=None).decode(\\'utf-8\\')' - GCS-fetched config content"
+        ]
+      },
+      {
+        "family": "env",
+        "evidence": [
+          "api/main.py:33/37 'os.environ[\\'CONFIG_PATH\\']' / 'os.environ[GOOGLE_FUNCTION_SIGNATURE_TYPE]'",
+          "api/main.py:34 'os.environ.get(\\'EXPORTERS_PATH\\', None)'",
+          "constants.py:22/26/27/28 'os.environ.get(MIN_VALID_EVENTS / COLORED_OUTPUT / DRY_RUN / DEBUG)'",
+          "cloud_service_monitoring.py:586 'os.environ.get(\\'DEBUG\\')'",
+          "utils.py:132 'full_value.replace(f\\'${{{var}}}\\', ctx[var])' - ${VAR} substitution from os.environ into config content (ctx defaults to os.environ, utils.py:45/63/103)"
+        ]
+      },
+      {
+        "family": "cli",
+        "evidence": [
+          "cli.py:53-76 @click.option('--slo-config'/'--config'/'--export'/'--delete'/'--timestamp') feeding compute(slo_config, config, ...)",
+          "cli.py:120-132 @click.option(envvar='CONFIG_PATH'/'GOOGLE_FUNCTION_SIGNATURE_TYPE') feeding api(config, signature_type, target)",
+          "cli.py:147-182 @click.option --source/--target/--error-budget-policy-path/--exporters-path/--version feeding migrate(**kwargs)",
+          "no direct sys.argv or argparse.OptionParser().parse_args() usage in project source (argparse is imported in utils.py:19 only for ArgumentTypeError)"
+        ]
+      },
+      {
+        "family": "handler_params",
+        "evidence": [
+          "api/main.py:41 'def run_compute(request)' / api/main.py:80 'def run_export(request)' - Functions Framework target functions (name selected via GOOGLE_FUNCTION_TARGET env, set at cli.py:139)",
+          "migrator.py:44 'def do_migrate(source, target, error_budget_policy_path, exporters_path, version, quiet, verbose)'",
+          "report.py:193 'method = config[\\'spec\\'][\\'method\\']' - backend method selected by name; dispatched onto %Backend classes (query_sli / good_bad_ratio / count / count_threshold, e.g. prometheus.py:43/61)",
+          "compute.py:119 'instance().export(data, **config)' - exporter methods selected by name on %Exporter classes (export / export_metric, e.g. base.py:70/225)"
+        ]
+      },
+      {
+        "family": "config_dict_reads",
+        "evidence": [
+          "utils.py:217/243/266 'config.get(\\'exporters\\')' / 'config.get(\\'backends\\')' / 'config.get(\\'error_budget_policies\\')'",
+          "utils.py:244/267 'spec[\\'backend\\']' / 'spec.get(\\'error_budget_policy\\')'",
+          "compute.py:56 'spec = slo_config[\\'spec\\']'",
+          "report.py:192-193 'backend.get(\\'class\\')' / 'config[\\'spec\\'][\\'method\\']'",
+          "api/main.py:106 'exporters = slo_report[\\'exporters\\']'",
+          "prometheus.py:54-55 'slo_config[\\'spec\\'][\\'service_level_indicator\\']' / 'measurement[\\'expression\\']'"
+        ]
+      },
+      {
+        "family": "internal_transfer",
+        "evidence": [
+          "api/main.py:61/65/98/103 'load_config(data|CONFIG_PATH|EXPORTERS_PATH)' - request body or env-derived path handed to the YAML parser",
+          "cli.py:83/87/91 'utils.load_config(config)' / 'utils.load_configs(slo_config, ...)'",
+          "api/main.py:70 and cli.py:101 'compute(slo_config, config, ...)' / '_compute(slo_config_dict, config_dict, ...)' - external data enters the pipeline",
+          "api/main.py:111 and compute.py:79 'export(slo_report|json_report, exporters)'",
+          "cli.py:185 'migrator.do_migrate(**kwargs)' - CLI values handed to the migrator"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "process_exec_apis",
+        "evidence": [
+          "grep over slo_generator/, samples/, setup.py for subprocess/os.system/os.popen/Popen/check_output/check_call/execv*/spawn*/pexpect/shell=True: ZERO call sites",
+          "family kept in sinks.ql (API-graph + syntactic shapes) as the exhaustive CWE-78 baseline; expected to yield zero rows against this database"
+        ]
+      },
+      {
+        "family": "dynamic_import",
+        "evidence": [
+          "utils.py:337 'return getattr(importlib.import_module(package), name)' - module path built from the config-derived class name: report.py:192 cls_name = backend.get('class'); compute.py:112 exporter_class = config.get('class'); utils.py:313-315 '.'-containing names are split into package/name and imported verbatim (plugin path); utils.py:318-322 core names are reassembled into f'slo_generator.{modules_name}.{filename}'",
+          "in API mode the backend/exporter names originate from the request-supplied YAML config (api/main.py:61 load_config(data) -> compute -> get_backend/export -> run_backend)",
+          "cli.py:32 'sys.path.append(os.getcwd())' - widens the module search path so plugin classes resolve from the working directory"
+        ]
+      },
+      {
+        "family": "getattr_dispatch",
+        "evidence": [
+          "utils.py:337 'getattr(importlib.import_module(package), name)' - class member selected by config-derived name (arg 1)",
+          "report.py:204 'method = getattr(instance, method)' - method from config['spec']['method'], invoked at report.py:216 'data = method(self.timestamp, self.window, config)'",
+          "migrator.py:78/87/139 'getattr(sys.modules[__name__], f\"ebp_{curver}to{version}\" / f\"exporters_{curver}to{version}\" / f\"slo_config_{curver}to{version}\")' - function name built from the CLI --version value, invoked at migrator.py:79/89/141",
+          "dynatrace.py:296 'req = getattr(self.client, method)' - HTTP method name from backend config, invoked at dynatrace.py:311/313 'response = req(url, headers=headers, ...)'",
+          "exporters/base.py:82/83/139 and backends/cloud_monitoring.py:254/256 'getattr(self, <literal>, ...)' - constant attribute names (benign, extracted for completeness)"
+        ]
+      },
+      {
+        "family": "dispatch_invocation",
+        "evidence": [
+          "report.py:203 'instance = cls(client=client, **backend_cfg)' (cls from utils.get_backend_cls) and report.py:216 'data = method(self.timestamp, ...)'",
+          "migrator.py:79/89/141 'ebp_func(...)' / 'exporters_func(...)' / 'slo_func(...)'",
+          "dynatrace.py:311/313 'req(url, headers=headers, json=post_data)'",
+          "compute.py:119 'instance().export(data, **config)' - callee is an attribute of a call result, NOT matched by the Name-callee shape (recorded under uncoveredCases)"
+        ]
+      },
+      {
+        "family": "env_write",
+        "evidence": [
+          "prometheus.py:38 'os.environ[\\'PROMETHEUS_URL\\'] = url' and prometheus.py:40 'os.environ[\\'PROMETHEUS_HEAD\\'] = json.dumps(headers)' - backend config written into the process environment consumed by the prometheus_http_client library constructor (prometheus.py:41 'self.client = Prometheus()')",
+          "cli.py:137-139 'os.environ[\\'CONFIG_PATH\\'] = config' / 'os.environ[GOOGLE_FUNCTION_SIGNATURE_TYPE]' / 'os.environ[GOOGLE_FUNCTION_TARGET\\']' - CLI values written into env read later by the API module"
+        ]
+      },
+      {
+        "family": "internal_exec_wrapper",
+        "evidence": [
+          "utils.py:326 import_dynamic (body: importlib.import_module + getattr), utils.py:301 import_cls, utils.py:275 get_backend_cls, utils.py:288 get_exporter_cls - the name-resolution chain",
+          "report.py:177 run_backend (get_backend_cls + getattr + method call), compute.py:89 export (get_exporter_cls + instance().export), migrator.py:44 do_migrate (3 getattr dispatches), backends/dynatrace.py:274 DynatraceClient.request (getattr + req call), exporters/base.py:70 export / :127 build_metric (getattr), backends/cloud_monitoring.py (getattr at 254/256)"
+        ]
+      },
+      {
+        "family": "name_format",
+        "evidence": [
+          "migrator.py:78/87/139 f-strings f\"ebp_{curver}to{version}\" etc. passed directly as the getattr name argument",
+          "utils.py:321 f'slo_generator.{modules_name}.{filename}' passed directly as the import_dynamic package argument; utils.py:319 full_cls_name = f\\'{cls_name}{expected_type}\\' assigned then passed as the import_dynamic name argument"
+        ]
+      }
+    ],
+    "sanitizerObservations": [
+      "yaml.safe_load (not yaml.load) is used on the request-derived SLO config string at api/main.py:94 and utils.py:145; the migrator however uses the unsafe yaml.Loader at migrator.py:229/264",
+      "no shlex.quote / pipes.quote / shell-escaping helper exists anywhere in project source (no shell command construction at all)",
+      "class name selection (utils.py:301-323 import_cls) performs no allowlist check on the module path: any '.'-containing class name in config is imported verbatim as a plugin; core names are reassembled into a slo_generator.<type>s.<filename> path - snake_to_caml/capitalize normalization is cosmetic, not a security filter",
+      "no argv-list subprocess invocation exists, so no list-form command sanitization pattern applies",
+      "load_config falls back to parsing the path string itself as YAML content when the path does not exist (utils.py:88-89), blurring file/string input, but this is an input-shape property, not a sanitizer"
+    ],
+    "nonVulnerabilityNote": "Zero direct command-execution sinks exist in this snapshot; the subprocess/os.exec API families are kept in sinks.ql only as the exhaustive CWE-78 baseline. The dynamic import / getattr dispatch chain is a documented plugin extension point (docs/providers/custom.md, samples/custom/custom_backend.py), and normal name-based dispatch is not automatically a vulnerability: these are recorded as sink candidates for labeling, not findings. No CVE ground truth was consulted (see constraintsHonored)."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) and codeql bqrs decode --format=csv; NOT database analyze / SARIF (deferred to Phase 2)",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output is decoded directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API; AstNode.getFile() does not exist)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); alias-aware, only genuine resolved calls into external modules (json/yaml/base64 decode APIs, importlib.import_module)",
+      "ast": "pure AST shape match (attribute/name text, receiver name, assignment-to-call bindings); catches framework request objects (request.get_data/get_json/data/subscripts), os.environ shapes, getattr dispatch, Path/file reads, and config dict reads that API graphs cannot resolve. Subject to name-collision noise; the LLM labeling step filters it."
+    },
+    "flowKinds": {
+      "sources": [
+        "return",
+        "param",
+        "http_request",
+        "env",
+        "cli",
+        "config",
+        "file",
+        "internal_transfer"
+      ],
+      "sinks": [
+        "arg",
+        "shell_true",
+        "dynamic_import",
+        "getattr_dispatch",
+        "dispatch_invocation",
+        "env_write",
+        "sys_path_write",
+        "internal_exec_wrapper",
+        "name_format"
+      ]
+    },
+    "exclusions": [
+      "tests/ (tests/unit/** including fixtures) excluded from candidate scope per the Augur candidate strategy (noise: test config loading and stub classes); implemented as a path filter in both queries",
+      "samples/custom/ kept in scope: it is the documented plugin-target shape for the dynamic import boundary, not test noise",
+      "logging-only helpers (LOGGER.debug/info calls, click.secho output) are not extracted as candidates; pure output sites are out of scope",
+      "migrations/ here means SLO-config format migration (v1->v2 migrator), not DB schema migrations; it stays in scope and is NOT subject to the migration-file FP heuristic"
+    ]
+  },
+  "uncoveredCases": [
+    "compute.py:119 'instance().export(data, **config)' - the callee is an Attribute of a Call result, so the dispatch_invocation family (Name callee assigned from a dispatch call in the same function) does not match it; mitigated by the export param rows of %Exporter classes and by the get_exporter_cls wrapper rows.",
+    "Functions Framework dispatch itself is outside the database: run_compute/run_export are registered by target name through the GOOGLE_FUNCTION_TARGET environment variable (cli.py:139); only the param family captures the request entry points.",
+    "api/main.py:54 'request.get_data().decode(\\'utf-8\\')' - only the get_data/get_json/data/subscript request shapes observed in this codebase are matched; other flask request fields (request.headers/args/form) do not occur in project source.",
+    "utils.py:118 'yaml.util.load_yaml_guess_indent(...)' - not expected to resolve through API graphs (accessed as an attribute chain on the yaml module object); matched at AST level only.",
+    "utils.py:132 'ctx[var]' env substitution happens inside the nested function replace_env_vars of parse_config; captured as an env-read row (ctx subscript), but the re.sub/str.replace interpolation into config content is not modeled as a flow step at extraction time.",
+    "Dynamic alias imports: none observed for the APIs of interest (importlib, yaml, json, base64, os imported directly); internal helpers are called by bare or module-attribute name, including the 'from slo_generator.compute import compute as _compute' alias at cli.py:28 which the internal_transfer family matches by the alias name '_compute'. If a backend module were loaded under an alias, the AST family still matches by attribute name.",
+    "CloudEvent fields other than data/time/id (e.g. source, type) are not read in project source; no coverage claimed.",
+    "google.cloud.storage, functions_framework, prometheus_http_client, googleapiclient are external dependencies not present in the database; their internals are out of scope (only call sites into them are extracted)."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/references/flask.md (secondary candidate; route model not applicable, request-object cues used)",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: cmd_safe_sinks.csv, cmd_sinks.csv, cmd_sinks_all.csv, confirmed_vulns.json, CVE_vulnerability_report_slo-generator_dynamic_import.md, the .git history, and any fix-diff material inside the source tree were NOT opened during Step 1-2; candidate families are derived from repository evidence and the loaded language/pattern references only. Project source, the CodeQL database, and the Augur installation were not modified. Only files under iris_manual/slo-generator/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). No CodeQL run and no LLM labeling in this step, per instructions."
+  }
+}
