@@ -1,0 +1,758 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "xmpp-http-upload-iris-pass1-step3-20261023",
+    "generated_at": "2026-10-23T16:30:25Z",
+    "language": "python",
+    "framework": "flask",
+    "model": "glm-5.3",
+    "project": "xmpp-http-upload",
+    "notes": [
+      "Labeling mode: in-session LLM analysis by model 'glm-5.3' (Augur Step 3 is agent-agnostic; the agent's own model performs the labeling; no external LLM API call was made). 3 batches, 32 candidates total (4 source rows from sources.csv, 28 sink rows from sinks.csv); every CSV candidate was processed, none deferred; batch records with verbatim candidate rows are in labels_raw_pass1.json.",
+      "Source-extraction recall gap (verified root cause): extraction/sources.ql family 1 (route_param) emitted ZERO rows, so sources.csv holds only the 4 flask.request.* rows while detection.json expectedVolume predicted 7 (including the route_param rows for put_file/head_file/get_file). Verified with read-only diagnostics in iris/diagnostics (codeql query run, CLI 2.25.1, python-all 7.1.2 pack sources): flaskRouteHandler casts Function.getADecorator() to Attribute, but for the parameterized decorators @app.route(\"/<path:path>\", methods=[...]) (xhu.py:104/:189/:214) getADecorator() returns the decorator CALL node (instanceof Call holds, instanceof Attribute fails); the verified fix pattern is dec.(Call).getFunc().(Attribute).getName() = \"route\", which matches all four handlers. Phase 2 must add the three route handler parameters (xhu.py:105/:190/:215, parameter `path`) to MySources.qll or Pass1_PathTraversal.ql will produce zero alerts despite the sink labels - flagged as the top human review point.",
+      "Sanitizer list is deliberately EMPTY: the only guard, sanitized_join's startswith prefix check (xhu.py:44), compares the un-normalized string of (root / path).absolute(); pathlib.Path.absolute() performs no '..' normalization and no symlink resolution, and the Werkzeug path converter always yields a relative string, so the prefix condition is textually satisfied by every converter-supplied path - the guard does not confine '../' traversal and must not become an isBarrier. Consequently Step 6's generic 'explicit startswith guard -> FP' heuristic must NOT be applied to this target's findings without checking for normalization.",
+      "Trust asymmetry: only put_file authenticates its input (HMAC-SHA256 over '{path} {length}' with the operator SECRET_KEY, xhu.py:118-130); head_file and get_file are unauthenticated, so the read-side traversal flows (sink-013 open, sink-026 stat, sink-028 send_file) are the highest-exploitability paths. PUT-side sinks (sink-019, sink-020, sink-023, sink-024) require an HMAC signed over the exact traversal path by the key holder.",
+      "Read-side traversal scope is constrained by get_paths' textual suffixes: arbitrary read/stat is limited to file names ending in '.data' (send_file/stat) or '.meta' (open) - recorded in the sink rationales; directory creation (sink-023) is not suffix-constrained.",
+      "Independence: no PyVul ground truth, CVE advisories or patch diffs were consulted; the pre-existing audit artifacts in the source-tree root (VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv, 漏洞审查报告.md, 第一步筛选报告.md) were NOT opened. Labeling used only xhu.py, setup.py, config.example.py, the Phase-1 CSVs, exploration/detection.json and the Augur references (WORKFLOW.md, references/patterns.md, references/python.md, references/flask.md, assets/labels_schema.json).",
+      "Diagnostics were run read-only (codeql query run + bqrs decode against the existing database; outputs under iris/diagnostics/). No modification of the source tree, the CodeQL database, the Augur installation, or the Phase-1 original CSVs."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": [
+        {
+          "id": "src-001",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "flask.request.args.get",
+            "flow_kind": "return",
+            "arg_index": null,
+            "package": "flask",
+            "module": "flask"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 118
+          },
+          "rationale": "Genuine untrusted input boundary: the PUT query-string verification key 'v' read via flask.request.args.get (request args are fully attacker-controlled in a Flask/Werkzeug service). Labeled source for pass-1 recall because request-arg values are potential path carriers in Flask apps generally. Input controllability: full (any query-string bytes, URL-decoded by the framework). In THIS codebase the value flows only into hmac.compare_digest (xhu.py:125) as the offered key and is never used as or concatenated into a filesystem path, so it cannot seed a path-traversal flow here; reachability recorded so Phase-2 alert expectations stay accurate.",
+          "evidence": [
+            "xhu.py:104 @app.route(\"/<path:path>\", methods=[\"PUT\"]) - put_file handler",
+            "xhu.py:118 verification_key = flask.request.args.get(\"v\", \"\")",
+            "xhu.py:125 if not hmac.compare_digest(digest, verification_key) - sole consumer",
+            "sources.csv row 1: source_candidate, request_arg, match_kind api"
+          ]
+        },
+        {
+          "id": "src-002",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "flask.request.headers.get",
+            "flow_kind": "return",
+            "arg_index": null,
+            "package": "flask",
+            "module": "flask"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 119
+          },
+          "rationale": "Genuine untrusted input boundary: the Content-Length request header, int()-coerced at the call site. Input controllability: full (arbitrary header value; a non-numeric value raises ValueError -> unhandled 500, which is out of pass-1 scope). The coerced length feeds the HMAC input (xhu.py:120) and the stream copy bound (xhu.py:142, stream_file :92-101); it is never used as a filesystem path, so it cannot seed a pass-1 flow in this codebase.",
+          "evidence": [
+            "xhu.py:119 length = int(flask.request.headers.get(\"Content-Length\", 0))",
+            "xhu.py:120 hmac_input = \"{} {}\".format(path, length)",
+            "xhu.py:142 stream_file(flask.request.stream, fout, length)",
+            "sources.csv row 2: source_candidate, request_header, match_kind api"
+          ]
+        },
+        {
+          "id": "src-003",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "flask.request.headers.get",
+            "flow_kind": "return",
+            "arg_index": null,
+            "package": "flask",
+            "module": "flask"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 132
+          },
+          "rationale": "Genuine untrusted input boundary: the Content-Type request header (attacker-controlled, with an application/octet-stream default). The value is persisted into the .meta metadata JSON (xhu.py:144-150) and replayed as a response header by generate_headers (:173-186, gated by the operator's NON_ATTACHMENT_MIME_TYPES fnmatch globs) - header-injection-adjacent behavior that belongs to a header pass, not pass 1. It is never used as a filesystem path.",
+          "evidence": [
+            "xhu.py:132-135 content_type = flask.request.headers.get(\"Content-Type\", ...)",
+            "xhu.py:147 json.dump({\"headers\": {\"Content-Type\": content_type}}, f)",
+            "xhu.py:177-182 generate_headers replays metadata Content-Type / sets Content-Disposition",
+            "sources.csv row 3: source_candidate, request_header, match_kind api"
+          ]
+        },
+        {
+          "id": "src-004",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "flask.request.stream",
+            "flow_kind": "field",
+            "arg_index": null,
+            "package": "flask",
+            "module": "flask"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 142
+          },
+          "rationale": "Genuine untrusted input boundary: the raw request-body object (flask.request.stream). Input controllability: full over the body BYTES. The value is consumed only as file CONTENT via stream_file (xhu.py:92-101: src.read / dest.write) into the file opened by write_file; it is never used as a filesystem path, so it cannot seed a pass-1 path flow. Kept as source because it is a true request input boundary (content channel of the same upload flow whose path channel is the vulnerable one).",
+          "evidence": [
+            "xhu.py:142 stream_file(flask.request.stream, fout, length)",
+            "xhu.py:94 data = src.read(min(nbytes, 4096))",
+            "xhu.py:97 dest.write(data)",
+            "sources.csv row 4: source_candidate, request_stream, match_kind ast (attribute read)"
+          ]
+        },
+        {
+          "id": "sink-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "os.path.abspath",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "os.path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/setup.py",
+            "line": 8
+          },
+          "rationale": "Packaging-time path computation in the setuptools build script: the argument is the literal __file__-derived directory (os.path.dirname(__file__)). setup.py is executed at install time, is not reachable by any request, and receives no untrusted input; additionally os.path.abspath is a path wrapper, not a file access, so by the pass-1 rubric (Path()/join()/abspath alone is not a dangerous file API) it is excluded.",
+          "evidence": [
+            "setup.py:2 import os.path",
+            "setup.py:8 here = os.path.abspath(os.path.dirname(__file__))",
+            "sinks.csv row 1: sink_candidate, path_wrapper, match_kind api"
+          ]
+        },
+        {
+          "id": "sink-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "os.path.dirname",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "os.path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/setup.py",
+            "line": 8
+          },
+          "rationale": "Same packaging expression as sink-001: dirname of the literal __file__; constant input, no external reachability, and a pure path wrapper rather than a file access. Excluded as none/FP.",
+          "evidence": [
+            "setup.py:8 here = os.path.abspath(os.path.dirname(__file__))",
+            "sinks.csv row 2: sink_candidate, path_wrapper, match_kind api"
+          ]
+        },
+        {
+          "id": "sink-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.97,
+          "signature": {
+            "callable": "open",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "builtins"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/setup.py",
+            "line": 10
+          },
+          "rationale": "Reads the packaging long-description README.rst at build time with a fully literal path (os.path.join(here, \"README.rst\")). No untrusted input, no external reachability (install-time script, not the service), no attacker influence over the path. Classic extraction noise; excluded as none/FP.",
+          "evidence": [
+            "setup.py:10 with open(os.path.join(here, \"README.rst\"), encoding=\"utf-8\") as f:",
+            "sinks.csv row 3: sink_candidate, file_open, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "os.path.join",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "os.path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/setup.py",
+            "line": 10
+          },
+          "rationale": "Literal packaging join of the __file__-derived base with the constant \"README.rst\"; not attacker-influenced and itself only a path construction, not a file access. Excluded as none/FP.",
+          "evidence": [
+            "setup.py:10 with open(os.path.join(here, \"README.rst\"), encoding=\"utf-8\") as f:",
+            "sinks.csv row 4: sink_candidate, path_wrapper, match_kind api"
+          ]
+        },
+        {
+          "id": "sink-005",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "sanitized_join",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "xhu"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 42
+          },
+          "rationale": "Internal wrapper that receives the URL-decoded route path from put_file (xhu.py:107, argument 0) and from get_info (:64, which is fed by head_file/get_file route parameters) and returns the joined absolute Path that every downstream file API consumes. Labeled summary (parameter 0 -> return taint step) so this propagation survives query generation. It is NOT a sink (performs no file access itself) and - decisively - NOT a sanitizer: the startswith guard at :44 compares str((root / path).absolute()) lexically; pathlib.Path.absolute() performs no '..' normalization and no symlink resolution (CPython: 'Make the path absolute, without normalization or resolving symlinks'), and the Werkzeug path converter always yields a relative string, so the textual prefix condition is satisfied by every converter-supplied path including '../' traversal segments, which the OS then resolves at open/stat/mkdir/send_file time outside DATA_ROOT. Marking this function a barrier would suppress the genuine traversal flow.",
+          "evidence": [
+            "xhu.py:42-46 def sanitized_join(path, root): result = (root / path).absolute(); if not str(result).startswith(str(root) + \"/\"): raise ValueError",
+            "xhu.py:107-110 put_file: dest_path = sanitized_join(path, pathlib.Path(app.config[\"DATA_ROOT\"]))",
+            "xhu.py:64-67 get_info: dest_path = sanitized_join(path, pathlib.Path(app.config[\"DATA_ROOT\"]))",
+            "CPython pathlib.Path.absolute(): no normalization, no symlink resolution (unlike resolve())",
+            "sinks.csv row 5: sink_candidate, file_api_def, arg_index 0 (parameter position)"
+          ]
+        },
+        {
+          "id": "sink-006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "sanitized_join",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "xhu"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 42
+          },
+          "rationale": "The root/base operand of the wrapper: every call site passes pathlib.Path(app.config[\"DATA_ROOT\"]) - operator-configured configuration (config.example.py: DATA_ROOT = \"/var/lib/xmpp-http-upload\"), never attacker-controlled. The only tainted position of sanitized_join is parameter 0 (sink-005). Excluded to keep the base operand out of taint configurations.",
+          "evidence": [
+            "xhu.py:42 def sanitized_join(path: str, root: pathlib.Path)",
+            "xhu.py:66/:109/:194/:219 pathlib.Path(app.config[\"DATA_ROOT\"]) call sites",
+            "config.example.py:2 DATA_ROOT = \"/var/lib/xmpp-http-upload\"",
+            "sinks.csv row 6: sink_candidate, file_api_def, arg_index 1"
+          ]
+        },
+        {
+          "id": "sink-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "pathlib.Path.absolute",
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "module": "pathlib",
+            "type": "pathlib.Path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 43
+          },
+          "rationale": "Path.absolute() inside sanitized_join only makes the joined path absolute (prepending the CWD for relative inputs); it performs no file access (so it is not a pass-1 sink) and no normalization or symlink resolution (so it does not neutralize the '..' segments - it is not a sanitizer either). The traversal-relevant path content passes through unchanged. Recorded as none so it is neither an alert point nor a barrier; the enclosing wrapper is labeled summary (sink-005).",
+          "evidence": [
+            "xhu.py:43 result = (root / path).absolute()",
+            "CPython pathlib.Path.absolute(): 'Make the path absolute, without normalization or resolving symlinks'",
+            "sinks.csv row 7: sink_candidate, path_wrapper, receiver <expr>, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-008",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "pathlib.Path.__truediv__",
+            "flow_kind": "argument",
+            "arg_index": 1,
+            "module": "pathlib",
+            "type": "pathlib.Path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 43
+          },
+          "rationale": "The pathlib true-division join 'root / path' inside sanitized_join is the point where the attacker-controlled route path (right operand; extraction arg_index 1 = right operand per the column contract) enters the joined path object. Taint must flow from the right operand to the join result for every downstream file API to be reachable. CodeQL's default taint modeling of binary expressions is expected to cover this; the summary edge is recorded as a recall safeguard. Not a sink: pure path construction, no file access.",
+          "evidence": [
+            "xhu.py:43 result = (root / path).absolute()",
+            "extraction columnContract: for the path_join Div row, arg_index 1 = the right operand (0 = base)",
+            "sinks.csv row 8: sink_candidate, path_join, receiver root, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-009",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "pathlib.Path",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "pathlib"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 50
+          },
+          "rationale": "Constructs the data_file companion as pathlib.Path(str(base_path) + \".data\") from the sanitized joined path. pathlib.Path is a stdlib constructor whose body is outside this database; if the pack's flow summaries do not model Path(argument 0) -> result, the flow from the route path to the .open/.stat/.send_file sinks breaks at this call (the same holds for the str() coercion and the '+' concatenation around it). Labeled summary (argument 0 -> return) as a recall safeguard. Not a sink: constructing a Path performs no file access. Dedup note: same signature as sink-010; library generation collapses both rows into one Path(arg0)->result edge (harmless for the DATA_ROOT construction sites, where nothing tainted reaches the argument).",
+          "evidence": [
+            "xhu.py:50 data_file = pathlib.Path(str(base_path) + \".data\")",
+            "xhu.py:49-53 get_paths derives both companions from base_path",
+            "sinks.csv row 9: sink_candidate, path_ctor, match_kind api"
+          ]
+        },
+        {
+          "id": "sink-010",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "pathlib.Path",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "pathlib"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 51
+          },
+          "rationale": "Constructs the metadata_file companion pathlib.Path(str(base_path) + \".meta\") from the sanitized joined path - same stdlib-constructor boundary and same rationale as sink-009 (argument 0 -> return summary edge so taint survives into the .open(\"r\")/:144 .open(\"x\") sinks). Not a sink: no file access happens here. The '.meta' suffix also constrains the read side of any traversal flow to metadata-named files.",
+          "evidence": [
+            "xhu.py:51 metadata_file = pathlib.Path(str(base_path) + \".meta\")",
+            "xhu.py:57 metadata_file.open(\"r\") and xhu.py:144 metadata_file.open(\"x\") - downstream consumers",
+            "sinks.csv row 10: sink_candidate, path_ctor, match_kind api"
+          ]
+        },
+        {
+          "id": "sink-011",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "get_paths",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "xhu"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 49
+          },
+          "rationale": "Internal companion-suffix helper: receives the sanitized joined path as base_path and returns (data_file, metadata_file) derived from it (documented param -> both returns propagation). An internal helper parameter is not an external boundary, so it is not a source; the body is database-visible so standard local dataflow covers the internal steps, and the summary label preserves the boundary for library generation.",
+          "evidence": [
+            "xhu.py:49-53 def get_paths(base_path): ... return data_file, metadata_file",
+            "xhu.py:69 get_info: data_file, metadata_file = get_paths(dest_path)",
+            "xhu.py:138 put_file: data_file, metadata_file = get_paths(dest_path)",
+            "sinks.csv row 11: sink_candidate, file_api_def, arg_index 0"
+          ]
+        },
+        {
+          "id": "sink-012",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "load_metadata",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "xhu"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 56
+          },
+          "rationale": "Definition row of a thin reader: the actual filesystem access is the metadata_file.open(\"r\") member call at :57 (labeled sink-013), and the returned JSON content is response-header data (pass-10 adjacent), not a path. Flow from get_info into :57's receiver is native local dataflow through the visible body; the parameter row adds no predicate. Excluded as none/FP.",
+          "evidence": [
+            "xhu.py:56-58 def load_metadata(metadata_file): with metadata_file.open(\"r\") as f: return json.load(f)",
+            "sinks.csv row 12: sink_candidate, file_api_def, arg_index 0"
+          ]
+        },
+        {
+          "id": "sink-013",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "pathlib.Path.open",
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "module": "pathlib",
+            "type": "pathlib.Path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 57
+          },
+          "rationale": "Real file read (the stored metadata JSON) whose RECEIVER path is derived from the attacker-controlled route path via sanitized_join -> get_paths, i.e. '<route-path>.meta'. Dangerous path position: the receiver (the Path object). Reachable from the UNAUTHENTICATED HEAD and GET routes (get_info at :192-195 / :217-220). Containment rests solely on sanitized_join's lexical startswith guard, which does not normalize '..' segments, so a request path containing '../' makes this open read metadata files OUTSIDE the declared DATA_ROOT; the read scope is constrained to files whose names end in '.meta' (the suffix is appended textually at :51, so it cannot be avoided).",
+          "evidence": [
+            "xhu.py:57 with metadata_file.open(\"r\") as f:",
+            "xhu.py:51 metadata_file = pathlib.Path(str(base_path) + \".meta\")",
+            "xhu.py:42-46 lexical-only containment guard (no '..' normalization)",
+            "xhu.py:189-203 head_file and xhu.py:214-226 get_file: unauthenticated routes calling get_info",
+            "sinks.csv row 13: sink_candidate, file_open, receiver metadata_file, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-014",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "get_info",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "xhu"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 61
+          },
+          "rationale": "Internal aggregator called by head_file (:192) and get_file (:217) with the route parameter `path` as argument 0; it forwards the path into sanitized_join/get_paths/load_metadata and returns the derived (data_file, metadata) pair. The parameter is an internal wrapper position, not an external boundary (a plain internal function parameter is not a source); the summary label preserves the param -> returns propagation for the read-side flow into the :57 open, :197 stat and :228 send_file sinks.",
+          "evidence": [
+            "xhu.py:61-71 def get_info(path, root): dest_path = sanitized_join(path, ...); ... return data_file, load_metadata(metadata_file)",
+            "xhu.py:192-195 head_file: get_info(path, ...)",
+            "xhu.py:217-220 get_file: get_info(path, ...)",
+            "sinks.csv row 14: sink_candidate, file_api_def, arg_index 0"
+          ]
+        },
+        {
+          "id": "sink-015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get_info",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "xhu"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 61
+          },
+          "rationale": "The root/base operand of get_info: every caller passes pathlib.Path(app.config[\"DATA_ROOT\"]) - operator configuration, never attacker-controlled. The tainted position of get_info is parameter 0 (sink-014). Excluded as none/FP.",
+          "evidence": [
+            "xhu.py:61 def get_info(path: str, root: pathlib.Path)",
+            "xhu.py:194/:219 pathlib.Path(app.config[\"DATA_ROOT\"]) call sites",
+            "sinks.csv row 15: sink_candidate, file_api_def, arg_index 1"
+          ]
+        },
+        {
+          "id": "sink-016",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "sanitized_join",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "xhu"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 64
+          },
+          "rationale": "Call site inside get_info passing the (route-parameter-fed) tainted path argument into the wrapper; the summary edge is argument 0 -> wrapper return value. Dedup note: same signature as sink-021 (the put_file call site) and the wrapper parameter row sink-005 - library generation must collapse these into a single sanitized_join arg0->return edge. Not a sink: a wrapper call is not a file access.",
+          "evidence": [
+            "xhu.py:64-67 dest_path = sanitized_join(path, pathlib.Path(app.config[\"DATA_ROOT\"])) inside get_info",
+            "sinks.csv row 16: sink_candidate, path_wrapper, arg_index 0, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "pathlib.Path",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "pathlib"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 66
+          },
+          "rationale": "Base-path construction inside get_info: the argument is app.config[\"DATA_ROOT\"] (operator-configured), never attacker-controlled; a Path(arg0)->result summary edge here would carry no taint (nothing tainted reaches this argument). Excluded as none/FP. Note: the signature-level Path(arg0)->return summary from sink-009/sink-010 also matches this call site but is vacuous here.",
+          "evidence": [
+            "xhu.py:66 pathlib.Path(app.config[\"DATA_ROOT\"])",
+            "sinks.csv row 17: sink_candidate, path_ctor, match_kind api"
+          ]
+        },
+        {
+          "id": "sink-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "write_file",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "xhu"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 75
+          },
+          "rationale": "Definition row of the contextmanager writer: the dangerous operations are at.open(\"xb\") at :76 (sink-019) and at.unlink() at :80 (sink-020); parameter-to-receiver flow inside the database-visible body is native local dataflow, so the parameter row adds no predicate. Review note for Phase 2: write_file is a @contextlib.contextmanager generator invoked at :141 - if taint tracking fails to step through the decorated generator, add an explicit write_file arg0->param summary at that point (recorded as a human review point, deliberately not a label).",
+          "evidence": [
+            "xhu.py:74-81 @contextlib.contextmanager def write_file(at): with at.open(\"xb\") as f: ... at.unlink()",
+            "xhu.py:141 with write_file(data_file) as fout:",
+            "sinks.csv row 18: sink_candidate, file_api_def, arg_index 0"
+          ]
+        },
+        {
+          "id": "sink-019",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "pathlib.Path.open",
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "module": "pathlib",
+            "type": "pathlib.Path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 76
+          },
+          "rationale": "Real file WRITE: exclusive-create ('xb') of the uploaded data file at '<route-path>.data', whose receiver path is derived from the route path via sanitized_join -> get_paths. Dangerous path position: the receiver. The path is not provably confined to DATA_ROOT (lexical guard only, no '..' normalization), so traversal segments write outside the declared root. Reachability is bounded by the PUT-side authorization: the exact path+length is HMAC-SHA256-gated by the operator SECRET_KEY (xhu.py:118-130), so an attacker can only select a traversal path that the XMPP slot server signed with that exact value; the sink itself remains a genuine pass-1 sink because the file-creation API consumes a route-derived, unconfined path.",
+          "evidence": [
+            "xhu.py:76 with at.open(\"xb\") as f:",
+            "xhu.py:118-130 HMAC verification of '{path} {length}' before any write",
+            "xhu.py:137-142 mkdir + write_file(data_file) + stream_file body copy",
+            "xhu.py:157-163 EEXIST -> 409 (conflict) handling",
+            "sinks.csv row 19: sink_candidate, file_open, receiver at, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-020",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "callable": "pathlib.Path.unlink",
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "module": "pathlib",
+            "type": "pathlib.Path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 80
+          },
+          "rationale": "Rollback deletion of the partially-written data file at the same attacker-influenced path ('<route-path>.data'): a file-deletion API whose receiver path can resolve outside DATA_ROOT via '..' segments under the same lexical-only guard. Reachability is narrow - only the write_file error path (exception while streaming the body, e.g. the EOFError raised by stream_file) after a successful exclusive create - and the PUT side is HMAC-gated. Secondary severity, moderate confidence.",
+          "evidence": [
+            "xhu.py:79-81 except: at.unlink(); raise",
+            "xhu.py:92-101 stream_file raises EOFError on short body",
+            "xhu.py:151-156 EOFError -> 400 handling after unlink",
+            "sinks.csv row 20: sink_candidate, file_unlink, receiver at, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-021",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "sanitized_join",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "xhu"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 107
+          },
+          "rationale": "Call site inside put_file passing the route parameter `path` (Werkzeug path-converter binding, URL-decoded) directly as argument 0 into the wrapper; summary edge argument 0 -> wrapper return value. Same signature as sink-005/sink-016 (dedup to one edge at library generation). Not a sink: wrapper call, not a file access.",
+          "evidence": [
+            "xhu.py:104-110 @app.route(\"/<path:path>\", methods=[\"PUT\"]) def put_file(path): dest_path = sanitized_join(path, pathlib.Path(app.config[\"DATA_ROOT\"]))",
+            "sinks.csv row 21: sink_candidate, path_wrapper, arg_index 0, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "pathlib.Path",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "pathlib"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 109
+          },
+          "rationale": "Base-path construction inside put_file: argument is operator-configured app.config[\"DATA_ROOT\"], not attacker-controlled. Excluded as none/FP (the Path(arg0)->return summary signature also matches this site but is vacuous here).",
+          "evidence": [
+            "xhu.py:109 pathlib.Path(app.config[\"DATA_ROOT\"])",
+            "sinks.csv row 22: sink_candidate, path_ctor, match_kind api"
+          ]
+        },
+        {
+          "id": "sink-023",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "pathlib.Path.mkdir",
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "module": "pathlib",
+            "type": "pathlib.Path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 137
+          },
+          "rationale": "Real directory creation: mkdir(parents=True, exist_ok=True) creates EVERY intermediate directory of the attacker-influenced joined path (the receiver is dest_path.parent); with '../' segments in the route path this creates directories OUTSIDE DATA_ROOT (arbitrary directory creation) under the same lexical-only guard. PUT/HMAC-gated. Phase-2 review note: the tainted value reaches the receiver through the stdlib '.parent' property - if flow modeling does not cover Path.parent, this sink will under-report; flagged for MySummaries consideration (no candidate row exists for '.parent' itself).",
+          "evidence": [
+            "xhu.py:137 dest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o770)",
+            "xhu.py:107-110 dest_path derivation from the route path",
+            "sinks.csv row 23: sink_candidate, file_mkdir, receiver dest_path.parent, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-024",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "pathlib.Path.open",
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "module": "pathlib",
+            "type": "pathlib.Path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 144
+          },
+          "rationale": "Real file WRITE: exclusive-create ('x') of the metadata companion at '<route-path>.meta' with the attacker-influenced path (receiver position), inside the same put_file flow; lexical-only containment and HMAC gate as sink-019; EEXIST surfaces as 409 (:157-163). Metadata content is the uploader's Content-Type (pass-10 adjacent), but the PATH is the pass-1 concern here.",
+          "evidence": [
+            "xhu.py:144-150 with metadata_file.open(\"x\") as f: json.dump({\"headers\": ...}, f)",
+            "xhu.py:138 get_paths(dest_path) derivation",
+            "sinks.csv row 24: sink_candidate, file_open, receiver metadata_file, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-025",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "pathlib.Path",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "pathlib"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 194
+          },
+          "rationale": "Base-path construction inside head_file: argument is operator-configured app.config[\"DATA_ROOT\"], not attacker-controlled. Excluded as none/FP.",
+          "evidence": [
+            "xhu.py:194 pathlib.Path(app.config[\"DATA_ROOT\"])",
+            "sinks.csv row 25: sink_candidate, path_ctor, match_kind api"
+          ]
+        },
+        {
+          "id": "sink-026",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "callable": "pathlib.Path.stat",
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "module": "pathlib",
+            "type": "pathlib.Path"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 197
+          },
+          "rationale": "Filesystem metadata probe on '<route-path>.data' from the UNAUTHENTICATED HEAD route: no file-content read, but an existence/size oracle at a path that can resolve outside DATA_ROOT via '..' segments (CWE-22/23 resource access). Dangerous path position: the receiver. Lower severity than the content-reading sinks; kept as a sink with moderate confidence - it is a real filesystem access on an unconfined attacker-selected path.",
+          "evidence": [
+            "xhu.py:197 stat = data_file.stat()",
+            "xhu.py:190 head_file(path) - unauthenticated HEAD route",
+            "xhu.py:206 response.headers[\"Content-Length\"] = str(stat.st_size) - size disclosure",
+            "sinks.csv row 26: sink_candidate, file_stat, receiver data_file, match_kind ast"
+          ]
+        },
+        {
+          "id": "sink-027",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "pathlib.Path",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "pathlib"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 219
+          },
+          "rationale": "Base-path construction inside get_file: argument is operator-configured app.config[\"DATA_ROOT\"], not attacker-controlled. Excluded as none/FP.",
+          "evidence": [
+            "xhu.py:219 pathlib.Path(app.config[\"DATA_ROOT\"])",
+            "sinks.csv row 27: sink_candidate, path_ctor, match_kind api"
+          ]
+        },
+        {
+          "id": "sink-028",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "flask.send_file",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "package": "flask",
+            "module": "flask"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/xmpp-http-upload_vuln/xhu.py",
+            "line": 228
+          },
+          "rationale": "The framework file-read-into-HTTP-response call of the UNAUTHENTICATED GET route: argument 0 is str(data_file) = '<route-path>.data' derived from the route path via sanitized_join -> get_paths. Dangerous path position: argument 0. Containment rests solely on the lexical startswith guard (no '..' normalization), so a request path containing '../' makes the service read and return files OUTSIDE the declared DATA_ROOT, constrained to files whose names end in '.data' (suffix appended textually at :50). Highest-value pass-1 sink of this target. flask.make_response wrapping it is a response wrapper, not a file access (correctly not a candidate).",
+          "evidence": [
+            "xhu.py:228-230 response = flask.make_response(flask.send_file(str(data_file)))",
+            "xhu.py:50 data_file = pathlib.Path(str(base_path) + \".data\")",
+            "xhu.py:214-226 get_file(path) - unauthenticated GET route calling get_info",
+            "xhu.py:42-46 lexical-only containment guard",
+            "sinks.csv row 28: sink_candidate, file_serve, arg_index 0, match_kind api"
+          ]
+        }
+      ]
+    }
+  ]
+}

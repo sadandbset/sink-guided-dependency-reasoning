@@ -1,0 +1,155 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "streamlit-pathtraversal-pass1-20261023",
+    "generated_at": "2026-10-23T13:09:04Z",
+    "task": "对 ruleId=py/augur/streamlit/pass1-path-traversal 的正式 Pass 1 SARIF codeFlows 做独立 LLM 路径复核，并分析已知真实漏洞（commit 80d9979d5f4a00217743d607078a1d867fad8acf, CWE-22）是否被告警命中",
+    "language": "python",
+    "framework": "Tornado",
+    "project": "streamlit",
+    "pass_id": 1,
+    "focus": "Path Traversal",
+    "cwes": ["22", "23", "36", "73"],
+    "reviewer_model": "glm-5.3 (Claude Code CLI, 会话内独立复核)",
+    "inputs_reviewed": [
+      "iris/report/iris_report.md",
+      "iris/labels/labels.json",
+      "iris/report/query_generation_notes.md",
+      "iris/results/pass1.sarif（正式 SARIF，逐字段解析）",
+      "iris/queries/Pass1_PathTraversal.ql 与 iris/libraries/*.qll（只读，用于根因定位）",
+      "告警涉及的真实源码：streamlit_vuln/lib/streamlit/components/v1/components.py、lib/streamlit/server/server.py、extraction 探测所引用的 routes.py/upload_file_request_handler.py 等文件的相关片段（labels.json 证据行已在上一阶段逐条核对）"
+    ],
+    "independence_statement": [
+      "未读取 PyVul 真值文件、修复提交 diff 以外的漏洞/CVE 描述；源码树中存在 STREAMLIT-CVE-REPORT.md 与 STREAMLIT-VULNERABILITY-REPORT.md，本轮刻意未打开",
+      "未修改 SARIF、labels、正式查询与任何 iris/ 正式产物；诊断实验全部在 _diag/ 临时目录用副本完成",
+      "commit 80d9979 的 code_before/code_after 由用户在任务提示中提供，仅用于真实漏洞命中分析，未用于虚构正式告警"
+    ]
+  },
+
+  "sarif_review": {
+    "sarif_file": "results/pass1.sarif",
+    "runs": 1,
+    "tool_driver": "CodeQL",
+    "rule_ids_present": ["py/augur/streamlit/pass1-path-traversal"],
+    "invocation_execution_successful": true,
+    "formal_result_count": 0,
+    "formal_code_flows": 0,
+    "conclusion": "CodeQL 分析成功，但本轮没有命中正式路径穿越污点路径",
+    "notes": [
+      "SARIF 中仅注册了 pass1 单一规则，results 数组为空；iris_report.md 的 Finding Counts 表为空、TP/Candidate/FP 三个区块均为 'No findings'，与 SARIF 0 结果一致。",
+      "SARIF 携带大量 js/baseline/expected-extracted-files 工具执行通知（toolExecutionNotifications），它们不是 results，不构成任何告警，也未与 Pass 1 结果混淆。"
+    ]
+  },
+
+  "alert_triage": [],
+
+  "questionnaire": [
+    {
+      "question": "1. Source 是否来自实际可由攻击者控制的 URL 路径、路由参数、请求字段、文件名或其他输入？",
+      "verdict": "no_alert",
+      "answer": "正式告警数为 0，无可审 Source。背景核对（labels 层面，非正式结果）：Phase 1 标注的 11 个 source 中，src-012（ComponentRequestHandler.get 的 path 参数，components.py:310，/component/(.*) 路由捕获，server.py:391-395）确为完全攻击者可控的解码后 URL 路径；src-016/007/008/009/022 等亦是真实网络边界。该判断不产生本轮正式 TP。"
+    },
+    {
+      "question": "2. Source 是否真的能够到达文件访问路径参数（异步调用、包装、文件名变换有真实源码证据）？",
+      "verdict": "no_alert",
+      "answer": "正式结果中无任何污点路径。诊断性复核（不计入正式结果，见 root_cause_analysis）：源码中存在完整传播链 path.split('/')→parts[1:]→'/'.join→os.path.join(component_root, filename)→open(abspath,'rb')（components.py:311-325），全为同步直线代码，无异步/跨函数跳转，每一步都有真实源码行号；labels 与 query_generation_notes §4 对各步骤的核对与源码一致。"
+    },
+    {
+      "question": "3. Sink 是否真正执行读取、写入、删除、文件响应、归档落盘等敏感文件操作？",
+      "verdict": "no_alert",
+      "answer": "正式告警数为 0。核对确认正式查询的 Sink 集合只含真实文件操作（open/okenize.open/os.remove/os.makedirs/os.stat/shutil.rmtree/bind_unix_socket/render/glob/mkdtemp 的路径文本位置），os.path.join、Path 构造、纯拼接均被排除在 Sink 之外（MySinks.qll 注释与实现一致），符合'纯拼接不算 Sink'的要求。"
+    },
+    {
+      "question": "4. 项目声明/隐含的允许根目录、文件集合与访问权限是什么？受控输入能否指向其外？",
+      "verdict": "no_alert",
+      "answer": "无正式告警。就源码中唯一完整链路而言：隐含允许根是 ComponentRegistry 返回的 component_root（components.py:436-443，仅校验 parts[0] 组件名），受控的 parts[1:] 拼接后可直接以 '../' 越出该根，也可用前导 '/' 或 Windows 盘符使 os.path.join 返回绝对路径整体脱离 component_root——能指向根外。"
+    },
+    {
+      "question": "5. ..、绝对路径、URL/百分号解码、分隔符变化、重复解码与符号链接是否真实影响访问目标？",
+      "verdict": "no_alert",
+      "answer": "无正式告警可评。源码层面：路由正则 (.*) 无段约束，tornado 对捕获组做 unquote，%2e%2e%2f 与裸 ../ 均可到达 path；无 normpath/realpath 归一化，故不存在归一化后失效的问题；该路径的利用不依赖符号链接。"
+    },
+    {
+      "question": "6. 是否存在规范化后严格的根目录包含判断、固定映射、真实文件名白名单等防护？是否在实际访问之前？",
+      "verdict": "no_alert",
+      "answer": "无正式告警。源码 components.py:310-336 逐行核对：在 open(abspath) 之前不存在任何 containment（无 commonpath/relative_to/startswith/白名单/固定映射）；唯一的'校验'是对 parts[0] 的注册表查询，不影响 parts[1:]。"
+    },
+    {
+      "question": "7. 是否把 Path.resolve、normpath、startsWith 前缀或单纯登录鉴权误判为足够防护？",
+      "verdict": "no_alert",
+      "answer": "无正式告警，因而也不存在此类误判。labels/query 侧同样未把任何此类操作当 Barrier：MySanitizers 为空，clean_filename 被正确认定只作用于响应头文件名而非磁盘路径。"
+    },
+    {
+      "question": "8. 是否只是正常授权的静态文件服务、测试代码、不可达路径或固定常量，而非越权文件访问？",
+      "verdict": "no_alert",
+      "answer": "无正式告警。就真实链路而言它不是正常静态服务：ComponentRequestHandler 继承 RequestHandler 而非 StaticFileHandler，绕过了 tornado validate_absolute_path 的根约束；/component/(.*) 为无鉴权 GET（无 XSRF 要求），读到的文件内容直接 self.write 回给请求者（components.py:333）。"
+    },
+    {
+      "question": "9. 是否因过度泛化的 Source/Sink/summary、数据库覆盖问题或错误诊断路径导致假阳性？",
+      "verdict": "no_alert",
+      "answer": "本轮 0 告警，不存在假阳性。真正的问题是反向的：查询的范围谓词缺陷造成整体假阴性（0 结果），详见 root_cause_analysis。"
+    },
+    {
+      "question": "10. 是否把其他 CWE、CodeQL 自带基线或 SARIF 解析诊断混入 Pass 1 正式结果？",
+      "verdict": "no_alert",
+      "answer": "没有。SARIF 仅含 ruleId=py/augur/streamlit/pass1-path-traversal 的单一规则，results 为空；js/baseline/* 仅为执行通知；不存在其他 CWE 规则、CodeQL 内置查询结果或解析诊断混入。诊断查询结果也未写入正式产物。"
+    }
+  ],
+
+  "root_cause_analysis": {
+    "classification": "查询实现缺陷导致的假阴性（miss），非假阳性；非 Source/Sink/summary 建模错误",
+    "defect": "MySources.qll:186、MySinks.qll:213、MySummaries.qll:80 的 inLibStreamlit 使用 abs.matches(\"%.*/lib/streamlit/%\")。CodeQL string.matches() 是 SQL-LIKE 语义（仅 % 与 _ 是通配符，'.' 与 '*' 为字面字符），该模式要求路径中存在字面 '.*' 子串，因此匹配不到任何文件。",
+    "diagnostic_evidence": [
+      "只读诊断 A（_diag/scope_check.ql，LIKE 原式）：0 个文件匹配",
+      "只读诊断 B（_diag/scope_regex.ql，等价真 regex）：132 个 .py 文件匹配，含 lib/streamlit/components/v1/components.py",
+      "诊断 C（_diag/Pass1_diag.ql = 正式查询逐字副本，仅把三处 inLibStreamlit 的 matches 改为 regexpMatch，其余含 MySummaries 自定义边完全不变）：对同一数据库运行，返回恰好 1 条污点流 —— source=ComponentRequestHandler.get 的 path 参数（components.py:310）→ sink=open(abspath,'rb') 的 arg0（components.py:325），路径图 path→parts→filename→(AdditionalTaintStep: os.path.join)→abspath，与 query_generation_notes §6 的预测完全一致",
+      "正式查询本体如 SARIF 所示：编译通过、executionSuccessful=true、0 结果——与'范围谓词匹配空集 → isSource/isSink 全空 → flowPath 空'的推断吻合"
+    ],
+    "impact": "全部 11 个 source 节点与 10 类 sink 签名因范围谓词落空，正式 Pass 1 无任何告警输出；预测中的唯一正式 TP（src-012→sink-009）因此丢失。",
+    "status": "已定位但未修复（本轮禁止修改正式查询）；修复方向：将三处 matches 模式改为 regexpMatch(\"^.*/lib/streamlit/.+\") 或复用 extraction/sources.ql:47-52 的 relPath+regexpCapture 回退写法。诊断目录 _diag/ 保留为审计证据。"
+  },
+
+  "real_vulnerability_hit_analysis": {
+    "commit": "https://github.com/streamlit/streamlit/commit/80d9979d5f4a00217743d607078a1d867fad8acf",
+    "cwe": "CWE-22",
+    "vulnerable_function": "ComponentRequestHandler.get",
+    "vulnerable_location": "lib/streamlit/components/v1/components.py:310-336",
+    "vulnerability_exists_in_analyzed_source": {
+      "verified": true,
+      "evidence": [
+        "components.py:311-320: parts = path.split('/'); component_name=parts[0]; filename='/'.join(parts[1:]); abspath = os.path.join(component_root, filename) —— 与用户提供 code_before 逐行一致",
+        "components.py:314-317: 仅 parts[0] 经 get_component_path 做注册表校验",
+        "components.py:324-333: open(abspath,'rb') 后 self.write(contents) 将文件内容返回给请求者",
+        "components.py 全函数无 os.path.realpath/commonprefix（即修复 code_after 引入的防护在本源码中不存在）",
+        "server.py:391-395: /component/(.*) 路由注册到 ComponentRequestHandler，无鉴权"
+      ]
+    },
+    "hit_by_formal_alert": false,
+    "hit_verdict": "未命中（假阴性/miss）：正式 SARIF 0 条结果，真实存在的 CWE-22 漏洞没有任何告警覆盖",
+    "attack_path_reconstruction": {
+      "controllable_input": "URL 中 /component/<component_name>/ 之后的一切（路由捕获 (.*)，tornado 解码后进入 path 参数）",
+      "allowed_root": "ComponentRegistry.get_component_path(parts[0]) 返回的组件目录",
+      "traversal_mechanisms": ["裸 ../ 序列（parts[1:] 拼接保留）", "%2e%2e%2f 等百分号编码（tornado 对捕获组 unquote）", "前导 '/' 或 Windows 盘符使 os.path.join 丢弃 component_root 返回绝对路径", "符号链接（非必需，路径本身已无约束）"],
+      "barriers_before_open": "无（逐行核对 components.py:310-325，无 normpath/realpath/basename/startswith/commonpath/白名单/鉴权）",
+      "precondition": "服务器注册了至少一个基于文件路径的自定义组件（declare_component(path=...)），否则 get_component_path 返回 None 走 404（components.py:314-317）",
+      "impact": "任意文件读取（服务器日志、world-readable 文件等），与该 commit 描述的 CVE 影响一致"
+    },
+    "why_missed": {
+      "root_cause": "正式查询三处 inLibStreamlit 的 LIKE 模式 '%.*/lib/streamlit/%' 把 regex 语法 '.*' 写进了 LIKE 语义的 matches()，匹配空集 → source/sink 节点全部失效 → 0 结果",
+      "not_the_cause": [
+        "Source 建模：正确（src-012 覆盖该 path 参数）",
+        "Sink 建模：正确（builtinOpenPathSink 覆盖 components.py:325 的 open arg0）",
+        "污点步：正确（默认 split/subscript/join 步 + MySummaries 的 os.path.join arg→result 自定义边在诊断 C 中实际生效）",
+        "数据库覆盖：正常（132 个 lib/streamlit .py 文件均在库中）"
+      ],
+      "diagnostic_confirmation": "仅修复范围谓词、其余逐字不变的副本查询在同一数据库上恰好报出这 1 条 path→abspath 流且无其他结果——证明建模链条本身是完备且精准的，miss 完全归因于范围谓词缺陷"
+    },
+    "diagnostic_result_is_not_formal": "诊断 C 的结果仅为根因分析证据，不是 Augur 正式 TP，不得写入 pass1.sarif 或计入本轮结论；正式结论以 0 告警为准。"
+  },
+
+  "final_conclusion": {
+    "formal_pass1": "CodeQL 分析成功，但本轮没有命中正式路径穿越污点路径（SARIF 0 results，逐项复核 10 个问题均无正式告警可判，无 likely_tp / likely_fp / uncertain 个体裁决）",
+    "real_vulnerability_coverage": "commit 80d9979d 修复的 ComponentRequestHandler.get 目录穿越漏洞真实存在于被分析源码中，但未被任何正式告警命中（假阴性）。根因为正式查询 inLibStreamlit 范围谓词将 regex 语法误用于 matches() 的 LIKE 语义，导致全部 source/sink 失配；Source/Sink/污点步建模本身经诊断验证可精确命中该漏洞。",
+    "action_required_next_round": "修复三处 inLibStreamlit 谓词（MySources.qll:186 / MySinks.qll:213 / MySummaries.qll:80）并重跑 Step 5 后，预期正式结果为恰好 1 条 src-012→sink-009 路径（components.py:310→325）。"
+  }
+}

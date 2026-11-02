@@ -1,0 +1,222 @@
+{
+  "triage_run": {
+    "task": "独立 LLM 路径复核：Augur IRIS Pass 1 Path Traversal（CWE-22/23/36/73）正式 SARIF 结果",
+    "ruleId_reviewed": "py/augur/thefuck/pass1-path-traversal",
+    "sarif": "iris/results/pass1.sarif",
+    "source_tree": "dataset/codeql_databases/path_traversal_dbs/thefuck_vuln（thefuck 3.30，db 创建 sha 6da0bc55）",
+    "reviewer_model": "glm-5.3",
+    "reviewed_at": "2026-10-24",
+    "official_results_total": 13,
+    "verdict_counts": {"likely_tp": 4, "likely_fp": 9, "uncertain": 0},
+    "independence": "仅依据 pass1.sarif 的 codeFlows、真实源码与已审核标签 labels.json；未读取 PyVul 真值文件、CVE 描述或修复提交（用户在指令中提供的 commit 对照信息仅用于第二项命中分析，未访问任何外部真值源）。未修改 SARIF、标签与正式查询。"
+  },
+
+  "project_threat_model": {
+    "application": "thefuck 3.30 —— 本地交互式 CLI，修正上一条失败命令；别名捕获失败命令的 argv 与终端输出后重放/修正",
+    "attacker_model": [
+      "归档条目名（tar/zip entry name）：恶意归档创建者完全可控，归档位于用户 CWD 即可（CVE 场景）",
+      "失败命令的终端输出 command.output：含远程 SSH 端点/MITM 或被打印文件内容等攻击者可影响文本（thefuck 的核心不可信输入通道）",
+      "本地用户自身的 argv/环境变量（TF_HISTORY、HISTFILE、XDG_*、THEFUCK_OUTPUT_LOG、-l/--shell-logger 值）：单用户本地 CLI 信任级，非攻击者可控"
+    ],
+    "allowed_roots": "全库不存在任何受限根/包含性检查/文件名白名单（无 startswith(base)/realpath/relative_to/normpath）；dirty_untar/dirty_unzip 的删除路径、ssh_known_hosts 的读写路径均以 CWD 相对或绝对原样解释",
+    "sanitizers": "无。MySanitizers::isBarrier = none()；源码核实：expanduser 只做 ~ 展开、os.path.split 只做名字分离、generic.py:59 isfile 仅为可用性探测（check-then-use，非授权检查），均无阻断力"
+  },
+
+  "findings": [
+    {
+      "sarif_index": 0,
+      "location": "thefuck/rules/dirty_untar.py:42",
+      "sink_expr": "tarfile.TarFile(_tar_file(old_cmd.script_parts)[0])",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "source_evidence": "codeFlows 起点 fix_command.py:15/:17/:19（known_args.force_command/command、TF_HISTORY env）→ types.py:69/16（from_raw_script→Command.script 字段边）→ dirty_untar.py:42 old_cmd.script_parts 属性读取（p1-082 candidate）。链路真实，无虚构边。",
+      "sink_evidence": "arg0 = 归档路径文本，tarfile.TarFile 只读打开归档（读取元数据 getnames），非写入/删除/响应类敏感操作。",
+      "taint_flow": "CLI argv → Command.script → script_parts → _tar_file() 取 .tar 后缀词 → TarFile(path)",
+      "reasoning": "路径参数是用户自己敲入的失败命令 argv（authorized-by-use，标签 p1-082 自评 candidate）；打开为只读，攻击面在归档内容（entry 名）而非归档路径本身。同一语句的 :45 os.remove 才是真实 sink（见 finding 1）。此告警本身为过度保守的候选路径，非越权访问。",
+      "preconditions_for_tp": "仅当攻击者能控制 thefuck 的 argv/TF_HISTORY（超出发布威胁模型）时才成立。"
+    },
+    {
+      "sarif_index": 1,
+      "location": "thefuck/rules/dirty_untar.py:45",
+      "sink_expr": "os.remove(file)",
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "source_evidence": "首个 codeFlow：dirty_untar.py:43 archive.getnames()（p1-083，标签 tp，置信 0.95）→ :43 file（迭代解包）→ :45 os.remove 实参。短直链，无中间包装。",
+      "sink_evidence": "os.remove = 任意路径删除。tar entry 名可含 ../、绝对路径、混合分隔符，原样传入，CWD 相对解释（Windows 上 \\ / 均可）。",
+      "taint_flow": "恶意 tar 归档条目名 → getnames() → for file 迭代 → os.remove(file)",
+      "reachability": "side_effect 真实运行时可达：types.py:152/:197-199 将规则模块 side_effect 装入 CorrectedCommand，types.py:248-255 CorrectedCommand.run 在用户选择修正命令时调用 side_effect(old_cmd, script)，由 fix_command.py:46 触发。规则经 imp.load_source（types.py:144）动态加载，标签 summary 边 p1-377/p1-378 补偿了该动态缺口。",
+      "barrier_evidence": "无：:43-49 无任何 .. 拒绝/绝对路径检查/base 包含判断/白名单；except OSError 仅静默跳过目录删除失败，不限制路径。",
+      "preconditions": "用户在含恶意 tar 的目录运行失败的 tar 解压命令，thefuck 提示 undo 且用户确认 → CWD 外任意文件删除（arbitrary file deletion）。",
+      "reasoning": "源码与正式 codeFlow 完整证明：攻击者可控（归档创建者）→ 归档条目名 → 无校验 → os.remove。这正是 undo archive operation 任意文件删除漏洞本体。"
+    },
+    {
+      "sarif_index": 2,
+      "location": "thefuck/rules/dirty_unzip.py:9",
+      "sink_expr": "zipfile.ZipFile(file, 'r')  # _is_bad_zip 内",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "source_evidence": "codeFlows：dirty_unzip.py:20 command.script_parts（p1-085 candidate）→ :23/:33 _zip_file() → :35 zip_file → _is_bad_zip(file) → :9 ZipFile 实参；另有 fix_command CLI 长链同 finding 0。",
+      "sink_evidence": "arg0 = 用户 argv 指定的 .zip 路径，只读打开并仅取 namelist() 数量。",
+      "reasoning": "zip 路径是用户自己的命令词（authorized-by-use）；只读；namelist 仅做 len>1 判断。真实风险在 :49 的 os.remove（见 finding 4）。此告警是 match() 阶段的探测性打开，非越权。"
+    },
+    {
+      "sarif_index": 3,
+      "location": "thefuck/rules/dirty_unzip.py:46",
+      "sink_expr": "zipfile.ZipFile(_zip_file(old_cmd)[1→路径], 'r')  # side_effect 内",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "source_evidence": "codeFlows：dirty_unzip.py:20 command.script_parts（p1-085 candidate）→ :23 → :46 _zip_file() 实参；及 fix_command CLI 长链。",
+      "sink_evidence": "只读打开用户自选 zip 归档。",
+      "reasoning": "与 finding 0 同型：归档路径 authorized-by-use、打开只读；同一函数内 :47 namelist → :49 os.remove 才是攻击链（finding 4 已单独立为 tp）。"
+    },
+    {
+      "sarif_index": 4,
+      "location": "thefuck/rules/dirty_unzip.py:49",
+      "sink_expr": "os.remove(file)",
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "source_evidence": "首个 codeFlow：dirty_unzip.py:47 archive.namelist()（p1-086，标签 tp，置信 0.95）→ :47/:13 file 迭代 → :49 os.remove 实参。直链无包装。",
+      "sink_evidence": "os.remove = 任意路径删除；zip 条目名（../、绝对路径、NUL/分隔符变体）原样传入，CWD 相对解释。",
+      "taint_flow": "恶意 zip 归档条目名 → namelist() → for file 迭代 → os.remove(file)",
+      "reachability": "side_effect 经 types.py:197-199/:248-255 真实调用链可达（同 finding 1）。",
+      "barrier_evidence": "无：:47-53 无任何路径校验；except OSError 静默跳过失败不限制目标。",
+      "preconditions": "CWD 内恶意 zip + 用户运行失败的 unzip 并确认修正 → CWD 外任意文件删除。",
+      "reasoning": "与 finding 1 为同一漏洞的 zip 变体，正式 codeFlow 直接证明 entry-name → os.remove。"
+    },
+    {
+      "sarif_index": 5,
+      "location": "thefuck/shells/generic.py:60",
+      "sink_expr": "io.open(history_file_name, 'r', encoding='utf-8', errors='ignore')",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source_evidence": "codeFlows：bash.py:69 / tcsh.py:29 / zsh.py:74 os.environ.get('HISTFILE', expanduser('~/.<shell>_history'))（p1-021/p1-362/p1-410 candidate）→ generic.py:58 history_file_name → :60 io.open 实参。三条链路均为真实本地流。",
+      "sink_evidence": "只读打开 shell 历史文件。",
+      "barrier_evidence": "generic.py:59 os.path.isfile 是可用性探测（TOCTOU 形态但非授权检查）；无路径过滤。",
+      "reasoning": "源是用户自己 shell 导出的 HISTFILE（本地单用户信任级）；sink 只读。虽然环境变量形式上可含 ../ 或绝对路径，但控制者即文件属主本人，无越权受害方。属正常授权的本地历史读取。"
+    },
+    {
+      "sarif_index": 6,
+      "location": "thefuck/output_readers/read_log.py:93",
+      "sink_expr": "os.open(os.environ['THEFUCK_OUTPUT_LOG'], os.O_RDONLY)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "note": "本条 SARIF result 未携带 codeFlows（source 为同表达式内 :93 的 os.environ 下标读取，零长度路径未展开）。",
+      "source_evidence": "THEFUCK_OUTPUT_LOG 环境变量（p1-337/p1-339 candidate），由 thefuck 自己的 alias 导出（instant 模式日志路径）。",
+      "sink_evidence": "os.O_RDONLY 只读打开 + mmap PROT_READ，仅用于读取失败命令输出日志。",
+      "reasoning": "路径由 thefuck 自身 alias 生成并导出到同一用户会话环境，非攻击者可控；且为只读。属设计内行为。"
+    },
+    {
+      "sarif_index": 7,
+      "location": "thefuck/entrypoints/shell_logger.py:74",
+      "sink_expr": "os.open(output, os.O_CREAT | os.O_TRUNC | os.O_RDWR)",
+      "verdict": "likely_fp",
+      "confidence": 0.75,
+      "source_evidence": "codeFlows：main.py:38 known_args.shell_logger（p1-260 candidate，argparse -l/--shell-logger 值）→ shell_logger.py:64 output 形参（p1-349）→ :74 os.open 实参。CLI→entrypoint 形参直传，链路真实。",
+      "sink_evidence": "O_CREAT|O_TRUNC 创建/截断写入（mmap PROT_WRITE 记录 shell 输出）——形式上是破坏性 sink。",
+      "barrier_evidence": "无路径校验，但无需：该功能的文档语义即类 unix script 命令，用户显式指定输出文件。",
+      "reasoning": "值由本地用户自己在命令行给出（authorized-by-use）；功能按设计截断指定日志文件。附注：该模块 import fcntl/pty（Linux/macOS 专属），Windows 上 main.py:33-38 捕获 ImportError 不可达——但即使可达也属用户自授权行为。非越权文件访问。"
+    },
+    {
+      "sarif_index": 8,
+      "location": "thefuck/rules/ssh_known_hosts.py:33",
+      "sink_expr": "open(filepath, 'r')",
+      "verdict": "likely_tp",
+      "confidence": 0.7,
+      "source_evidence": "codeFlows：ssh_known_hosts.py:31 old_cmd.output（p1-352，标签 tp）→ :31 offending_pattern.findall 结果（re 标准库摘要感染，Stdlib.qll 已建模）→ :32 元组解包 filepath → :33 open 实参。四条变体 codeFlow（List element/IterableSequence/Tuple element）均为同一真实流的迭代解包展开，无虚构边。",
+      "sink_evidence": "open(path,'r') + readlines：任意路径读取；读取内容供 :35 删行、:36 回写（与 finding 9 构成读-改-写链）。",
+      "taint_flow": "失败命令终端输出（可含恶意 SSH 远端/MITM 打印的 'Offending key for IP in <path>:<n>' 伪行）→ 正则 ([^:]+) 捕获（接受绝对路径与 ../）→ filepath → open(filepath)",
+      "reachability": "side_effect 真实调用链可达（types.py:248-255）；match() 闸门（:14-20 警告模式）所需文本同样可由远端输出伪造。",
+      "barrier_evidence": "无：无路径校验、无 base 限制；正则 ([^:]+) 不排除绝对路径或 ..。",
+      "preconditions": "攻击者需使 command.output 出现匹配串（恶意 SSH 端点/中间人输出，或任何打印攻击者可控内容的失败命令），且用户确认该修正。C 盘/任意本地文件被读取并（配合 :36）篡改一行。",
+      "reasoning": "old_cmd.output 是本工具明确不可信的核心通道（标签 p1-352 tp）；无任何校验直达 open。作为独立告警是任意文件读（泄漏通道间接：读取行被删后回写，配合 :36 才是完整危害），判定 likely_tp，置信中等（依赖输出可伪造成 match 闸门 + side_effect 双条件）。"
+    },
+    {
+      "sarif_index": 9,
+      "location": "thefuck/rules/ssh_known_hosts.py:36",
+      "sink_expr": "open(filepath, 'w')",
+      "verdict": "likely_tp",
+      "confidence": 0.7,
+      "source_evidence": "同 finding 8 的四条 codeFlow，终点为 :36 open(filepath,'w') 实参（p1-502 标签 tp）。",
+      "sink_evidence": "open(path,'w') + writelines：任意路径改写（删除第 N 行后整体回写）——写敏感操作成立。",
+      "taint_flow": "old_cmd.output → findall 捕获 filepath → :33 读原内容 → :35 del lines[int(lineno)-1] → :36 以 'w' 截断重写同一路径。",
+      "barrier_evidence": "无。int(lineno) 仅是行号解析，非路径约束。",
+      "preconditions": "同 finding 8；效果为攻击者指定路径 + 指定行号的删除式篡改（如删除 authorized_keys/known_hosts/shell 配置中的关键行）。",
+      "reasoning": "污点流与破坏性 sink 均有真实源码证据，无校验。判定 likely_tp，置信中等（前置条件同 finding 8）。"
+    },
+    {
+      "sarif_index": 10,
+      "location": "thefuck/utils.py:217",
+      "sink_expr": "shelve.open(cache_path)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source_evidence": "codeFlow：utils.py:228 os.getenv('XDG_CACHE_HOME', expanduser('~/.cache'))（p1-390 candidate）→ :238 cache_dir → :213 → :214 Path(cache_dir).joinpath('thefuck').as_posix() → :217 cache_path 实参。链路真实。",
+      "sink_evidence": "shelve/dbm 缓存打开或创建于 <env>/thefuck。",
+      "reasoning": "XDG_CACHE_HOME 是用户自己的环境变量（本地单用户信任级）；文件名为固定字面量 'thefuck'。路径若越界，越界者与受害者同为用户本人。属正常配置驱动的缓存初始化。"
+    },
+    {
+      "sarif_index": 11,
+      "location": "thefuck/utils.py:222",
+      "sink_expr": "os.remove(cache_path)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source_evidence": "同 finding 10 的 codeFlow，终点 :222 os.remove(cache_path)。",
+      "sink_evidence": "删除 db 缓存文件（固定名 thefuck），仅在 shelve 打开失败（Python 版本切换）的异常分支执行。",
+      "reasoning": "同 finding 10：env 来源本地用户、文件名固定、路径单一。删除的是工具自己的缓存文件。非攻击者可控目标。"
+    },
+    {
+      "sarif_index": 12,
+      "location": "thefuck/utils.py:233",
+      "sink_expr": "os.makedirs(cache_dir)",
+      "verdict": "likely_fp",
+      "confidence": 0.9,
+      "source_evidence": "codeFlow：utils.py:228 XDG_CACHE_HOME（p1-390 candidate）→ :233 makedirs 实参。",
+      "sink_evidence": "目录创建（无覆盖/删除语义，exist_ok 风格的 OSError 容忍）。",
+      "reasoning": "环境来源为本地用户自身；makedirs 是非破坏性操作。典型配置驱动目录创建，无越权受害方。"
+    }
+  ],
+
+  "review_questions_summary": {
+    "q1_source_attacker_control": "攻击者可控源仅两类：归档条目名（finding 1/4，恶意归档创建者）与失败命令终端输出（finding 8/9，远程端点/被打印内容可影响）。其余 9 条的源为本地用户自身的 argv/env/CLI 值（TF_HISTORY、HISTFILE、XDG_*、THEFUCK_OUTPUT_LOG、-l 值、command.script_parts 自选归档路径），单用户本地 CLI 下不构成攻击者控制。",
+    "q2_source_reaches_path_arg": "全部 13 条的 codeFlow 均经真实源码节点验证：CLI→Command.script→script_parts 依赖标签审核过的字段 store→load 边（types.py:23/:37-46，规则经 imp.load_source 动态加载的缺口由 summary 边 p1-377/p1-378 补偿，端点均为具体节点）；findall 感染由 stdlib re 摘要原生覆盖；for-迭代/元组解包由本地流步骤展开（finding 8/9 的四条变体 codeFlow 是同一流的合法展开）。唯一例外：result 6（read_log.py:93）SARIF 未带 codeFlow，但 source 与 sink 同表达式（:93 os.environ 下标），流平凡成立。",
+    "q3_real_sensitive_sink": "成立：finding 1/4 os.remove=删除；finding 8 open 'r'=读取（配合 :35-36 构成改写）；finding 9 open 'w'=截断改写。不成立的 8 条：TarFile/ZipFile 只读归档打开（0/2/3）、io.open 'r'/os.open O_RDONLY 只读（5/6）、makedirs 非破坏性（12）虽为真文件操作但非敏感破坏；finding 7 O_CREAT|O_TRUNC 形式敏感但为功能设计语义（authorized-by-use）。",
+    "q4_allowed_roots": "项目不存在声明或隐含的受限根。受控输入（归档条目名、输出正则捕获）可指向任意绝对/相对路径，含 CWD 之外。无固定文件集合（对比：not_configured.py 的 tempdir 字面量固定名、utils.py:214 固定名 'thefuck' 属于事实上不受控的固定路径）。",
+    "q5_traversal_vectors": "真实影响：../ 与绝对路径原样进入 os.remove/open（tar/zip 条目名、([^:]+) 捕获），CWD 相对解释，无拒绝逻辑。URL/百分号解码不适用（无 web 面，无解码代码）。符号链接：全库无 symlink 创建/readlink/跟随处理。分隔符变体：Windows 数据库上 \\/ 均被 OS 接受。重复解码不适用。",
+    "q6_guards": "不存在。无规范化后 base 包含判断、无固定映射、无可生效白名单。唯一前置检查是可用性探测（generic.py:59 isfile、read_log 无、conf.py:38 isfile），均发生于访问之前但属 check-then-use，不授权也不阻断路径选择。except OSError 的静默跳过（dirty_* :46/:50）限制的是删除失败处理，不限制目标路径。",
+    "q7_misjudged_barriers": "未发现此类误判：全库无 Path.resolve/normpath/startsWith；本项目根本不存在这些检查（MySanitizers 为 none()）。也无登录鉴权可误判。注：修复提交（用户指令中提供）补的是 abspath().startswith(os.getcwd()) 前缀判断——复核的漏洞版本中该检查不存在，符合'前缀判断非足够防护'的警示（前缀判断本身可被同级前缀绕过），但本轮结论不依赖该修复信息。",
+    "q8_benign_by_design": "9 条 likely_fp 中：5/6/10/11/12 是正常授权的本地文件访问（历史读取、日志读取、缓存初始化）；0/2/3 是用户自选归档的只读探测（authorized-by-use）；7 是功能设计语义内的 CLI 指定日志截断。均非测试代码或不可达路径（shell_logger 在 Windows 不可达，但判定 fp 的主因是信任模型而非不可达性）。",
+    "q9_overgeneralization_fp": "是——4 条 likely_tp 以外的 9 条源于 pass1 污点模型的保守召回设计（21 个本地信任 candidate 源全部渲染，交由 Step 6 triage 裁决）：过宽的 env/CLI source 分类 + 归档打开/缓存初始化类 sink 使 authorized-by-use 流入告警。summary 文本本身准确（未声称不存在的位置）。数据库覆盖无问题：13 条告警的行号/列号与源码逐一核对一致。result 6 缺 codeFlow 是 SARIF 展示限制而非覆盖问题。",
+    "q10_contamination": "无混入。SARIF 仅含一个 run、一个 rule（py/augur/thefuck/pass1-path-traversal），13 条 results 全部为该 ruleId；无 diagnostics 查询结果（iris/diagnostics/ 为空）、无 CodeQL 内置基线查询（如 py/path-injection）结果、无其他 CWE 混入。iris_report.md 中 13 条候选与此 13 条一一对应。"
+  },
+
+  "ground_truth_hit_analysis": {
+    "task": "复核用户提供的真实漏洞（commit e343c577cd7da4d304b837d4a07ab4df1e023092，CWE-22，'Fix possible changes in files outside of working directory (#1206)'）是否被本轮正式 Pass 1 告警命中",
+    "vulnerable_functions": [
+      {
+        "function": "side_effect (thefuck/rules/dirty_untar.py:41-49)",
+        "vulnerable_code_verified_in_source": "for file in archive.getnames(): try: os.remove(file) except OSError: pass —— 与 commit 的 code_before 逐字一致（无 abspath/startswith 守卫），已在分析的 thefuck_vuln 源码树中核实",
+        "hit": true,
+        "hit_by": "SARIF result 1（dirty_untar.py:45，os.remove(file)），codeFlow 起点 :43 archive.getnames()（归档条目名源）直达 sink",
+        "match_quality": "精确命中：告警行号 45 即漏洞删除语句所在行；source（entry name）→ sink（os.remove）与漏洞机理完全对应"
+      },
+      {
+        "function": "side_effect (thefuck/rules/dirty_unzip.py:45-53)",
+        "vulnerable_code_verified_in_source": "for file in archive.namelist(): try: os.remove(file) except OSError: pass —— 与 commit 的 code_before 逐字一致，已在源码树核实",
+        "hit": true,
+        "hit_by": "SARIF result 4（dirty_unzip.py:49，os.remove(file)），codeFlow 起点 :47 archive.namelist() 直达 sink",
+        "match_quality": "精确命中：行号 49 即漏洞删除语句"
+      }
+    ],
+    "adjacent_alerts_on_same_feature": [
+      "result 0（dirty_untar.py:42 TarFile 打开）与 result 3（dirty_unzip.py:46 ZipFile 打开）：同一 side_effect 内的归档打开语句，源为用户 argv（candidate 级），指向漏洞函数但非漏洞删除语句本身",
+      "result 2（dirty_unzip.py:9 _is_bad_zip 的 ZipFile 打开）：match 阶段探测路径，非漏洞函数本体"
+    ],
+    "conclusion": "真实漏洞（undo archive operation 任意文件删除，CWE-22）的两个 side_effect 函数均被本轮正式 Pass 1 告警精确命中：tar 变体命中 result 1（dirty_untar.py:45），zip 变体命中 result 4（dirty_unzip.py:49），且两者的正式 codeFlow 均直接以归档条目名（getnames/namelist）为 source、以 os.remove 为 sink，与漏洞数据流一致。攻击链要件（恶意归档在 CWD、无路径校验、用户确认修正触发 side_effect）全部有源码证据。检出该漏洞不需要依赖项目名称或历史公告。",
+    "detection_gaps": "无核心缺口。附带观察：IRIS 自动启发式（iris_report.md）将全部 13 条留为 candidate、0 条自动晋升 tp——真实漏洞依赖本轮人工/LLM triage 才获 likely_tp 判定。"
+  },
+
+  "conclusion": {
+    "codeql_run": "CodeQL 分析成功，本轮命中 13 条正式路径穿越污点路径（ruleId = py/augur/thefuck/pass1-path-traversal）。",
+    "triage": "4 likely_tp：dirty_untar.py:45、dirty_unzip.py:49（归档条目名→os.remove，任意文件删除，高置信）与 ssh_known_hosts.py:33/:36（失败命令输出→正则捕获→open 读/改写，任意文件读改，中置信）。9 likely_fp：本地用户自身 argv/env 驱动的授权访问（归档只读打开、历史/日志只读、缓存初始化、CLI 指定日志截断）。",
+    "ground_truth_coverage": "用户指定真实漏洞（commit e343c577 的两个 side_effect 任意文件删除）全部被正式告警精确命中。"
+  }
+}

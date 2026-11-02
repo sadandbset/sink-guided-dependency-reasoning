@@ -1,0 +1,185 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-23",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\thefuck\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round per the task contract) against the thefuck_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database thefuck-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded thefuck-db. The database sourceLocationPrefix matches the explored tree (creation sha 6da0bc55). thefuck is a pure CLI tool (a shell-command corrector): there is NO web/routing/static-file/request surface at all. The untrusted boundaries are (a) the failed command's SCRIPT + TERMINAL OUTPUT (what the tool reads and rewrites), (b) the argparse CLI of the `thefuck`/`fuck` commands, (c) the process environment (XDG_*/HISTFILE/THEFUCK_OUTPUT_LOG/SHELL_LOGGER_SOCKET/PATH/PS1/TF_HISTORY/EDITOR/THEFUCK_* settings), and (d) archive entry names in the dirty_untar/dirty_unzip side effects."
+  },
+  "target": {
+    "project": "thefuck 3.30 (setup.py:34 VERSION = '3.30'; six/imp/py2-era code, database creation sha 6da0bc557f0fd94ea1397d3a7f508be896cc98d8) - 'Magnificent app which corrects your previous console command'. Entry points (setup.py entry_points): thefuck = thefuck.entrypoints.main:main, fuck = thefuck.entrypoints.not_configured:main. Runtime shape: the shell alias runs `thefuck $(fc -ln -1)` with TF_HISTORY/TF_SHELL/TF_ALIAS env exported; entrypoints/main.py parses argv (argument_parser.Parser with --shell-logger/-l, --force-command, --command words), dispatches to fix_command (reads TF_HISTORY env or CLI command words, builds types.Command.from_raw_script whose output comes from output_readers: rerun.py (re-executes the failed command), read_log.py (reads the THEFUCK_OUTPUT_LOG mmap written by entrypoints/shell_logger.py), or shell_logger.py (connects to the SHELL_LOGGER_SOCKET unix socket)); settings are merged from settings.py in the user dir + THEFUCK_* env + CLI flags (conf.py); corrector.get_rules globs *.py from thefuck/rules, user_dir/rules (XDG_CONFIG_HOME/thefuck) and sys.path/thefuck_contrib_* packages and loads each via types.Rule.from_path -> imp.load_source; matching rules may return a corrected command string and an optional side_effect executed on selection (types.CorrectedCommand.run). Filesystem-relevant channels: entrypoints/shell_logger.py:74 os.open(output, O_CREAT|O_TRUNC|O_RDWR) on the CLI -l value; read_log.py:93 os.open(os.environ['THEFUCK_OUTPUT_LOG']) plus os.path.getsize at :65; shells/generic.py:60 io.open(history_file_name) where history_file_name = os.environ.get('HISTFILE', ~/.bash_history) (bash.py:69, zsh.py:74, tcsh.py:29); conf.py user_dir = Path(os.environ.get('XDG_CONFIG_HOME', '~/.config'), 'thefuck') -> joinpath('settings.py').open('w') (:39), joinpath('rules').mkdir (:64) and imp.load_source of settings.py (:69); utils.py Cache: os.getenv('XDG_CACHE_HOME') -> os.makedirs (:233), shelve.open (:217/:222), os.remove (:221), os.path.getmtime of cache depends_on paths (:242), and PATH walking with os.path.join + isfile/access (:64-66) / Path(path).iterdir() (:125-127); not_configured.py tracker file under gettempdir() (open 'w'/:42, exists/:58, open 'r'/:62) and shell-config Path(configuration_details.path).open('r'/'a') (:77-:88); dirty_untar.py side_effect tarfile.TarFile(...).getnames() -> os.remove(file) per entry name (:42-:45); dirty_unzip.py side_effect zipfile.ZipFile(...).namelist() -> os.remove(file) (:46-:49); ssh_known_hosts.py side_effect open(filepath, 'r'/'w') where filepath is regex-extracted from the failed command's output (:31-:36); a dozen rules stat command-derived paths (os.path.isfile/isdir/exists/access, Path(...).exists()/is_dir(), os.listdir, os.getcwd in cd_correction).",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\thefuck_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (thefuck-db/codeql-database.yml, baselineLinesOfCode 12160, columnKind utf32)",
+      "the whole package is .py: thefuck/ (core + 163 rule modules under thefuck/rules/ + shells/ + entrypoints/ + output_readers/ + specific/ + system/) plus tests/ and root packaging scripts (setup.py, release.py, fastentrypoints.py)",
+      "setup.py setuptools packaging with console_scripts entry points; requirements: psutil, colorama, six, decorator, pyte"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\thefuck_vuln\\thefuck-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\thefuck_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "6da0bc557f0fd94ea1397d3a7f508be896cc98d8",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T04:00:40.971797800Z"
+    },
+    "baselineLinesOfCode": 12160,
+    "finalised": true,
+    "locationNote": "thefuck-db is nested inside the source tree; it was excluded from all exploration and is excluded from extraction result rows via the path filter in both queries (excludedPath matches %/thefuck-db/%). The database snapshot also covers tests/ and the root packaging scripts; both queries filter /tests/ and /thefuck-db/. Root dev scripts (release.py:12/:24 open('setup.py') literals, fastentrypoints.py:90-102 os.path.join+open with packaging arguments, setup.py:17 os.environ.get('CONVERT_README')) are outside thefuck/ and produce no rows by construction; they are documented in excludedCandidates instead."
+  },
+  "toolchain": {
+    "qlpack": "iris/thefuck-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (local `codeql version` output; database created with cliVersion 2.25.1)",
+    "compatibilityBasis": "The two queries reuse the structural shapes already proven against this same CLI + python-all 7.1.2 pack family in earlier projects of this series (the py7zr round ran and decoded them successfully): AstNode.getLocation().getFile(): File + Location.getStartLine() (Location API - AstNode.getFile() does not exist), Call.getFunc(), Attribute.getName()/getObject(), Name.getId(), StringLiteral.getText() (Exprs.qll:557 - returns the unquoted value), Subscript.getObject()/getIndex() (Exprs.qll:98 region), Function.getArgByName(string)/getName()/getEnclosingScope(), Parameter.getPosition(), Class.getName(), Scope.getEnclosingModule()/Module.getName()/Module.getFile().getShortName(), bindingset[string] predicates for path filtering. Pitfalls avoided: no `module` variable (moduleHint used), no AstNode.getFile(), no unbound `this` or class without a valid supertype (no QL classes are defined at all), no API::Node-to-DataFlow::Node assignment, no StrConst, no Decorator class, no {{...}} placeholders left, every variable bound through a positive body. NOTE: no compile check was run this round because the task contract forbids executing CodeQL in this step; compile/run validation is deferred to the execution round."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        { "name": "flask", "confidence": 0.0, "evidence": ["no flask import anywhere in the tree - references/flask.md was not loaded"] },
+        { "name": "django", "confidence": 0.0, "evidence": ["no django import - references/django.md was not loaded"] },
+        { "name": "fastapi", "confidence": 0.0, "evidence": ["no fastapi import - references/fastapi.md was not loaded"] },
+        { "name": "argparse CLI (console_scripts entries, not a web framework)", "confidence": 1.0, "evidence": ["import/package +0.45 equivalent: setup.py entry_points console_scripts thefuck = thefuck.entrypoints.main:main and fuck = thefuck.entrypoints.not_configured:main; thefuck/argument_parser.py imports argparse (:2) and builds ArgumentParser with --shell-logger/-l, --force-command, --command words (:19-52)", "runtime/bootstrap +0.20 equivalent: entrypoints/main.py:18 parser.parse(sys.argv) -> argument_parser.py:86 self._parser.parse_args(arguments) (reads sys.argv when invoked by the shell alias); dispatch on known_args.shell_logger at main.py:32/:38 and fix_command(known_args) at main.py:31"], "kind": "cli-boundary" },
+        { "name": "shell-alias runtime (bash/zsh/fish/tcsh/powershell adapters, not a web framework)", "confidence": 1.0, "evidence": ["thefuck/shells/{bash,zsh,fish,tcsh,powershell,generic}.py implement the shell integration (app_alias exports TF_HISTORY/TF_SHELL/TF_ALIAS into the environment, thefuck runs and prints a corrected command that the shell evals); the shells/ package supplies HISTFILE-based history reading (bash.py:69, zsh.py:74, tcsh.py:29) and fish history append (fish.py:124)"], "kind": "shell-integration" }
+      ]
+    },
+    "selected": "none (no web framework - the audit target is a standalone CLI tool; the only external input boundaries are the failed shell command's script+output, the argparse CLI, the process environment, and archive contents consumed by two rule side effects)",
+    "notes": "No framework reference was loaded: no web framework import evidence exists in the tree (references/flask.md / django.md / fastapi.md exist in the Augur installation but match nothing here). references/python.md and references/patterns.md were loaded: python.md Pass 1 sink cues (open/Path/os.path/shutil, archive extraction destination handling) map onto the os.open/io.open/open/shelve.open family, the Path/os.path pipeline, and the tar/zip entry-name consumption in dirty_untar/dirty_unzip; its source cues (handler parameters, parser/deserializer entrypoints, CLI args in service-mode tools, env vars in security-sensitive flows) map onto the CLI/env/command boundaries inventoried below; its sanitizer cues (canonicalize + base containment, explicit '..' rejection, basename-only) have NO counterpart in thefuck - no base-directory containment, no '..' rejection, and no canonicalization guard exists anywhere on the paths opened/removed (guardAndTraversalEvidence below). patterns.md Pass 1 sink families (file open/read/write APIs with user-controlled path, resource loader methods taking path strings) map onto shell_logger/read_log/generic/ssh_known_hosts opens and the imp.load_source rule loader. No routing, request, upload, multipart, static-file or file-response functionality exists in this project - none was assumed."
+  },
+  "inputBoundaryInventory": {
+    "summary": "The audit target is an interactive CLI tool, so the untrusted-input boundary is NOT HTTP. Boundaries, in descending relevance: (1) the FAILED COMMAND'S SCRIPT + TERMINAL OUTPUT - the payload the tool exists to process: _get_raw_command (entrypoints/fix_command.py:13-26) takes known_args.force_command/known_args.command (CLI words) or os.environ['TF_HISTORY'] (the shell alias exports the last 10 history lines); types.Command.from_raw_script (:69-83) builds script + output where output comes from output_readers (rerun re-execution, the THEFUCK_OUTPUT_LOG mmap of the previous command's terminal, or the SHELL_LOGGER_SOCKET unix socket); rules then read command.output (257 attribute reads across thefuck/rules/) and command.script_parts (117 reads) - paths extracted from these feeds reach os.path.isfile/isdir/exists/access (fix_file.py:52, git_add.py:13 via regex over command.output, cat_dir.py:9, chmod_x.py:8/:10, has_exists_script.py:7, ln_s_order.py:8, grep_arguments_order.py:7, prove_recursively.py:13), open(filepath) read+write (ssh_known_hosts.py:31-36), os.remove per archive entry name (dirty_untar.py:45, dirty_unzip.py:49 - the entry names come from tar/zip archives named ON THE COMMAND LINE, i.e. command.script_parts-derived archive paths whose CONTENT is fully attacker-controlled when a malicious archive is placed in the working directory), and os.listdir/os.path.join spell-correction (cd_correction.py:16/:58 over command.script_parts[1]); (2) the argparse CLI boundary: argument_parser.py:86 self._parser.parse_args(arguments) (sys.argv when run via the alias), known_args.shell_logger (main.py:32/:38) - the -l/--shell-logger VALUE is opened directly with O_CREAT|O_TRUNC|O_RDWR at entrypoints/shell_logger.py:74, known_args.force_command/known_args.command (fix_command.py:14/:17); (3) the process environment (set by the user's shell, the alias, or a wrapper that pipes untrusted data): XDG_CONFIG_HOME (conf.py:46 -> user_dir -> settings.py write/open + rules/ mkdir + imp.load_source), XDG_CACHE_HOME (utils.py:228 -> os.makedirs :233, shelve.open :217/:222, os.remove :221), HISTFILE (bash.py:69/zsh.py:74/tcsh.py:29 -> io.open read at generic.py:60, fish open append at fish.py:124 via its own fixed path), THEFUCK_OUTPUT_LOG (read_log.py:65/:93 -> os.path.getsize/os.open), SHELL_LOGGER_SOCKET (output_readers/shell_logger.py:13 -> os.path.exists :26, socket.connect :31), PATH (utils.py:64/:125 -> os.path.join+isfile/access and Path(path).iterdir), PS1/TF_HISTORY/EDITOR and the generic os.environ[env] THEFUCK_* settings read (conf.py:93) as content inputs, TRUST NOTE: these are local-user environment values - the same 'real process-input boundary, local trust level' decision as the py7zr CLI; they are emitted for labeling, not auto-assumed attacker-controlled; (4) filesystem-side content boundaries: tar/zip archive entry names (dirty_untar.py:43 getnames(), dirty_unzip.py:10/:47 namelist()) and rule modules/settings.py loaded by imp.load_source (types.py:144, conf.py:69) from glob'd directories (corrector.py:29-47, including sys.path thefuck_contrib_* packages and the XDG user rules dir - THEFUCK_RULES env controls which names are enabled via settings.rules). NOT attacker-controlled and NOT emitted: the shell-config paths from how_to_configure (literal '~/.bashrc', '~/.zshrc', '~/.config/fish/config.fish', '~/.tcshrc' in bash.py:76-84/zsh:86-88/fish.py:105-109/tcsh:41-43 - operator-owned files; their .open('r'/'a') at not_configured.py:78/:85 are still emitted as SINK rows), the gettempdir() tracker filename (not_configured.py:31, contains getpass.getuser()+uuid-free pid - TMPDIR-derived, sink rows emitted), os.devnull (utils.py:15 literal, sink row emitted, expected FP), '~/.virtualenvs' (workon_doesnt_exists.py:8 literal), brew prefix from `brew --prefix` subprocess (specific/brew.py:12 - local tool output; brew rule stat rows still emitted).",
+    "sourceFamilies": [
+      "env_path (environment variables whose VALUE is a filesystem path): os.environ.get('XDG_CONFIG_HOME') conf.py:46, os.environ.get('HISTFILE') bash.py:69 / zsh.py:74 / tcsh.py:29, os.environ['THEFUCK_OUTPUT_LOG'] read_log.py:65 / :93, os.environ.get(const.SHELL_LOGGER_SOCKET_ENV) output_readers/shell_logger.py:13, os.getenv('XDG_CACHE_HOME') utils.py:228, os.environ['PATH'] utils.py:64 and os.environ.get('PATH') utils.py:125",
+      "env_content (environment variables whose value is command/content input): os.environ['PS1'] read_log.py:16 and os.environ.get('PS1') read_log.py:85, os.environ.get('TF_HISTORY') fix_command.py:16 and os.environ['TF_HISTORY'] fix_command.py:19, os.environ['EDITOR'] fix_file.py:71/:76, the generic os.environ[env] THEFUCK_* settings read conf.py:93",
+      "cli (argparse boundary): self._parser.parse_args(arguments) argument_parser.py:86, known_args.shell_logger attribute reads entrypoints/main.py:32/:38, known_args.force_command / known_args.command fix_command.py:14/:17 (plus known_args.command read at main.py:30)",
+      "param (process-boundary function parameters): entrypoints/shell_logger.py:64 shell_logger(output) pos 0 (THE -l value), entrypoints/fix_command.py:29 fix_command(known_args) pos 0, types.py:16 Command.__init__(self, script, output) pos 1/2, types.py:69 from_raw_script(cls, raw_script) pos 1, types.py:131 Rule.from_path(cls, path) pos 1, corrector.py:8 get_loaded_rules(rules_paths) pos 0, conf.py:17 Settings.init(self, args) pos 1, utils.py:240 Cache._get_mtime(self, path) pos 1",
+      "command_output (the failed command's terminal output - the tool's dominant untrusted payload): command.output / old_cmd.output / cmd.output attribute reads across thefuck/rules/ (257 reads; the path-deriving subset includes fix_file.py:60/:66 -> _search regex group 'file' -> os.path.isfile :52, git_add.py:12 -> pathspec regex -> Path(pathspec).exists() :13, ssh_known_hosts.py:31 -> offending regex -> open(filepath) :33/:36, path_from_history.py:18 -> destination regex, no_such_file.py:24, cd_correction.py:19-21)",
+      "command_script (the failed command's argv): command.script_parts / old_cmd.script_parts / cmd.script_parts attribute reads across thefuck/rules/ (117 reads; the file-op-feeding subset includes cd_correction.py:40, cat_dir.py:9, chmod_x.py:8/:10, has_exists_script.py:7, grep_arguments_order.py:17/:24, ln_s_order.py:15/:20, prove_recursively.py:21/:25, dirty_untar.py:32/:36/:42, dirty_unzip.py:20)",
+      "archive_entry_name (tar/zip entry names): archive.getnames() dirty_untar.py:43, archive.namelist() dirty_unzip.py:10 / :47 - consumed by os.remove(file) at dirty_untar.py:45 / dirty_unzip.py:49 with NO validation of '..', absolute paths, or separators"
+    ],
+    "sinkFamilies": [
+      "file_open: os.open(output, O_CREAT|O_TRUNC|O_RDWR) entrypoints/shell_logger.py:74 (arg 0 = the CLI -l value - THE create/truncate sink) and os.open(os.environ['THEFUCK_OUTPUT_LOG'], O_RDONLY) read_log.py:93 (arg 0 = env path); io.open(history_file_name, 'r') shells/generic.py:60 (arg 0 = HISTFILE env); builtin open() calls: fish.py:124 (append to the fish history file), ssh_known_hosts.py:33 (read) / :36 (write - the path is regex-extracted from the failed command's output), utils.py:15 (os.devnull literal, expected FP); shelve.open(cache_path) utils.py:217/:222 (arg 0 = XDG_CACHE_HOME-derived); pathlib .open member calls: conf.py:39 settings_path.open(mode='w') (XDG user_dir settings.py - file CREATE in env-controlled dir), not_configured.py:42 tracker.open(mode) (write), :62 tracker_path.open('r'), :78 path.open('r') / :85 path.open('a') (shell config read/append)",
+      "file_remove: os.remove(file) dirty_untar.py:45 and dirty_unzip.py:49 (arg 0 = unvalidated archive entry name, relative to CWD), os.remove(cache_path) utils.py:221 (arg 0 = XDG_CACHE_HOME-derived path)",
+      "file_mkdir: rules_dir.mkdir(parents=True) conf.py:64 (receiver = XDG user_dir/rules), os.makedirs(cache_dir) utils.py:233 (arg 0 = XDG_CACHE_HOME)",
+      "archive_open: tarfile.TarFile(_tar_file(old_cmd.script_parts)[0]) dirty_untar.py:42 (arg 0 = archive path taken from the failed command's argv), zipfile.ZipFile(file, 'r') dirty_unzip.py:9 and zipfile.ZipFile(_zip_file(old_cmd), 'r') dirty_unzip.py:46 (arg 0 = command-derived .zip path)",
+      "file_stat: os.path.isfile/isdir/exists/getsize/getmtime/access (utils.py:57 x2, :242; read_log.py:65; shells/generic.py:59; shells/fish.py:123; rules: cat_dir.py:9, chmod_x.py:8/:10, fix_file.py:52, grep_arguments_order.py:7 x2, has_exists_script.py:7, ln_s_order.py:8, prove_recursively.py:13, brew_unknown_command.py:36/:50) and os.listdir (brew_install.py:15, brew_unknown_command.py:17/:38/:49, cd_correction.py:16) - command.output/script_parts-derived paths in the rules",
+      "path_ctor: Path(...) constructor calls (func Name 'Path', thefuck.system.Path): conf.py:47/:48 (XDG env), corrector.py:29/:31/:34, not_configured.py:31/:77/:84, utils.py:214/:255, shells/generic.py:154, rules: git_add.py:13, path_from_history.py:50, scm_correction.py:18, workon_doesnt_exists.py:8",
+      "path_join: .joinpath member calls (conf.py:37/:62/:70, corrector.py:29/:31/:35, not_configured.py:31, utils.py:214) and os.path.join calls (bash.py:46/:77/:78, zsh.py:51, utils.py:66, cd_correction.py:16/:58)",
+      "path_wrapper: os.path.expanduser (bash.py:70, zsh.py:75, tcsh.py:30, fish.py:86, utils.py:227), .expanduser member (conf.py:47/:48, not_configured.py:77/:84, path_from_history.py:50, workon_doesnt_exists.py:8, utils.py:255, shells/generic.py:154), .absolute member (utils.py:255), os.path.split (utils.py:59, cd_correction.py:54)",
+      "code_load: imp.load_source('settings', text_type(user_dir.joinpath('settings.py'))) conf.py:69 (arg 1 = env-derived path - code + settings loaded from XDG dir) and load_source(name, str(path)) types.py:144 (arg 1 = rule file path from the glob'd rules/contrib dirs)",
+      "socket_connect: client.connect(_get_socket_path()) output_readers/shell_logger.py:31 (arg 0 = SHELL_LOGGER_SOCKET env path)",
+      "file_api_def (definition rows of path-consuming internal APIs): Rule.from_path path (types.py:131, pos 1), get_loaded_rules rules_paths (corrector.py:8, pos 0), shell_logger output (entrypoints/shell_logger.py:64, pos 0), Settings.init args (conf.py:17, pos 1), Cache._get_mtime path (utils.py:240, pos 1), _tar_file cmd (dirty_untar.py:21, pos 0), _zip_file command (dirty_unzip.py:15, pos 0), _get_actual_file parts (grep_arguments_order.py:5, pos 0), _get_destination script_parts (ln_s_order.py:4, pos 0), _get_directory_names_only path (brew_unknown_command.py:44, pos 0), _get_brew_commands brew_path_prefix (brew_unknown_command.py:9, pos 0), _get_destination command (path_from_history.py:15, pos 0), _search output (fix_file.py:49, pos 0)"
+    ],
+    "guardAndTraversalEvidence": {
+      "containmentChecks": "NONE observed anywhere in the package: no startswith-base-dir guard, no os.path.abspath/realpath containment, no .relative_to() check, no basename-only extraction before any open/remove/mkdir (the only os.path.basename/splitext uses are py7zr-style name splitting absent here; thefuck has os.path.split at utils.py:59 and cd_correction.py:54 for cwd walking, not sanitization)",
+      "dotdotRejection": "NONE observed: dirty_untar.py:45 / dirty_unzip.py:49 pass archive entry names straight to os.remove (a '..' entry escapes the CWD; directories are silently skipped via the OSError except, files are deleted); entry names are also consumed with no separator rewrite (unlike py7zr, no .replace('\\\\','/') normalization exists - mixed-separator names reach os.remove verbatim)",
+      "absolutePathHandling": "NONE observed: the CLI --shell-logger value (entrypoints/shell_logger.py:74) and THEFUCK_OUTPUT_LOG (read_log.py:93) are opened as-is; absolute and relative paths are both accepted",
+      "toctouEvidence": "shells/generic.py:59-61 checks os.path.isfile(history_file_name) before io.open(history_file_name) (classic check-then-use); conf.py:38 checks settings_path.is_file() before .open(mode='w'); not_configured.py:58 checks tracker_path.exists() before tracker_path.open('r')",
+      "symlinkEvidence": "no symlink creation or readlink usage in the package; ssh_known_hosts.py rewrites a file in place (read lines, delete one, rewrite) at an output-regex-derived path - the path itself is the untrusted element, not a symlink",
+      "mixedSeparatorEvidence": "cd_correction.py:40 splits the cd destination on os.sep and re-joins with os.path.join (:58); archive entry names in dirty_untar/dirty_unzip are used verbatim (no separator rewrite at all)",
+      "percentDecoding": "no URL decoding anywhere (no web surface)"
+    }
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution is deferred to the next round per the task contract (generation only; this round also ran no compile check).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables; @kind problem requires the element+message two-column select) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index carrying the path/value; parameter position including the self slot for param/file_api_def rows; -1 when the receiver or the return value carries it)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO source or sink row is expected to resolve at API level: the file-access channels flow through bare module names (os, os.path, io, shelve, tarfile, zipfile, mmap, imp) and instance members on local variables (settings_path, tracker_path, archive, client, history_file_name, cache_path) that API graphs cannot bind to stdlib members, and os/pathlib/shelve/tarfile/zipfile are not part of the database (only the thefuck tree is). The column is kept 'ast' for all families for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, os/os.environ/known_args/command conventions). Member-name matching (.open/.exists/.is_dir/.joinpath/.expanduser/...) is receiver-name-agnostic on purpose: receiver identity cannot be proven syntactically (a .open()/.exists() on a non-path object would be a name-collision row); receiver hints (settings_path/tracker_path/path/archive/client/...) are emitted for the labeling step. The os.path.* families additionally require the syntactic `os.path.` receiver chain, and the environ families require the `os.environ.` chain, which removes the common false shapes."
+    },
+    "flowKinds": {
+      "sources": [
+        "env_path",
+        "env_content",
+        "cli",
+        "param",
+        "command_output",
+        "command_script",
+        "archive_entry_name"
+      ],
+      "sinks": [
+        "file_open",
+        "file_remove",
+        "file_mkdir",
+        "archive_open",
+        "file_stat",
+        "file_read",
+        "path_ctor",
+        "path_join",
+        "path_wrapper",
+        "code_load",
+        "socket_connect",
+        "file_api_def"
+      ]
+    },
+    "exclusions": [
+      "paths containing /tests/ (tests/ tree of the database snapshot - the workflow's noise rule for tests and fixtures)",
+      "/thefuck-db/ (the CodeQL database directory nested inside the source tree)",
+      "rows are additionally constrained to the thefuck/ package by construction: the sink/source families match shapes only under %/thefuck/%, so root dev scripts (release.py:12/:24 open('setup.py') literals, fastentrypoints.py:90-102, setup.py:17) and any file outside thefuck/ produce no rows (documented in excludedCandidates)"
+    ],
+    "expectedVolume": "sources ~400 rows (about 257 command.output reads + 117 command.script_parts reads across thefuck/rules/ dominate; plus ~13 env rows, ~5 CLI rows, ~11 param rows, 3 archive rows); sinks ~120 rows (file_stat and path families dominate). All rows are candidate-grade: the broad command_output/command_script families are intentionally recall-first (the failed command's output IS the tool's payload; the labeling step filters rules whose output never reaches a path)."
+  },
+  "uncoveredCases": [
+    "Rule modules are loaded dynamically via imp.load_source (types.py:144) and invoked dynamically (rule.match(command) at types.py:181, rule.get_new_command at :193, side_effect(old_cmd, script) at types.py:255): CodeQL cannot resolve these calls, so per-rule dataflow into match(command)/get_new_command(command) parameters would not connect to the entrypoint boundary. The extraction compensates by emitting the CONSUMPTION-side reads (command.output / command.script_parts attribute reads inside each rule file) as source rows, which is why those two families are broad.",
+    "command.script (full command string) and command.stdout/.stderr (deprecated properties) reads are NOT emitted: command.script feeds corrected-command string construction (primarily a command-injection channel for a later pass; script_parts is the argv-level view that feeds the path checks), and .stdout/.stderr only appear on Popen results (proc.stdout at apt_invalid_operation.py:46, dnf_no_such_command.py:26, docker_not_command.py:25, gem_unknown_command.py:22, git_checkout.py:19 - helper-process pipe reads, not Command properties).",
+    "Non-path environment reads are NOT emitted: os.environ.get('THEFUCK_INSTANT_MODE') bash.py:38 / zsh.py:41, os.environ.get('TF_SHELL') shells/__init__.py:24, os.environ.get('TF_SHELL_ALIASES') bash.py:64 / zsh.py:69, os.environ.get('PYTHONIOENCODING') types.py:260, os.environ.get('SHELL') entrypoints/shell_logger.py:70 (feeds os.execlp - command channel), os.environ.get('TF_ALIAS') utils.py:304, THEFUCK_OVERRIDDEN_ALIASES fish.py, dict(os.environ) rerun.py:53 (env copy for the re-executed command). They are mode flags/strings with no path use.",
+    "Non-path CLI fields are NOT emitted: known_args.help/version/alias/enable_experimental_instant_mode (main.py:20-:28), args.yes/debug/repeat in conf.py:_settings_from_args (:115-127) - boolean flags.",
+    "Path-construction by string concatenation: brew_unknown_command.py builds tap/cmd paths with `+` (brew_path_prefix + BREW_CMD_PATH, :14/:27/:33/:37) instead of os.path.join/Path - these concatenations are not matched by any call-shape family; the resulting os.listdir/os.path.isdir calls (:17/:36/:38/:49/:50) ARE emitted as sink rows, so the access site is covered even though the construction node is not.",
+    "mmap.mmap(fd, ...) at entrypoints/shell_logger.py:76 and read_log.py:94 is NOT emitted: argument 0 is an integer fd (the path is consumed upstream at the paired os.open row), and the sink core per the task contract is the controlled PATH parameter of actual filesystem operations - the fd rows would be pure duplicates of the os.open rows.",
+    "os.write(fd, ...) entrypoints/shell_logger.py:75, f.write(data) :17, f.move/f.seek/f.write :20-:23, and history_file.readlines()/write() bodies are content I/O on already-open handles - not path parameters; not emitted.",
+    "os.getcwd()/os.getcwdu() (cd_correction.py:47/:49) are path ORIGINS (cwd), not attacker-controlled path inputs; they are recorded here. The cwd is then joined with spell-corrected script_parts segments at :58.",
+    "Pure string operations are not emitted: path.strip('\"') utils.py:65, .as_posix() utils.py:214/:255, str(...) coercions, .split(os.sep) cd_correction.py:40, .replace operations in rules; shell.and_/or_ command string assembly is command-construction, not path construction.",
+    "Popen family (rerun.py:60 Popen(expanded, shell=True), the Popen(['bash'...]) version probes in shells/*, subprocess helper rules like apt_invalid_operation.py:43, dnf_no_such_command.py:23, docker_not_command.py:22, git_checkout.py:16, brew prefix check_output) are command-execution channels (Pass 2), not path traversal; not emitted.",
+    "os.execlp(shell, shell) entrypoints/shell_logger.py:42 - command execution channel, not emitted.",
+    "Shell-configuration paths (bash.py:76-84, zsh.py:86-88, fish.py:105-109, tcsh.py:41-43) are literal operator-owned strings; the Path(path).expanduser().exists() check at generic.py:154 and the open('r')/open('a') at not_configured.py:78/:85 are emitted as sink rows, but no source row is emitted for configuration_details.path (not attacker-controlled).",
+    "Conditional platform branch: system/__init__.py imports win32 on sys.platform == 'win32' else unix - both files' Path monkey-patches (Path.expanduser = _expanduser) are extracted as .expanduser member CALL rows only where calls exist; the monkey-patch assignments themselves are not flow nodes.",
+    "shelve.open operates on the XDG_CACHE_HOME-derived path 'thefuck' file (utils.py:214-222): the dbm backing store creates/opens/deletes files under the env-controlled directory - emitted as file_open/file_remove rows; the atexit-registered self._db.close is a handle close, not emitted.",
+    "thefuck/rules/__init__.py is empty; rules are plain modules - no wrapper framework inside rules to model."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction queries run via codeql query run + bqrs decode, never database analyze; Python pitfalls list honored)",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "no framework reference was loaded: no web framework import evidence exists in this tree (references/flask.md / django.md / fastapi.md exist in the Augur installation but match nothing here); no references/thefuck.md or references/argparse.md exists"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: THEFUCK-CVE-REPORT.md, THEFUCK-PRIVATE-ADVISORY-REPORT.md, VULNERABILITY_AUDIT_REPORT.md and path_traversal_sinks.csv at the thefuck_vuln repo root were NOT opened during this step (they were only seen in a directory listing and explicitly avoided); candidate families are derived from repository code and the loaded language/pattern references only. No assumption was made that any specific file, API or path is vulnerable. thefuck-db was used solely to read codeql-database.yml (metadata) and its directory layout; it was excluded from all traversal and is filtered from extraction rows. The cached codeql/python-all pack sources under C:\\Users\\lzh\\.codeql\\packages were read (text) only to verify AST API existence (StringLiteral.getText at Exprs.qll:557 returns the unquoted value). thefuck_vuln, thefuck-db, the Augur installation and sibling project results were not modified. No CodeQL command of any kind was executed for this step beyond the read-only `codeql version` check, no compile was run, and no LLM labeling was performed. Only the three Phase-1 Step-1/2 artifacts under iris_manual/Path_Traversal/thefuck/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql); the pre-existing qlpack.yml and empty subdirectories were left untouched."
+  },
+  "excludedCandidates": [
+    "release.py:12/:24 open('setup.py', 'r'/'w') and fastentrypoints.py:94/:102 open(manifest_path/setup_path, 'a+') - root packaging/dev scripts with literal/packaging-derived paths; outside thefuck/ and not row-matched (would be labeled none/FP anyway)",
+    "setup.py:17 os.environ.get('CONVERT_README') - build flag, not a path",
+    "utils.py:15 open(os.devnull, 'w') IS row-matched (builtin open family) and expected to be labeled none/FP (literal device path)"
+  ]
+}

@@ -1,0 +1,193 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-23",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\xmpp-http-upload\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round per the task contract) against the xmpp-http-upload_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database xmpp-http-upload-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded xmpp-http-upload-db (and the .git tree). The database sourceLocationPrefix matches the explored tree (creation sha f0fc7443c06a0e8aecb5696fc2bd513a2cc8b611) and its src.zip covers exactly the three explored python files (xhu.py, setup.py, config.example.py), so file/line evidence below refers to the same snapshot the database was built from. The audit target is the service application itself: xmpp-http-upload 0.3.0 (setup.py version), a Flask-based HTTP file upload/download service for Prosody mod_http_upload_external; the entire server logic is the single module xhu.py (236 lines). Three Flask routes exist: '/' (index, no input) and '/<path:path>' with methods PUT/HEAD/GET (xhu.py:104/:189/:214) - the Werkzeug `path` converter captures the percent-decoded remainder of the request URL and binds it to the handler parameter `path`, which is the dominant untrusted file-location input; it flows through sanitized_join(path, pathlib.Path(app.config['DATA_ROOT'])) into (root / path).absolute(), then into .data/.meta path construction, .open/.stat/.mkdir/.unlink and flask.send_file. NOTE on experiment independence: the vulnerable source tree root contains pre-existing audit artifacts (VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv, 漏洞审查报告.md, 第一步筛选报告.md) which were NOT opened during this step (they were only listed in a directory listing to be explicitly avoided); no PyVul ground truth, known CWE/CVE locations, fix commits or patch diffs were consulted."
+  },
+  "target": {
+    "project": "xmpp-http-upload",
+    "projectDescription": "xmpp-http-upload 0.3.0 (setup.py:20; GPL-3.0+, url github.com/horazont/xmpp-http-upload) - a Flask-based HTTP service implementing the XMPP HTTP upload protocol for Prosody mod_http_upload_external: an XMPP server (holding a shared SECRET_KEY) authorizes uploads by HMAC over 'path length', clients PUT file bytes to /<path:path>, and anyone can HEAD/GET the stored files. The complete server is xhu.py (236 lines): flask.Flask('xmpp-http-upload') bootstrap with app.config.from_envvar('XMPP_HTTP_UPLOAD_CONFIG') (:33-34), optional flask_cors CORS wrapper (:37-39, config-gated), sanitized_join(path, root) = (root / path).absolute() with a str(result).startswith(str(root) + '/') prefix guard raising ValueError (:42-46), get_paths building '<base>.data'/'<base>.meta' companions (:49-53), load_metadata via metadata_file.open('r') + json.load (:56-58), get_info(path, root) = sanitized_join + get_paths + load_metadata (:61-71), write_file(at) context manager with at.open('xb') exclusive create and at.unlink() rollback on error (:74-81), index route (:84-89), stream_file(src, dest, nbytes) chunked copy (:92-101), put_file(path) PUT handler (:104-170): sanitized_join (:107-110, ValueError -> 404), verification_key = flask.request.args.get('v', '') (:118), length = int(flask.request.headers.get('Content-Length', 0)) (:119), hmac over '{} {}'.format(path, length) with SECRET_KEY sha256, compare_digest gate -> 403 (:120-130), content_type from request headers (:132-135), dest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o770) (:137), write_file(data_file) + stream_file(flask.request.stream, fout, length) (:141-142), metadata_file.open('x') + json.dump headers (:144-150), EOFError -> 400, EEXIST -> 409 (:151-164); head_file(path) HEAD handler (:189-211): get_info + data_file.stat() -> Content-Length from st_size + generate_headers; get_file(path) GET handler (:214-235): get_info + flask.make_response(flask.send_file(str(data_file))) (:228) + generate_headers (Content-Disposition attachment unless a NON_ATTACHMENT_MIME_TYPES fnmatch glob matches; X-Content-Type-Options/nosniff, X-Frame-Options/DENY, CSP sandbox at :173-186). Deployment: WSGI (application = app at :35; contrib/nginx-example.conf reverse proxy, contrib/xmpp-http-upload.service systemd unit; README.rst install instructions; config.example.py with SECRET_KEY/DATA_ROOT/ENABLE_CORS). No CLI, no queue consumer, no database, no subprocess, no eval, no archive handling anywhere in the audited code.",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\xmpp-http-upload_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (xmpp-http-upload-db/codeql-database.yml, baselineLinesOfCode 211, columnKind utf32)",
+      "the database source archive (xmpp-http-upload-db/src.zip) covers exactly 3 .py files: xhu.py (the service), setup.py (setuptools packaging), config.example.py (literal config template); no other languages are present in the tree (contrib/ holds only an nginx .conf and a systemd .service file)",
+      "setup.py setuptools packaging (name=xmpp-http-upload, version=0.3.0, install_requires flask~=0.12 and flask-cors~=3.0.3, python3-only classifiers 3.3/3.4)"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\xmpp-http-upload_vuln\\xmpp-http-upload-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\xmpp-http-upload_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "f0fc7443c06a0e8aecb5696fc2bd513a2cc8b611",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:55:14.155453200Z"
+    },
+    "baselineLinesOfCode": 211,
+    "finalised": true,
+    "locationNote": "xmpp-http-upload-db is nested inside the source tree; it was excluded from all exploration and is excluded from extraction result rows via the path filter in both queries (together with the .git tree, which is not part of the database anyway). No /tests/ directory exists in this project at all, so no test exclusion applies; setup.py and config.example.py are kept in scope (setup.py contributes 4 literal-path rows expected to be labeled none/FP; config.example.py contains only literal assignments and contributes no rows)."
+  },
+  "toolchain": {
+    "qlpack": "iris/xmpp-http-upload-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace, left untouched",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1; no codeql command of any kind was executed in this round, so the installed CLI version was not re-checked - deferred to the execution round)",
+    "compatibilityBasis": "API facts used by the generated queries were cross-checked against the cached python-all 7.1.2 library sources (read-only, no execution): AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), Call.getFunc()/getPositionalArg-free arg matching via Attribute/Name casts (AstGenerated.qll/Exprs.qll), Attribute.getName()/getObject() (Exprs.qll), Function.getADecorator()/getArgByName(string)/getAnArg()/getName()/getEnclosingScope() (Function.qll:59/:65), FunctionExpr.getADecorator() returning the decorator call's func expression, Parameter.getPosition()/getName() (Function.qll:280-283, position via f.getArg(result) = this), Scope.getEnclosingModule()/Module.getName() (Scope.qll:25), BinaryExpr/Div with getOp()/getLeft()/getRight() (Operations.qll:46-90 over AstGenerated BinaryExpr_), and the API-graph surface from semmle/python/ApiGraphs.qll (module API: moduleImport(string) line 439, Node.getMember(string) line 173, Node.getACall() line 161 returning a CallNode that extends DataFlow::CallCfgNode) plus astCallOf(cn) = cn.getNode().getNode().(Call) - the same helper shape already compiled and executed clean in the airflow project of this series (airflow/iris/extraction/sinks.ql:98) for converting an API CallNode to its syntactic Call; the same flask member-chain resolution idiom (API::moduleImport(\"flask\").getMember(\"request\").getMember(\"args\").getMember(\"get\").getACall()) mirrors semmle/python/frameworks/Flask.qll request()/RequestAttrMultiDict modeling (Flask.qll:106/:509). Deprecations/compile pitfalls avoided: no StrConst, no Decorator class (decorators read via getADecorator()), no AstNode.getFile(), no `module` variable name (moduleHint used), no unbound `this`, no QL class without a valid supertype (no QL classes at all - only predicates/functions), no API::Node-to-DataFlow::Node assignment (API graph nodes only appear inside exists() bodies feeding astCallOf), no unbound variables (every variable bound through a positive body; match_kind bound in both branches of its api/ast disjunction), no {{...}} template placeholders. NOTE: no check-only compile was run this round because the task contract forbids executing CodeQL in this step; compile/run validation is deferred to the execution round."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "flask",
+          "confidence": 0.95,
+          "evidence": [
+            "import/package +0.45: `import flask` at xhu.py:31; flask~=0.12 in setup.py install_requires (setup.py:14)",
+            "route/decorator +0.30: @app.route decorators at xhu.py:84 (\"/\"), :104 (\"/<path:path>\", methods=[\"PUT\"]), :189 (methods=[\"HEAD\"]), :214 (methods=[\"GET\"])",
+            "runtime/bootstrap +0.20: app = flask.Flask(\"xmpp-http-upload\") at xhu.py:33, app.config.from_envvar(\"XMPP_HTTP_UPLOAD_CONFIG\") at :34, flask.Response(...)/flask.make_response(...)/flask.send_file(...) response construction (:86/:112/:126/:152/:159/:166/:199/:228), flask.request accessors (:118/:119/:132/:142)"
+          ],
+          "kind": "web-framework"
+        },
+        {
+          "name": "flask_cors",
+          "confidence": 0.45,
+          "evidence": [
+            "import/package +0.45: conditional `from flask_cors import CORS; CORS(app)` at xhu.py:38-39 (only executed when app.config['ENABLE_CORS'] is truthy, :37); flask-cors~=3.0.3 in setup.py install_requires (setup.py:15); no routes or bootstrap of its own"
+          ],
+          "kind": "conditional-cors-extension",
+          "note": "below the 0.50 secondary threshold; no reference file exists in the Augur installation (no references/flask-cors.md), and CORS headers are unrelated to Pass 1 path handling - documented only"
+        },
+        {
+          "name": "django",
+          "confidence": 0.0,
+          "evidence": ["no django import anywhere in the tree - references/django.md was not loaded"]
+        },
+        {
+          "name": "fastapi",
+          "confidence": 0.0,
+          "evidence": ["no fastapi import - references/fastapi.md was not loaded"]
+        }
+      ]
+    },
+    "selected": "flask (primary, confidence 0.95) - references/flask.md was loaded",
+    "notes": "references/flask.md detection heuristics match exactly (Flask import + @app.route decorators). Its source cues (request.args/form/json/header/cookie accessors, path variables in route handlers) map onto the observed flask.request.args.get('v') at :118, flask.request.headers.get(...) at :119/:132, the '/<path:path>' route parameters, and flask.request.stream at :142; no request.form/request.json/request.cookies/request.files usage exists in this codebase (the upload is a raw PUT body, not a multipart form - so there is NO multipart filename input at all; the stored filename is derived entirely from the URL path). Its sink cues (filesystem operations with request-derived path) map onto the pathlib pipeline and flask.send_file; its sanitizer cues (canonical path checks + base dir constraints) map onto the sanitized_join prefix guard. references/python.md and references/patterns.md were also loaded: python.md Pass 1 sink cues (open/Path/os.path/shutil, archive extraction destination handling - no archive code exists here) and source cues (HTTP request path/query/body/header values, handler parameters) map onto the same evidence; patterns.md Pass 1 sink families (file open/read/write APIs with user-controlled path, resource loader methods taking path strings) map onto .open/.stat/.mkdir/.unlink and flask.send_file."
+  },
+  "inputBoundaryInventory": {
+    "summary": "The audit target is a web service, so the untrusted-input boundary is HTTP: (1) THE dominant source is the Flask route path-converter variable: @app.route(\"/<path:path>\", methods=[...]) at xhu.py:104/:189/:214 binds the Werkzeug `path` converter result to the put_file/head_file/get_file parameter `path` - the converter captures the ENTIRE remainder of the request URL (slashes included) AFTER Werkzeug percent-decoding, so the handler receives a fully attacker-controlled, URL-decoded multi-segment path string; it flows into sanitized_join(path, pathlib.Path(app.config[\"DATA_ROOT\"])) (:64-67 via get_info, :107-110 directly) -> result = (root / path).absolute() (:43) -> the startswith prefix guard (:44) -> get_paths '<base>.data'/'<base>.meta' companions (:50-51) -> dest_path.parent.mkdir (:137), write_file at.open('xb') (:76), at.unlink() rollback (:80), metadata_file.open('x') (:144), data_file.stat() (:197), and flask.send_file(str(data_file)) (:228). For PUT the path is additionally gated by an HMAC: hmac_input = '{} {}'.format(path, length) signed with the operator SECRET_KEY and compared to the request's 'v' query parameter (xhu.py:118-130) - i.e. an uploader must present a server-authorized HMAC over the exact path+length; GET/HEAD have NO such gate, so the read-side path is fully unauthenticated (this trust asymmetry is recorded as boundary evidence, not a verdict). (2) flask.request.args.get(\"v\", \"\") at :118 - query-string verification key, consumed only by hmac.compare_digest, never used as a path. (3) flask.request.headers.get(\"Content-Length\", 0) at :119 (int-coerced, feeds the HMAC input and the stream copy length) and flask.request.headers.get(\"Content-Type\", ...) at :132-135 (stored into the metadata JSON, later replayed as response headers). (4) the flask.request.stream body object at :142 - the raw PUT payload read by stream_file (:92-101) and written into the data file. (5) Operator-configured values that are NOT attacker-controlled and are NOT emitted as source rows: app.config.from_envvar(\"XMPP_HTTP_UPLOAD_CONFIG\") (:34 - deployment config file location from the environment), app.config[\"DATA_ROOT\"] reads (:66/:109/:194/:219 - the containment base directory), app.config[\"SECRET_KEY\"] (:121), app.config['ENABLE_CORS'] (:37), app.config.get(\"NON_ATTACHMENT_MIME_TYPES\", []) (:178 - the operator's mimetype glob allowlist). DATA_ROOT appears only as the base operand of path construction (emitted as path_ctor sink rows, not as a source). No CLI arguments, no message-queue consumers, no database reads, no other environment-variable reads exist in the audited code.",
+    "sourceFamilies": [
+      "route_param: the `path` parameters of the three Flask route handlers put_file (xhu.py:105), head_file (:190), get_file (:215), bound by the '/<path:path>' converter of @app.route (:104/:189/:214) - the URL-decoded attacker-controlled file location",
+      "request_arg: flask.request.args.get(\"v\", \"\") at xhu.py:118 - the PUT verification key (query string)",
+      "request_header: flask.request.headers.get(\"Content-Length\", 0) at xhu.py:119 and flask.request.headers.get(\"Content-Type\", \"application/octet-stream\") at :132 - request-header inputs",
+      "request_stream: the flask.request.stream attribute read at xhu.py:142 - the raw PUT request body consumed by stream_file"
+    ],
+    "sinkFamilies": [
+      "path_join: the pathlib true-division join `root / path` (Div BinaryExpr) at xhu.py:43 inside sanitized_join - left operand is the DATA_ROOT base, right operand is the attacker path (row arg_index 1 = right operand)",
+      "path_wrapper: the custom sanitized_join(path, root) validation-wrapper call sites at xhu.py:64 (get_info) and :107 (put_file), argument 0 = attacker path; the .absolute() member call at :43 (make-absolute without normalization); os.path.join/abspath/dirname in setup.py (:8/:10, literal packaging paths)",
+      "path_ctor: pathlib.Path(...) constructions at xhu.py:50/:51 (the '<base>.data'/'<base>.meta' suffix joins onto the sanitized path) and :66/:109/:194/:219 (the DATA_ROOT base conversion)",
+      "file_open: pathlib .open member calls - metadata_file.open(\"r\") at xhu.py:57 (read), at.open(\"xb\") at :76 (exclusive create of the uploaded data file), metadata_file.open(\"x\") at :144 (exclusive create of the metadata file); builtin open(os.path.join(here, \"README.rst\"), encoding=\"utf-8\") in setup.py:10 (packaging long-description read, expected FP)",
+      "file_serve: flask.send_file(str(data_file)) at xhu.py:228, argument 0 - the framework file-read-into-HTTP-response call for the GET route (the real file access; flask.make_response wrapping it is a response wrapper, not a file access, and is not emitted)",
+      "file_mkdir: dest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o770) at xhu.py:137 - creates intermediate directories derived from the URL path",
+      "file_unlink: at.unlink() at xhu.py:80 - the write_file rollback deletion",
+      "file_stat: data_file.stat() at xhu.py:197 - the HEAD-route metadata probe",
+      "file_api_def (definition rows of path-consuming internal APIs, carrying the true parameter positions): sanitized_join(path, root) :42 positions 0/1, get_paths(base_path) :49 position 0, load_metadata(metadata_file) :56 position 0, get_info(path, root) :61 positions 0/1, write_file(at) :75 position 0"
+    ],
+    "guardAndTraversalEvidence": [
+      "Base-directory containment guard: sanitized_join (xhu.py:42-46) computes result = (root / path).absolute() and accepts only if str(result).startswith(str(root) + \"/\"), else ValueError (caught as 404 at :111-116/:198-203/:221-226) - a STRING-PREFIX check, applied to the joined path object",
+      "Canonicalization gap evidence: the guard path uses .absolute() only - there is NO pathlib .resolve()/.is_symlink(), NO os.path.realpath/normpath, NO explicit '..' segment rejection, and NO basename-only extraction anywhere in xhu.py; Path.absolute() makes the path absolute without resolving symlinks (and performs no textual normalization of '..' segments in the CPython implementations targeted by this project's python3 classifiers), so the prefix comparison runs on the un-normalized joined string - recorded as CWE-22/23/36-relevant guard evidence for the labeling and analysis steps, no vulnerability verdict assumed",
+      "Symlink/TOCTOU evidence (CWE-36/59-adjacent): the sanitized_join check and the later filesystem use are separate operations - put_file checks, then mkdir(parents=True) at :137 then at.open('xb') at :76; head/get check, then data_file.stat() at :197 / flask.send_file at :228; a symlink planted inside DATA_ROOT after the check would redirect the open (the check-then-use window is recorded; put_file's exclusive-create modes 'xb'/'x' with EEXIST->409 (:157-163) and the at.unlink() rollback (:79-81) limit overwrite semantics but not redirection)",
+      "Mixed-separator evidence: no backslash normalization or separator handling exists anywhere in xhu.py; on POSIX a backslash is an ordinary filename character, and Werkzeug's routing percent-decodes %5C and %2E before the handler sees the path (framework-provided decoding - no explicit decode/encode calls exist in the app code)",
+      "Directory creation from URL components: dest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o770) at :137 creates every intermediate directory of the uploaded path under DATA_ROOT (arbitrary subdirectory creation, exists_ok tolerated)",
+      "HMAC authorization asymmetry: only put_file authenticates its input (verification key 'v' = HMAC-SHA256 over '{} {}'.format(path, length) with the operator SECRET_KEY, xhu.py:118-130); head_file and get_file apply the sanitized_join guard but no authentication - the read-side path is unauthenticated",
+      "Filename derivation: the stored file name and its .data/.meta companions derive entirely from the URL path (get_paths at :49-53 appends the '.data'/'.meta' suffixes); there is no multipart filename, no Content-Disposition filename parsing, no archive entry handling",
+      "Post-storage metadata replay: the Content-Type supplied by the uploader (:132-135) is persisted in the .meta JSON and replayed into responses by generate_headers (:173-186) with Content-Disposition: attachment unless the operator's NON_ATTACHMENT_MIME_TYPES globs match (fnmatch at :179) - header-injection-adjacent, out of Pass 1 path scope, recorded for completeness"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution is deferred to the next round per the task contract (generation only; this round also ran no compile check).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables; @kind problem requires the element+message two-column select) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index carrying the path/value; parameter position for route_param/file_api_def rows; -1 when the receiver or the return value carries it; for the path_join Div row, 1 = the right operand, 0 being the left/base operand)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call additionally resolved through semmle.python.ApiGraphs (moduleImport/member/getACall chains anchored at the real import statements in the database: `import flask` xhu.py:31, `import pathlib` :28, `import os.path` setup.py:2). Expected to resolve: flask.request.args.get (xhu.py:118), flask.request.headers.get (:119/:132), flask.send_file (:228), pathlib.Path (:50/:51/:66/:109/:194/:219), and possibly the os.path.join/abspath/dirname calls in setup.py (:8/:10). A call row carries 'api' when the API graph resolves it and 'ast' otherwise, so the column records which mechanism produced the confidence (the row itself is always generated by the AST shape, guaranteeing candidate presence even if API resolution fails).",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, decorator name). Member-name matching (.open/.mkdir/.unlink/.stat/.absolute) is receiver-name-agnostic on purpose: receiver identity cannot be proven syntactically, so receiver hints (metadata_file/at/dest_path.parent/data_file) are emitted for the labeling step; in this codebase every matched member call is a pathlib instance call (no name collisions exist - verified against the full 236-line module). The Div BinaryExpr row, the sanitized_join wrapper calls, the route_param parameters, the file_api_def parameters, the flask.request.stream attribute read and the builtin open() in setup.py are ast-only rows by construction."
+    },
+    "flowKinds": {
+      "sources": [
+        "route_param",
+        "request_arg",
+        "request_header",
+        "request_stream"
+      ],
+      "sinks": [
+        "path_join",
+        "path_ctor",
+        "path_wrapper",
+        "file_open",
+        "file_serve",
+        "file_mkdir",
+        "file_unlink",
+        "file_stat",
+        "file_api_def"
+      ]
+    },
+    "exclusions": [
+      "paths containing /xmpp-http-upload-db/ (the CodeQL database directory nested inside the source tree)",
+      "paths containing /.git/ (the source tree's git metadata; not part of the database, filtered for safety)",
+      "no /tests/ exclusion applies: this project has no test tree at all",
+      "setup.py and config.example.py are kept in scope: setup.py contributes 4 literal-path rows (os.path.abspath/dirname/join and builtin open on the README, expected to be labeled none/FP); config.example.py contains only literal assignments (SECRET_KEY/DATA_ROOT/ENABLE_CORS) and contributes no rows"
+    ],
+    "expectedVolume": "exactly 7 source rows (route_param 3: put_file :105, head_file :190, get_file :215; request_arg 1: :118; request_header 2: :119 and :132; request_stream 1: :142) and exactly 28 sink rows (path_join 1: the Div at :43; path_ctor 6: :50/:51/:66/:109/:194/:219; path_wrapper 6: sanitized_join calls :64/:107, .absolute() :43, os.path.join/abspath/dirname setup.py:10/:8/:8; file_open 4: .open at :57/:76/:144 plus builtin open setup.py:10; file_serve 1: :228; file_mkdir 1: :137; file_unlink 1: :80; file_stat 1: :197; file_api_def 7: sanitized_join path/root, get_paths base_path, load_metadata metadata_file, get_info path/root, write_file at). Of these, 3 source rows (flask.request.* call sites) and 7-10 sink rows (flask.send_file, the 6 pathlib.Path constructions, and the setup.py os.path.* calls when they resolve) are expected to carry match_kind 'api'. The single concentrated attack surface is the put/get pipeline in xhu.py; the setup.py rows are packaging noise expected to be filtered at labeling."
+  },
+  "uncoveredCases": [
+    "flask/werkzeug/flask_cors internals are not in the database (only the 3 project files): the actual file read inside flask.send_file and the URL percent-decoding inside Werkzeug routing happen in framework code that is invisible to extraction; the visible boundary is the send_file call site (:228) and the route-handler `path` parameter as bound by the framework. flask_cors is a config-gated conditional import (:37-39) with no path-relevant behavior.",
+    "flask.make_response(flask.send_file(...)) at :228: only the inner send_file call is emitted; make_response is a response-object wrapper, not a file access (per the task rule that class/wrapper names alone do not make a sink).",
+    "Content I/O on already-open handles is not emitted: stream_file's src.read()/dest.write() (:94/:97) operate on flask.request.stream and the open fout object; json.load(f) (:58) and json.dump(..., f) (:145) operate on open file objects; the path decision point is the preceding .open() call, which is emitted. The request_stream source row (:142) covers the body input boundary.",
+    "Pure path/string operations are not emitted as sinks and are recorded here instead: str(...) coercions (:50/:51 str(base_path), :229 str(data_file)), the '<base> + \".data\"'/'.meta' string concatenations (:50/:51), the startswith prefix guard (:44), hmac.new/compare_digest (:122/:125), int() coercion of Content-Length (:119), fnmatch.fnmatch (:179), and the response header writes in generate_headers (:174-186).",
+    "Operator configuration is not emitted as sources: app.config.from_envvar(\"XMPP_HTTP_UPLOAD_CONFIG\") (:34 - the only environment-variable interaction in the codebase; it locates the deployment config file), app.config[\"DATA_ROOT\"] (:66/:109/:194/:219), SECRET_KEY (:121), ENABLE_CORS (:37), NON_ATTACHMENT_MIME_TYPES (:178) - none of these crosses an attacker-controlled trust boundary; DATA_ROOT appears only as the base operand of the emitted path_ctor/path_join rows.",
+    "No multipart upload, no archive extraction, no zipfile/tarfile usage, no static-file directory serving, no symlink creation, no os.chmod/utime exists in this codebase - none was assumed or emitted (verified by reading the full xhu.py).",
+    "The `/` operator join (root / path, xhu.py:43) IS emitted as a path_join row even though it is syntactically a Div BinaryExpr (indistinguishable from numeric division in general): in this module it is the single Div occurrence and its left/right operands are the documented base/path pair - the row's receiver column ('root') and arg_index 1 (right operand) record that mapping; FloorDiv is not matched.",
+    "API-graph resolution is not attempted for member calls on local variables (.open/.mkdir/.unlink/.stat/.absolute - receivers are local Names, unresolvable through module-level API chains), for the Div operator, for the sanitized_join internal calls, for the route_param/file_api_def Parameter rows, or for the bare builtin open() in setup.py; those rows stay match_kind 'ast' by construction. If flask/pathlib/os API resolution unexpectedly fails in the execution round, the affected rows degrade to 'ast' rather than disappearing (rows are generated by AST shape first).",
+    "Module-name hint: xhu.py is a top-level script module; moduleHintOf resolves its enclosing module name (or falls back to the file base name) - either 'xhu' or the file stem is acceptable for labeling.",
+    "The source-tree root contains pre-existing audit artifacts (VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv, 漏洞审查报告.md, 第一步筛选报告.md) plus .git metadata: none were opened; the database src.zip confirms none of them are part of the extracted snapshot. contrib/ (nginx-example.conf, xmpp-http-upload.service) is non-Python deployment config, also not in the database.",
+    "Compile validation: NOT performed this round (the task contract forbids executing CodeQL in this step, including check-only compiles). Both queries reuse the helper and row-assembly shapes already compiled and executed clean on the same CLI 2.25.1 + python-all 7.1.x family in earlier projects of this series (moduleHintOf/receiverHint/normalizedPathOf/bindingset[path] excludedPath from py7zr; astCallOf/API::CallNode resolution and the flask member-chain idiom from airflow, which mirrors the stock Flask.qll modeling). `codeql query run`/bqrs decode execution and LLM labeling remain deferred to later steps; run_manifest.json and summary.md belong to Step 0 / post-execution stages and were not fabricated."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction queries run via codeql query run + bqrs decode, never database analyze)",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/references/flask.md (loaded: Flask detected as primary framework)",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "no other framework reference was loaded: django/fastapi/etc. have no import evidence; no references/flask-cors.md exists in the Augur installation (the conditional flask_cors extension is documented under framework.candidates only)"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv, 漏洞审查报告.md and 第一步筛选报告.md at the xmpp-http-upload_vuln repo root were NOT opened during this step (they were only listed in a directory listing to be explicitly avoided); no known CWE/CVE locations, fix commits or patch diffs were looked at; candidate families are derived from repository evidence (xhu.py, setup.py, config.example.py, README.rst, contrib deployment files) and the loaded language/pattern/flask references only. No assumption was made that any specific file, API or path is vulnerable. xmpp-http-upload-db was used solely to read codeql-database.yml and the src.zip path listing (metadata/scope) and was otherwise excluded from all traversal; the cached codeql/python-all 7.1.2 pack sources under C:\\Users\\lzh\\.codeql\\packages were read (text) only to verify AST/API facts for the generated queries. Project source (xmpp-http-upload_vuln), the database, and the Augur installation were not modified; no CodeQL command of any kind (version check, pack install, compile, query run, bqrs decode, database analyze) and no LLM labeling were executed. Only the three Phase-1 Step-1/2 artifacts under iris_manual/Path_Traversal/xmpp-http-upload/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql); the pre-existing qlpack.yml and the empty subdirectories (extraction/, labels/, libraries/, queries/, results/, report/, diagnostics/) were left untouched."
+  }
+}

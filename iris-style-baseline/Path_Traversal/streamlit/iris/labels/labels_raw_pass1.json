@@ -1,0 +1,1150 @@
+{
+  "run_id": "streamlit-pathtraversal-pass1-20261023",
+  "generated_at": "2026-10-23T12:32:37Z",
+  "pass_id": 1,
+  "focus": "Path Traversal",
+  "cwes": [
+    "22",
+    "23",
+    "36",
+    "73"
+  ],
+  "model": "glm-5.3",
+  "labeling_method": "In-session LLM labeling by the assistant model (glm-5.3 via Claude Code CLI). Each candidate was labeled from the real source code in dataset/codeql_databases/path_traversal_dbs/streamlit_vuln (read-only); no external LLM API calls were made, no CodeQL queries were executed, and no PyVul ground truth, patch diffs, or CVE advisories were consulted.",
+  "inputs": [
+    "extraction/sources.csv (24 candidates)",
+    "extraction/sinks.csv (33 candidates)",
+    "exploration/detection.json",
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/assets/labels_schema.json"
+  ],
+  "framework_reference_note": "No references/<framework>.md matches the detected framework Tornado in Augur 0.3.0; per WORKFLOW 4.2.3 source/sink shapes come from repository evidence (exploration/detection.json).",
+  "batch_count": 4,
+  "total_candidates": 57,
+  "batches": [
+    {
+      "batch_id": 1,
+      "scope": "HTTP request-boundary source candidates (tornado request object reads, get_argument, handler route params, multipart fields) - sources.csv data rows 7-20, 22-24",
+      "candidate_count": 17,
+      "entries": [
+        {
+          "id": "src-007",
+          "original_candidate": {
+            "nodeRepr": "request attribute self.request.body",
+            "role": "source_candidate",
+            "callableName": "self.request.body",
+            "flowKind": "field",
+            "receiver": "self.request",
+            "moduleHint": "tornado.httputil.HTTPServerRequest",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/server/upload_file_request_handler.py",
+            "line": "115",
+            "context": "Tornado HTTPServerRequest field read (raw request payload from the browser; multipart bodies are parsed by tornado.httputil.parse_body_arguments)"
+          },
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "rationale": "Raw HTTP POST body from the browser on the unauthenticated /upload_file route. Passed as body= to tornado.httputil.parse_body_arguments, which produces the args/files dicts that feed sessionId/widgetId and the multipart file fields. Genuine network input boundary; pass-1 note: the parsed upload data stays in memory (UploadedFile extends io.BytesIO), so no in-repo path sink is reached, but the boundary itself is real and feeds the src-019/src-020/src-022 family."
+        },
+        {
+          "id": "src-008",
+          "original_candidate": {
+            "nodeRepr": "request attribute self.request.headers",
+            "role": "source_candidate",
+            "callableName": "self.request.headers",
+            "flowKind": "field",
+            "receiver": "self.request",
+            "moduleHint": "tornado.httputil.HTTPServerRequest",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/stats.py",
+            "line": "116",
+            "context": "Tornado HTTPServerRequest field read (raw request payload from the browser; multipart bodies are parsed by tornado.httputil.parse_body_arguments)"
+          },
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "rationale": "Accept request header read in StatsHandler.get(): a genuine network-controlled header, but the value is only string-compared against the literal 'application/x-protobuf' to choose the response format. No path-shaped use exists in-repo; retained as a low-confidence source for recall with a manual-review flag."
+        },
+        {
+          "id": "src-009",
+          "original_candidate": {
+            "nodeRepr": "request attribute self.request.headers",
+            "role": "source_candidate",
+            "callableName": "self.request.headers",
+            "flowKind": "field",
+            "receiver": "self.request",
+            "moduleHint": "tornado.httputil.HTTPServerRequest",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/server/upload_file_request_handler.py",
+            "line": "114",
+            "context": "Tornado HTTPServerRequest field read (raw request payload from the browser; multipart bodies are parsed by tornado.httputil.parse_body_arguments)"
+          },
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "rationale": "Content-Type request header (attacker-controlled) consumed as the content_type argument of tornado.httputil.parse_body_arguments, steering the multipart parse of the request body. Genuine network boundary whose value flows into the parser machinery; path traversal reachability is nil in-repo (uploads in memory) but the boundary is real."
+        },
+        {
+          "id": "src-010",
+          "original_candidate": {
+            "nodeRepr": "call self.get_argument",
+            "role": "source_candidate",
+            "callableName": "self.get_argument",
+            "flowKind": "field",
+            "receiver": "self",
+            "moduleHint": "tornado.web.RequestHandler",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/server/routes.py",
+            "line": "129",
+            "context": "Tornado request argument read (query string or form-encoded body value returned by the call)"
+          },
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "rationale": "Query-string argument 'title' read in MediaFileHandler.set_extra_headers. The value is percent-decoded (unquote_plus) and passed through generate_download_filename_from_title/string_util.clean_filename (which strips everything outside [-\\w.] and rejects '.', '..') before being placed in the Content-Disposition response header. Real request boundary, but the only consumer is a response header and the cleaner is a genuine barrier on that flow; no filesystem path is involved. Kept as candidate for manual review."
+        },
+        {
+          "id": "src-011",
+          "original_candidate": {
+            "nodeRepr": "call self.get_argument",
+            "role": "source_candidate",
+            "callableName": "self.get_argument",
+            "flowKind": "field",
+            "receiver": "self",
+            "moduleHint": "tornado.web.RequestHandler",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/server/routes.py",
+            "line": "298",
+            "context": "Tornado request argument read (query string or form-encoded body value returned by the call)"
+          },
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "rationale": "Query argument 'hash' read in MessageCacheHandler.get(): used exclusively as a lookup key into the in-memory MessageCache and log strings. Real request boundary; no path-shaped use. Low pass-1 relevance; retained for recall with manual-review flag."
+        },
+        {
+          "id": "src-012",
+          "original_candidate": {
+            "nodeRepr": "parameter 'path' of handler method ComponentRequestHandler.get",
+            "role": "source_candidate",
+            "callableName": "get",
+            "flowKind": "param",
+            "receiver": "ComponentRequestHandler",
+            "moduleHint": "streamlit.components.v1.components",
+            "argIndex": "1",
+            "filePath": "lib/streamlit/components/v1/components.py",
+            "line": "310",
+            "context": "ComponentRequestHandler.get: '/component/(.*)' route capture; parts[0] selects a registered component, '/'.join(parts[1:]) becomes filename, joined via os.path.join(component_root, filename) (components.py:319-320) then open(abspath, 'rb') (components.py:325) - no containment check observed"
+          },
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.97,
+          "rationale": "The 'path' parameter of ComponentRequestHandler.get is the decoded tornado route capture from `/component/(.*)` (registered at server.py:391-395). parts[0] selects a registered component; '/'.join(parts[1:]) becomes filename and is joined with os.path.join(component_root, filename) (components.py:319-320) and opened (components.py:325) with no containment check, no basename/normpath, and no allowlist. Raw '../' segments are captured directly by the (.*) regex, percent-encoded '%2e%2e%2f' additionally decode (tornado unquotes regex captures), and a filename beginning with '/' or a drive letter makes os.path.join return an absolute path. Input controllability: everything after the component name, i.e. arbitrary relative traversal depth and absolute-path forms. This is the only complete in-repo untrusted-source-to-file-open flow (pairs with sink-009)."
+        },
+        {
+          "id": "src-013",
+          "original_candidate": {
+            "nodeRepr": "parameter 'path' of handler method ComponentRequestHandler.set_extra_headers",
+            "role": "source_candidate",
+            "callableName": "set_extra_headers",
+            "flowKind": "param",
+            "receiver": "ComponentRequestHandler",
+            "moduleHint": "streamlit.components.v1.components",
+            "argIndex": "1",
+            "filePath": "lib/streamlit/components/v1/components.py",
+            "line": "338",
+            "context": "Tornado StaticFileHandler response hook: parameter is the request path (response header selection)"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "The 'path' parameter of the set_extra_headers response hook is the same untrusted request path, but it is only tested with endswith('.html') / length to choose the Cache-Control header value. No propagation into any path or file operation; not a pass-1 source of interest."
+        },
+        {
+          "id": "src-014",
+          "original_candidate": {
+            "nodeRepr": "parameter 'path' of handler method StaticFileHandler.set_extra_headers",
+            "role": "source_candidate",
+            "callableName": "set_extra_headers",
+            "flowKind": "param",
+            "receiver": "StaticFileHandler",
+            "moduleHint": "streamlit.server.routes",
+            "argIndex": "1",
+            "filePath": "lib/streamlit/server/routes.py",
+            "line": "51",
+            "context": "Tornado StaticFileHandler response hook: parameter is the request path (response header selection)"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "StaticFileHandler.set_extra_headers 'path' parameter: identical Cache-Control selection logic to src-013; response-header decision only, no data flow to file paths."
+        },
+        {
+          "id": "src-015",
+          "original_candidate": {
+            "nodeRepr": "parameter 'url_path' of handler method StaticFileHandler.parse_url_path",
+            "role": "source_candidate",
+            "callableName": "parse_url_path",
+            "flowKind": "param",
+            "receiver": "StaticFileHandler",
+            "moduleHint": "streamlit.server.routes",
+            "argIndex": "1",
+            "filePath": "lib/streamlit/server/routes.py",
+            "line": "64",
+            "context": "StaticFileHandler.parse_url_path (only definition: streamlit/server/routes.py): decoded URL path from the '/(.*)' static route; page-name lookup against the registered pages set, then deferred to the tornado superclass (framework-side validation outside this database)"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "MediaFileHandler.set_extra_headers 'path' parameter: used as a key into the InMemoryFileManager and in the Content-Disposition filename block. MediaFileHandler serves files from memory (get_content/get_absolute_path overridden, routes.py:173-205), so no disk path is involved; the 'title' argument consumed in this hook is covered by src-010."
+        },
+        {
+          "id": "src-016",
+          "original_candidate": {
+            "nodeRepr": "parameter 'path' of handler method MediaFileHandler.set_extra_headers",
+            "role": "source_candidate",
+            "callableName": "set_extra_headers",
+            "flowKind": "param",
+            "receiver": "MediaFileHandler",
+            "moduleHint": "streamlit.server.routes",
+            "argIndex": "1",
+            "filePath": "lib/streamlit/server/routes.py",
+            "line": "113",
+            "context": "Tornado StaticFileHandler response hook: parameter is the request path (response header selection)"
+          },
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "rationale": "Decoded URL path from the catch-all static route `/(.*)` (server.py:417-432). First segment is matched against the registered page-name allowlist (from the local pages/ directory) and mapped to index.html; non-page paths fall through to tornado.web.StaticFileHandler, whose disk read and validate_absolute_path containment live in the tornado library outside this database. Genuine untrusted input that reaches a (framework-side) file-serving sink; the abspath/realpath root containment performed by tornado is the real barrier and cannot be verified in-repo."
+        },
+        {
+          "id": "src-017",
+          "original_candidate": {
+            "nodeRepr": "parameter 'origin' of handler method _BrowserWebSocketHandler.check_origin",
+            "role": "source_candidate",
+            "callableName": "check_origin",
+            "flowKind": "param",
+            "receiver": "_BrowserWebSocketHandler",
+            "moduleHint": "streamlit.server.server",
+            "argIndex": "1",
+            "filePath": "lib/streamlit/server/server.py",
+            "line": "748",
+            "context": "Tornado WebSocket check_origin: parameter is the Origin request header value (CORS decision only)"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "Origin header value used only for the CORS allowlist decision (boolean return). No propagation into paths or file operations; not a pass-1 source."
+        },
+        {
+          "id": "src-018",
+          "original_candidate": {
+            "nodeRepr": "parameter 'payload' of handler method _BrowserWebSocketHandler.on_message",
+            "role": "source_candidate",
+            "callableName": "on_message",
+            "flowKind": "param",
+            "receiver": "_BrowserWebSocketHandler",
+            "moduleHint": "streamlit.server.server",
+            "argIndex": "1",
+            "filePath": "lib/streamlit/server/server.py",
+            "line": "774",
+            "context": "Tornado WebSocket on_message: parameter is the raw message payload bytes from the browser, parsed as a BackMsg protobuf (server.py:789)"
+          },
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "rationale": "Raw WebSocket message bytes from the browser, parsed as a BackMsg protobuf (msg.ParseFromString, server.py:789) and dispatched to session handlers (rerun_script/widget states). The payload is a genuine primary input channel of the app, but the parsed protobuf field reads are not plain attribute flows: modeling BackMsg -> widget_states -> (e.g.) file_uploader values requires a Phase 2 summary step, and deserialized uploads are in-memory. Marked candidate with an explicit Phase 2 modeling dependency."
+        },
+        {
+          "id": "src-019",
+          "original_candidate": {
+            "nodeRepr": "call self._require_arg(args, \"sessionId\")",
+            "role": "source_candidate",
+            "callableName": "self._require_arg",
+            "flowKind": "return",
+            "receiver": "self",
+            "moduleHint": "streamlit.server.upload_file_request_handler",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/server/upload_file_request_handler.py",
+            "line": "121",
+            "context": "boundary wrapper returning a parsed request-body argument value ('sessionId' -> args[name][0].decode('utf-8'))"
+          },
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "rationale": "Boundary wrapper returning args['sessionId'][0].decode('utf-8') from the parse_body_arguments-parsed POST body — attacker-controlled string on the /upload_file route. Modeled as a source node to avoid modeling the parsed args dict in Phase 2. Downstream use: _is_valid_session_id membership check against active sessions (a real validation barrier) and as an in-memory manager key; no path propagation observed in-repo."
+        },
+        {
+          "id": "src-020",
+          "original_candidate": {
+            "nodeRepr": "call self._require_arg(args, \"widgetId\")",
+            "role": "source_candidate",
+            "callableName": "self._require_arg",
+            "flowKind": "return",
+            "receiver": "self",
+            "moduleHint": "streamlit.server.upload_file_request_handler",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/server/upload_file_request_handler.py",
+            "line": "122",
+            "context": "boundary wrapper returning a parsed request-body argument value ('widgetId' -> args[name][0].decode('utf-8'))"
+          },
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "rationale": "Same _require_arg wrapper for args['widgetId']: attacker-controlled request-body string, used as the widget key in the in-memory UploadedFileManager (add_file widget_id). No validation observed (unlike sessionId), but also no path propagation in-repo; candidate with manual-review flag."
+        },
+        {
+          "id": "src-022",
+          "original_candidate": {
+            "nodeRepr": "multipart file field 'file[\"filename\"]'",
+            "role": "source_candidate",
+            "callableName": "file['filename']",
+            "flowKind": "field",
+            "receiver": "files (parsed multipart dict)",
+            "moduleHint": "tornado.httputil.parse_body_arguments",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/server/upload_file_request_handler.py",
+            "line": "144",
+            "context": "client-supplied multipart upload field parsed by tornado.httputil.parse_body_arguments; 'filename' is the client-controlled upload name stored into UploadedFileRec and later exposed to app scripts via st.file_uploader (uploads stay in memory)"
+          },
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "rationale": "Client-supplied multipart upload filename on the unauthenticated /upload_file POST route: fully attacker-controlled, path-shaped string. It is stored into UploadedFileRec.name (upload_file_request_handler.py:144) and kept in memory (UploadedFile extends io.BytesIO); no disk write occurs on the upload path in-repo. Labeled source/tp as a real network boundary carrying a path-shaped value whose downstream use (app scripts receiving it via st.file_uploader) is outside this database — Phase 2 needs the deserialization summary step."
+        },
+        {
+          "id": "src-023",
+          "original_candidate": {
+            "nodeRepr": "multipart file field 'file[\"content_type\"]'",
+            "role": "source_candidate",
+            "callableName": "file['content_type']",
+            "flowKind": "field",
+            "receiver": "files (parsed multipart dict)",
+            "moduleHint": "tornado.httputil.parse_body_arguments",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/server/upload_file_request_handler.py",
+            "line": "145",
+            "context": "client-supplied multipart upload field parsed by tornado.httputil.parse_body_arguments; 'filename' is the client-controlled upload name stored into UploadedFileRec and later exposed to app scripts via st.file_uploader (uploads stay in memory)"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "rationale": "Client-supplied multipart content_type metadata: attacker-controlled but never path-shaped in this codebase — it becomes UploadedFileRec.type and is used for mimetype mapping and response headers in the in-memory file manager. No filesystem path use; not a pass-1 source."
+        },
+        {
+          "id": "src-024",
+          "original_candidate": {
+            "nodeRepr": "multipart file field 'file[\"body\"]'",
+            "role": "source_candidate",
+            "callableName": "file['body']",
+            "flowKind": "field",
+            "receiver": "files (parsed multipart dict)",
+            "moduleHint": "tornado.httputil.parse_body_arguments",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/server/upload_file_request_handler.py",
+            "line": "146",
+            "context": "client-supplied multipart upload field parsed by tornado.httputil.parse_body_arguments; 'filename' is the client-controlled upload name stored into UploadedFileRec and later exposed to app scripts via st.file_uploader (uploads stay in memory)"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "rationale": "Client-supplied multipart file body: raw content bytes stored in UploadedFileRec.data and held in memory (BytesIO). File content is not a path source for path traversal; relevant to other CWE passes, not pass 1."
+        }
+      ]
+    },
+    {
+      "batch_id": 2,
+      "scope": "Local-boundary source candidates (os.getenv / os.environ.get, click CLI argument) - sources.csv data rows 1-6, 21",
+      "candidate_count": 7,
+      "entries": [
+        {
+          "id": "src-001",
+          "original_candidate": {
+            "nodeRepr": "call os.getenv",
+            "role": "source_candidate",
+            "callableName": "os.getenv",
+            "flowKind": "return",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/config.py",
+            "line": "532",
+            "context": "environment variable read (local operator environment, e.g. STREAMLIT_* configuration); not a network-attacker boundary - label as source only if a cross-boundary flow is judged plausible"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "os.getenv('DISPLAY') read in _server_headless(): the value is only tested for emptiness to pick a boolean default (server.headless). Local operator environment, not a network-attacker boundary, and the value never reaches a filesystem path."
+        },
+        {
+          "id": "src-002",
+          "original_candidate": {
+            "nodeRepr": "call os.getenv",
+            "role": "source_candidate",
+            "callableName": "os.getenv",
+            "flowKind": "return",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/config.py",
+            "line": "536",
+            "context": "environment variable read (local operator environment, e.g. STREAMLIT_* configuration); not a network-attacker boundary - label as source only if a cross-boundary flow is judged plausible"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "os.getenv('IS_RUNNING_IN_STREAMLIT_EDITOR_PLUGIN') presence check driving the same boolean branch in _server_headless(). Local operator environment; boolean branch only; no path propagation."
+        },
+        {
+          "id": "src-003",
+          "original_candidate": {
+            "nodeRepr": "call os.environ.get",
+            "role": "source_candidate",
+            "callableName": "os.environ.get",
+            "flowKind": "return",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/config.py",
+            "line": "962",
+            "context": "environment variable read (local operator environment, e.g. STREAMLIT_* configuration); not a network-attacker boundary - label as source only if a cross-boundary flow is judged plausible"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "os.environ.get(var_name) resolves 'env:'-prefixed config values (_parse_config_value). Values come from operator-controlled config files/environment (STREAMLIT_* options); they populate config options (ports, booleans, addresses), not attacker-facing file paths. The only path-shaped consumer is server.address (unix socket), which is operator-local configuration."
+        },
+        {
+          "id": "src-004",
+          "original_candidate": {
+            "nodeRepr": "call os.environ.get",
+            "role": "source_candidate",
+            "callableName": "os.environ.get",
+            "flowKind": "return",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/file_util.py",
+            "line": "190",
+            "context": "environment variable read (local operator environment, e.g. STREAMLIT_* configuration); not a network-attacker boundary - label as source only if a cross-boundary flow is judged plausible"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "os.environ.get('PYTHONPATH', '') in file_in_pythonpath(): the string is split and compared via fnmatch to classify a file path; the function returns a boolean. Operator environment; no taint-carrying value flows onward into a path."
+        },
+        {
+          "id": "src-005",
+          "original_candidate": {
+            "nodeRepr": "call os.environ.get",
+            "role": "source_candidate",
+            "callableName": "os.environ.get",
+            "flowKind": "return",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/secrets.py",
+            "line": "176",
+            "context": "environment variable read (local operator environment, e.g. STREAMLIT_* configuration); not a network-attacker boundary - label as source only if a cross-boundary flow is judged plausible"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "os.environ.get(k) in _maybe_delete_environment_variable(): equality comparison against a secrets-file value before deleting the environment variable. Operator secrets file content; comparison only; no path use."
+        },
+        {
+          "id": "src-006",
+          "original_candidate": {
+            "nodeRepr": "call os.environ.get",
+            "role": "source_candidate",
+            "callableName": "os.environ.get",
+            "flowKind": "return",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/credentials.py",
+            "line": "35",
+            "context": "environment variable read (local operator environment, e.g. STREAMLIT_* configuration); not a network-attacker boundary - label as source only if a cross-boundary flow is judged plausible"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "os.environ.get('WT_SESSION') sets the module-level _SHOW_EMOJIS boolean for Windows Terminal emoji support. Local operator environment; boolean decision only; no path propagation."
+        },
+        {
+          "id": "src-021",
+          "original_candidate": {
+            "nodeRepr": "parameter 'target' of main_run",
+            "role": "source_candidate",
+            "callableName": "main_run",
+            "flowKind": "param",
+            "receiver": "",
+            "moduleHint": "streamlit.cli",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/cli.py",
+            "line": "164",
+            "context": "click CLI argument 'target' (envvar STREAMLIT_RUN_TARGET): local user input, not a network boundary; a URL target is downloaded to a temp file via open() (cli.py:75, 194-200)"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "rationale": "click CLI argument 'target' (envvar STREAMLIT_RUN_TARGET): local operator input from the person who launches streamlit — the operator already controls the machine, so this is not a network-attacker boundary in the deployed threat model. The URL branch extracts the basename via path.strip('/').rsplit('/', 1)[-1] before joining into a temp dir (sink-014). Residual caveat for manual review: rsplit on '/' does not neutralize Windows backslash separators, so on Windows a crafted URL could smuggle '..\\' into the temp-dir join — kept at 0.7 confidence because of this edge."
+        }
+      ]
+    },
+    {
+      "batch_id": 3,
+      "scope": "Request/app-API-facing sink candidates (component route open, st.image/st.media element opens, cli remote download write, tornado render, pathlib glob receivers) - sinks.csv data rows 9-11, 14-15, 31-33 (1-based)",
+      "candidate_count": 8,
+      "entries": [
+        {
+          "id": "sink-009",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/components/v1/components.py",
+            "line": "325",
+            "context": "file open (read or write per mode argument); path argument is a variable 'abspath'"
+          },
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.97,
+          "rationale": "The /component/(.*) route's disk read: open(abspath, 'rb') where abspath = os.path.join(component_root, filename) and filename = '/'.join(parts[1:]) of the attacker-controlled route capture (src-012). No containment check, basename, or normalization executes before the open; '../' sequences (raw or percent-decoded by tornado's capture unquoting) traverse out of component_root, and a leading '/' or drive letter in filename makes os.path.join return an absolute path. Contents are returned to the requester (self.write, components.py:333). This is the only confirmed complete source-to-sink path-traversal flow in this database."
+        },
+        {
+          "id": "sink-010",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/elements/image.py",
+            "line": "339",
+            "context": "file open (read or write per mode argument); path argument is a variable 'image'"
+          },
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "rationale": "open(image, 'rb') in image_to_url: the path is the 'image' argument an app script passes to st.image()/st.logo(). A genuine file-read sink at a caller-controlled path (the classic place where app-controlled, possibly request-influenced data hits the filesystem), but the source side lives in app scripts outside this database, so in-repo taint reachability cannot be established. Candidate pending app-script-side sources (Phase 2 / cross-DB)."
+        },
+        {
+          "id": "sink-011",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/elements/image.py",
+            "line": "415",
+            "context": "file open (read or write per mode argument); path argument is a variable 'image'"
+          },
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "rationale": "open(image) in the SVG branch of _marshal_images: reads a local .svg file whose path is the app-script-supplied image argument (guarded only by endswith('.svg') and a scheme check). Same app-facing sink characterization as sink-010; source side out of database."
+        },
+        {
+          "id": "sink-014",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/cli.py",
+            "line": "75",
+            "context": "file open (read or write per mode argument); path argument is a variable 'main_script_path'"
+          },
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "rationale": "open(main_script_path, 'wb') in _download_remote: writes a remotely fetched script into a fresh TemporaryDirectory. The path is os.path.join(temp_dir, urlparse(target).path.strip('/').rsplit('/', 1)[-1]) where target is the local CLI argument (src-021) — operator-trusted in the deployed threat model, so classified candidate rather than tp solely due to the Windows edge: rsplit('/') does not split backslash separators, so a crafted URL path containing '..\\' could escape the temp dir on Windows. Flagged for manual review."
+        },
+        {
+          "id": "sink-015",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/elements/media.py",
+            "line": "184",
+            "context": "file open (read or write per mode argument); path argument is a variable 'data'"
+          },
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "rationale": "open(data, 'rb') in _marshall_av_media: the path is the 'data' argument an app script passes to st.audio()/st.video() after URL strings are filtered out. Same app-facing sink characterization as sink-010: genuine file read at a caller-controlled path, source side in app scripts outside this database."
+        },
+        {
+          "id": "sink-031",
+          "original_candidate": {
+            "nodeRepr": "call 'render' argument 0",
+            "role": "sink_candidate",
+            "callableName": "render",
+            "flowKind": "arg",
+            "receiver": "self",
+            "moduleHint": "tornado.web.RequestHandler (inferred)",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/server/routes.py",
+            "line": "90",
+            "context": "template file load: tornado RequestHandler.render loads and renders a template file from disk; the only observed call site (routes.py:90) uses a fixed index.html path joined to the static dir; path argument is a variable 'index_file'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "self.render(index_file) in StaticFileHandler.write_error: index_file = os.path.join(file_util.get_static_dir(), 'index.html') — a fixed framework-static path; tornado's render loads the template from disk. Fixed constant join; no attacker path control. (Receiver module inferred — dynamic dispatch, see detection.json.)"
+        },
+        {
+          "id": "sink-032",
+          "original_candidate": {
+            "nodeRepr": "call 'glob' (receiver-controlled directory)",
+            "role": "sink_candidate",
+            "callableName": "glob",
+            "flowKind": "receiver",
+            "receiver": "pages_dir",
+            "moduleHint": "pathlib.Path (inferred)",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/source_util.py",
+            "line": "161",
+            "context": "directory enumeration: pathlib Path.glob lists files under the receiver directory; the path is carried by the receiver, not an argument; receiver is 'pages_dir'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "pages_dir.glob('*.py') enumerating the app's pages directory: pages_dir = main_script_path.parent / 'pages', derived from the operator's CLI main-script path. The enumerated directory is carried by the receiver (pathlib.Path), inferred module; operator-local discovery, no network-attacker control."
+        },
+        {
+          "id": "sink-033",
+          "original_candidate": {
+            "nodeRepr": "call 'glob' (receiver-controlled directory)",
+            "role": "sink_candidate",
+            "callableName": "glob",
+            "flowKind": "receiver",
+            "receiver": "p",
+            "moduleHint": "pathlib.Path (inferred)",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/watcher/util.py",
+            "line": "105",
+            "context": "directory enumeration: pathlib Path.glob lists files under the receiver directory; the path is carried by the receiver, not an argument; receiver is 'p'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "p.glob(glob_pattern) in _dirfiles: enumerates a watched directory (operator-local script dirs) to compute a stable directory identifier. Receiver-carried pathlib.Path path, inferred module; no network-attacker control."
+        }
+      ]
+    },
+    {
+      "batch_id": 4,
+      "scope": "Internal storage/config/watcher sink candidates (caching disk ops, credentials/secrets/config reads, temp dir, makedirs, os.stat, bind_unix_socket) - all remaining sinks.csv rows",
+      "candidate_count": 25,
+      "entries": [
+        {
+          "id": "sink-001",
+          "original_candidate": {
+            "nodeRepr": "call 'tempfile.mkdtemp' (keyword-controlled)",
+            "role": "sink_candidate",
+            "callableName": "tempfile.mkdtemp",
+            "flowKind": "arg",
+            "receiver": "tempfile",
+            "moduleHint": "tempfile",
+            "argIndex": "-1",
+            "filePath": "lib/streamlit/temporary_directory.py",
+            "line": "49",
+            "context": "temp directory creation; prefix/suffix/dir keyword arguments influence the created path"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.8,
+          "rationale": "Temp-directory creation whose prefix/suffix/dir keyword arguments influence the created path — a legitimate pass-1 sink family in principle, but the only in-repo caller chain (TemporaryDirectory() in cli.py:190) passes no path-controlling arguments, so the created path is always the OS-random temp dir. No untrusted reachability; keyword-controlled position cannot be expressed as a positional arg_index (mapped to flow_kind 'unknown', arg_index null)."
+        },
+        {
+          "id": "sink-002",
+          "original_candidate": {
+            "nodeRepr": "call 'os.remove' argument 0",
+            "role": "sink_candidate",
+            "callableName": "os.remove",
+            "flowKind": "arg",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/legacy_caching/caching.py",
+            "line": "302",
+            "context": "file delete; path argument is a variable 'path'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "File delete of a failed cache write: path = file_util.get_streamlit_file_path(\"cache\", \"%s.pickle\" % key), i.e. ~/.streamlit/cache/<key>.pickle where key is a framework-computed cache key (hash of function identity/args), not attacker-supplied path text. No traversal-relevant taint observed; sink site is real but the path is home-dir + hashed name."
+        },
+        {
+          "id": "sink-003",
+          "original_candidate": {
+            "nodeRepr": "call 'os.remove' argument 0",
+            "role": "sink_candidate",
+            "callableName": "os.remove",
+            "flowKind": "arg",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/caching/memo_decorator.py",
+            "line": "472",
+            "context": "file delete; path argument is a variable 'path'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "File delete of a failed cache write in the new caching layer: path = self._get_file_path(key) = get_streamlit_file_path(\"cache\", ...) with a framework-computed hashed key. Same fixed-root + hash-name pattern as sink-002; no untrusted path control."
+        },
+        {
+          "id": "sink-004",
+          "original_candidate": {
+            "nodeRepr": "call 'os.remove' argument 0",
+            "role": "sink_candidate",
+            "callableName": "os.remove",
+            "flowKind": "arg",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/caching/memo_decorator.py",
+            "line": "483",
+            "context": "file delete; path argument is a variable 'path'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "File delete in _remove_from_disk_cache: same _get_file_path(key) hashed-key path under the fixed ~/.streamlit/cache root. No untrusted path control."
+        },
+        {
+          "id": "sink-005",
+          "original_candidate": {
+            "nodeRepr": "call 'os.remove' argument 0",
+            "role": "sink_candidate",
+            "callableName": "os.remove",
+            "flowKind": "arg",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/credentials.py",
+            "line": "177",
+            "context": "file delete; path argument is a attribute 'c._conf_file'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "os.remove(c._conf_file) in Credentials.reset(): _conf_file is the fixed operator path ~/.streamlit/credentials.toml (file_util.get_streamlit_file_path). No attacker control of the path; operator-side credential reset."
+        },
+        {
+          "id": "sink-006",
+          "original_candidate": {
+            "nodeRepr": "call 'shutil.rmtree' argument 0",
+            "role": "sink_candidate",
+            "callableName": "shutil.rmtree",
+            "flowKind": "arg",
+            "receiver": "shutil",
+            "moduleHint": "shutil",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/temporary_directory.py",
+            "line": "53",
+            "context": "directory tree delete; path argument is a attribute 'self._path'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "shutil.rmtree(self._path) in TemporaryDirectory.__exit__: _path is the OS-random directory returned by tempfile.mkdtemp (no caller-supplied dir/prefix/suffix — see sink-001). No untrusted path control."
+        },
+        {
+          "id": "sink-007",
+          "original_candidate": {
+            "nodeRepr": "call 'shutil.rmtree' argument 0",
+            "role": "sink_candidate",
+            "callableName": "shutil.rmtree",
+            "flowKind": "arg",
+            "receiver": "shutil",
+            "moduleHint": "shutil",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/legacy_caching/caching.py",
+            "line": "660",
+            "context": "directory tree delete; path argument is a variable 'cache_path'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "shutil.rmtree(cache_path) in _clear_disk_cache: cache_path = get_cache_path() = file_util.get_streamlit_file_path(\"cache\") — the fixed ~/.streamlit/cache directory. Triggered by app clear-cache actions, but the deleted path is a fixed operator directory; no traversal."
+        },
+        {
+          "id": "sink-008",
+          "original_candidate": {
+            "nodeRepr": "call 'shutil.rmtree' argument 0",
+            "role": "sink_candidate",
+            "callableName": "shutil.rmtree",
+            "flowKind": "arg",
+            "receiver": "shutil",
+            "moduleHint": "shutil",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/caching/memo_decorator.py",
+            "line": "127",
+            "context": "directory tree delete; path argument is a variable 'cache_path'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "shutil.rmtree(cache_path) in CacheStorageManager.clear_all(): same fixed ~/.streamlit/cache root, guarded by os.path.isdir. No untrusted path control."
+        },
+        {
+          "id": "sink-012",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/watcher/util.py",
+            "line": "92",
+            "context": "file open (read or write per mode argument); path argument is a variable 'file_path'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.8,
+          "rationale": "open(file_path, 'rb') in _get_file_content_with_blocking_retries: file_path comes from the file watcher watching operator-local script/source files (main script path and pages/ directory derived from the CLI target, secrets.toml). Watched paths are operator-chosen local files; no network-attacker control of the path in-repo."
+        },
+        {
+          "id": "sink-013",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/config.py",
+            "line": "1054",
+            "context": "file open (read or write per mode argument); path argument is a variable 'filename'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "open(filename, 'r') over CONFIG_FILENAMES: the fixed operator paths ~/.streamlit/config.toml and $CWD/.streamlit/config.toml (config.py:996-999), each guarded by os.path.exists. Operator-controlled configuration files; no attacker path control."
+        },
+        {
+          "id": "sink-016",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/util.py",
+            "line": "95",
+            "context": "file open (read or write per mode argument); path argument is a attribute 'os.devnull'"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "open(os.devnull, 'w') to redirect subprocess output: the argument is the compile-time OS constant os.devnull. No data flow into the path is possible even in principle; not a path-traversal-relevant sink site."
+        },
+        {
+          "id": "sink-017",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/file_util.py",
+            "line": "81",
+            "context": "file open (read or write per mode argument); path argument is a call to os.path.join"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "open(os.path.join(CONFIG_FOLDER_NAME, path), mode) inside the streamlit_read wrapper. All in-repo callers (caching/memo_decorator.py:449, legacy_caching/caching.py:278) pass paths built by get_streamlit_file_path(\"cache\", <hashed key>\".pickle\") — framework-computed, home-rooted, hash-suffixed. No untrusted path control. (Noted code smell: this join uses the relative '.streamlit' constant while the preceding os.stat uses the absolute get_streamlit_file_path result — inconsistent but internal-only, and os.path.join's absolute-argument semantics make the absolute callers resolve unchanged.)"
+        },
+        {
+          "id": "sink-018",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/file_util.py",
+            "line": "106",
+            "context": "file open (read or write per mode argument); path argument is a variable 'path'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "open(path, mode) inside the streamlit_write wrapper, where path = get_streamlit_file_path(path) (home + .streamlit root). In-repo callers pass framework-computed hashed cache paths (memo_decorator.py:466, legacy_caching/caching.py:295). No untrusted path control."
+        },
+        {
+          "id": "sink-019",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/metrics_util.py",
+            "line": "38",
+            "context": "file open (read or write per mode argument); path argument is a variable '_ETC_MACHINE_ID_PATH'"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "open(_ETC_MACHINE_ID_PATH, 'r') with the module constant '/etc/machine-id'. Fixed OS path, existence-guarded; no data flow into the path is possible. Not path-traversal-relevant."
+        },
+        {
+          "id": "sink-020",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/metrics_util.py",
+            "line": "42",
+            "context": "file open (read or write per mode argument); path argument is a variable '_DBUS_MACHINE_ID_PATH'"
+          },
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "open(_DBUS_MACHINE_ID_PATH, 'r') with the module constant '/var/lib/dbus/machine-id'. Fixed OS path, existence-guarded; no data flow possible."
+        },
+        {
+          "id": "sink-021",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/source_util.py",
+            "line": "43",
+            "context": "file open (read or write per mode argument); path argument is a variable 'filename'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.8,
+          "rationale": "open(filename, 'r') in open_python_file: filename is a Python script path enumerated from the operator-local pages/ directory or the CLI main-script path (get_pages). All callers are operator-local script discovery; no network-attacker control. The wrapper itself should become a Phase 2 summary step (path param -> open/tokenize.open)."
+        },
+        {
+          "id": "sink-022",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/secrets.py",
+            "line": "141",
+            "context": "file open (read or write per mode argument); path argument is a attribute 'self._file_path'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.8,
+          "rationale": "tokenize.open(filename) inside open_python_file: PEP263-aware source read of operator-local script paths (same flow as sink-021). No untrusted path control in-repo."
+        },
+        {
+          "id": "sink-023",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/credentials.py",
+            "line": "128",
+            "context": "file open (read or write per mode argument); path argument is a attribute 'self._conf_file'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "open(self._file_path, encoding='utf-8') reading secrets.toml: _file_path is the operator-local secrets path (get_streamlit_file_path / project .streamlit dir). Operator-controlled file; the file contents (not the path) are the sensitive data. No attacker path control."
+        },
+        {
+          "id": "sink-024",
+          "original_candidate": {
+            "nodeRepr": "call 'open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "open",
+            "flowKind": "arg",
+            "receiver": "",
+            "moduleHint": "builtins",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/credentials.py",
+            "line": "191",
+            "context": "file open (read or write per mode argument); path argument is a attribute 'self._conf_file'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "open(self._conf_file, 'r') in Credentials.load(): _conf_file is the fixed ~/.streamlit/credentials.toml path. No attacker path control."
+        },
+        {
+          "id": "sink-025",
+          "original_candidate": {
+            "nodeRepr": "call 'os.makedirs' argument 0",
+            "role": "sink_candidate",
+            "callableName": "os.makedirs",
+            "flowKind": "arg",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/file_util.py",
+            "line": "104",
+            "context": "directory create; path argument is a call to os.path.dirname"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "open(self._conf_file, 'w') in Credentials.save(): same fixed ~/.streamlit/credentials.toml path. No attacker path control."
+        },
+        {
+          "id": "sink-026",
+          "original_candidate": {
+            "nodeRepr": "call 'os.makedirs' argument 0",
+            "role": "sink_candidate",
+            "callableName": "os.makedirs",
+            "flowKind": "arg",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/credentials.py",
+            "line": "187",
+            "context": "directory create; path argument is a call to os.path.dirname"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "os.makedirs(os.path.dirname(path)) inside streamlit_write: parent directory of the get_streamlit_file_path-canonicalized internal write path. Callers pass framework-computed hashed cache paths; no untrusted path control."
+        },
+        {
+          "id": "sink-027",
+          "original_candidate": {
+            "nodeRepr": "call 'os.stat' argument 0",
+            "role": "sink_candidate",
+            "callableName": "os.stat",
+            "flowKind": "arg",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/watcher/util.py",
+            "line": "82",
+            "context": "file stat (metadata read); path argument is a variable 'path'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "os.makedirs(os.path.dirname(self._conf_file), exist_ok=True): parent of the fixed ~/.streamlit/credentials.toml path. No attacker path control."
+        },
+        {
+          "id": "sink-028",
+          "original_candidate": {
+            "nodeRepr": "call 'os.stat' argument 0",
+            "role": "sink_candidate",
+            "callableName": "os.stat",
+            "flowKind": "arg",
+            "receiver": "os",
+            "moduleHint": "os",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/file_util.py",
+            "line": "75",
+            "context": "file stat (metadata read); path argument is a variable 'filename'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.8,
+          "rationale": "os.stat(path) for watched-file modification times: paths are operator-local script/pages/secrets files registered with the watcher. Metadata read on operator-chosen paths; no network-attacker path control in-repo."
+        },
+        {
+          "id": "sink-029",
+          "original_candidate": {
+            "nodeRepr": "call 'tornado.netutil.bind_unix_socket' argument 0",
+            "role": "sink_candidate",
+            "callableName": "tornado.netutil.bind_unix_socket",
+            "flowKind": "arg",
+            "receiver": "tornado.netutil",
+            "moduleHint": "tornado.netutil",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/server/server.py",
+            "line": "191",
+            "context": "unix socket file creation at a config-derived path (server.address); path argument is a variable 'file_name'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "os.stat(filename) inside streamlit_read, where filename = get_streamlit_file_path(path): home-rooted internal paths with framework-computed (hashed) names from all callers. Metadata read; no untrusted path control."
+        },
+        {
+          "id": "sink-030",
+          "original_candidate": {
+            "nodeRepr": "call 'tokenize.open' argument 0",
+            "role": "sink_candidate",
+            "callableName": "tokenize.open",
+            "flowKind": "arg",
+            "receiver": "tokenize",
+            "moduleHint": "tokenize",
+            "argIndex": "0",
+            "filePath": "lib/streamlit/source_util.py",
+            "line": "41",
+            "context": "python source file open, PEP263-encoding-aware read (source_util.open_python_file wrapper); path argument is a variable 'filename'"
+          },
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "Unix-socket file creation at file_name = os.path.expanduser(server.address[len('unix://'):]): server.address is operator configuration (config file/env/CLI), and binding a listening socket requires local operator privileges. Operator-local path; no network-attacker control of the path."
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "source": 11,
+    "sink": 30,
+    "sanitizer": 0,
+    "summary": 0,
+    "none": 16,
+    "classification_tp": 6,
+    "classification_candidate": 10,
+    "classification_fp": 41
+  },
+  "consolidated_labels": "labels/labels.json (schema-validated against assets/labels_schema.json)"
+}

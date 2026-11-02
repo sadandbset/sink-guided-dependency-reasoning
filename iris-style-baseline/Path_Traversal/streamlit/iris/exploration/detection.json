@@ -1,0 +1,209 @@
+{
+  "run": {
+    "timestamp": "2026-10-23",
+    "project": "streamlit",
+    "project_version": "1.11.0 (lib/setup.py VERSION)",
+    "source_root": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\streamlit_vuln",
+    "database": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\streamlit_vuln\\streamlit-db",
+    "codeql_cli_version": "2.25.1 (codeql-database.yml creationMetadata)",
+    "python_pack": "codeql/python-all 7.1.1 / 7.1.2 (local package cache; QL APIs verified read-only, no CodeQL executed)",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\streamlit\\iris",
+    "qlpack": "iris/streamlit-cwe22"
+  },
+  "pass_scope": {
+    "pass_id": 1,
+    "focus": "Path Traversal",
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"]
+  },
+  "language": {
+    "detected": "python",
+    "evidence": [
+      "codeql-database.yml primaryLanguage: python",
+      "lib/setup.py with NAME = \"streamlit\", VERSION = \"1.11.0\"",
+      "lib/streamlit/ package with 132 .py files (131 excluding proto/__init__.py)"
+    ]
+  },
+  "frameworks": [
+    {
+      "name": "Tornado",
+      "role": "primary",
+      "confidence": 1.0,
+      "score_breakdown": {
+        "import_evidence": 0.45,
+        "route_decorator_evidence": 0.30,
+        "runtime_bootstrap_evidence": 0.20,
+        "layout_evidence": 0.05
+      },
+      "evidence": [
+        "import: 'import tornado.web' (lib/streamlit/server/routes.py:18, lib/streamlit/server/server.py:43, lib/streamlit/server/upload_file_request_handler.py:18, lib/streamlit/components/v1/components.py:22)",
+        "import: 'import tornado.websocket' / 'from tornado.websocket import WebSocketHandler' (server.py:44-46)",
+        "import: 'from tornado.httpserver import HTTPServer' (server.py:47), 'import tornado.httputil' (upload_file_request_handler.py:17), 'import tornado.netutil' (server.py:42)",
+        "handler classes: StaticFileHandler/AssetsFileHandler/MediaFileHandler/AddSlashHandler/_SpecialRequestHandler/HealthHandler/DebugHandler/MessageCacheHandler (routes.py), _BrowserWebSocketHandler (server.py:734), UploadFileRequestHandler (upload_file_request_handler.py:31), ComponentRequestHandler (components.py:306), StatsHandler (stats.py:95) - all subclass tornado.web.RequestHandler or WebSocketHandler",
+        "route registrations: Server._create_app routes list with make_url_path_regex patterns (server.py:352-396): stream, healthz, debugz, message, st-metrics, upload_file, assets/(.*), media/(.*), component/(.*), (.*) static, AddSlashHandler",
+        "bootstrap: 'tornado.web.Application(routes, cookie_secret=..., xsrf_cookies=..., **TORNADO_SETTINGS)' (server.py:437-444)",
+        "runtime: 'HTTPServer(app, max_buffer_size=...)' + 'http_server.listen(port, address)' (server.py:177-204), AsyncIOLoop, tornado.locks.Event/Condition",
+        "layout: dedicated lib/streamlit/server/ package (routes.py, server.py, server_util.py, upload_file_request_handler.py)",
+        "dependency: lib/Pipfile: tornado = \">=5.0\""
+      ],
+      "extensions": []
+    }
+  ],
+  "reference_files_loaded": [
+    "references/patterns.md",
+    "references/python.md"
+  ],
+  "reference_files_missing": [
+    "references/tornado.md does not exist in Augur 0.3.0; per WORKFLOW 4.2.3 the tornado-specific source/sink shapes below were derived from repository evidence (tornado handler/route idioms) instead of a framework reference"
+  ],
+  "route_inventory": [
+    {"route": "<base>/stream", "handler": "_BrowserWebSocketHandler", "file": "lib/streamlit/server/server.py", "line": 354, "methods": ["WebSocket"], "notes": "BackMsg protobuf payload from the browser"},
+    {"route": "<base>/healthz", "handler": "HealthHandler", "file": "lib/streamlit/server/server.py", "line": 359, "methods": ["GET"]},
+    {"route": "<base>/debugz", "handler": "DebugHandler", "file": "lib/streamlit/server/server.py", "line": 363, "methods": ["GET"]},
+    {"route": "<base>/message", "handler": "MessageCacheHandler", "file": "lib/streamlit/server/server.py", "line": 364, "methods": ["GET"], "request_body": "self.get_argument(\"hash\") (routes.py:298)"},
+    {"route": "<base>/st-metrics", "handler": "StatsHandler", "file": "lib/streamlit/server/server.py", "line": 370, "methods": ["GET"]},
+    {"route": "<base>/upload_file/?(?<session_id>[^/]*)?/?(?<widget_id>[^/]*)?", "handler": "UploadFileRequestHandler", "file": "lib/streamlit/server/server.py", "line": 374, "methods": ["POST"], "request_body": "multipart body parsed by tornado.httputil.parse_body_arguments (upload_file_request_handler.py:113-118); sessionId/widgetId form args; file['filename']/['content_type']/['body']"},
+    {"route": "<base>/assets/(.*)", "handler": "AssetsFileHandler", "file": "lib/streamlit/server/server.py", "line": 386, "methods": ["GET"], "path_capture": true, "notes": "tornado.web.StaticFileHandler rooted at the streamlit static/assets dir; disk read happens in tornado library code"},
+    {"route": "<base>/media/(.*)", "handler": "MediaFileHandler", "file": "lib/streamlit/server/server.py", "line": 390, "methods": ["GET"], "path_capture": true, "notes": "serves InMemoryFileManager files from memory; get_content/get_absolute_path overridden so no disk access despite StaticFileHandler subclassing"},
+    {"route": "<base>/component/(.*)", "handler": "ComponentRequestHandler", "file": "lib/streamlit/server/server.py", "line": 391, "methods": ["GET"], "path_capture": true, "notes": "repo-side disk read: parts[0] selects a registered component, '/'.join(parts[1:]) -> os.path.join(component_root, filename) -> open(abspath, 'rb') (components.py:310-325)"},
+    {"route": "<base>/(.*)", "handler": "StaticFileHandler", "file": "lib/streamlit/server/server.py", "line": 417, "methods": ["GET"], "path_capture": true, "notes": "tornado.web.StaticFileHandler rooted at the static dir with get_pages page-name allowlist; parse_url_path overridden in routes.py:64; disk read in tornado library code"},
+    {"route": "<base>", "handler": "AddSlashHandler", "file": "lib/streamlit/server/server.py", "line": 433, "methods": ["GET"]}
+  ],
+  "source_evidence": {
+    "tornado_url_capture_params": [
+      "ComponentRequestHandler.get(self, path) (lib/streamlit/components/v1/components.py:310): '/component/(.*)' route capture; parts[0] is matched against the ComponentRegistry, '/'.join(parts[1:]) becomes filename and is joined via os.path.join(component_root, filename) (components.py:319-320) then open(abspath, 'rb') (components.py:325) - no containment check, no basename, no normpath observed on this path",
+      "StaticFileHandler.parse_url_path(self, url_path) (lib/streamlit/server/routes.py:64): decoded URL path from the '/(.*)' static route; page-name lookup against the registered pages set (routes.py:67-81) then deferred to the tornado superclass",
+      "StaticFileHandler.set_extra_headers(self, path) (routes.py:51) and MediaFileHandler.set_extra_headers(self, path) (routes.py:113): request path passed into response-header hooks",
+      "ComponentRequestHandler.set_extra_headers(self, path) (components.py:338): request path passed into the cache-header hook",
+      "_BrowserWebSocketHandler.check_origin(self, origin) (lib/streamlit/server/server.py:748): Origin header value, used only for the CORS allowlist decision",
+      "_BrowserWebSocketHandler.on_message(self, payload) (server.py:774): raw WebSocket payload bytes, parsed as a BackMsg protobuf (msg.ParseFromString(payload), server.py:789)"
+    ],
+    "tornado_argument_reads": [
+      "self.get_argument(\"title\", \"\", True) in MediaFileHandler.set_extra_headers (routes.py:129): query-string argument, unquote_plus-decoded (routes.py:130) and converted via clean_filename into a Content-Disposition filename - header value only, no filesystem access",
+      "self.get_argument(\"hash\", None) in MessageCacheHandler.get (routes.py:298): message-cache lookup key"
+    ],
+    "request_object_reads": [
+      "self.request.headers[\"Content-Type\"] and self.request.body in UploadFileRequestHandler.post (lib/streamlit/server/upload_file_request_handler.py:114-115): multipart body parsed by tornado.httputil.parse_body_arguments into args/files dicts"
+    ],
+    "multipart_file_fields": [
+      "file['filename'], file['content_type'], file['body'] (upload_file_request_handler.py:144-146): client-supplied multipart upload metadata stored into UploadedFileRec; the manager keeps uploaded files in memory (BytesIO, uploaded_file_manager.py) - no disk write on the upload path; UploadedFileRec.name is later exposed to app scripts through st.file_uploader"
+    ],
+    "boundary_wrapper_returns": [
+      "self._require_arg(args, 'sessionId'/'widgetId') (upload_file_request_handler.py:121-122): local boundary wrapper returning args[name][0].decode('utf-8') from the parsed request body"
+    ],
+    "env_and_cli_boundaries": [
+      "os.environ.get(var_name) (lib/streamlit/config.py:962): STREAMLIT_* configuration environment variables - local operator control, not a network boundary",
+      "os.getenv('DISPLAY') / os.getenv('IS_RUNNING_IN_STREAMLIT_EDITOR_PLUGIN') (config.py:532, 536): local environment detection",
+      "main_run(target, ...) (lib/streamlit/cli.py:164): click CLI argument with envvar STREAMLIT_RUN_TARGET - local user input; a URL target is downloaded to a temp file via open(main_script_path, 'wb') (cli.py:75) with the basename extracted from the URL path (cli.py:194-197)"
+    ],
+    "excluded_as_not_attacker_controlled": [
+      "widget_states / ClientState from BackMsg.rerun_script (server.py:795, app_session.py:613-631): client protobuf data drives widget deserialization, but file_uploader deserialization only returns in-memory UploadedFile objects; recorded as a Phase 2 modeling gap instead of a syntactic source",
+      "config option values (config.py): operator-controlled config files (CONFIG_FILENAMES fixed paths, config.py:996-999) and environment; server.address-derived unix-socket paths are operator-local",
+      "secrets.toml content (secrets.py:141): local operator file; values are copied into os.environ (secrets.py:169)",
+      "main_script_path (bootstrap.py, server.py, session_data.py): CLI-derived local path; pages discovered from the local pages/ directory (source_util.py:159-163)",
+      "machine-id files (metrics_util.py:37-42): fixed OS paths (/etc/machine-id, /var/lib/dbus/machine-id)"
+    ]
+  },
+  "sink_evidence": {
+    "actual_filesystem_operations": [
+      "open(): components.py:325 (ComponentRequestHandler route-path read - the key repo-side file-serving sink), cli.py:75 (remote script download write), config.py:1054 (config.toml read), credentials.py:128,191 (credentials file read/write), elements/image.py:339,415 (st.image path read), elements/media.py:184 (st.audio/st.video path read), file_util.py:81,106 (streamlit config dir read/write), metrics_util.py:38,42 (machine-id read), secrets.py:141 (secrets.toml read), source_util.py:43 (python source read), util.py:95 (os.devnull), watcher/util.py:92 (watched file read for hashing)",
+      "tokenize.open(): source_util.py:41 (PEP263-aware source read inside open_python_file)",
+      "os.remove(): credentials.py:177, caching/memo_decorator.py:472,483, legacy_caching/caching.py:302 (file delete)",
+      "os.makedirs(): credentials.py:187, file_util.py:104 (directory create)",
+      "os.stat(): file_util.py:75 (metadata read)",
+      "shutil.rmtree(): caching/memo_decorator.py:127, legacy_caching/caching.py:660, temporary_directory.py:53 (directory tree delete)",
+      "tempfile.mkdtemp(): temporary_directory.py:49 (temp directory creation; prefix/suffix/dir keyword-controlled)",
+      "tornado.netutil.bind_unix_socket(): server.py:191 (unix socket file creation at the config-derived server.address path)"
+    ],
+    "dynamic_dispatch_file_operations": [
+      "self.render(index_file) (routes.py:90): tornado RequestHandler.render loads a template file from disk (here a fixed static-dir index.html path); receiver module inferred",
+      "pages_dir.glob('*.py') (source_util.py:161) and p.glob(glob_pattern) (watcher/util.py:105): pathlib Path.glob directory enumeration; the enumerated directory is carried by the receiver, not an argument"
+    ],
+    "static_file_response_paths": [
+      "/assets/(.*) and <base>/(.*) are served by tornado.web.StaticFileHandler subclasses; the actual disk read (get_content/validate_absolute_path) happens inside the tornado library, which is outside this database - only the overridden hooks (parse_url_path, set_extra_headers) are repo code",
+      "/component/(.*) is the only route whose file read is implemented in repo code (ComponentRequestHandler.get -> open, components.py:325)",
+      "/media/(.*) MediaFileHandler overrides get_content/get_absolute_path/validate_absolute_path to serve InMemoryFileManager entries from memory - no disk access despite the 'file handler' naming"
+    ],
+    "archive_extraction": "not present: no zipfile/tarfile/extract/extractall usage anywhere in the lib/streamlit package; no archive-entry-name sinks were extracted",
+    "excluded_as_not_sinks": [
+      "Image.open(io.BytesIO(data)) (elements/image.py:240): in-memory bytes, not a filesystem path",
+      "webbrowser.open(url) (util.py:90): browser launch, not filesystem",
+      "os.path.exists/isdir/isfile checks (cli.py:203, bootstrap.py:327, components.py:420, memo_decorator.py:126, legacy_caching/caching.py:659, watcher/local_sources_watcher.py:199): existence validation nodes, TOCTOU-adjacent but not data-bearing sinks",
+      "os.path.join/abspath/basename/normpath/realpath and pathlib Path() construction: propagation/validation nodes (see sanitizer_and_validation_evidence)"
+    ]
+  },
+  "sanitizer_and_validation_evidence": [
+    "ComponentRequestHandler.get (components.py:310-334): NO sanitization observed on the request-derived filename - os.path.join(component_root, filename) does not neutralize '..' segments or absolute paths, and no containment check, basename or normpath precedes open(abspath, 'rb')",
+    "tornado.web.StaticFileHandler superclass validation (abspath/realpath containment in validate_absolute_path) lives in the tornado library, outside this database - not a repo-side barrier for the /assets and static routes",
+    "StaticFileHandler.parse_url_path (routes.py:64-85): maybe_page_name is matched against the registered page-name set (from the local pages/ directory) before returning index.html; non-page paths fall through to the tornado superclass",
+    "string_util.clean_filename (string_util.py:64-78): strips characters outside [-\\w.] and rejects '', '.', '..' - applied only to the 'title' query argument to build a Content-Disposition filename (routes.py:131), not a filesystem path",
+    "unquote_plus(title) (routes.py:130): percent-decoding of attacker-controlled input before clean_filename",
+    "UploadFileRequestHandler._is_valid_session_id (upload_file_request_handler.py:50-52): sessionId validated against active sessions before the upload is stored",
+    "os.path.join sites (components.py:320, cli.py:195, routes.py:89, file_util.py:81,104,120-127,133-148, session_data.py:80-81, legacy_caching/hashing.py:722): treated as propagation nodes, not sinks and not barriers",
+    "os.path.abspath (components.py:71, legacy_caching/hashing.py:404, watcher/event_based_path_watcher.py:88,161,183,333, session_data.py:80): canonicalization-style propagation, no containment check",
+    "os.path.basename (cli.py:196, components.py:293, session_data.py:78): name extraction, propagation",
+    "check-then-use patterns: os.path.exists/isdir before open/remove/makedirs (cli.py:203, bootstrap.py:327, file_util.py:75, memo_decorator.py:126) - TOCTOU-adjacent validation, not barriers"
+  ],
+  "wrapper_functions_needing_summary_steps": [
+    "source_util.open_python_file(filename) -> tokenize.open / open (source_util.py:28-43)",
+    "file_util.streamlit_read(path) -> os.stat + open(os.path.join(CONFIG_FOLDER_NAME, path)) (file_util.py:63-84)",
+    "file_util.streamlit_write(path) -> os.makedirs + open(path) (file_util.py:86-115)",
+    "watcher.path_watcher.watch_file / watch_dir (bootstrap.py:328,338, secrets.py:187) -> watcher/util.py open(file_path, 'rb') hashing reads",
+    "upload_file_request_handler._require_arg(args, name) -> args[name][0].decode('utf-8') (upload_file_request_handler.py:88-105)",
+    "cli._download_remote(main_script_path, url_path) -> open(main_script_path, 'wb') + requests.get (cli.py:72-81)",
+    "uploaded_file_manager.UploadedFile(record) -> exposes record.name/.data/.type to app scripts as the st.file_uploader return value (uploaded_file_manager.py:35-51, elements/file_uploader.py:293-300)",
+    "in_memory_file_manager.InMemoryFileManager.add(content, ...) -> in-memory storage only, exposed via /media URLs"
+  ],
+  "coverage_gaps_and_dynamic_dispatch_notes": [
+    "tornado framework code (StaticFileHandler.get/validate_absolute_path/get_content, WebSocketHandler internals) is outside the database: the actual disk reads for the /assets and static routes cannot be repo-side sinks; only overridden hooks are modeled",
+    "MediaFileHandler serves from InMemoryFileManager (memory): no disk access despite StaticFileHandler subclassing - excluded from sink candidates with this rationale",
+    "UploadedFile.name (client-controlled multipart filename) propagates into app scripts via st.file_uploader deserialization; whether an app script uses it in a path is outside the framework - Phase 2 needs a summary/modeling step (deserialize_file_uploader -> widget value) rather than a syntactic source here",
+    "BackMsg protobuf field reads (msg.rerun_script, msg.WhichOneof) at server.py:789-801 are parsed API results, not plain attribute chains; websocket-to-widget-state flow needs Phase 2 modeling",
+    "dynamic dispatch: self.render (tornado.web.RequestHandler) and .glob (pathlib.Path) receiver modules cannot be resolved syntactically; module_hint is inferred and marked as such in the sink rows",
+    "alias imports: 'from streamlit import config, file_util' and 'import tornado.web' styles are used; dotted-name matching on call sites uses the call-site spelling, which matches the observed code",
+    "varargs-only handler signatures (UploadFileRequestHandler.post(**kwargs), _BrowserWebSocketHandler.open(*args, **kwargs)) yield no positional parameter rows; their request data is captured through the request-object, multipart-field and _require_arg families instead",
+    "streamlit-db is a CodeQL database directory nested inside the source root; extraction queries restrict candidates to files whose relative path starts with 'lib/streamlit/', which structurally excludes streamlit-db, lib/tests/, e2e/, scripts/ and frontend/ files",
+    "lib/streamlit/proto/ (generated protobuf code) is excluded by scope; the snapshot contains only proto/__init__.py",
+    "no zipfile/tarfile/archive extraction code exists in the package, so archive-entry-name sinks are intentionally absent"
+  ],
+  "extraction_policy": {
+    "scope": "lib/streamlit/ package only (relative path 'lib/streamlit/%')",
+    "excluded": "lib/tests/ and test fixtures, e2e/ scripts, scripts/ dev tooling, frontend/ and component-lib/ (JavaScript), generated proto code, the nested streamlit-db database directory, setup.py",
+    "noise_controls": "pure existence checks (os.path.exists/isdir/isfile) and path-construction nodes (os.path.join/abspath/basename/normpath/realpath, pathlib.Path()) are not extracted as sinks; only actual filesystem operations are; request sources are restricted to observed tornado request idioms and the repo's upload boundary"
+  },
+  "database_content_and_path_format": {
+    "extracted_python_files": {
+      "src_zip_entries_total": 429,
+      "lib_streamlit_py": 132,
+      "lib_streamlit_py_excluding_proto": 131,
+      "lib_tests_py": 136,
+      "streamlit_db_entries": "only streamlit-db/codeql-database.yml (non-Python) present in src.zip"
+    },
+    "streamlit_db_files_extracted": false,
+    "path_format_note": "Database file paths are stored forward-slash normalized (src.zip entries like 'C_/Users/.../streamlit_vuln/lib/streamlit/server/routes.py'), while the sourceLocationPrefix in codeql-database.yml uses backslashes ('C:\\\\Users\\\\...\\\\streamlit_vuln'). File.getRelativePath() may therefore be unable to resolve on this Windows-created database (prefix/suffix separator mismatch in its implementation). The extraction queries use a fallback that captures the 'lib/streamlit/...' suffix from getAbsolutePath(), so the 'lib/streamlit/%' scope filter holds regardless of which form resolves. getRelativePath() results are additionally backslash-normalized before matching."
+  },
+  "extraction_query_contract": {
+    "usage": "codeql query run + codeql bqrs decode --format=csv (multi-column candidate table)",
+    "not_used_for": "database analyze / SARIF",
+    "metadata_note": "queries deliberately omit @kind (a @kind problem select shape would not support multi-column extraction, and no @kind table is assumed)",
+    "csv_columns": [
+      "node",
+      "role",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "module_hint",
+      "arg_index",
+      "file",
+      "line",
+      "context"
+    ],
+    "flow_kind_vocabulary": ["param", "arg", "return", "receiver", "field"],
+    "arg_index_convention": "0-based positional parameter/argument index; -1 when not applicable (keyword-controlled, receiver-controlled or field-read candidates)",
+    "ql_compatibility_notes": [
+      "parameter/argument APIs verified read-only against local codeql/python-all 7.1.2: Subscript uses getObject()/getIndex() (no getSlice), StringLiteral exposes getS(), Function.getArg(i) covers positional parameters only, Parameter.getName()/asName()/getPosition() available",
+      "no {{...}} template placeholders remain; moduleHint is used as the variable/predicate name instead of 'module'; AstNode locations use getLocation().getFile()/getStartLine()",
+      "both extraction queries pass `codeql query compile --check-only` (CLI 2.25.1, local pack cache); one binding error was found and fixed during check-compilation: a free function call (moduleHintOf(f)) passed directly as a predicate argument, combined with a parameter used only in negated atoms inside handlerContext, produced \"'moduleHint' is not bound to a value\"; the fix binds values via equality first and passes only positively-bound variables/member-call results (f.getName()) as predicate arguments, with no negation on predicate parameters",
+      "no CodeQL query execution (query run / bqrs decode / database analyze) was performed during this step per experiment instructions"
+    ]
+  }
+}

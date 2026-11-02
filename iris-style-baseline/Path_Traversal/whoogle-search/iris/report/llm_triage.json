@@ -1,0 +1,199 @@
+{
+  "triage_metadata": {
+    "task": "Independent LLM path re-review of formal Augur Pass 1 Path Traversal SARIF codeFlows (ruleId py/augur/whoogle-search/pass1-path-traversal)",
+    "reviewed_at": "2026-10-24",
+    "sarif": "iris/results/pass1.sarif",
+    "sarif_run_tool": "CodeQL",
+    "formal_result_count": 2,
+    "rule_ids_in_sarif": ["py/augur/whoogle-search/pass1-path-traversal"],
+    "diagnostics_or_builtin_results_merged": false,
+    "independence_note": "Triage verdicts below were derived exclusively from the SARIF codeFlows, labels/labels.json, report/query_generation_notes.md, and the real source tree under dataset/codeql_databases/path_traversal_dbs/whoogle-search_vuln. No PyVul ground truth, fix commits, or CVE descriptions were consulted for the per-finding verdicts. The ground-truth commit comparison is a separate section supplied at the operator's request after the independent triage and did not alter any verdict.",
+    "scope_note": "Only the 2 results carrying ruleId py/augur/whoogle-search/pass1-path-traversal were triaged. Diagnostics queries and CodeQL built-in security query suites were not present in pass1.sarif and none were counted."
+  },
+  "findings": [
+    {
+      "finding_id": "pass1-config-put-read",
+      "rule_id": "py/augur/whoogle-search/pass1-path-traversal",
+      "sarif_location": {
+        "file": "app/routes.py",
+        "line": 430,
+        "columns": "51-61"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "endpoint": "PUT /config (route decorator app/routes.py:416, handlers @session_required @auth_required, function config() routes.py:419)",
+      "source": {
+        "attacker_controlled": true,
+        "location": "app/routes.py:429",
+        "expression": "request.args.get('name')",
+        "kind": "Flask URL query parameter 'name' (PUT /config?name=<attacker value>)",
+        "evidence": "routes.py:426 `if 'name' in request.args:` -> routes.py:429 `request.args.get('name')` — direct flask request.args read; werkzeug percent-decodes once at parse time, no further decode on this chain",
+        "label_ref": "src-110 (role source, tp, conf 0.97)"
+      },
+      "taint_flow": [
+        {"step": 1, "file": "app/routes.py", "line": 429, "node": "request.args.get('name')", "note": "SARIF codeFlow step 0/1 — untrusted query param"},
+        {"step": 2, "file": "app/routes.py", "lines": "427-429", "node": "os.path.join(app.config['CONFIG_PATH'], request.args.get('name')) -> config_pkl", "note": "SARIF codeFlow steps 2-3; os.path.join is taint-preserving: '..' segments survive, an absolute second argument replaces CONFIG_PATH entirely (label snk-240, summary tp 0.9)"},
+        {"step": 3, "file": "app/routes.py", "line": 430, "node": "open(config_pkl, 'rb') -> pickle.load(...)", "note": "SARIF codeFlow step 4; result assigned into session['config'] and returned to the client as JSON (routes.py:430-433)"}
+      ],
+      "sink": {
+        "is_real_file_access": true,
+        "location": "app/routes.py:430",
+        "expression": "open(config_pkl, 'rb') with pickle.load(open(...))",
+        "operation": "arbitrary file READ (plus pickle deserialization of attacker-chosen file — secondary concern, CWE-502-adjacent)",
+        "note": "Not mere path concatenation: this is a genuine filesystem read whose loaded content is reflected to the attacker in the JSON response (routes.py:433).",
+        "label_ref": "snk-242 (role sink, tp, conf 0.97)"
+      },
+      "allowed_root": {
+        "base": "app.config['CONFIG_PATH'] = os.getenv('CONFIG_VOLUME', <STATIC_FOLDER>/config) (app/__init__.py:70-72)",
+        "can_input_escape": true,
+        "escape_mechanisms": [
+          "'..' segments: name=../../etc/foo survives os.path.join verbatim (join performs no normalization)",
+          "absolute path: name=/etc/foo — os.path.join discards CONFIG_PATH entirely when arg 2 is absolute",
+          "Windows drive letters (this db is analyzed on win32 host): name=C:/x/y replaces base",
+          "mixed/forward separators accepted by the underlying OS APIs"
+        ]
+      },
+      "barriers": {
+        "present": false,
+        "examined": [
+          {"candidate": "os.path.exists(config_pkl) routes.py:431", "blocks": false, "reason": "existence probe only — gates whether the load branch runs, performs no containment or canonicalization (check-then-open TOCTOU companion, not a barrier)"},
+          {"candidate": "auth_required / session_required decorators routes.py:417-418", "blocks": false, "reason": "see preconditions — not a path-containment control, and bypassed in default credential-less deployments"},
+          {"candidate": "config_disabled gate routes.py:425", "blocks": false, "reason": "business toggle (WHOOGLE_CONFIG_DISABLE, default false via read_config_bool app/utils/misc.py:18), not path validation"}
+        ],
+        "verified_absent": "grep over app/routes.py confirms no normpath/realpath/resolve/relative_to/basename/'..'-rejection/regex-whitelist between source (429) and sink (430). The vulnerable version predates the fix's `os.path.normpath` + `^[A-Za-z0-9_.+-]+$` regex (verified absent in this tree).",
+        "misdiagnosis_check": "No Path.resolve/startsWith prefix check or login-only 'protection' was mistaken for containment — none exist on this chain; the empty isBarrier (MySanitizers.qll) is the accurate model."
+      },
+      "preconditions": [
+        "HTTP PUT (not GET) to /config with a 'name' query parameter",
+        "config_disabled must be false: app.config['CONFIG_DISABLE'] = read_config_bool('WHOOGLE_CONFIG_DISABLE') (routes.py:420-422, 425) — default false",
+        "auth_required (routes.py:48-74): if WHOOGLE_USER/WHOOGLE_PASS env vars are unset — the default for most self-hosted deployments — routes.py:64 `(not whoogle_user or not whoogle_pass)` short-circuits to `session['auth'] = True; return f(...)` with NO authentication; if credentials are configured, any validly authenticated user (single shared account) reaches the sink",
+        "for content exfiltration the target file must parse as a pickle (os.path.exists must also pass, routes.py:431, for the open to execute); non-pickle targets still permit existence probing and error differentiation"
+      ],
+      "questions_1_to_10": {
+        "1_source_attacker_controlled": "yes — flask query parameter 'name', fully attacker-controlled string",
+        "2_source_reaches_sink": "yes — direct same-function flow, no async hop or wrapper: 429 -> join(427-429) -> open(430); SARIF codeFlows (both threadFlows) show exactly these nodes",
+        "3_sink_is_sensitive_file_op": "yes — open(...,'rb') + pickle.load, a real filesystem read with content reflected in the JSON response; not mere concatenation",
+        "4_allowed_root_escape": "yes — CONFIG_PATH (CONFIG_VOLUME or static/config) is the only intended root; '..' and absolute second-arg join semantics both escape it",
+        "5_traversal_vectors_real": "yes — no normalization exists at all, so '..', absolute paths, and separators all pass through unchanged; single framework-level percent-decode only",
+        "6_containment_before_access": "none — the only checks (os.path.exists) occur as TOCTOU companions, not pre-access containment",
+        "7_barrier_misdiagnosis": "none — no normpath/resolve/startsWith/auth-only false barrier was credited; empty barrier model is correct",
+        "8_not_benign_static_serving": "correct — this is an authenticated-user/credential-less-deployment arbitrary read outside the config root, not authorized static file serving, test code, or unreachable path",
+        "9_overgeneralization_fp": "no — source/sink shapes are the exact labeled sites (src-110, snk-242), path is the single documented full untrusted->path chain; database covers app/routes.py correctly (codeFlows carry real line numbers)",
+        "10_cwe_mixing": "no — single ruleId in SARIF, no diagnostics or builtin-suite results present"
+      },
+      "rationale": "Genuine CWE-22/23/36/73 arbitrary-file-read (with pickle deserialization side effect) on PUT /config: attacker-controlled query parameter joined under CONFIG_PATH with zero validation or canonicalization and opened directly. Reachable unauthenticated in default deployments (no WHOOGLE_USER/PASS) or by the shared authenticated account otherwise."
+    },
+    {
+      "finding_id": "pass1-config-post-write",
+      "rule_id": "py/augur/whoogle-search/pass1-path-traversal",
+      "sarif_location": {
+        "file": "app/routes.py",
+        "line": 445,
+        "columns": "22-47 (spanning 445-447)"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "endpoint": "POST /config (route decorator app/routes.py:416, handlers @session_required @auth_required, function config() routes.py:419)",
+      "source": {
+        "attacker_controlled": true,
+        "location": "app/routes.py:447",
+        "expression": "request.args.get('name')",
+        "kind": "Flask URL query parameter 'name' (POST /config?name=<attacker value>)",
+        "evidence": "routes.py:442 `if 'name' in request.args:` -> routes.py:447 `request.args.get('name')`",
+        "label_ref": "src-118 (role source, tp, conf 0.97)"
+      },
+      "taint_flow": [
+        {"step": 1, "file": "app/routes.py", "line": 447, "node": "request.args.get('name')", "note": "SARIF codeFlow step 0 — untrusted query param"},
+        {"step": 2, "file": "app/routes.py", "lines": "445-447", "node": "os.path.join(app.config['CONFIG_PATH'], request.args.get('name'))", "note": "SARIF codeFlow step 1; taint-preserving join (label snk-244, summary tp 0.9)"},
+        {"step": 3, "file": "app/routes.py", "lines": "443-447", "node": "pickle.dump(config_data, open(..., 'wb'))", "note": "SARIF final step; open(...,'wb') creates/truncates the file; config_data = request.form.to_dict() (routes.py:437) is attacker-influenced content"}
+      ],
+      "sink": {
+        "is_real_file_access": true,
+        "location": "app/routes.py:445-447",
+        "expression": "open(os.path.join(app.config['CONFIG_PATH'], request.args.get('name')), 'wb') receiving pickle.dump(config_data)",
+        "operation": "arbitrary file CREATE/OVERWRITE (write) with attacker-influenced pickled-dict content",
+        "note": "Real filesystem write, not path construction; 'wb' truncates existing targets, enabling overwrite of arbitrary writable files.",
+        "label_ref": "snk-243 (role sink, tp, conf 0.97)"
+      },
+      "allowed_root": {
+        "base": "app.config['CONFIG_PATH'] = os.getenv('CONFIG_VOLUME', <STATIC_FOLDER>/config) (app/__init__.py:70-72)",
+        "can_input_escape": true,
+        "escape_mechanisms": [
+          "'..' segments: name=../../../home/x/.ssh/authorized_keys-style targets",
+          "absolute path: name=/tmp/x replaces CONFIG_PATH entirely under os.path.join semantics",
+          "Windows drive letters and mixed separators on win32 hosts",
+          "note: CONFIG_PATH also holds whoogle.key (app/__init__.py:102) and the session dir (app/__init__.py:77-79) — escapes and in-root collisions both have security impact; overwrite of whoogle.key or session pickles is in-root but attacker-named"
+        ]
+      },
+      "barriers": {
+        "present": false,
+        "examined": [
+          {"candidate": "auth_required / session_required routes.py:417-418", "blocks": false, "reason": "not path containment; bypassed entirely in default credential-less deployments (routes.py:64 short-circuit)"},
+          {"candidate": "config_disabled gate routes.py:436", "blocks": false, "reason": "business toggle, default false, not path validation"}
+        ],
+        "verified_absent": "no normpath/realpath/regex whitelist on this chain in the analyzed tree (pre-fix source); write happens immediately after the join with no probe at all (worse than the read side — not even an exists() TOCTOU companion)",
+        "misdiagnosis_check": "No barrier over-crediting; MySanitizers empty barrier is accurate for this chain too."
+      },
+      "preconditions": [
+        "HTTP POST to /config with a 'name' query parameter and form body (config_data)",
+        "config_disabled false (default)",
+        "auth_required passable: default deployments with WHOOGLE_USER/WHOOGLE_PASS unset require NO authentication (routes.py:62-69); otherwise the single shared account",
+        "process write permissions on the target path (app typically runs with adequate perms in its container)"
+      ],
+      "questions_1_to_10": {
+        "1_source_attacker_controlled": "yes — query parameter 'name', plus form-derived pickled content",
+        "2_source_reaches_sink": "yes — same-function direct flow 447 -> join(445-447) -> open 'wb'; both SARIF codeFlows show these exact nodes",
+        "3_sink_is_sensitive_file_op": "yes — open(...,'wb') + pickle.dump is a real create/overwrite write, not concatenation",
+        "4_allowed_root_escape": "yes — same join semantics; additionally in-root arbitrary-name writes (whoogle.key, session pickles) are impactful",
+        "5_traversal_vectors_real": "yes — zero normalization on the chain; '..'/absolute/separators all effective",
+        "6_containment_before_access": "none whatsoever on the write path",
+        "7_barrier_misdiagnosis": "none — no false barrier credited",
+        "8_not_benign_static_serving": "correct — arbitrary write outside intended config root by request-provided name",
+        "9_overgeneralization_fp": "no — exact labeled sites (src-118, snk-243/snk-244); the only full untrusted->path write chain in the tree",
+        "10_cwe_mixing": "no"
+      },
+      "rationale": "Genuine CWE-22/23/36/73 arbitrary-file-write (and overwrite) on POST /config: attacker-chosen filename joined under CONFIG_PATH with no validation, opened 'wb', filled with attacker-influenced pickled content. Same reachability preconditions as the read-side finding; strictly more damaging (no existence requirement)."
+    }
+  ],
+  "summary": {
+    "total_formal_alerts": 2,
+    "likely_tp": 2,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "statement": "CodeQL analysis succeeded and produced 2 formal Pass 1 path-traversal taint findings, both on the /config endpoint's 'name' query parameter (routes.py:430 read, routes.py:445 write). Both are independently re-verified as likely true positives from source evidence: attacker-controlled query string -> unvalidated os.path.join under CONFIG_PATH -> direct open() read/write, with no canonicalization, whitelist, or containment anywhere on the chain, and default deployments (WHOOGLE_USER/PASS unset) admitting unauthenticated access.",
+    "out_of_scope_observations": [
+      "send_file calls in the element() route (routes.py:484/490 in query notes; actual sites at app/routes.py element()) pass io.BytesIO buffers — correctly NOT modeled as path sinks; no false sink there.",
+      "window()/element() SSRF-style base_url fetches (g.user_request.send(base_url=...)) are network operations, not filesystem path accesses — correctly outside this CWE-22 pass.",
+      "Second-order chains (session-dir open/remove routes.py:93-120, gen_file_hash/gen_bangs_json param paths) produced no alerts, consistent with query_generation_notes.md §2 expectation — no spurious coverage."
+    ]
+  },
+  "ground_truth_commit_match": {
+    "task": "Operator-supplied post-triage question: was the real vulnerability fixed by benbusby/whoogle-search commit 3a2e0b262e4a076a20416b45e6b6f23fd265aeda hit by the formal Pass 1 alerts?",
+    "analyzed_after_independent_triage": true,
+    "commit_functions": [
+      {
+        "function": "config",
+        "real_cwe": "CWE-22 (Path Traversal) — commit message: 'This also includes validation of config names to prevent names from including path values such as \"../../(etc)\"'",
+        "fix_applied": "os.path.normpath(request.args.get('name')) + regex whitelist ^[A-Za-z0-9_.+-]+$ with 400 on failure, applied BEFORE both the PUT read (open(config_pkl,'rb') + pickle.load) and the POST write (pickle.dump into open(...,'wb'))",
+        "vulnerable_version_matches_analyzed_tree": "verified — app/routes.py:419-452 in the analyzed database is byte-for-byte the code_before shape (no normpath, no regex, direct join+open on request.args.get('name'))",
+        "hit_by_pass1_alerts": true,
+        "hit_detail": "Both formal alerts hit this exact vulnerability: pass1-config-put-read (routes.py:430, the PUT pickle.load read) and pass1-config-post-write (routes.py:445, the POST pickle.dump write). The taint sources (request.args.get('name') at 429/447), the join step (427/445), and the sinks (open at 430/445) are precisely the lines the commit's config() diff validates. Both alerts independently re-verified as likely_tp."
+      },
+      {
+        "function": "window",
+        "real_cwe": "CWE-918 (SSRF) — validators.domain check on target.netloc before g.user_request.send(base_url=target_url)",
+        "fix_relevant_to_path_traversal": false,
+        "hit_by_pass1_alerts": false,
+        "assessment": "Not a miss: the vulnerability is SSRF (request.args.get('location') -> outbound HTTP fetch of attacker-chosen scheme://netloc, e.g. 127.0.0.1:port/resource), not a filesystem path access. No file path argument exists anywhere on the window() chain, so a Pass 1 CWE-22 taint query correctly produces no alert for it. Out of scope by design (different CWE, network sink)."
+      },
+      {
+        "function": "element",
+        "real_cwe": "CWE-918 (SSRF) — validators.domain check on urlparse(src_url).netloc before g.user_request.send(base_url=src_url)",
+        "fix_relevant_to_path_traversal": false,
+        "hit_by_pass1_alerts": false,
+        "assessment": "Not a miss: SSRF via request.args.get('url') -> server-side fetch. The only file-ish call, send_file, receives io.BytesIO buffers (routes.py element(): send_file(tmp_mem, mimetype=src_type) and send_file(io.BytesIO(empty_gif), ...)) — there is no path argument, so it is neither a path-traversal sink nor a false one. Out of scope for CWE-22 Pass 1; correctly unalerted."
+      }
+    ],
+    "conclusion": "The commit bundles one CWE-22 fix (config name path traversal) and two CWE-918 fixes (window/element SSRF, per the function descriptions). The formal Pass 1 Path Traversal alerts hit the CWE-22 portion completely: both the read side (PUT, routes.py:430) and the write side (POST, routes.py:445) of the vulnerable config() flow are alerted, with full source->sink codeFlows, and both are re-verified as likely_tp. The window/element SSRF portions are a different CWE with no filesystem path sink and are properly outside a Path Traversal pass — their absence from the alerts is correct scoping, not a missed detection. Pass 1 detection rate on this commit's path-traversal-relevant fix: 1/1 functions hit (2/2 vulnerable code paths covered)."
+  }
+}

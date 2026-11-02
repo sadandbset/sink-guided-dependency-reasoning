@@ -1,0 +1,295 @@
+/**
+ * @name xmpp-http-upload CWE-22 source candidate extraction
+ * @description Extract attacker-controlled input source candidates from the
+ *   xmpp-http-upload CodeQL database (version 0.3.0, creation sha
+ *   f0fc7443c06a0e8aecb5696fc2bd513a2cc8b611 - a Flask-based HTTP file
+ *   upload/download service for Prosody mod_http_upload_external; the
+ *   entire server is the single module xhu.py, plus setup.py packaging
+ *   and config.example.py): the Flask route path-converter parameters
+ *   (the `path` parameters of put_file/head_file/get_file bound by
+ *   @app.route("/<path:path>", methods=[...]) at xhu.py:104/:189/:214 -
+ *   the percent-decoded remainder of the request URL as captured by the
+ *   Werkzeug `path` converter is THE dominant attacker-controlled
+ *   file-location input of this service: it flows into
+ *   sanitized_join(path, root) -> (root / path).absolute() -> the
+ *   '<base>.data'/'<base>.meta' path construction -> .mkdir/.open/
+ *   .stat/flask.send_file); flask.request.args.get("v", "") at
+ *   xhu.py:118 (the PUT verification key - query-string input, consumed
+ *   only by hmac.compare_digest, never used as a path);
+ *   flask.request.headers.get(...) at xhu.py:119 (Content-Length -
+ *   feeds the HMAC input and the stream copy length) and at :132
+ *   (Content-Type - stored into the metadata JSON); and the
+ *   flask.request.stream request-body object at xhu.py:142 (the raw PUT
+ *   payload read by stream_file). Operator-configured values that are
+ *   NOT attacker-controlled are NOT emitted (the app.config family:
+ *   DATA_ROOT - the containment base read at :66/:109/:194/:219,
+ *   SECRET_KEY :121, ENABLE_CORS :37, NON_ATTACHMENT_MIME_TYPES :178,
+ *   and the from_envvar("XMPP_HTTP_UPLOAD_CONFIG") bootstrap at :34 -
+ *   the only environment-variable interaction in the codebase) - they
+ *   are documented in detection.json instead. Raw BQRS extraction
+ *   query: run with `codeql query run` and decode with `codeql bqrs
+ *   decode` (not database analyze). This is a plain multi-column
+ *   select query on purpose: @kind problem is the wrong shape for
+ *   candidate tables and @kind table is not assumed to exist.
+ * @id iris/xmpp-http-upload/extraction/sources
+ * @tags path-traversal
+ */
+
+import python
+import semmle.python.ApiGraphs
+
+/*
+ * Column contract (identical order to sinks.ql and to the prior IRIS
+ * manual projects):
+ *   1. node       - candidate AST node (location-backed, decodes as file:line:col)
+ *   2. role       - always "source_candidate" in this query
+ *   3. callable   - callable/member/function name ("put_file"/"head_file"/
+ *                   "get_file" for route_param rows, "get" for the
+ *                   flask.request accessor calls, "stream" for the body
+ *                   attribute read)
+ *   4. flow_kind  - "route_param" (parameter of a Flask route handler,
+ *                   bound by the '/<path:path>' URL converter),
+ *                   "request_arg" (flask.request.args.get - query
+ *                   string), "request_header" (flask.request.headers.get
+ *                   - request headers), "request_stream"
+ *                   (flask.request.stream - raw request body)
+ *   5. receiver   - syntactic receiver hint ("" for module-level
+ *                   function parameters and bare-name calls; dotted
+ *                   hints "flask.request.args"/"flask.request.headers"/
+ *                   "flask.request" for the flask accessor rows)
+ *   6. moduleHint - "flask" for the framework accessor rows, otherwise
+ *                   the dotted python module path of the containing
+ *                   module (variable intentionally named moduleHint;
+ *                   `module` is not a valid QL variable name here)
+ *   7. arg_index  - for route_param rows the true 0-based parameter
+ *                   position in the handler definition; -1 when the
+ *                   return value (flask.request.args.get /
+ *                   flask.request.headers.get) or the attribute itself
+ *                   (flask.request.stream) carries the value
+ *   8. file       - absolute file path, obtained through the Location API
+ *                    (AstNode.getLocation().getFile().getAbsolutePath();
+ *                    AstNode.getFile() does not exist)
+ *   9. line       - 1-based start line (AstNode.getLocation().getStartLine())
+ *  10. match_kind - "api" (call additionally resolved through API graphs
+ *                   via the real `import flask` at xhu.py:31) or "ast"
+ *                   (syntax-level match only)
+ *
+ * Note: this file defines no QL classes (only predicates), does not
+ * assign API::Node values to DataFlow::Node variables (API graph nodes
+ * only appear inside exists() bodies feeding astCallOf), keeps every
+ * variable bound through a positive body, and keeps resolved-API
+ * matching strictly separate from AST syntax matching: every row is
+ * GENERATED by its AST shape (guaranteeing candidate presence), and the
+ * match_kind column records whether the API graph additionally resolves
+ * the call (expected: yes for the three flask.request accessor call
+ * sites; the route_param parameters and the flask.request.stream
+ * attribute read are ast-only by construction).
+ *
+ * Excluded paths (applied to every row): /xmpp-http-upload-db/ (the
+ * CodeQL database directory nested inside the source tree) and /.git/
+ * (not part of the database; filtered for safety). No /tests/ tree
+ * exists in this project. setup.py and config.example.py contribute no
+ * source rows (packaging literals and config literals only).
+ */
+
+/* ------------------------------------------------------------------ */
+/* Generic helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+/** Dotted path of the python module containing n (used as moduleHint for
+ *  internal candidates). Top-level scripts that are not on an import path
+ *  have no dotted module name; their file base name is used instead. */
+string moduleHintOf(AstNode n) {
+  result = n.getScope().getEnclosingModule().getName()
+  or
+  not exists(n.getScope().getEnclosingModule().getName()) and
+  result = n.getScope().getEnclosingModule().getFile().getShortName()
+}
+
+/** Forward-slash-normalized absolute path of the file containing n, so path
+ *  matching works with both CodeQL path styles on Windows. */
+string normalizedPathOf(AstNode n) {
+  result = n.getLocation().getFile().getAbsolutePath().replaceAll("\\", "/")
+}
+
+/** Base name of the object expression of an attribute access, used as a receiver hint. */
+string receiverHint(Attribute a) {
+  result = a.getObject().(Name).getId()
+  or
+  result = a.getObject().(Attribute).getName()
+  or
+  not a.getObject() instanceof Name and
+  not a.getObject() instanceof Attribute and
+  result = "<expr>"
+}
+
+/** True iff the candidate's file path is one of the excluded trees. Path is
+ *  normalized to forward slashes before matching so the query works on both
+ *  CodeQL path styles. bindingset[path] declares that the caller passes a
+ *  bound path (the path only appears in checked positions such as the
+ *  receiver of replaceAll/matches inside this predicate). */
+bindingset[path]
+predicate excludedPath(string path) {
+  path.replaceAll("\\", "/").matches("%/xmpp-http-upload-db/%")
+  or
+  path.replaceAll("\\", "/").matches("%/.git/%")
+}
+
+/** The syntactic Call node behind an API graph call node (same proven
+ *  helper shape as the airflow project of this series). */
+private Call astCallOf(API::CallNode cn) {
+  result = cn.getNode().getNode().(Call)
+}
+
+/** Holds if c is a flask.request accessor call that the API graph resolves
+ *  through the real `import flask` (xhu.py:31): the
+ *  flask.request.args.get / flask.request.headers.get chains, mirroring
+ *  the stock Flask.qll request()/RequestAttrMultiDict modeling. */
+private predicate apiResolvedFlaskRequestCall(Call c) {
+  exists(API::CallNode cn |
+    (
+      cn = API::moduleImport("flask").getMember("request").getMember("args").getMember("get").getACall()
+      or
+      cn = API::moduleImport("flask").getMember("request").getMember("headers").getMember("get").getACall()
+    ) and
+    c = astCallOf(cn)
+  )
+}
+
+/** Holds if f is a Flask route handler: a function decorated with a
+ *  `<something>.route(...)` call (xhu.py:84/:104/:189/:214 - index,
+ *  put_file, head_file, get_file). Python CodeQL has no Decorator AST
+ *  type; the decorator is read via getADecorator(), which returns the
+ *  func expression of the decorator call (the `app.route` attribute). */
+private predicate flaskRouteHandler(Function f) {
+  exists(Attribute dec |
+    dec = f.getADecorator() and
+    dec.getName() = "route"
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Row assembly                                                        */
+/* ------------------------------------------------------------------ */
+
+/** One row per source candidate. */
+private predicate sourceCandidate(
+  AstNode node, string callableName, string flowKind, string receiver,
+  string moduleHint, int argIndex, string matchKind
+) {
+  /* family 1: route_param - the parameters of the Flask route handlers.
+     The '/<path:path>' converter of @app.route("/<path:path>",
+     methods=["PUT"/"HEAD"/"GET"]) at xhu.py:104/:189/:214 binds the
+     percent-decoded remainder of the request URL (slashes included) to
+     the `path` parameter of put_file (:105), head_file (:190) and
+     get_file (:215). index () at :84-89 has no parameters and produces
+     no row. THE dominant attacker-controlled file-location input: it
+     flows into sanitized_join -> (root / path).absolute() -> .data/
+     .meta construction -> .mkdir/.open/.stat/send_file. Note the trust
+     asymmetry recorded in detection.json: put_file additionally gates
+     on an HMAC over "path length" (the uploading entity must hold the
+     shared SECRET_KEY), head_file/get_file do not. */
+  exists(Function f, Parameter p |
+    flaskRouteHandler(f) and
+    normalizedPathOf(f).matches("%/xhu.py") and
+    p = f.getAnArg() and
+    node = p and
+    flowKind = "route_param" and
+    callableName = f.getName() and
+    argIndex = p.getPosition() and
+    receiver = "" and
+    moduleHint = moduleHintOf(f) and
+    matchKind = "ast"
+  )
+  or
+  /* family 2: request_arg - flask.request.args.get("v", "") at
+     xhu.py:118 in put_file: the PUT verification key from the query
+     string (compared against the HMAC digest at :125, never used as a
+     path). The row node is the get(...) call; its RETURN value carries
+     the value, hence arg_index -1. */
+  exists(Call c, Attribute getAttr, Attribute argsAttr, Attribute reqAttr |
+    getAttr = c.getFunc().(Attribute) and
+    getAttr.getName() = "get" and
+    argsAttr = getAttr.getObject().(Attribute) and
+    argsAttr.getName() = "args" and
+    reqAttr = argsAttr.getObject().(Attribute) and
+    reqAttr.getName() = "request" and
+    reqAttr.getObject().(Name).getId() = "flask" and
+    normalizedPathOf(c).matches("%/xhu.py") and
+    node = c and
+    flowKind = "request_arg" and
+    callableName = "get" and
+    argIndex = -1 and
+    receiver = "flask.request.args" and
+    moduleHint = "flask" and
+    (
+      (apiResolvedFlaskRequestCall(c) and matchKind = "api")
+      or
+      (not apiResolvedFlaskRequestCall(c) and matchKind = "ast")
+    )
+  )
+  or
+  /* family 3: request_header - flask.request.headers.get(...) at
+     xhu.py:119 (Content-Length: int-coerced, feeds the HMAC input
+     ":120 and the stream copy length :142) and :132 (Content-Type:
+     stored into the metadata JSON :144-150 and replayed into responses
+     by generate_headers). The row node is the get(...) call; its RETURN
+     value carries the value, hence arg_index -1. */
+  exists(Call c, Attribute getAttr, Attribute headersAttr, Attribute reqAttr |
+    getAttr = c.getFunc().(Attribute) and
+    getAttr.getName() = "get" and
+    headersAttr = getAttr.getObject().(Attribute) and
+    headersAttr.getName() = "headers" and
+    reqAttr = headersAttr.getObject().(Attribute) and
+    reqAttr.getName() = "request" and
+    reqAttr.getObject().(Name).getId() = "flask" and
+    normalizedPathOf(c).matches("%/xhu.py") and
+    node = c and
+    flowKind = "request_header" and
+    callableName = "get" and
+    argIndex = -1 and
+    receiver = "flask.request.headers" and
+    moduleHint = "flask" and
+    (
+      (apiResolvedFlaskRequestCall(c) and matchKind = "api")
+      or
+      (not apiResolvedFlaskRequestCall(c) and matchKind = "ast")
+    )
+  )
+  or
+  /* family 4: request_stream - the flask.request.stream attribute read
+     at xhu.py:142 in put_file: the raw PUT request body object handed
+     to stream_file (:92-101) and read chunk-wise into the data file
+     (:94). The attribute itself is the value, hence arg_index -1. */
+  exists(Attribute streamAttr, Attribute reqAttr |
+    streamAttr.getName() = "stream" and
+    reqAttr = streamAttr.getObject().(Attribute) and
+    reqAttr.getName() = "request" and
+    reqAttr.getObject().(Name).getId() = "flask" and
+    normalizedPathOf(streamAttr).matches("%/xhu.py") and
+    node = streamAttr and
+    flowKind = "request_stream" and
+    callableName = "stream" and
+    argIndex = -1 and
+    receiver = "flask.request" and
+    moduleHint = "flask" and
+    matchKind = "ast"
+  )
+}
+
+from AstNode node, string callableName, string flowKind, string receiver,
+     string moduleHint, int argIndex, string matchKind
+where
+  sourceCandidate(node, callableName, flowKind, receiver, moduleHint, argIndex, matchKind) and
+  not excludedPath(node.getLocation().getFile().getAbsolutePath())
+select
+  node,
+  "source_candidate",
+  callableName,
+  flowKind,
+  receiver,
+  moduleHint,
+  argIndex,
+  node.getLocation().getFile().getAbsolutePath() as file,
+  node.getLocation().getStartLine() as line,
+  matchKind

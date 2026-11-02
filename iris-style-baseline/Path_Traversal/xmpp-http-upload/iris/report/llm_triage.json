@@ -1,0 +1,151 @@
+{
+  "version": "1.0.0",
+  "triage_id": "xmpp-http-upload-iris-pass1-llm-path-review-20261024",
+  "reviewer_model": "glm-5.3",
+  "scope": {
+    "ruleId": "py/augur/xmpp-http-upload/pass1-path-traversal",
+    "sarif": "iris/results/pass1.sarif",
+    "formal_result_count": 7,
+    "other_rules_in_sarif": [],
+    "notes": "The SARIF run contains exactly one rule (py/augur/xmpp-http-upload/pass1-path-traversal) with 7 results. The only notifications are telemetry (py/baseline/expected-extracted-files, cli/file-coverage-baseline, cli/platform) with level=none - no diagnostic or CodeQL built-in query results are mixed into the formal Pass 1 output. Artifacts: xhu.py, config.example.py, setup.py (full coverage of the service)."
+  },
+  "independence": "No PyVul ground truth, no fix commits, no CVE descriptions were consulted for the 7 alert verdicts. Inputs used: iris_report.md, labels.json, query_generation_notes.md, results/pass1.sarif, and the real source xhu.py / config.example.py / setup.py of the xmpp-http-upload_vuln tree. The second task (real-vulnerability hit analysis) uses only the commit metadata supplied by the operator in the task prompt itself."
+  ,
+  "project_context": {
+    "service": "xmpp-http-upload 0.3.0 - Flask HTTP file upload/download service for XMPP HTTP Upload (XEP-0363)",
+    "allowed_root": "DATA_ROOT - operator configuration (app.config['DATA_ROOT']; config.example.py: '/var/lib/xmpp-http-upload', absolute, no trailing slash). Declared containment base for all uploads/downloads.",
+    "file_set": "Per uploaded slot: '<slot>.data' (payload) and '<slot>.meta' (JSON metadata with the uploader Content-Type), created exclusively ('xb'/'x') with 0o770 dirs.",
+    "routes": [
+      "PUT /<path:path> - put_file (xhu.py:104-105) - HMAC-SHA256 gate over '{path} {length}' with operator SECRET_KEY (xhu.py:118-130)",
+      "HEAD /<path:path> - head_file (xhu.py:189-190) - unauthenticated",
+      "GET /<path:path> - get_file (xhu.py:214-215) - unauthenticated"
+    ],
+    "guard": "sanitized_join (xhu.py:42-46): result = (root / path).absolute(); if not str(result).startswith(str(root) + '/'): raise ValueError. Lexical prefix check on an un-normalized string; runs before every file access (check-then-use) but, as analyzed below, blocks nothing on the converter-supplied input class."
+  },
+  "shared_flow_verification": {
+    "source": "Route parameter `path` of put_file/head_file/get_file (xhu.py:105/:190/:215), bound by the Werkzeug `path` converter of @app.route(\"/<path:path>\", ...) at xhu.py:104/:189/:214. Verified against the real source: all three handlers exist with exactly that route/parameter shape.",
+    "source_controllability": "Full. The Werkzeug `path` converter captures the URL-decoded remainder of the request URL (regex [^/].*? - always a relative string, slashes included). Percent-decoding happens once, in the framework, before the handler; the app performs no further encode/decode. A request path containing ../ (literal or %2e%2e%2f, decoded by the framework) is bound verbatim to `path`.",
+    "propagation_chain": "path (route param) -> sanitized_join arg0 (xhu.py:107-110 / :64-67 via get_info :192/:217) -> param `path` (:42) -> BinaryExpr root / path (:43) -> .absolute() (:43, pass-through: prepends CWD only, no '..' collapse, no symlink resolution) -> result (:43) -> return (:46) -> dest_path (:107/:64) -> get_paths arg0 (:138/:69) -> str(base_path) + '.data'/'.meta' + pathlib.Path(...) (:50/:51) -> tuple return (:53) -> unpack (:138/:69) -> open/stat/mkdir/unlink receivers / send_file argument (:57/:76/:80/:137/:144/:197/:229).",
+    "chain_evidence": "Every step of every codeFlow in the SARIF lands on a real source line (verified line-by-line against xhu.py; all calls are synchronous - no async hops, no speculative inter-file jumps). The modeled taint steps (truediv at :43, .absolute() at :43, Path ctor at :50/:51, .parent at :137) are site-anchored to exact lines and are pure path-text derivations visible in the source; no over-generalized summary edge was needed to reach any sink.",
+    "guard_ineffectiveness": "pathlib.Path.absolute() performs no '..' normalization and no symlink resolution (CPython documented behavior; resolve() is the normalizing API and is never called in xhu.py - verified by reading the whole file). Because the `path` converter always yields a relative string, str((root / path).absolute()) textually begins with str(root) + '/' for EVERY converter-supplied request path, including paths with ../ segments. Example: path='../../../../etc/shadow' passes the guard as '/var/lib/xmpp-http-upload/../../../../etc/shadow' and the OS resolves the '..' chain at open/stat/mkdir/send_file time, outside DATA_ROOT. The guard's only effective case is absolute-path substitution, which the converter regex [^/].*? makes unreachable. Symlinks: none created by the app ('xb'/'x'/mkdir create regular files/dirs); no resolve/is_symlink anywhere; a pre-planted symlink inside DATA_ROOT would be followed by the lexical guard, but planting one requires independent filesystem write access - CWE-36 contribution recorded as not independently exploitable via the app alone. No backslash handling exists; on POSIX a backslash is an ordinary character (no separator confusion)."
+  },
+  "findings": [
+    {
+      "finding_index": 0,
+      "location": "xhu.py:57:10 (metadata_file receiver of metadata_file.open(\"r\") in load_metadata)",
+      "sink_operation": "Real file READ: open('r') + json.load of '<route-path>.meta' (pathlib.Path.open, xhu.py:57-58). Not a mere path construction.",
+      "codeflow_sources": ["xhu.py:190 (head_file route param)", "xhu.py:215 (get_file route param)"],
+      "flow_summary": "head_file/get_file path -> get_info (:192/:217) -> sanitized_join (:64-67, guard :44 passes) -> get_paths (:69) -> metadata_file = pathlib.Path(str(base_path)+'.meta') (:51) -> load_metadata (:56) -> metadata_file.open('r') (:57). 4 codeFlows, 23-25 steps, all real lines.",
+      "reachability": "UNAUTHENTICATED (HEAD and GET routes have no auth of any kind).",
+      "preconditions": "Target file must end in '.meta' (suffix appended textually at :51 - unavoidable) and contain valid JSON for full parsing; a missing/invalid file raises OSError/ValueError -> 404 (existence oracle either way).",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "reasoning": "Genuine CWE-22: unauthenticated attacker reads (and reflects part of, via generate_headers -> response headers at :207-210/:231-234) metadata files outside the declared DATA_ROOT via ../ segments; the lexical startswith guard passes every relative converter path. Scope constrained to *.meta files - limits, but does not remove, the information disclosure."
+    },
+    {
+      "finding_index": 1,
+      "location": "xhu.py:76:10 (at receiver of at.open(\"xb\") in write_file)",
+      "sink_operation": "Real file WRITE: exclusive-create open('xb') of '<route-path>.data' followed by streaming the request body into it (stream_file, xhu.py:92-101, :142).",
+      "codeflow_sources": ["xhu.py:105 (put_file route param)"],
+      "flow_summary": "put_file path -> sanitized_join (:107-110, guard passes) -> dest_path -> get_paths (:138) -> data_file (:50) -> write_file(data_file) (:141, @contextlib.contextmanager generator, body visible in DB) -> at.open('xb') (:76). 3 codeFlows, 22-24 steps, all real lines.",
+      "reachability": "PUT route only; gated by HMAC-SHA256 over '{path} {length}' with the operator SECRET_KEY (xhu.py:118-130) - an authorization gate over the exact path, not a containment mechanism.",
+      "preconditions": "Attacker must hold a valid verification key for the exact traversal path+length (normally only the XMPP slot server, which signs its own generated non-traversal paths, can produce one). EEXIST -> 409.",
+      "verdict": "likely_tp",
+      "confidence": 0.75,
+      "reasoning": "The code-level flow is genuine: the write path is attacker-selected, unconfined by the ineffective lexical guard, and mkdir(:137) has already created the escaped parent chain. The HMAC precondition substantially narrows remote exploitability (requires key compromise or a slot server willing to sign traversal paths), so it is a severity qualifier, not an FP reason - the sink consumes an unconfined route-derived path exactly as modeled."
+    },
+    {
+      "finding_index": 2,
+      "location": "xhu.py:80:13 (at receiver of at.unlink() in write_file error path)",
+      "sink_operation": "Real file DELETE: at.unlink() rollback of the partially-written '<route-path>.data'.",
+      "codeflow_sources": ["xhu.py:105 (put_file route param)"],
+      "flow_summary": "Same chain as finding 1 into write_file; then the except branch (:79-81) unlinks `at`. 3 codeFlows, 22-24 steps, all real lines.",
+      "reachability": "PUT route; HMAC-gated as finding 1; error path only - triggered when the body stream raises (e.g. EOFError from stream_file on a short body, xhu.py:100-101) after a successful exclusive create.",
+      "preconditions": "HMAC-valid request + exception during streaming. Note unlink targets the just-created '<path>.data' - a path the attacker selected - so with a traversal path it deletes a pre-existing file at that location only if open('xb') had succeeded (which it cannot for an existing file, EEXIST->409 before unlink). Net effect: deletes the attacker-chosen freshly-created file; overwrite of existing files is blocked by 'xb'.",
+      "verdict": "likely_tp",
+      "confidence": 0.65,
+      "reasoning": "A real deletion API on an unconfined route-derived path - the taint flow and CWE-22 mechanism are genuine. Practical impact is small (rollback semantics + 'xb' exclusivity + HMAC gate), so this is a secondary, low-severity TP; not an FP because the sink and flow are real, not a path-construction-only artifact."
+    },
+    {
+      "finding_index": 3,
+      "location": "xhu.py:137:5 (dest_path.parent receiver of mkdir(parents=True, exist_ok=True, mode=0o770))",
+      "sink_operation": "Real recursive DIRECTORY CREATION outside any file-content channel.",
+      "codeflow_sources": ["xhu.py:105 (put_file route param)"],
+      "flow_summary": "put_file path -> sanitized_join (:107-110) -> dest_path (:107) -> dest_path.parent (:137, Attribute step, real line verified) -> mkdir. 1 codeFlow, 12 steps, all real lines.",
+      "reachability": "PUT route; HMAC-gated as finding 1. Runs BEFORE the writes (ordering verified: :137 precedes :141/:144).",
+      "preconditions": "HMAC-valid request. NOT suffix-constrained (no .data/.meta text appended to the mkdir receiver) - '../' chains create arbitrary directory trees anywhere the process can write, with mode 0o770.",
+      "verdict": "likely_tp",
+      "confidence": 0.8,
+      "reasoning": "Arbitrary directory creation outside DATA_ROOT via the same ineffective guard; the .parent attribute is a pure path-text derivation of the tainted joined path, so the taint step is sound. HMAC gate is the only practical brake."
+    },
+    {
+      "finding_index": 4,
+      "location": "xhu.py:144:18 (metadata_file receiver of metadata_file.open(\"x\"))",
+      "sink_operation": "Real file WRITE: exclusive-create open('x') of '<route-path>.meta' with the uploader's Content-Type JSON dumped into it (:145-150).",
+      "codeflow_sources": ["xhu.py:105 (put_file route param)"],
+      "flow_summary": "Same chain as finding 1 via put_file -> get_paths (:138) -> metadata_file (:51) -> open('x') (:144). 3 codeFlows, 20-22 steps, all real lines.",
+      "reachability": "PUT route; HMAC-gated as finding 1; runs after the data write inside the same try block.",
+      "preconditions": "HMAC-valid request; '.meta' suffix; EEXIST -> 409 (:157-163).",
+      "verdict": "likely_tp",
+      "confidence": 0.75,
+      "reasoning": "Genuine write to an attacker-selected, unconfined path; same guard-ineffectiveness mechanism. HMAC precondition narrows exploitability as with finding 1."
+    },
+    {
+      "finding_index": 5,
+      "location": "xhu.py:197:16 (data_file receiver of data_file.stat())",
+      "sink_operation": "Real filesystem STAT probe (existence + size oracle; st_size disclosed as Content-Length at :206). Not a content read.",
+      "codeflow_sources": ["xhu.py:190 (head_file route param)"],
+      "flow_summary": "head_file path -> get_info (:192) -> sanitized_join (:64) -> get_paths (:69) -> data_file (:50) -> data_file.stat() (:197). 3 codeFlows, 24-27 steps, all real lines.",
+      "reachability": "UNAUTHENTICATED (HEAD route).",
+      "preconditions": "Target must end in '.data' (suffix at :50). OSError/ValueError -> 404, so the response difference (200 with size vs 404) is itself the oracle.",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "reasoning": "Unauthenticated existence/size oracle on arbitrary '*.data' paths outside DATA_ROOT via ../ - a genuine CWE-22/23 resource access on an unconfined attacker-selected path. Lower severity than content read, but a real file API on a real tainted path."
+    },
+    {
+      "finding_index": 6,
+      "location": "xhu.py:229:9 (argument 0 of flask.send_file, str(data_file), inside flask.make_response at :228-230)",
+      "sink_operation": "Real framework file READ INTO HTTP RESPONSE: flask.send_file(str(data_file)) streams '<route-path>.data' to the client.",
+      "codeflow_sources": ["xhu.py:215 (get_file route param)"],
+      "flow_summary": "get_file path -> get_info (:217) -> sanitized_join (:64-67, guard :44 passes) -> get_paths (:69) -> data_file = pathlib.Path(str(base_path)+'.data') (:50) -> str(data_file) (:229, default str() step) -> flask.send_file argument 0 (:228-230). 3 codeFlows, 24-27 steps, all real lines.",
+      "reachability": "UNAUTHENTICATED (GET route) - the highest-exploitability flow of the target.",
+      "preconditions": "Target file must end in '.data'; a matching '.meta' must exist and parse (get_info runs first and 404s otherwise), so arbitrary read is limited to (data, meta) pairs. This constrains scope (e.g. reading another instance's upload store on a shared host), not the traversal itself.",
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "reasoning": "Textbook CWE-22 information disclosure: fully attacker-controlled, unauthenticated URL path, lexical-only containment that passes every relative path including '../', and a direct file-content response. The suffix/paired-meta constraints are scope limitations acknowledged in the finding, not defenses against traversal."
+    }
+  ],
+  "checklist_answers": {
+    "1_source_attacker_controlled": "YES for all 7 findings - the sole source is the Werkzeug `path` route-converter binding (xhu.py:105/:190/:215), i.e. the URL-decoded request URL remainder. No finding relies on the flask.request.args/headers/stream label sources (they cannot reach a path in this codebase, and none produced alerts).",
+    "2_source_reaches_sink": "YES - every codeFlow step lands on a real, verified source line; all calls are synchronous Flask handlers -> plain functions -> pathlib/stdlib APIs; the only modeled edges (truediv :43, .absolute() :43, Path ctor :50/:51, .parent :137) are site-anchored pure path-text derivations corroborated by the visible source.",
+    "3_sink_is_real_file_operation": "YES for all 7 - open('r') :57, open('xb') :76 + body stream, unlink :80, mkdir(parents=True) :137, open('x') :144, stat :197, send_file :229. None is a bare path construction; flask.make_response (:228) is correctly not the sink (the send_file argument is).",
+    "4_allowed_root_and_escape": "Declared root = DATA_ROOT (operator config, '/var/lib/xmpp-http-upload'). YES - '..' segments in the route path make every sink operate outside DATA_ROOT; the guard cannot prevent it (see shared_flow_verification.guard_ineffectiveness).",
+    "5_traversal_factors": "Percent-decoding happens once in the framework (%2e%2e%2f -> ../ reaches the handler); no re-encoding/decoding in the app; absolute-path substitution unreachable (converter regex [^/].*?); no backslash separator confusion on POSIX; symlinks: none created by the app, lexical guard would follow a planted one but planting requires independent write access (CWE-36 residual, not independently exploitable). The decisive factor is '..'-segment resolution at OS access time.",
+    "6_effective_guards": "NONE effective. The only guard (sanitized_join :44) is a lexical startswith on an un-normalized string and runs before every access (check-then-use ordering verified per handler) yet blocks nothing on the converter input class. No resolve()/realpath()/relative_to()/segment whitelist/fixed mapping exists anywhere in xhu.py (whole file read).",
+    "7_misjudged_guards": "NO - the analysis explicitly did NOT treat the startswith check, Path.absolute(), or the HMAC auth as barriers; isBarrier is empty (MySanitizers.qll none()), which is the correct call. HMAC (PUT) is recorded as an authorization precondition, not containment.",
+    "8_normal_service_or_test": "NO - these are the production upload/download routes of the service, not static-file serving of a public dir (the whole point of DATA_ROOT + slot HMAC is restricted storage), not test code, not unreachable paths. put_file/head_file/get_file are all live routes.",
+    "9_overgeneralization_or_coverage_fp": "NO FP from over-generalization found. Sources are exact route parameters; sinks are exact receiver/argument positions at real file APIs; summaries are site-anchored. Database covers the whole 3-file project (artifact list + coverage notifications). One scope nuance repeated across read-side findings: the textual '.data'/'.meta' suffixes and the paired-meta requirement limit which files are reachable - a severity qualifier, not a false positive.",
+    "10_mixed_cwes_or_baselines": "NO - the SARIF contains exactly one rule (the Pass 1 Augur rule) and 7 results; notifications are telemetry only (level=none); no CodeQL built-in security query results and no diagnostic-query results are present in the formal output."
+  },
+  "summary": {
+    "likely_tp": 7,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "overall": "All 7 formal Pass 1 findings are verified likely true positives of CWE-22 path traversal. The read-side pair (xhu.py:229 send_file, unauthenticated GET; xhu.py:197 stat, unauthenticated HEAD) is the most exploitable; xhu.py:57 (unauthenticated .meta read) follows; the PUT-side writes/mkdir/unlink (:76/:137/:144/:80) are genuine flows whose exploitation is bounded by the HMAC verification-key precondition. The root cause - sanitized_join's lexical startswith guard over the un-normalized (root / path).absolute() string - is confirmed by direct source reading and CPython semantics of Path.absolute()."
+  },
+  "real_vulnerability_hit_analysis": {
+    "task": "Determine whether the real vulnerability of commit horazont/xmpp-http-upload@82056540191e89f0cd697c81f57714c00962ed75 (CWE-22, 'Simplify path handling, use safe_join') is hit by the formal Pass 1 alerts.",
+    "provided_functions": ["get_paths", "sanitized_join", "put_file"],
+    "code_match_verification": "The code_before snippets supplied for all three functions match the analyzed source verbatim: sanitized_join = xhu.py:42-46, get_paths = xhu.py:49-53, put_file = xhu.py:105-170 (including the ValueError->404 branch at :111-116). The analyzed database therefore contains exactly the pre-patch vulnerable code.",
+    "hit_assessment": {
+      "sanitized_join": "HIT - every one of the 7 alerts' codeFlows passes through sanitized_join (param :42, join :43, return :46), and the alert message names the exact defect the commit message describes ('.absolute() does not do what .resolve() does'): the guard's failure to normalize '..'. The function deleted by the fix is the function on every flagged path.",
+      "get_paths": "HIT - all 7 sinks consume get_paths outputs (:50 .data / :51 .meta); get_paths was rewritten by the fix to take (root, sub_path) and delegate to flask.safe_join, i.e. the fix moved containment INTO this function precisely because the flagged flows derive their paths here.",
+      "put_file": "HIT - findings at :76, :80, :137, :144 originate from put_file's route parameter (:105); the fix rewrote put_file to obtain both paths from the safe_join-based get_paths."
+    },
+    "impact_match": "The commit's impact statement ('When the GET method is attacked, attackers can read files which have a .data suffix and which are accompanied by a JSON file with the .meta suffix') describes exactly finding 6 (xhu.py:229, unauthenticated GET, .data-constrained, paired-meta requirement recorded as a precondition) and, secondarily, findings 0 (:57) and 5 (:197) on the unauthenticated HEAD/GET side.",
+    "coverage_of_fix_sites": "All three patched functions lie on flagged flows. The GET/HEAD read side (get_file/head_file/get_info) - the primary exploitation vector per the impact statement - is covered by findings 0, 5, 6. The PUT write side is covered by findings 1, 2, 3, 4.",
+    "conclusion": "HIT - the real CWE-22 vulnerability of commit 8205654 is captured by the formal Pass 1 alerts. The primary unauthenticated GET-side information disclosure (finding 6, xhu.py:229, confidence 0.95) matches the published impact, and the defective containment logic (sanitized_join, replaced by flask.safe_join in the fix) is on every one of the 7 flagged paths. No aspect of the fix's changed code is missed by the alert set.",
+    "note": "This section uses only the operator-supplied commit metadata (message, code_before/code_after, impact description) per the task instruction; no PyVul ground-truth files, fix repository, or CVE text were opened."
+  },
+  "actions": "None taken beyond this review. No SARIF, labels, or formal queries were modified; the sole output is this file (report/llm_triage.json). Independent review complete - stopping here."
+}
