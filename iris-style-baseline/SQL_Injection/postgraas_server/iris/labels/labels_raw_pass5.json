@@ -1,0 +1,1163 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 - Phase 1 Step 3: LLM API candidate labeling",
+    "pass": 5,
+    "cwes": [
+      "CWE-89"
+    ],
+    "focus": "SQL Injection",
+    "project": "postgraas_server",
+    "language": "python",
+    "framework": "flask",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SQL_Injection\\postgraas_server\\iris",
+    "generated_at": "2026-10-21T10:39:22+08:00",
+    "run_id": "postgraas-server-iris-pass5-20261021"
+  },
+  "llm": {
+    "model": "glm-5.3",
+    "invocation_mode": "in-session labeling by the agent's underlying LLM (no external LLM API calls)",
+    "batches": 4,
+    "candidates_total": 88,
+    "sources_rows": 56,
+    "sinks_rows": 32,
+    "label_entries": 80,
+    "merged_rows": 8,
+    "supplementary_entries": 0,
+    "re_ask_threshold": 0.55,
+    "entries_below_threshold": 0,
+    "role_x_classification": {
+      "none/fp": 44,
+      "sink/fp": 1,
+      "sink/tp": 8,
+      "source/candidate": 3,
+      "source/tp": 5,
+      "summary/candidate": 2,
+      "summary/tp": 17
+    },
+    "raw_row_classifications": {
+      "fp": 45,
+      "tp": 38,
+      "candidate": 5
+    },
+    "prompt_contract": {
+      "system": "Classify candidate APIs for a single CWE pass (pass 5, CWE-89 SQL Injection); prefer conservative recall; avoid overlabeling sink APIs unless SQL execution is present; mark sanitizers only with concrete evidence; distinguish ORM bound parameters and static-literal SQL from raw interpolated SQL.",
+      "row_contract": "For each CSV row: read the real source at file:line (and its enclosing function), then decide (a) is the data external attacker-influenced input, (b) can it reach SQL text (not just a query API), (c) is it bound, quoted, whitelisted or otherwise neutralized, (d) is it a CWE-89 taint source / a genuine raw-SQL sink with a dangerous argument index, (e) which wrapper summary edges the propagation needs.",
+      "labels": "role in {source,sink,sanitizer,summary,none}; classification in {tp,fp,candidate,unknown}; evidence must cite verbatim source lines."
+    }
+  },
+  "batches": [
+    {
+      "batch_id": 1,
+      "files": [
+        "postgraas_server/management_resources.py"
+      ],
+      "rows": 19,
+      "note": "HTTP boundary: reqparse parse_args sites, route params, ORM db_content reads, backend dispatch transfers, DBInstance constructor kwargs"
+    },
+    {
+      "batch_id": 2,
+      "files": [
+        "postgraas_server/backends/postgres_cluster/__init__.py",
+        "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py"
+      ],
+      "rows": 25,
+      "note": "pg_cluster SQL layer: PGClusterBackend wrapper params, pgcd call args, driver api_params (the SQL trust boundary)"
+    },
+    {
+      "batch_id": 3,
+      "files": [
+        "postgraas_server/backends/docker/__init__.py",
+        "postgraas_server/configuration.py",
+        "postgraas_server/backends/exceptions.py",
+        "postgraas_server/prometheus_app.py"
+      ],
+      "rows": 12,
+      "note": "non-SQL channels: docker backend params, operator config/secrets reads, exception message param, prometheus CLI options"
+    },
+    {
+      "batch_id": 4,
+      "files": [
+        "sinks.csv"
+      ],
+      "rows": 32,
+      "note": "all sink candidates: ORM channel rows, driver cursor.execute + str.format construction sites (merged), internal_sql_wrapper functions, prometheus static SQL"
+    }
+  ],
+  "coverage": {
+    "source_rows": 56,
+    "source_rows_dispositioned": 56,
+    "sink_rows": 32,
+    "sink_rows_dispositioned": 32,
+    "sink_rows_merged": 8,
+    "all_rows_covered": true,
+    "uncovered_keys": []
+  },
+  "source_row_dispositions": [
+    {
+      "row": 1,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 6,
+      "callable": "__init__",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-001"
+    },
+    {
+      "row": 2,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 9,
+      "callable": "create",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-002"
+    },
+    {
+      "row": 3,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 9,
+      "callable": "create",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-003"
+    },
+    {
+      "row": 4,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 11,
+      "callable": "create_postgres_db",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-004"
+    },
+    {
+      "row": 5,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 11,
+      "callable": "create_postgres_db",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-005"
+    },
+    {
+      "row": 6,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 16,
+      "callable": "delete",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-006"
+    },
+    {
+      "row": 7,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 18,
+      "callable": "delete_database",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-007"
+    },
+    {
+      "row": 8,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 18,
+      "callable": "delete_database",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-008"
+    },
+    {
+      "row": 9,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 19,
+      "callable": "delete_user",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-009"
+    },
+    {
+      "row": 10,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 19,
+      "callable": "delete_user",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-010"
+    },
+    {
+      "row": 11,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 26,
+      "callable": "exists",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-011"
+    },
+    {
+      "row": 12,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 27,
+      "callable": "check_db_or_user_exists",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-012"
+    },
+    {
+      "row": 13,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 27,
+      "callable": "check_db_or_user_exists",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-013"
+    },
+    {
+      "row": 14,
+      "file": "postgraas_server/backends/postgres_cluster/__init__.py",
+      "line": 27,
+      "callable": "check_db_or_user_exists",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-014"
+    },
+    {
+      "row": 15,
+      "file": "postgraas_server/backends/docker/__init__.py",
+      "line": 6,
+      "callable": "__init__",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-015"
+    },
+    {
+      "row": 16,
+      "file": "postgraas_server/backends/docker/__init__.py",
+      "line": 9,
+      "callable": "create",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-016"
+    },
+    {
+      "row": 17,
+      "file": "postgraas_server/backends/docker/__init__.py",
+      "line": 9,
+      "callable": "create",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-017"
+    },
+    {
+      "row": 18,
+      "file": "postgraas_server/backends/docker/__init__.py",
+      "line": 17,
+      "callable": "delete",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-018"
+    },
+    {
+      "row": 19,
+      "file": "postgraas_server/backends/docker/__init__.py",
+      "line": 29,
+      "callable": "exists",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-019"
+    },
+    {
+      "row": 20,
+      "file": "postgraas_server/configuration.py",
+      "line": 19,
+      "callable": "open",
+      "flow_kind": "config_file",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-020"
+    },
+    {
+      "row": 21,
+      "file": "postgraas_server/configuration.py",
+      "line": 20,
+      "callable": "load",
+      "flow_kind": "config_load",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-021"
+    },
+    {
+      "row": 22,
+      "file": "postgraas_server/configuration.py",
+      "line": 31,
+      "callable": "open",
+      "flow_kind": "config_file",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-022"
+    },
+    {
+      "row": 23,
+      "file": "postgraas_server/configuration.py",
+      "line": 32,
+      "callable": "load",
+      "flow_kind": "config_load",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-023"
+    },
+    {
+      "row": 24,
+      "file": "postgraas_server/backends/exceptions.py",
+      "line": 14,
+      "callable": "__init__",
+      "flow_kind": "wrapper_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-024"
+    },
+    {
+      "row": 25,
+      "file": "postgraas_server/management_resources.py",
+      "line": 67,
+      "callable": "get",
+      "flow_kind": "route_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-025"
+    },
+    {
+      "row": 26,
+      "file": "postgraas_server/management_resources.py",
+      "line": 68,
+      "callable": "get",
+      "flow_kind": "db_content",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-026"
+    },
+    {
+      "row": 27,
+      "file": "postgraas_server/management_resources.py",
+      "line": 71,
+      "callable": "delete",
+      "flow_kind": "route_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-027"
+    },
+    {
+      "row": 28,
+      "file": "postgraas_server/management_resources.py",
+      "line": 74,
+      "callable": "parse_args",
+      "flow_kind": "http_request",
+      "disposition": {
+        "role": "source",
+        "classification": "tp"
+      },
+      "entry": "p5-e-028"
+    },
+    {
+      "row": 29,
+      "file": "postgraas_server/management_resources.py",
+      "line": 76,
+      "callable": "get",
+      "flow_kind": "db_content",
+      "disposition": {
+        "role": "source",
+        "classification": "candidate"
+      },
+      "entry": "p5-e-029"
+    },
+    {
+      "row": 30,
+      "file": "postgraas_server/management_resources.py",
+      "line": 95,
+      "callable": "exists",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "candidate"
+      },
+      "entry": "p5-e-030"
+    },
+    {
+      "row": 31,
+      "file": "postgraas_server/management_resources.py",
+      "line": 107,
+      "callable": "delete",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "candidate"
+      },
+      "entry": "p5-e-031"
+    },
+    {
+      "row": 32,
+      "file": "postgraas_server/management_resources.py",
+      "line": 119,
+      "callable": "all",
+      "flow_kind": "db_content",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-032"
+    },
+    {
+      "row": 33,
+      "file": "postgraas_server/management_resources.py",
+      "line": 133,
+      "callable": "parse_args",
+      "flow_kind": "http_request",
+      "disposition": {
+        "role": "source",
+        "classification": "tp"
+      },
+      "entry": "p5-e-033"
+    },
+    {
+      "row": 34,
+      "file": "postgraas_server/management_resources.py",
+      "line": 135,
+      "callable": "filter_by",
+      "flow_kind": "db_content",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-034"
+    },
+    {
+      "row": 35,
+      "file": "postgraas_server/management_resources.py",
+      "line": 151,
+      "callable": "DBInstance",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-035"
+    },
+    {
+      "row": 36,
+      "file": "postgraas_server/management_resources.py",
+      "line": 152,
+      "callable": "DBInstance",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-036"
+    },
+    {
+      "row": 37,
+      "file": "postgraas_server/management_resources.py",
+      "line": 153,
+      "callable": "DBInstance",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-037"
+    },
+    {
+      "row": 38,
+      "file": "postgraas_server/management_resources.py",
+      "line": 154,
+      "callable": "DBInstance",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-038"
+    },
+    {
+      "row": 39,
+      "file": "postgraas_server/management_resources.py",
+      "line": 155,
+      "callable": "DBInstance",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-039"
+    },
+    {
+      "row": 40,
+      "file": "postgraas_server/management_resources.py",
+      "line": 156,
+      "callable": "DBInstance",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-040"
+    },
+    {
+      "row": 41,
+      "file": "postgraas_server/management_resources.py",
+      "line": 158,
+      "callable": "exists",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-041"
+    },
+    {
+      "row": 42,
+      "file": "postgraas_server/management_resources.py",
+      "line": 164,
+      "callable": "create",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-042"
+    },
+    {
+      "row": 43,
+      "file": "postgraas_server/management_resources.py",
+      "line": 164,
+      "callable": "create",
+      "flow_kind": "internal_transfer",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-043"
+    },
+    {
+      "row": 44,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 5,
+      "callable": "_create_pg_connection",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-044"
+    },
+    {
+      "row": 45,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 19,
+      "callable": "check_db_or_user_exists",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "source",
+        "classification": "tp"
+      },
+      "entry": "p5-e-045"
+    },
+    {
+      "row": 46,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 19,
+      "callable": "check_db_or_user_exists",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "source",
+        "classification": "tp"
+      },
+      "entry": "p5-e-046"
+    },
+    {
+      "row": 47,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 19,
+      "callable": "check_db_or_user_exists",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-047"
+    },
+    {
+      "row": 48,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 30,
+      "callable": "create_postgres_db",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "source",
+        "classification": "tp"
+      },
+      "entry": "p5-e-048"
+    },
+    {
+      "row": 49,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 30,
+      "callable": "create_postgres_db",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-049"
+    },
+    {
+      "row": 50,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 56,
+      "callable": "get_normalized_username",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-050"
+    },
+    {
+      "row": 51,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 60,
+      "callable": "delete_database",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "source",
+        "classification": "candidate"
+      },
+      "entry": "p5-e-051"
+    },
+    {
+      "row": 52,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 60,
+      "callable": "delete_database",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-052"
+    },
+    {
+      "row": 53,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 70,
+      "callable": "delete_user",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "source",
+        "classification": "candidate"
+      },
+      "entry": "p5-e-053"
+    },
+    {
+      "row": 54,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 70,
+      "callable": "delete_user",
+      "flow_kind": "api_param",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-054"
+    },
+    {
+      "row": 55,
+      "file": "postgraas_server/prometheus_app.py",
+      "line": 88,
+      "callable": "run_server",
+      "flow_kind": "cli",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-055"
+    },
+    {
+      "row": 56,
+      "file": "postgraas_server/prometheus_app.py",
+      "line": 88,
+      "callable": "run_server",
+      "flow_kind": "cli",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-056"
+    }
+  ],
+  "sink_row_dispositions": [
+    {
+      "row": 1,
+      "file": "postgraas_server/management_resources.py",
+      "line": 68,
+      "callable": "get",
+      "flow_kind": "orm_query",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-057"
+    },
+    {
+      "row": 2,
+      "file": "postgraas_server/management_resources.py",
+      "line": 76,
+      "callable": "get",
+      "flow_kind": "orm_query",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-058"
+    },
+    {
+      "row": 3,
+      "file": "postgraas_server/management_resources.py",
+      "line": 99,
+      "callable": "delete",
+      "flow_kind": "orm_query",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-059"
+    },
+    {
+      "row": 4,
+      "file": "postgraas_server/management_resources.py",
+      "line": 100,
+      "callable": "commit",
+      "flow_kind": "orm_query",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-060"
+    },
+    {
+      "row": 5,
+      "file": "postgraas_server/management_resources.py",
+      "line": 111,
+      "callable": "delete",
+      "flow_kind": "orm_query",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-061"
+    },
+    {
+      "row": 6,
+      "file": "postgraas_server/management_resources.py",
+      "line": 112,
+      "callable": "commit",
+      "flow_kind": "orm_query",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-062"
+    },
+    {
+      "row": 7,
+      "file": "postgraas_server/management_resources.py",
+      "line": 119,
+      "callable": "all",
+      "flow_kind": "orm_query",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-063"
+    },
+    {
+      "row": 8,
+      "file": "postgraas_server/management_resources.py",
+      "line": 135,
+      "callable": "filter_by",
+      "flow_kind": "orm_query",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-064"
+    },
+    {
+      "row": 9,
+      "file": "postgraas_server/management_resources.py",
+      "line": 175,
+      "callable": "add",
+      "flow_kind": "orm_query",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-065"
+    },
+    {
+      "row": 10,
+      "file": "postgraas_server/management_resources.py",
+      "line": 176,
+      "callable": "commit",
+      "flow_kind": "orm_query",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-066"
+    },
+    {
+      "row": 11,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 19,
+      "callable": "check_db_or_user_exists",
+      "flow_kind": "internal_sql_wrapper",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-067"
+    },
+    {
+      "row": 12,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 22,
+      "callable": "execute",
+      "flow_kind": "sql_text",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp"
+      },
+      "entry": "p5-e-068"
+    },
+    {
+      "row": 13,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 22,
+      "callable": "format",
+      "flow_kind": "sql_format_call",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp",
+        "merged_into": "p5-e-068"
+      },
+      "entry": "p5-e-068"
+    },
+    {
+      "row": 14,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 24,
+      "callable": "execute",
+      "flow_kind": "sql_text",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp"
+      },
+      "entry": "p5-e-069"
+    },
+    {
+      "row": 15,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 24,
+      "callable": "format",
+      "flow_kind": "sql_format_call",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp",
+        "merged_into": "p5-e-069"
+      },
+      "entry": "p5-e-069"
+    },
+    {
+      "row": 16,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 30,
+      "callable": "create_postgres_db",
+      "flow_kind": "internal_sql_wrapper",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-070"
+    },
+    {
+      "row": 17,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 36,
+      "callable": "format",
+      "flow_kind": "sql_format_call",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp",
+        "merged_into": "p5-e-071"
+      },
+      "entry": "p5-e-071"
+    },
+    {
+      "row": 18,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 37,
+      "callable": "format",
+      "flow_kind": "sql_format_call",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp",
+        "merged_into": "p5-e-074"
+      },
+      "entry": "p5-e-074"
+    },
+    {
+      "row": 19,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 38,
+      "callable": "format",
+      "flow_kind": "sql_format_call",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp",
+        "merged_into": "p5-e-072"
+      },
+      "entry": "p5-e-072"
+    },
+    {
+      "row": 20,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 41,
+      "callable": "format",
+      "flow_kind": "sql_format_call",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp",
+        "merged_into": "p5-e-073"
+      },
+      "entry": "p5-e-073"
+    },
+    {
+      "row": 21,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 43,
+      "callable": "execute",
+      "flow_kind": "sql_text",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp"
+      },
+      "entry": "p5-e-071"
+    },
+    {
+      "row": 22,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 44,
+      "callable": "execute",
+      "flow_kind": "sql_text",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp"
+      },
+      "entry": "p5-e-072"
+    },
+    {
+      "row": 23,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 50,
+      "callable": "execute",
+      "flow_kind": "sql_text",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp"
+      },
+      "entry": "p5-e-073"
+    },
+    {
+      "row": 24,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 52,
+      "callable": "execute",
+      "flow_kind": "sql_text",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp"
+      },
+      "entry": "p5-e-074"
+    },
+    {
+      "row": 25,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 60,
+      "callable": "delete_database",
+      "flow_kind": "internal_sql_wrapper",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-075"
+    },
+    {
+      "row": 26,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 65,
+      "callable": "execute",
+      "flow_kind": "sql_text",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp"
+      },
+      "entry": "p5-e-076"
+    },
+    {
+      "row": 27,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 65,
+      "callable": "format",
+      "flow_kind": "sql_format_call",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp",
+        "merged_into": "p5-e-076"
+      },
+      "entry": "p5-e-076"
+    },
+    {
+      "row": 28,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 70,
+      "callable": "delete_user",
+      "flow_kind": "internal_sql_wrapper",
+      "disposition": {
+        "role": "summary",
+        "classification": "tp"
+      },
+      "entry": "p5-e-077"
+    },
+    {
+      "row": 29,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 75,
+      "callable": "execute",
+      "flow_kind": "sql_text",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp"
+      },
+      "entry": "p5-e-078"
+    },
+    {
+      "row": 30,
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "line": 75,
+      "callable": "format",
+      "flow_kind": "sql_format_call",
+      "disposition": {
+        "role": "sink",
+        "classification": "tp",
+        "merged_into": "p5-e-078"
+      },
+      "entry": "p5-e-078"
+    },
+    {
+      "row": 31,
+      "file": "postgraas_server/prometheus_app.py",
+      "line": 33,
+      "callable": "do_count_query",
+      "flow_kind": "internal_sql_wrapper",
+      "disposition": {
+        "role": "none",
+        "classification": "fp"
+      },
+      "entry": "p5-e-079"
+    },
+    {
+      "row": 32,
+      "file": "postgraas_server/prometheus_app.py",
+      "line": 40,
+      "callable": "execute",
+      "flow_kind": "sql_text",
+      "disposition": {
+        "role": "sink",
+        "classification": "fp"
+      },
+      "entry": "p5-e-080"
+    }
+  ]
+}

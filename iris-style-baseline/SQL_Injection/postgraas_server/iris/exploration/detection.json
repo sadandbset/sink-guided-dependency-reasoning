@@ -1,0 +1,268 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": [
+      "Step 1: explore and detect",
+      "Step 2: extraction query generation"
+    ],
+    "generated": "2026-10-21",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SQL_Injection\\postgraas_server\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the postgraas_server_vuln source tree. Two CodeQL database directories sit INSIDE the source tree (postgraas_server-db and postgraas_server-safe-db), so all exploration, file traversal, and evidence collection excluded both. The database metadata sourceLocationPrefix matches the explored tree (creation sha bd4f1b88), so file/line evidence below refers to the same snapshot the database was built from. Only three files are generated this round: exploration/detection.json, extraction/sources.ql, extraction/sinks.ql."
+  },
+  "target": {
+    "project": "postgraas_server",
+    "projectDescription": "postgraas_server v2.0.0b1 (CHANGES.rst top entry; setup.cfg name 'postgraas_server', 'Postgraas is a super simple PostgreSQL-as-a-service', author Sebastian Neubauer, Apache-2) - a small Flask REST service (package tree ~849 lines across 18 .py files; 1610 baseline LOC in the database snapshot) that provisions PostgreSQL database instances on demand. Two flask-restful resources are registered in create_app.py at /api/v2/postgraas_instances (collection) and /api/v2/postgraas_instances/<int:id> (item). Backends are pluggable via postgraas_server/backends: a docker backend (talks to the docker daemon; no SQL) and a pg_cluster backend (postgres_cluster_driver.py, psycopg2 DB-API against a shared PostgreSQL cluster, where all SQL statements are built with str.format and executed via cursor.execute). The meta DB (DBInstance rows) is accessed through flask-sqlalchemy ORM only.",
+    "pass": 5,
+    "cwes": [
+      "CWE-089"
+    ],
+    "focus": "SQL Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\postgraas_server_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (postgraas_server-db/codeql-database.yml)",
+      "the database source archive (src.zip) covers 35 .py files: 18 under postgraas_server/ (the package), 17 under tests/ (conftest plus test_unit and test_integration suites), plus setup.py and docs/conf.py",
+      "setup.cfg classifiers 'Programming Language :: Python :: 2.7 / 3.5 / 3.6'; requirements.txt: blinker, flask, flask-restful, flask-sqlalchemy, psycopg2, raven"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\postgraas_server_vuln\\postgraas_server-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\postgraas_server_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "bd4f1b88e7008a3abd4dbe05c26e7b20bbb99649",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:20:19.638513200Z"
+    },
+    "baselineLinesOfCode": 1610,
+    "finalised": true,
+    "locationNote": "The postgraas_server-db directory (and a second database directory, postgraas_server-safe-db) live inside the vulnerable source tree; both are excluded from every traversal, path match, and generated query row via the excludedPath predicate. Evidence line numbers below were read from the working tree, whose git HEAD (bd4f1b8 'Properly close database connections and transactions') matches the database creation sha."
+  },
+  "toolchain": {
+    "qlpack": "iris/postgraas_server-cwe89 (dependencies: codeql/python-all: \"*\") - already present in the workspace (created in a prior round; pack install itself deferred with query execution)",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (E:\\codeql) - recorded from the database creationMetadata; the CLI itself was not invoked this round",
+    "compatibilityBasis": "API facts used by the generated queries were cross-checked against the cached python-all 7.1.2 library sources: AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), Call.getFunc/getPositionalArg/getAKeyword, Keyword.getArg/getValue (semmle/python/Keywords.qll), Function.getAnArg/getName/getEnclosingScope/getADecorator (semmle/python/Function.qll:59), Parameter.isSelf/getPosition (semmle/python/Function.qll:280/286), Class.getABase (semmle/python/AstGenerated.qll:276), Attribute.getName/getObject, BinaryExpr.getOp/getLeft/getRight with Mod/Add (semmle/python/Operations.qll), StringLiteral (semmle/python/Exprs.qll:535), Fstring (semmle/python/Exprs.qll:627), Scope.getEnclosingModule (semmle/python/Scope.qll:25). The two queries reuse the structural shapes already proven on this same CLI + pack combination in the arches and django CWE-89 runs of this series (moduleHintOf/receiverHint/receiverHintOfCall/calledNameOf helpers, bindingset[path] excludedPath, AST-cast matching with unbound receivers, paramIndex self-adjustment, i in [0..9] positional-argument enumeration, no QL classes, no API::Node-to-DataFlow::Node assignment, no unbound `this`). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name (moduleHint used). No template placeholders remain. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "flask",
+          "confidence": 0.95,
+          "evidence": [
+            "import/package +0.45: 'from flask import Flask' (create_app.py:3), 'from flask import current_app' (management_resources.py:5), 'from flask import Blueprint, Flask, Response, abort' (prometheus_app.py:9); flask in requirements.txt",
+            "route/decorator +0.30: @app.route('/health') (create_app.py:42), @blueprint.route('/health') / @blueprint.route('/') / @blueprint.route('/metrics') (prometheus_app.py:69-75)",
+            "runtime/bootstrap +0.20: create_app() factory (create_app.py:20) building Flask(__name__), app.config['SQLALCHEMY_DATABASE_URI'], sentry.init_app(app); app.run(debug=True) (postgraas_api.py:11); app.run(host='0.0.0.0', port=port) (prometheus_app.py:107)"
+          ]
+        },
+        {
+          "name": "flask-restful",
+          "confidence": 0.75,
+          "evidence": [
+            "import/package +0.45: 'from flask_restful import fields, Resource, marshal_with, reqparse, abort' (management_resources.py:6), 'from flask_restful import Api' (create_app.py:4); flask-restful in requirements.txt",
+            "route/decorator +0.30: restful_api.add_resource(DBInstanceResource, '/api/v2/postgraas_instances/<int:id>') (create_app.py:37) and add_resource(DBInstanceCollectionResource, '/api/v2/postgraas_instances') (create_app.py:38); DBInstanceResource(Resource) and DBInstanceCollectionResource(Resource) class bases with get/post/delete verb methods and @marshal_with decorators (management_resources.py:65-122)"
+          ]
+        },
+        {
+          "name": "flask-sqlalchemy",
+          "confidence": 0.75,
+          "evidence": [
+            "import/package +0.45: 'from flask_sqlalchemy import SQLAlchemy' (management_resources.py:7); flask-sqlalchemy in requirements.txt",
+            "route/decorator +0.30: db = SQLAlchemy() module-level instance (management_resources.py:13), DBInstance(db.Model) model class (management_resources.py:16), db.init_app(app) (create_app.py:39)"
+          ]
+        },
+        {
+          "name": "click (CLI framework, not a web framework)",
+          "kind": "cli",
+          "confidence": 0.75,
+          "evidence": [
+            "import/package +0.45: 'import click' (prometheus_app.py:7)",
+            "route/decorator +0.30: @click.command() and two @click.option(...) decorators on run_server (prometheus_app.py:85-87), exposed as the prometheus_app console script (setup.cfg entry_points)"
+          ]
+        },
+        {
+          "name": "django",
+          "confidence": 0.0,
+          "evidence": [
+            "no django import anywhere in the tree - connection.cursor() / Manager.raw() / RawSQL() / extra() shapes are NOT observed and NOT emitted"
+          ]
+        },
+        {
+          "name": "fastapi",
+          "confidence": 0.0,
+          "evidence": [
+            "no fastapi import anywhere in the tree"
+          ]
+        }
+      ]
+    },
+    "selected": "flask (primary, 0.95) + flask-restful (0.75) + flask-sqlalchemy (0.75) + click CLI (0.75); raw psycopg2 DB-API is a driver, not a framework",
+    "notes": "references/flask.md was loaded in addition to references/python.md and references/patterns.md. Its source cues (request.args/form/json/headers/cookies, path variables in route handlers) map onto this codebase as: NO direct flask request-object attribute reads exist (the HTTP input surface is entirely flask-restful reqparse RequestParser().parse_args() calls plus the <int:id> URL converter into resource method parameters) - so the reqparse parse_args family and the route-param family are the http source shapes actually emitted, and the request-attribute families from flask.md are recorded as absent. Its sink cue 'raw SQL execution: cursor/connection .execute' is observed in postgres_cluster_driver.py and prometheus_app.py. Its reminder 'raw SQL formatting helpers need summary edges' is honored by the internal_sql_wrapper sink family (the driver functions are the helper layer between HTTP values and cursor.execute)."
+  },
+  "inputBoundaryInventory": {
+    "summary": "postgraas_server v2.0.0b1 is a small Flask REST service for PostgreSQL-as-a-service. Input boundaries: (1) the HTTP surface - two flask-restful resources registered in create_app.py:37-38; external input enters via reqparse.RequestParser().parse_args() in DBInstanceCollectionResource.post (management_resources.py:123-133: postgraas_instance_name, db_name, db_username, db_pwd, all required str) and DBInstanceResource.delete (management_resources.py:72-74: db_pwd), plus the <int:id> URL converter (int-typed) feeding the get/delete method parameters; the health/metrics routes and the plain @app.route('/health') handler take no input. No flask request.args/form/json/body/header/cookie attribute reads exist anywhere in the package. (2) the CLI surface - three console scripts (setup.cfg entry_points: postgraas_init=init_db:main, postgraas_create=backends.docker.create_db:main, prometheus_app=prometheus_app:run_server); run_server is click-decorated with --test/--port options, the two main() entry points take no arguments. (3) configuration - get_config() reads a JSON application.cfg (configuration.py:31-32) and optionally /secrets via secure-config (configuration.py:19-20); operator-level trust, not attacker input. (4) the meta DB itself - DBInstance rows read through the SQLAlchemy ORM (entity.username / entity.db_name / entity.port / entity.container_id) are re-fed into the backend delete path. The data access layer has three distinct channels: (a) the SQLAlchemy ORM (DBInstance model, DBInstance.query.get/filter_by/all, db.session.add/delete/commit - all parameterized, no raw SQL observed anywhere in the ORM usage), (b) psycopg2 DB-API in the pg_cluster backend driver (postgres_cluster_driver.py) where every statement is assembled with str.format and executed via cursor.execute with NO bound parameters, and (c) psycopg2.connect() calls (connection credential channel, not SQL text). The docker backend talks to the docker daemon API and executes no SQL.",
+    "sourceFamilies": [
+      {
+        "family": "http_request",
+        "evidence": [
+          "management_resources.py:72-74 (DBInstanceResource.delete): parser = reqparse.RequestParser(); parser.add_argument('db_pwd', required=True, type=str, ...); args = parser.parse_args() - args['db_pwd'] is later used as the connection password (line 83)",
+          "management_resources.py:123-133 (DBInstanceCollectionResource.post): RequestParser with postgraas_instance_name / db_name / db_username / db_pwd, args = parser.parse_args() - these feed db_credentials and the DBInstance(...) construction (lines 142-157)",
+          "the parse_args() call sites are emitted as http_request rows (the returned dict is the request-data boundary; per-field names are string literals in add_argument and are visible in the source context)"
+        ]
+      },
+      {
+        "family": "route_param",
+        "evidence": [
+          "DBInstanceResource.get(self, id) (management_resources.py:67) and DBInstanceResource.delete(self, id) (management_resources.py:71) - the <int:id> URL converter (create_app.py:37) maps onto these method parameters (int-converted by flask, still a trust boundary)",
+          "route-decorated functions (@app.route('/health') create_app.py:42-44, @blueprint.route prometheus_app.py:69-76) take no parameters - the family matches their parameter lists but yields no rows in this snapshot"
+        ]
+      },
+      {
+        "family": "cli",
+        "evidence": [
+          "prometheus_app.py:85-88 run_server(test, port) decorated with @click.command() and @click.option('--test'/'--port') - click injects the option values into the parameters",
+          "init_db.main() (init_db.py:7) and create_db.main() (backends/docker/create_db.py:27) are console-script entries without parameters - no rows",
+          "CLI values here drive server port / test mode only; they do not reach the SQL layer (recorded for boundary completeness)"
+        ]
+      },
+      {
+        "family": "config_file",
+        "evidence": [
+          "configuration.py:31 open(config_filename, 'r') + :32 json.load(cfg) - the application.cfg JSON (default path = cwd/application.cfg, configuration.py:12-14)",
+          "configuration.py:19 open(filename, 'r') + :20 json.load(secrets_file) - the /secrets file read by _load_secrets",
+          "operator-level trust: the config carries metadb credentials and backend selection; NOT treated as attacker input, emitted so the labeling step can classify"
+        ]
+      },
+      {
+        "family": "api_param",
+        "evidence": [
+          "the data-access layer is postgres_cluster_driver.py; every function parameter of that module is the SQL-layer trust boundary: _create_pg_connection(config) (:5), check_db_or_user_exists(db_name, db_user, config) (:19), create_postgres_db(connection_dict, config) (:30), get_normalized_username(username) (:56), delete_database(db_name, config) (:60), delete_user(username, config) (:70)",
+          "at the call chain, check_db_or_user_exists receives connection_dict['db_name']/['db_username'] which originate from the HTTP POST arguments; delete_database/delete_user receive entity.db_name/entity.username which originate from meta-DB rows created from HTTP POST arguments"
+        ]
+      },
+      {
+        "family": "wrapper_param",
+        "evidence": [
+          "backend wrapper methods that stand between the HTTP handlers and the driver layer: PGClusterBackend.create(entity, connection_info) / delete(entity) / exists(entity) / __init__(config) (backends/postgres_cluster/__init__.py:9-27) and DockerBackend.create(entity, connection_info) / delete(entity) / exists(entity) / __init__(config) (backends/docker/__init__.py:6-34)",
+          "these are intermediate propagation nodes, not external sources; emitted for labeling triage"
+        ]
+      },
+      {
+        "family": "internal_transfer",
+        "evidence": [
+          "pgcd.* driver call sites (backends/postgres_cluster/__init__.py): pgcd.create_postgres_db(connection_info, self.config) (:11), pgcd.delete_database(entity.db_name, self.config) (:18), pgcd.delete_user(entity.username, self.config) (:19), pgcd.check_db_or_user_exists(entity.db_name, entity.username, self.config) (:27)",
+          "backend dispatch call sites on the Flask app object (management_resources.py): current_app.postgraas_backend.exists(entity) (:95), .delete(entity) (:107), .exists(db_entry) (:158), .create(db_entry, db_credentials) (:164) - dynamic dispatch resolved at runtime via BACKENDS config",
+          "DBInstance(...) constructor call (management_resources.py:150-157) - all six arguments are keyword arguments carrying POST-derived values (postgraas_instance_name, db_name, username, password, hostname, port)"
+        ]
+      },
+      {
+        "family": "db_content",
+        "evidence": [
+          "ORM query call sites whose return values carry meta-DB row content: DBInstance.query.get(id) (management_resources.py:68, :76), DBInstance.query.all() (:119), DBInstance.query.filter_by(postgraas_instance_name=...).first() (:135)",
+          "the returned entity rows are re-used downstream: entity.username / entity.db_name / entity.port feed psycopg2.connect (:81-87) and the backend delete path -> pgcd.delete_database(entity.db_name) / pgcd.delete_user(entity.username) -> DROP DATABASE / DROP USER SQL"
+        ]
+      }
+    ],
+    "sinkFamilies": {
+      "channelInventory": {
+        "psycopg2CursorExecute": "cursor.execute(query) with the SQL text at positional argument 0 - the ONLY SQL execution member observed in this project: postgres_cluster_driver.py:22, :24, :43, :44, :50, :52 (all inside the pg_cluster driver, receivers are the local `cur` from `with con.cursor() as cur`) and prometheus_app.py:40 (receiver `cursor`, static literal SQL). executemany(), executescript(), and callproc() are NOT observed anywhere and are deliberately not matched.",
+        "sqlalchemyOrm": "flask-sqlalchemy ORM only: DBInstance.query.get/filter_by/all, db.session.add/delete/commit, db.drop_all()/create_all() in management_database.py:73-74. All parameterized; no db.engine.execute, no sqlalchemy text(), no from_statement(), no connection.cursor() raw channel observed in this snapshot - recorded as absent, no rules fabricated.",
+        "dynamicSqlSites": "postgres_cluster_driver.py:22 (\"SELECT 1 FROM pg_database WHERE datname='{}';\".format(db_name)) and :24 (\"SELECT 1 FROM pg_roles WHERE rolname='{}';\".format(db_user)) - .format() directly as the execute argument; :36-41 (create_role / drop_role / grant_role / create_database templates formatted with **connection_dict / keyword values into locals executed at :43/:44/:50/:52); :65 (DROP DATABASE \"{}\".format(db_name)); :75 (DROP USER \"{}\".format(get_normalized_username(username))). All 8 construction sites are .format() calls; no f-string, no '%'-interpolation, and no string-concatenation SQL construction is observed in non-test code (families kept in the query but expected to yield zero rows).",
+        "prometheusLiteralSql": "prometheus_app.py:36-40: sql = (\"SELECT count(*) FROM pg_database WHERE datistemplate = false;\") then cursor.execute(sql) - a string literal, fully static; captured by the sql_text family row, not dangerous by construction",
+        "parameterizedSites": "NO DB-API bound-parameter channel exists in this project: none of the 7 cursor.execute call sites passes a second positional argument (the bound_params family is kept in the query for cross-project contract consistency and is expected to yield zero rows). The only parameterized SQL channel is the SQLAlchemy ORM (filter_by keyword binding, session persistence).",
+        "connectChannel": "psycopg2.connect(...) call sites (postgres_cluster_driver.py:10-16 keyword-style; management_resources.py:81-87 keyword-style with user=entity.username, password=args['db_pwd']; utils.py:12; prometheus_app.py:23-29) carry connection credentials, not SQL text - out of CWE-89 SQL-text scope, deliberately NOT emitted as sink rows (documented here).",
+        "dockerChannel": "backends/docker/postgres_instance_driver.py talks to the docker daemon (containers.create/get/remove) - not a SQL channel, no sink rules emitted"
+      },
+      "sanitizingShapes": "No input validation or quoting is applied to db_name / db_username / db_pwd before the .format() interpolation in postgres_cluster_driver.py: get_normalized_username (driver :56-57) only splits at '@' and is not a SQL sanitizer; the double-quote quoting in the GRANT template (:38) and DROP templates (:65, :75) is partial identifier quoting applied to only some of the interpolated values, and the CREATE USER/CREATE DATABASE templates (:36, :41) interpolate the raw values unquoted. The reqparse type=str coercion performs no sanitization. These facts are recorded as context for the labeling/filtering stages; sanitizer modeling is not part of this extraction round."
+    },
+    "nonVulnerabilityNote": "The values interpolated into the driver's SQL templates originate from the HTTP POST/DELETE request arguments (db_name, db_username, db_pwd via db_credentials/connection_dict) and from meta-DB row fields (entity.db_name, entity.username via the delete path, which were themselves created from POST arguments) - these are candidates for the labeling step to triage, NOT presumed vulnerable in this round. The config-file and CLI input families are operator-level trust. No conclusion about any specific endpoint, file, or call being vulnerable is drawn here."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution is deferred to the next round per the task contract (generation only).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable; parameter rows use the 0-based position with `self` excluded)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO source or sink row is expected to resolve at API level: the SQL execution receivers are local cursor variables from `with con.cursor() as cur` context managers, the request data arrives through flask-restful reqparse instances and framework-injected method parameters, and the backend dispatch goes through the Flask app object attribute current_app.postgraas_backend - none of these bind to library API graph nodes. The column is kept for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, decorator shapes, class-base names). The execute matching is receiver-name-agnostic (any <obj>.execute(...) matches), which tolerates cursor aliasing (cur, cursor) but cannot prove the receiver is a database cursor - name-collision noise is possible and is left to the labeling step. In non-test package code, .execute call sites occur only in the driver and prometheus_app modules."
+    },
+    "flowKinds": {
+      "sources": [
+        "http_request",
+        "route_param",
+        "cli",
+        "config_file",
+        "config_load",
+        "api_param",
+        "wrapper_param",
+        "internal_transfer",
+        "db_content"
+      ],
+      "sinks": [
+        "sql_text",
+        "bound_params",
+        "sql_percent_format",
+        "sql_format_call",
+        "sql_fstring",
+        "sql_concat",
+        "internal_sql_wrapper",
+        "orm_query"
+      ]
+    },
+    "exclusions": [
+      "paths containing /tests/ (17 of the 35 .py files in the database snapshot; excluded per the workflow noise rules - the integration tests also exercise the driver SQL, but test code is filtered)",
+      "/postgraas_server-db/ and /postgraas_server-safe-db/ (the two CodeQL database directories nested inside the source tree)",
+      "/docs/ (docs/conf.py, sphinx boilerplate)"
+    ],
+    "expectedVolume": "small project - roughly 50 source rows (parse_args 2, route_param 2, cli 2, open 2, json.load 2, api_param 11 across the 6 driver functions, wrapper_param 10 across PGClusterBackend/DockerBackend methods, internal_transfer 9 pgcd args + 4 backend-dispatch args + 6 DBInstance kwargs, db_content 4 ORM query calls) and roughly 30 sink rows (7 sql_text execute sites, 0 bound_params, 8 sql_format_call construction nodes, 5 internal_sql_wrapper functions, ~10 orm_query channel rows). f-string / percent / concat construction families are expected to yield zero rows (not observed in non-test code)."
+  },
+  "uncoveredCases": [
+    "Positional-argument scan cap: the internal_transfer family enumerates argument positions 0-9 (i is bound by range membership before the indexed Call.getPositionalArg(i) lookup, because the index parameter of getPositionalArg is a checked/total-function input in QL); calls with more than 10 positional arguments would not be scanned. No such call exists in this snapshot (the widest call is create_postgres_db with 2).",
+    "Dynamic backend dispatch: current_app.postgraas_backend.create/delete/exists (management_resources.py:95/:107/:158/:164) resolve to DockerBackend or PGClusterBackend only at runtime via config['backend']['type'] and the BACKENDS dict in backends/__init__.py:4. The extraction records the call sites and both wrapper classes' parameters, but cannot prove which implementation receives the values; the pgcd.* rows capture the pg_cluster continuation only.",
+    "DBInstance(...) constructor call arguments are keyword arguments (management_resources.py:150-157); they are emitted as internal_transfer rows with arg_index -1 (keyword arguments have no positional index in the column contract; the keyword names are visible at the node location). Keyword-argument transfers into pgcd.* / backend methods are not separately enumerated - no such call site exists in this snapshot.",
+    "Chained ORM calls: DBInstance.query.filter_by(...).first() (management_resources.py:135-136) - the outer .first() call's object expression is the filter_by() call result, not an Attribute named 'query', so only the filter_by row is emitted; .first() itself is not captured as db_content/orm_query.",
+    "Dict-value propagation: the db_credentials dict literal values (management_resources.py:142-148) flow into subscript reads (connection_dict['db_name'] etc. in the driver) - only the whole dict is captured as the internal_transfer argument; per-key element flow is a dataflow/summary modeling concern for Step 4, not extraction.",
+    "Field/attribute propagation: entity.db_name / entity.username / entity.port / entity.container_id reads (management_resources.py:82-86, :97, :107, :18-19 in backends/postgres_cluster/__init__.py) and the DBInstance.__init__ self-assignments (management_resources.py:37-44) are not extracted as rows; taint through object attributes requires summary modeling in Step 4.",
+    "reqparse per-field rows: parse_args() is emitted as a single boundary row per call site; the add_argument field-name strings ('postgraas_instance_name', 'db_name', 'db_username', 'db_pwd') are string literals, not nodes, so no per-field rows are emitted - field names are visible in the source context around the row location.",
+    "flask request-object attribute reads (request.args/form/json/body/headers/cookies) do not exist in this package (flask.md cue families); no rules were fabricated for them.",
+    "psycopg2.connect keyword arguments (user/password/database/host/port) are a connection-credential channel, not SQL text; per the sink modeling decision (SQL query text or SQL-syntax-influencing fragments only) they are NOT emitted as sink rows and are recorded here instead. Same for the docker daemon API calls in backends/docker/postgres_instance_driver.py.",
+    "secure_config decryption (sec.load_secret_dict, configuration.py:36-37) returns decrypted config values through an external library; not extracted (operator-level trust, external-lib boundary).",
+    "sqlalchemy text()/from_statement()/engine.execute() and Django raw-SQL channels are absent from this snapshot; no sink rules were fabricated for them.",
+    "The safe database directory postgraas_server-safe-db inside the source tree was neither read nor traversed beyond confirming it is a database directory."
+  ],
+  "referencesLoaded": [
+    "WORKFLOW.md (pipeline contract; Pass 5 = CWE-089 SQL Injection, queries/Pass5_SQLInjection.ql in Phase 2)",
+    "references/patterns.md (cross-language rosetta stone; Pass 5 sink family: raw SQL execute with string concatenation/interpolation; sanitizer family: SQL bind parameters)",
+    "references/python.md (Python extraction focus, source families, AST pitfalls: no Decorator class, no StrConst)",
+    "references/flask.md (Flask source/sink cues; blueprint/wrapper flow considerations; reqparse/route-param shapes)",
+    "assets/extraction/python_sources.ql.tmpl (starter contract: SOURCE_HANDLER_PREDICATE / SOURCE_NODE_BINDINGS / SOURCE_WHERE / SOURCE_SELECT)",
+    "assets/extraction/python_sinks.ql.tmpl (starter contract: SINK_CALL_PREDICATE / SINK_NODE_BINDINGS / SINK_WHERE / SINK_SELECT)",
+    "assets/extraction/extract_sources.ql.tmpl and extract_sinks.ql.tmpl (generic column skeleton: node, role, callable, flow_kind, receiver, module, arg_index, line)"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": "PyVul ground truth, CVE vulnerability descriptions, fix commits, and fix diffs were NOT read. A file named 'CVE申请报告.md' exists at the root of postgraas_server_vuln and was deliberately NOT opened (independence rule). Only source code, requirements/setup/CHANGES metadata, and CodeQL DB metadata (codeql-database.yml, src.zip file list) were inspected.",
+    "noModifications": "The postgraas_server_vuln source tree, postgraas_server-db, postgraas_server-safe-db, the Augur installation, and other projects' experiment results were not modified. Only the three files under this workspace were written.",
+    "notes": "Only exploration/detection.json, extraction/sources.ql, and extraction/sinks.ql are generated; CodeQL execution, LLM labeling, and all Phase 2 steps are deferred to later rounds."
+  }
+}

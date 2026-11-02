@@ -1,0 +1,1777 @@
+{
+  "version": "0.3.0",
+  "metadata": {
+    "run_id": "postgraas-server-iris-pass5-20261021",
+    "generated_at": "2026-10-21T10:39:22+08:00",
+    "language": "python",
+    "framework": "flask",
+    "model": "glm-5.3",
+    "project": "postgraas_server",
+    "notes": [
+      "Phase 1 Step 3 (LLM API candidate labeling) against the postgraas_server_vuln source tree at sha bd4f1b88e7008a3abd4dbe05c26e7b20bbb99649, which equals the CodeQL database creation sha; every CSV line number was re-checked against the tree, each entry's first evidence string is the verbatim source line at its location (read from the tree at generation time), and remaining evidence strings are verbatim lines or clearly marked merge notes.",
+      "Single-pass labeling run: Pass 5 only (CWE-89 SQL Injection), per exploration/detection.json target.pass=5, cwes=[CWE-089].",
+      "passes contains a pass_id=1 stub with zero entries solely to satisfy labels_schema.json 'contains' (requires a pass_id=1 element); pass 1 (path traversal) was NOT labeled in this run and must be labeled separately before any pass-1 query generation.",
+      "All 88 candidate rows (sources.csv 56 + sinks.csv 32) were dispositioned; 8 sink rows merged (the sql_format_call construction nodes at postgres_cluster_driver.py:22/:24/:36/:37/:38/:41/:65/:75 into the execute entry of the same SQL statement), yielding 80 label entries.",
+      "Labeling performed in-session by the agent's underlying LLM (glm-5.3); 4 batches (batch-1 management_resources.py 19 rows; batch-2 postgres_cluster backend+driver 25 rows; batch-3 docker/configuration/exceptions/prometheus 12 rows; batch-4 all sinks 32 rows); no external LLM API calls.",
+      "classification semantics: tp = confirmed genuine for the assigned role in this pass; fp = candidate rejected; candidate = plausible but unresolved, human review requested (kept for conservative recall); unknown = unused this run. API-label tp does NOT equal vulnerability ground-truth TP.",
+      "Signature flow_kind values follow labels_schema.json: extraction families map as http_request/db_content/config_file/config_load -> return, route_param/api_param/wrapper_param/cli -> param, internal_transfer -> argument, DBInstance constructor kwargs -> field, orm_query -> unknown (rejected entries).",
+      "No sanitizer entries: no DB-API bound parameters exist anywhere in the driver (no execute call passes a second argument); reqparse type=str is type coercion only; get_normalized_username (driver :56-57) splits at '@' and is not a SQL sanitizer; the double-quote quoting in the GRANT/DROP templates (:38/:65/:75) is partial identifier quoting that a '\"' in the value breaks out of; the CREATE USER/CREATE DATABASE templates (:36/:41) interpolate raw unquoted values.",
+      "Global deployment precondition documented per-entry: the SQL channel exists only under the pg_cluster backend (BACKENDS dict, backends/__init__.py:4, default docker); this operator choice does not by itself demote entries.",
+      "Second-order delete path: POST-persisted meta-DB values (entity.db_name/entity.username) reach DROP DATABASE/DROP USER; the source-role entries on that path are kept as candidate pending human confirmation of the DB-content-as-source threat model.",
+      "No PyVul ground truth, CVE descriptions, fix commits or external security advisories were consulted; the source tree, CodeQL databases and Augur installation were not modified."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 5,
+      "focus": "SQL Injection",
+      "cwes": [
+        "089"
+      ],
+      "entries": [
+        {
+          "id": "p5-e-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 6
+          },
+          "rationale": "Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89. It is the backend config dict passed via get_backend (backends/__init__.py:7-14).",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:6 def __init__(self, config):"
+          ]
+        },
+        {
+          "id": "p5-e-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "create",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 9
+          },
+          "rationale": "The entity parameter is unused inside PGClusterBackend.create: only connection_info reaches pgcd.create_postgres_db (backends/postgres_cluster/__init__.py:11). Under DockerBackend the same parameter feeds container naming. No SQL-relevant flow starts at this parameter.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:9 def create(self, entity, connection_info):",
+            "postgraas_server/backends/postgres_cluster/__init__.py:11 pgcd.create_postgres_db(connection_info, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-003",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "create",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "postgraas_server.backends.postgres_cluster",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 9
+          },
+          "rationale": "connection_info is the POST-derived db_credentials dict; it flows to pgcd.create_postgres_db (backends/postgres_cluster/__init__.py:11) whose templates interpolate db_name/db_username/db_pwd into SQL text. Summary edge needed across the current_app.postgraas_backend dynamic dispatch (management_resources.py:164 -> BACKENDS, backends/__init__.py:4).",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:9 def create(self, entity, connection_info):",
+            "postgraas_server/backends/postgres_cluster/__init__.py:11 pgcd.create_postgres_db(connection_info, self.config)",
+            "postgraas_server/management_resources.py:164 db_entry.container_id = current_app.postgraas_backend.create(db_entry, db_credentials)"
+          ]
+        },
+        {
+          "id": "p5-e-004",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "create_postgres_db",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 11
+          },
+          "rationale": "Wrapper-to-driver transfer of the POST-derived credentials dict (plain call arg->param flow, natively modeled by CodeQL); entry documents the chain HTTP args -> backend.create -> driver.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:11 pgcd.create_postgres_db(connection_info, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-005",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "create_postgres_db",
+            "flow_kind": "argument",
+            "arg_index": 1,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 11
+          },
+          "rationale": "self.config is the operator backend config (master connection credentials). Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:11 pgcd.create_postgres_db(connection_info, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-006",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "delete",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 16
+          },
+          "rationale": "entity.db_name -> pgcd.delete_database (:18) and entity.username -> pgcd.delete_user (:19) -> DROP DATABASE/DROP USER .format SQL; object-field taint steps are needed; the entity originates from a meta-DB row (second-order origin, see the query.get:76 source entry).",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:16 def delete(self, entity):",
+            "postgraas_server/backends/postgres_cluster/__init__.py:18 pgcd.delete_database(entity.db_name, self.config)",
+            "postgraas_server/backends/postgres_cluster/__init__.py:19 pgcd.delete_user(entity.username, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-007",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "delete_database",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 18
+          },
+          "rationale": "Attribute read entity.db_name passed into DROP DATABASE \"{}\" (driver :65); attribute(field) taint step required; second-order origin (meta-DB row persisted from a prior POST).",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:18 pgcd.delete_database(entity.db_name, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "delete_database",
+            "flow_kind": "argument",
+            "arg_index": 1,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 18
+          },
+          "rationale": "self.config operator backend config. Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:18 pgcd.delete_database(entity.db_name, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-009",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "delete_user",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 19
+          },
+          "rationale": "Attribute read entity.username passed into pgcd.delete_user -> DROP USER \"{}\" (driver :75); field taint step required; second-order origin.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:19 pgcd.delete_user(entity.username, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "delete_user",
+            "flow_kind": "argument",
+            "arg_index": 1,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 19
+          },
+          "rationale": "self.config operator backend config. Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:19 pgcd.delete_user(entity.username, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-011",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "exists",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 26
+          },
+          "rationale": "entity.db_name/username -> pgcd.check_db_or_user_exists (:27) -> SELECT .format SQL. Reached first-order with the in-memory db_entry fields of the POST flow (management_resources.py:158) and second-order with DB-row fields from the delete handler (:95); field taint steps needed.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:26 def exists(self, entity):",
+            "postgraas_server/backends/postgres_cluster/__init__.py:27 return pgcd.check_db_or_user_exists(entity.db_name, entity.username, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-012",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "check_db_or_user_exists",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 27
+          },
+          "rationale": "Attribute read entity.db_name into the check SQL (driver :22); field taint step required.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:27 return pgcd.check_db_or_user_exists(entity.db_name, entity.username, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-013",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "check_db_or_user_exists",
+            "flow_kind": "argument",
+            "arg_index": 1,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 27
+          },
+          "rationale": "Attribute read entity.username into the check SQL (driver :24); field taint step required.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:27 return pgcd.check_db_or_user_exists(entity.db_name, entity.username, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-014",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "check_db_or_user_exists",
+            "flow_kind": "argument",
+            "arg_index": 2,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "PGClusterBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/__init__.py",
+            "line": 27
+          },
+          "rationale": "self.config operator backend config. Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/__init__.py:27 return pgcd.check_db_or_user_exists(entity.db_name, entity.username, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.docker",
+            "type": "DockerBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/docker/__init__.py",
+            "line": 6
+          },
+          "rationale": "Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89. DockerBackend dispatches to the docker daemon API (backends/docker/postgres_instance_driver.py: containers.create/get/remove) and executes no SQL anywhere; the pg_cluster driver is the project's only SQL text channel. For pass 5 this parameter carries no SQL-relevant flow.",
+          "evidence": [
+            "postgraas_server/backends/docker/__init__.py:6 def __init__(self, config=None):"
+          ]
+        },
+        {
+          "id": "p5-e-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "create",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.docker",
+            "type": "DockerBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/docker/__init__.py",
+            "line": 9
+          },
+          "rationale": "DockerBackend dispatches to the docker daemon API (backends/docker/postgres_instance_driver.py: containers.create/get/remove) and executes no SQL anywhere; the pg_cluster driver is the project's only SQL text channel. For pass 5 this parameter carries no SQL-relevant flow.",
+          "evidence": [
+            "postgraas_server/backends/docker/__init__.py:9 def create(self, entity, connection_info):"
+          ]
+        },
+        {
+          "id": "p5-e-017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "create",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "postgraas_server.backends.docker",
+            "type": "DockerBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/docker/__init__.py",
+            "line": 9
+          },
+          "rationale": "connection_info flows into pg.create_postgres_instance (docker container creation / environment setup), not into any SQL text. DockerBackend dispatches to the docker daemon API (backends/docker/postgres_instance_driver.py: containers.create/get/remove) and executes no SQL anywhere; the pg_cluster driver is the project's only SQL text channel. For pass 5 this parameter carries no SQL-relevant flow.",
+          "evidence": [
+            "postgraas_server/backends/docker/__init__.py:9 def create(self, entity, connection_info):"
+          ]
+        },
+        {
+          "id": "p5-e-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "delete",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.docker",
+            "type": "DockerBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/docker/__init__.py",
+            "line": 17
+          },
+          "rationale": "DockerBackend dispatches to the docker daemon API (backends/docker/postgres_instance_driver.py: containers.create/get/remove) and executes no SQL anywhere; the pg_cluster driver is the project's only SQL text channel. For pass 5 this parameter carries no SQL-relevant flow.",
+          "evidence": [
+            "postgraas_server/backends/docker/__init__.py:17 def delete(self, entity):"
+          ]
+        },
+        {
+          "id": "p5-e-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "exists",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.docker",
+            "type": "DockerBackend"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/docker/__init__.py",
+            "line": 29
+          },
+          "rationale": "DockerBackend dispatches to the docker daemon API (backends/docker/postgres_instance_driver.py: containers.create/get/remove) and executes no SQL anywhere; the pg_cluster driver is the project's only SQL text channel. For pass 5 this parameter carries no SQL-relevant flow.",
+          "evidence": [
+            "postgraas_server/backends/docker/__init__.py:29 def exists(self, entity):"
+          ]
+        },
+        {
+          "id": "p5-e-020",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "open",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "builtins",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/configuration.py",
+            "line": 19
+          },
+          "rationale": "open('/secrets') read by _load_secrets at process startup; operator-level secret material (encryption key), never writable by the remote HTTP client.",
+          "evidence": [
+            "postgraas_server/configuration.py:19 with open(filename, 'r') as secrets_file:"
+          ]
+        },
+        {
+          "id": "p5-e-021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "load",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "json",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/configuration.py",
+            "line": 20
+          },
+          "rationale": "json.load of the /secrets file; same operator-trust verdict as the open() at :19.",
+          "evidence": [
+            "postgraas_server/configuration.py:20 secrets = json.load(secrets_file)"
+          ]
+        },
+        {
+          "id": "p5-e-022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "open",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "builtins",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/configuration.py",
+            "line": 31
+          },
+          "rationale": "open(application.cfg) read by get_config at startup (create_app.py:20, prometheus_app.py:94); operator-authored; carries backend selection and master credentials. Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89.",
+          "evidence": [
+            "postgraas_server/configuration.py:31 with open(config_filename, 'r') as cfg:"
+          ]
+        },
+        {
+          "id": "p5-e-023",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "load",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "json",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/configuration.py",
+            "line": 32
+          },
+          "rationale": "json.load of application.cfg; same operator-trust verdict as the open() at :31.",
+          "evidence": [
+            "postgraas_server/configuration.py:32 config = json.load(cfg)"
+          ]
+        },
+        {
+          "id": "p5-e-024",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.exceptions",
+            "type": "PostgraasApiException"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/exceptions.py",
+            "line": 14
+          },
+          "rationale": "Internal exception-message channel: messages are assembled from backend/driver exception text (backends/*/__init__.py) and returned in HTTP responses; they never enter SQL text and are not an input boundary.",
+          "evidence": [
+            "postgraas_server/backends/exceptions.py:14 def __init__(self, message=None):"
+          ]
+        },
+        {
+          "id": "p5-e-025",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.management_resources",
+            "type": "DBInstanceResource"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 67
+          },
+          "rationale": "The <int:id> URL converter (create_app.py:37) is int-typed: non-integer segments fail routing; the value only reaches DBInstance.query.get(id) (:68) as a bound ORM parameter. An int cannot carry SQL syntax, so this route parameter is not a usable pass-5 source.",
+          "evidence": [
+            "postgraas_server/management_resources.py:67 def get(self, id):",
+            "postgraas_server/create_app.py:37 restful_api.add_resource(DBInstanceResource, \"/api/v2/postgraas_instances/<int:id>\")"
+          ]
+        },
+        {
+          "id": "p5-e-026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 68
+          },
+          "rationale": "The returned entity is only marshalled into the GET response (@marshal_with, :66-69); no SQL flow.",
+          "evidence": [
+            "postgraas_server/management_resources.py:68 entity = DBInstance.query.get(id)"
+          ]
+        },
+        {
+          "id": "p5-e-027",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "delete",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.management_resources",
+            "type": "DBInstanceResource"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 71
+          },
+          "rationale": "Same <int:id> int-converter argument as the get handler; used for query.get (:76) and a response message format (:78) only.",
+          "evidence": [
+            "postgraas_server/management_resources.py:71 def delete(self, id):"
+          ]
+        },
+        {
+          "id": "p5-e-028",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "parse_args",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "flask_restful",
+            "type": "RequestParser"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 74
+          },
+          "rationale": "reqparse boundary of DELETE /api/v2/postgraas_instances/<int:id>: args['db_pwd'] (required, type=str, no validation) is attacker-controlled request data and the endpoint has no authentication. In this snapshot db_pwd flows to psycopg2.connect(password=...) (:81-87) - the connection-credential channel, not SQL text - so it feeds no pass-5 sink directly; retained as a genuine request-data boundary for recall.",
+          "evidence": [
+            "postgraas_server/management_resources.py:74 args = parser.parse_args()",
+            "postgraas_server/management_resources.py:73 parser.add_argument('db_pwd', required=True, type=str, help='pass of the db user')",
+            "postgraas_server/management_resources.py:83 password=args['db_pwd'],"
+          ]
+        },
+        {
+          "id": "p5-e-029",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 76
+          },
+          "rationale": "Meta-DB row read in the delete handler: entity.db_name/entity.username were persisted by an earlier POST (management_resources.py:150-157, :175-176) from attacker-controlled args and flow into DROP DATABASE/DROP USER .format SQL via backend.delete (:107). Second-order (persisted) taint - the chain is code-verified, but the DB-content-as-source threat model deserves human confirmation, so retained as candidate.",
+          "evidence": [
+            "postgraas_server/management_resources.py:76 entity = DBInstance.query.get(id)",
+            "postgraas_server/management_resources.py:107 current_app.postgraas_backend.delete(entity)",
+            "postgraas_server/management_resources.py:176 db.session.commit()"
+          ]
+        },
+        {
+          "id": "p5-e-030",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "exists",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 95
+          },
+          "rationale": "Dynamic dispatch (BACKENDS dict, backends/__init__.py:4/:14): under pg_cluster the second-order entity.db_name/username reach check_db_or_user_exists SQL; under docker a container-name check runs instead. Propagation step is code-real; kept as candidate for conservative recall (dispatch + second-order origin).",
+          "evidence": [
+            "postgraas_server/management_resources.py:95 if not current_app.postgraas_backend.exists(entity):",
+            "postgraas_server/backends/__init__.py:4 BACKENDS = {'docker': DockerBackend, 'pg_cluster': PGClusterBackend}"
+          ]
+        },
+        {
+          "id": "p5-e-031",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "delete",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 107
+          },
+          "rationale": "Same dynamic dispatch as :95; under pg_cluster the second-order entity reaches delete_database/delete_user DROP SQL; under docker only container removal. Kept as candidate for conservative recall.",
+          "evidence": [
+            "postgraas_server/management_resources.py:107 current_app.postgraas_backend.delete(entity)",
+            "postgraas_server/backends/__init__.py:14 return BACKENDS[backend](backend_config)"
+          ]
+        },
+        {
+          "id": "p5-e-032",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "all",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 119
+          },
+          "rationale": "Rows are marshalled into the GET collection response only (:117-120); no SQL flow.",
+          "evidence": [
+            "postgraas_server/management_resources.py:119 all = DBInstance.query.all()"
+          ]
+        },
+        {
+          "id": "p5-e-033",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "parse_args",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "flask_restful",
+            "type": "RequestParser"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 133
+          },
+          "rationale": "reqparse boundary of POST /api/v2/postgraas_instances: postgraas_instance_name/db_name/db_username/db_pwd are all required str with type coercion only; db_name/db_username/db_pwd flow into db_credentials (:142-148) -> backend.create (:164) -> pgcd.create_postgres_db -> CREATE USER/GRANT/CREATE DATABASE/DROP ROLE .format SQL (driver :36-:52). No authentication on the endpoint and no validation anywhere on the path; the primary external CWE-89 boundary.",
+          "evidence": [
+            "postgraas_server/management_resources.py:133 args = parser.parse_args()",
+            "postgraas_server/management_resources.py:130 parser.add_argument('db_name', required=True, type=str, help='name of the db')",
+            "postgraas_server/management_resources.py:143 \"db_name\": args['db_name'],",
+            "postgraas_server/management_resources.py:164 db_entry.container_id = current_app.postgraas_backend.create(db_entry, db_credentials)",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:36 create_role = \"CREATE USER {db_username} WITH PASSWORD '{db_pwd}';\".format(**connection_dict)",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:41 create_database = \"CREATE DATABASE {db_name} OWNER {db_username};\".format(**connection_dict)"
+          ]
+        },
+        {
+          "id": "p5-e-034",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "filter_by",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 135
+          },
+          "rationale": "Duplicate-name existence check; the result is used as a truthiness value only. The POST value entering filter_by is a bound ORM keyword parameter (safe).",
+          "evidence": [
+            "postgraas_server/management_resources.py:135 if DBInstance.query.filter_by(postgraas_instance_name=args['postgraas_instance_name']"
+          ]
+        },
+        {
+          "id": "p5-e-035",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "DBInstance",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "postgraas_server.management_resources",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 151
+          },
+          "rationale": "postgraas_instance_name stored field is used for docker container naming and the filter_by ORM lookup (bound); under the pg_cluster backend it never enters SQL text.",
+          "evidence": [
+            "postgraas_server/management_resources.py:151 postgraas_instance_name=args['postgraas_instance_name'],"
+          ]
+        },
+        {
+          "id": "p5-e-036",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "DBInstance",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "postgraas_server.management_resources",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 152
+          },
+          "rationale": "args['db_name'] stored into DBInstance.db_name; read as entity.db_name by the exists path in the same request (:158 -> backends :27) and by the delete path after persistence (:76 -> :107 -> backends :18). Constructor-kwarg -> instance-field summary step required (object-field taint is not default-modeled).",
+          "evidence": [
+            "postgraas_server/management_resources.py:152 db_name=args['db_name'],",
+            "postgraas_server/backends/postgres_cluster/__init__.py:18 pgcd.delete_database(entity.db_name, self.config)"
+          ]
+        },
+        {
+          "id": "p5-e-037",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "DBInstance",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "postgraas_server.management_resources",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 153
+          },
+          "rationale": "db_credentials['db_username'] stored into DBInstance.username; read as entity.username by check_db_or_user_exists (first-order via :158) and DROP USER (second-order via the delete path). Field summary step required.",
+          "evidence": [
+            "postgraas_server/management_resources.py:153 username=db_credentials['db_username'],"
+          ]
+        },
+        {
+          "id": "p5-e-038",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "DBInstance",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "postgraas_server.management_resources",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 154
+          },
+          "rationale": "Constant empty-string literal (password=\"\"); no attacker data.",
+          "evidence": [
+            "postgraas_server/management_resources.py:154 password=\"\","
+          ]
+        },
+        {
+          "id": "p5-e-039",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "DBInstance",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "postgraas_server.management_resources",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 155
+          },
+          "rationale": "Backend hostname from operator config (db_credentials['host']); not attacker-controlled.",
+          "evidence": [
+            "postgraas_server/management_resources.py:155 hostname=db_credentials['host'],"
+          ]
+        },
+        {
+          "id": "p5-e-040",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "DBInstance",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "postgraas_server.management_resources",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 156
+          },
+          "rationale": "Backend port from operator config (db_credentials['port']); not attacker-controlled.",
+          "evidence": [
+            "postgraas_server/management_resources.py:156 port=db_credentials['port']"
+          ]
+        },
+        {
+          "id": "p5-e-041",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "exists",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 158
+          },
+          "rationale": "Dynamic dispatch; under pg_cluster the in-memory db_entry.db_name/db_username (POST-derived, first-order) reach check_db_or_user_exists .format SQL; under docker a container-name check runs instead. Dispatch ambiguity documented.",
+          "evidence": [
+            "postgraas_server/management_resources.py:158 if current_app.postgraas_backend.exists(db_entry):",
+            "postgraas_server/backends/__init__.py:14 return BACKENDS[backend](backend_config)"
+          ]
+        },
+        {
+          "id": "p5-e-042",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "create",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 164
+          },
+          "rationale": "db_entry (the entity argument) is unused inside PGClusterBackend.create - only connection_info reaches the driver (backends/postgres_cluster/__init__.py:11); under DockerBackend it feeds container naming. No SQL-relevant flow from this argument.",
+          "evidence": [
+            "postgraas_server/management_resources.py:164 db_entry.container_id = current_app.postgraas_backend.create(db_entry, db_credentials)"
+          ]
+        },
+        {
+          "id": "p5-e-043",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "create",
+            "flow_kind": "argument",
+            "arg_index": 1,
+            "module": "postgraas_server.backends",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 164
+          },
+          "rationale": "The key transfer of the POST-derived db_credentials (db_name/db_username/db_pwd) into the pg_cluster SQL layer via the current_app.postgraas_backend dynamic dispatch; under docker the dict goes to container environment setup instead.",
+          "evidence": [
+            "postgraas_server/management_resources.py:164 db_entry.container_id = current_app.postgraas_backend.create(db_entry, db_credentials)",
+            "postgraas_server/management_resources.py:143 \"db_name\": args['db_name'],"
+          ]
+        },
+        {
+          "id": "p5-e-044",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "_create_pg_connection",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 5
+          },
+          "rationale": "Operator backend config (master connection credentials). psycopg2.connect kwargs are a connection-credential channel, not SQL text, and are out of CWE-89 SQL-text scope.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:5 def _create_pg_connection(config):"
+          ]
+        },
+        {
+          "id": "p5-e-045",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "check_db_or_user_exists",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 19
+          },
+          "rationale": "SQL-layer trust boundary: receives connection_dict['db_name'] (POST-derived, first-order, driver :31) and entity.db_name (first-order via the create-flow exists, backends :27; second-order via the delete handler, :95) and flows unescaped into \"SELECT 1 FROM pg_database WHERE datname='{}';\".format(db_name) at :22 with no bound parameters. Chain verified conditional on the pg_cluster backend selection (operator config, BACKENDS dict).",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:19 def check_db_or_user_exists(db_name, db_user, config):",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:22 cur.execute(\"SELECT 1 FROM pg_database WHERE datname='{}';\".format(db_name))",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:31 if check_db_or_user_exists(connection_dict[\"db_name\"], connection_dict[\"db_username\"], config):"
+          ]
+        },
+        {
+          "id": "p5-e-046",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "check_db_or_user_exists",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 19
+          },
+          "rationale": "Same chain for db_user -> \"SELECT 1 FROM pg_roles WHERE rolname='{}';\".format(db_user) at :24, no bound parameters.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:19 def check_db_or_user_exists(db_name, db_user, config):",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:24 cur.execute(\"SELECT 1 FROM pg_roles WHERE rolname='{}';\".format(db_user))"
+          ]
+        },
+        {
+          "id": "p5-e-047",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "check_db_or_user_exists",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 19
+          },
+          "rationale": "Operator backend config. Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:19 def check_db_or_user_exists(db_name, db_user, config):"
+          ]
+        },
+        {
+          "id": "p5-e-048",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "create_postgres_db",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 30
+          },
+          "rationale": "Receives db_credentials built from POST args (management_resources.py:142-148 -> :164 -> backends :11); its subscripts feed the .format templates at :36-:41 (CREATE USER ... PASSWORD '{db_pwd}', GRANT, CREATE DATABASE {db_name} OWNER {db_username}, DROP ROLE) with no quoting or binding; first-order within the POST request.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:30 def create_postgres_db(connection_dict, config):",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:36 create_role = \"CREATE USER {db_username} WITH PASSWORD '{db_pwd}';\".format(**connection_dict)",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:41 create_database = \"CREATE DATABASE {db_name} OWNER {db_username};\".format(**connection_dict)",
+            "postgraas_server/management_resources.py:145 \"db_pwd\": args['db_pwd'],"
+          ]
+        },
+        {
+          "id": "p5-e-049",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "create_postgres_db",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 30
+          },
+          "rationale": "Operator backend config. Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:30 def create_postgres_db(connection_dict, config):"
+          ]
+        },
+        {
+          "id": "p5-e-050",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "get_normalized_username",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 56
+          },
+          "rationale": "Taint-through helper: username.split('@')[0] (:57) preserves prefix taint. Called with entity.username inside delete_user (-> DROP USER at :75) and with operator config['username'] at :39. The param0 -> return summary edge is what lets the :75 sink see tainted input.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:56 def get_normalized_username(username):",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:57 return username.split('@')[0]"
+          ]
+        },
+        {
+          "id": "p5-e-051",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "delete_database",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 60
+          },
+          "rationale": "Receives entity.db_name - meta-DB-persisted POST data (second-order chain :76 -> :107 -> backends :18) - and flows into DROP DATABASE \"{}\" at :65. Candidate pending human confirmation of the persisted-taint threat model.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:60 def delete_database(db_name, config):",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:65 cur.execute('''DROP DATABASE \"{}\";'''.format(db_name))"
+          ]
+        },
+        {
+          "id": "p5-e-052",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "delete_database",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 60
+          },
+          "rationale": "Operator backend config. Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:60 def delete_database(db_name, config):"
+          ]
+        },
+        {
+          "id": "p5-e-053",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "delete_user",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 70
+          },
+          "rationale": "Same second-order chain for entity.username -> get_normalized_username -> DROP USER \"{}\" at :75. Candidate pending human confirmation of the persisted-taint threat model.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:70 def delete_user(username, config):",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:75 cur.execute('''DROP USER \"{}\";'''.format(get_normalized_username(username)))"
+          ]
+        },
+        {
+          "id": "p5-e-054",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "delete_user",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 70
+          },
+          "rationale": "Operator backend config. Operator-level config: the value originates from the operator-authored application.cfg (configuration.py:29-41 get_config) or the /secrets file, read at process startup (create_app.py:20, prometheus_app.py:94); the remote HTTP client cannot write any of it. Not an attacker-influenced boundary for CWE-89.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:70 def delete_user(username, config):"
+          ]
+        },
+        {
+          "id": "p5-e-055",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "run_server",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "postgraas_server.prometheus_app",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/prometheus_app.py",
+            "line": 88
+          },
+          "rationale": "click --test flag of the local operator launching the monitoring server; test-mode printing only; no path into any SQL text (do_count_query uses a static literal).",
+          "evidence": [
+            "postgraas_server/prometheus_app.py:88 def run_server(test, port):"
+          ]
+        },
+        {
+          "id": "p5-e-056",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "run_server",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "postgraas_server.prometheus_app",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/prometheus_app.py",
+            "line": 88
+          },
+          "rationale": "click --port listen port of the monitoring server; no path into any SQL text.",
+          "evidence": [
+            "postgraas_server/prometheus_app.py:88 def run_server(test, port):"
+          ]
+        },
+        {
+          "id": "p5-e-057",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 68
+          },
+          "rationale": "ORM bound parameter (query.get(id)). flask-sqlalchemy ORM channel: query.get/all/filter_by and session.add/delete/commit generate parameterized SQL with bound values (python.md sanitizer family: SQL bind parameters); no raw SQL, text() or engine.execute exists anywhere in the ORM usage of this snapshot. Passing values as bound parameters is safe behavior for pass 5, not a CWE-89 sink.",
+          "evidence": [
+            "postgraas_server/management_resources.py:68 entity = DBInstance.query.get(id)"
+          ]
+        },
+        {
+          "id": "p5-e-058",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 76
+          },
+          "rationale": "ORM bound parameter; the id argument is the int-converted route value. flask-sqlalchemy ORM channel: query.get/all/filter_by and session.add/delete/commit generate parameterized SQL with bound values (python.md sanitizer family: SQL bind parameters); no raw SQL, text() or engine.execute exists anywhere in the ORM usage of this snapshot. Passing values as bound parameters is safe behavior for pass 5, not a CWE-89 sink.",
+          "evidence": [
+            "postgraas_server/management_resources.py:76 entity = DBInstance.query.get(id)"
+          ]
+        },
+        {
+          "id": "p5-e-059",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "delete",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "SQLAlchemy"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 99
+          },
+          "rationale": "ORM session delete; SQL generated with bound parameters. flask-sqlalchemy ORM channel: query.get/all/filter_by and session.add/delete/commit generate parameterized SQL with bound values (python.md sanitizer family: SQL bind parameters); no raw SQL, text() or engine.execute exists anywhere in the ORM usage of this snapshot. Passing values as bound parameters is safe behavior for pass 5, not a CWE-89 sink.",
+          "evidence": [
+            "postgraas_server/management_resources.py:99 db.session.delete(entity)"
+          ]
+        },
+        {
+          "id": "p5-e-060",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "commit",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "SQLAlchemy"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 100
+          },
+          "rationale": "ORM session commit. flask-sqlalchemy ORM channel: query.get/all/filter_by and session.add/delete/commit generate parameterized SQL with bound values (python.md sanitizer family: SQL bind parameters); no raw SQL, text() or engine.execute exists anywhere in the ORM usage of this snapshot. Passing values as bound parameters is safe behavior for pass 5, not a CWE-89 sink.",
+          "evidence": [
+            "postgraas_server/management_resources.py:100 db.session.commit()"
+          ]
+        },
+        {
+          "id": "p5-e-061",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "delete",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "SQLAlchemy"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 111
+          },
+          "rationale": "ORM session delete. flask-sqlalchemy ORM channel: query.get/all/filter_by and session.add/delete/commit generate parameterized SQL with bound values (python.md sanitizer family: SQL bind parameters); no raw SQL, text() or engine.execute exists anywhere in the ORM usage of this snapshot. Passing values as bound parameters is safe behavior for pass 5, not a CWE-89 sink.",
+          "evidence": [
+            "postgraas_server/management_resources.py:111 db.session.delete(entity)"
+          ]
+        },
+        {
+          "id": "p5-e-062",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "commit",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "SQLAlchemy"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 112
+          },
+          "rationale": "ORM session commit. flask-sqlalchemy ORM channel: query.get/all/filter_by and session.add/delete/commit generate parameterized SQL with bound values (python.md sanitizer family: SQL bind parameters); no raw SQL, text() or engine.execute exists anywhere in the ORM usage of this snapshot. Passing values as bound parameters is safe behavior for pass 5, not a CWE-89 sink.",
+          "evidence": [
+            "postgraas_server/management_resources.py:112 db.session.commit()"
+          ]
+        },
+        {
+          "id": "p5-e-063",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "all",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 119
+          },
+          "rationale": "ORM query.all(). flask-sqlalchemy ORM channel: query.get/all/filter_by and session.add/delete/commit generate parameterized SQL with bound values (python.md sanitizer family: SQL bind parameters); no raw SQL, text() or engine.execute exists anywhere in the ORM usage of this snapshot. Passing values as bound parameters is safe behavior for pass 5, not a CWE-89 sink.",
+          "evidence": [
+            "postgraas_server/management_resources.py:119 all = DBInstance.query.all()"
+          ]
+        },
+        {
+          "id": "p5-e-064",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "filter_by",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "DBInstance"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 135
+          },
+          "rationale": "ORM keyword-bound filter. flask-sqlalchemy ORM channel: query.get/all/filter_by and session.add/delete/commit generate parameterized SQL with bound values (python.md sanitizer family: SQL bind parameters); no raw SQL, text() or engine.execute exists anywhere in the ORM usage of this snapshot. Passing values as bound parameters is safe behavior for pass 5, not a CWE-89 sink.",
+          "evidence": [
+            "postgraas_server/management_resources.py:135 if DBInstance.query.filter_by(postgraas_instance_name=args['postgraas_instance_name']"
+          ]
+        },
+        {
+          "id": "p5-e-065",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "add",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "SQLAlchemy"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 175
+          },
+          "rationale": "ORM persistence. This is the write side of the second-order chain (db_entry fields are persisted here and re-read by a later DELETE request); the taint is modeled from the read side as the db_content source entry (query.get:76), since CodeQL cannot track cross-request persistence. flask-sqlalchemy ORM channel: query.get/all/filter_by and session.add/delete/commit generate parameterized SQL with bound values (python.md sanitizer family: SQL bind parameters); no raw SQL, text() or engine.execute exists anywhere in the ORM usage of this snapshot. Passing values as bound parameters is safe behavior for pass 5, not a CWE-89 sink.",
+          "evidence": [
+            "postgraas_server/management_resources.py:175 db.session.add(db_entry)"
+          ]
+        },
+        {
+          "id": "p5-e-066",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "commit",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "flask_sqlalchemy",
+            "type": "SQLAlchemy"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/management_resources.py",
+            "line": 176
+          },
+          "rationale": "ORM session commit. flask-sqlalchemy ORM channel: query.get/all/filter_by and session.add/delete/commit generate parameterized SQL with bound values (python.md sanitizer family: SQL bind parameters); no raw SQL, text() or engine.execute exists anywhere in the ORM usage of this snapshot. Passing values as bound parameters is safe behavior for pass 5, not a CWE-89 sink.",
+          "evidence": [
+            "postgraas_server/management_resources.py:176 db.session.commit()"
+          ]
+        },
+        {
+          "id": "p5-e-067",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "check_db_or_user_exists",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 19
+          },
+          "rationale": "Raw-SQL formatting helper (flask.md pass 5: raw SQL formatting helpers need summary edges): taint entering params db_name/db_user must reach the execute arguments at :22/:24; the param -> SQL-text steps are needed when tracking from the external parse_args source.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:19 def check_db_or_user_exists(db_name, db_user, config):"
+          ]
+        },
+        {
+          "id": "p5-e-068",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "cursor"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 22
+          },
+          "rationale": "cur.execute(\"SELECT 1 FROM pg_database WHERE datname='{}';\".format(db_name)): SQL text assembled with str.format and executed with NO second (bound-parameter) argument; db_name is POST-derived (create path) or DB-persisted (delete path) attacker data; no quoting or validation on the path.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:22 cur.execute(\"SELECT 1 FROM pg_database WHERE datname='{}';\".format(db_name))",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:31 if check_db_or_user_exists(connection_dict[\"db_name\"], connection_dict[\"db_username\"], config):",
+            "postgraas_server/management_resources.py:143 \"db_name\": args['db_name'],",
+            "merged: sinks.csv rows 13 (sql_format_call construction node(s) of this statement)"
+          ]
+        },
+        {
+          "id": "p5-e-069",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "cursor"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 24
+          },
+          "rationale": "cur.execute(\"SELECT 1 FROM pg_roles WHERE rolname='{}';\".format(db_user)): same unescaped str.format SQL construction with no bound parameters; db_user attacker-derived.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:24 cur.execute(\"SELECT 1 FROM pg_roles WHERE rolname='{}';\".format(db_user))",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:31 if check_db_or_user_exists(connection_dict[\"db_name\"], connection_dict[\"db_username\"], config):",
+            "merged: sinks.csv rows 15 (sql_format_call construction node(s) of this statement)"
+          ]
+        },
+        {
+          "id": "p5-e-070",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "create_postgres_db",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 30
+          },
+          "rationale": "Helper whose connection_dict subscript values feed the CREATE USER/GRANT/CREATE DATABASE/DROP ROLE templates (:36-:41); param -> dict-element -> format steps are needed (container-element flow across a function boundary is not default-modeled).",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:30 def create_postgres_db(connection_dict, config):"
+          ]
+        },
+        {
+          "id": "p5-e-071",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "cursor"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 43
+          },
+          "rationale": "cur.execute(create_role): CREATE USER {db_username} WITH PASSWORD '{db_pwd}'; - both values interpolated UNQUOTED into SQL text (a single quote in db_pwd breaks out of the password literal); classic CWE-89 text construction; no bound parameters.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:43 cur.execute(create_role)",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:36 create_role = \"CREATE USER {db_username} WITH PASSWORD '{db_pwd}';\".format(**connection_dict)",
+            "postgraas_server/management_resources.py:145 \"db_pwd\": args['db_pwd'],",
+            "merged: sinks.csv rows 17 (sql_format_call construction node(s) of this statement)"
+          ]
+        },
+        {
+          "id": "p5-e-072",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "cursor"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 44
+          },
+          "rationale": "cur.execute(grant_role): GRANT {db_username} TO \"{postgraas_user}\"; - db_username is interpolated unquoted (postgraas_user is operator config and quoted); the tainted db_username alone controls SQL structure.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:44 cur.execute(grant_role)",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:38 grant_role = 'GRANT {db_username} TO \"{postgraas_user}\";'.format(",
+            "merged: sinks.csv rows 19 (sql_format_call construction node(s) of this statement)"
+          ]
+        },
+        {
+          "id": "p5-e-073",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "cursor"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 50
+          },
+          "rationale": "cur.execute(create_database): CREATE DATABASE {db_name} OWNER {db_username}; - both values interpolated unquoted into SQL text; no bound parameters.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:50 cur.execute(create_database)",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:41 create_database = \"CREATE DATABASE {db_name} OWNER {db_username};\".format(**connection_dict)",
+            "postgraas_server/management_resources.py:143 \"db_name\": args['db_name'],",
+            "merged: sinks.csv rows 20 (sql_format_call construction node(s) of this statement)"
+          ]
+        },
+        {
+          "id": "p5-e-074",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "cursor"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 52
+          },
+          "rationale": "cur.execute(drop_role): DROP ROLE {db_username}; - unquoted identifier interpolation; executed only on the CREATE DATABASE failure cleanup path (conditional reachability documented).",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:52 cur.execute(drop_role)",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:37 drop_role = \"DROP ROLE {db_username};\".format(**connection_dict)",
+            "merged: sinks.csv rows 18 (sql_format_call construction node(s) of this statement)"
+          ]
+        },
+        {
+          "id": "p5-e-075",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "delete_database",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 60
+          },
+          "rationale": "Helper: the db_name param reaches the DROP DATABASE execute argument at :65; second-order taint origin documented at the source entries.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:60 def delete_database(db_name, config):"
+          ]
+        },
+        {
+          "id": "p5-e-076",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "cursor"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 65
+          },
+          "rationale": "cur.execute('DROP DATABASE \"{}\";'.format(db_name)): the double quotes are partial identifier quoting, NOT a sanitizer - a db_name containing '\"' terminates the quoted identifier and changes the statement; the value is DB-persisted POST data; no bound parameters.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:65 cur.execute('''DROP DATABASE \"{}\";'''.format(db_name))",
+            "postgraas_server/management_resources.py:152 db_name=args['db_name'],",
+            "merged: sinks.csv rows 27 (sql_format_call construction node(s) of this statement)"
+          ]
+        },
+        {
+          "id": "p5-e-077",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "delete_user",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 70
+          },
+          "rationale": "Helper: the username param reaches get_normalized_username and the DROP USER execute argument at :75; second-order taint origin documented at the source entries.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:70 def delete_user(username, config):"
+          ]
+        },
+        {
+          "id": "p5-e-078",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.backends.postgres_cluster.postgres_cluster_driver",
+            "type": "cursor"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+            "line": 75
+          },
+          "rationale": "cur.execute('DROP USER \"{}\";'.format(get_normalized_username(username))): same partial-quoting analysis; the split('@')[0] normalization does not remove quote characters; value is DB-persisted POST data; no bound parameters.",
+          "evidence": [
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:75 cur.execute('''DROP USER \"{}\";'''.format(get_normalized_username(username)))",
+            "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:57 return username.split('@')[0]",
+            "merged: sinks.csv rows 30 (sql_format_call construction node(s) of this statement)"
+          ]
+        },
+        {
+          "id": "p5-e-079",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "do_count_query",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "postgraas_server.prometheus_app",
+            "type": null
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/prometheus_app.py",
+            "line": 33
+          },
+          "rationale": "Wrapper around a fully static literal SQL (prometheus_app.py:36-40); only operator config enters the function; no taint can reach the SQL text.",
+          "evidence": [
+            "postgraas_server/prometheus_app.py:33 def do_count_query(config):",
+            "postgraas_server/prometheus_app.py:40 cursor.execute(sql)"
+          ]
+        },
+        {
+          "id": "p5-e-080",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "postgraas_server.prometheus_app",
+            "type": "cursor"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln/postgraas_server/prometheus_app.py",
+            "line": 40
+          },
+          "rationale": "cursor.execute(sql) where sql is the constant \"SELECT count(*) FROM pg_database WHERE datistemplate = false;\" (prometheus_app.py:36-39): the API family is the same DB-API execute channel as the driver sinks, but this site's SQL text is a static literal unreachable by attacker data (only operator config enters do_count_query).",
+          "evidence": [
+            "postgraas_server/prometheus_app.py:40 cursor.execute(sql)",
+            "postgraas_server/prometheus_app.py:36 sql = ("
+          ]
+        }
+      ]
+    }
+  ]
+}

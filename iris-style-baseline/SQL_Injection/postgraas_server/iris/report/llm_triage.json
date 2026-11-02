@@ -1,0 +1,345 @@
+{
+  "review": {
+    "kind": "independent_llm_path_recheck",
+    "target": "IRIS/Augur Pass 5 CWE-89 SQL Injection formal results",
+    "project": "postgraas_server",
+    "sarif": "results/pass5.sarif",
+    "formal_rule_id": "py/augur/postgraas_server/pass5-sql-injection",
+    "reviewer_model": "glm-5.3",
+    "reviewed_at": "2026-10-21",
+    "source_tree": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/postgraas_server_vuln",
+    "inputs_read": [
+      "iris/results/pass5.sarif",
+      "iris/report/iris_report.md",
+      "iris/labels/labels.json",
+      "iris/report/query_generation_notes.md",
+      "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "postgraas_server/backends/postgres_cluster/__init__.py",
+      "postgraas_server/backends/__init__.py",
+      "postgraas_server/management_resources.py",
+      "postgraas_server/create_app.py"
+    ],
+    "isolation_note": "未读取 PyVul 真值文件、CVE申请报告.md、漏洞审查报告.md 或任何修复提交/外部公告;仅使用用户在本次任务提示中提供的 commit 7cd8d016 信息做命中分析。未修改正式 SARIF、labels.json 或 CodeQL 查询。"
+  },
+  "sarif_summary": {
+    "runs": 1,
+    "rules": ["py/augur/postgraas_server/pass5-sql-injection"],
+    "formal_results": 8,
+    "diagnostic_results": 0,
+    "native_codeql_baseline_results": 0,
+    "mixed_in_other_cwe_or_nosql": false,
+    "notifications_note": "toolExecutionNotifications 仅为 expected-extracted-files / file-coverage / platform 遥测,非告警",
+    "all_result_locations": [
+      "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:22",
+      "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:24",
+      "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:43",
+      "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:44",
+      "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:50",
+      "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:52",
+      "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:65",
+      "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:75"
+    ],
+    "common_code_properties": {
+      "sql_construction": "全部 8 处均为 str.format 拼接(:22/:24/:65/:75 为参数式 .format(x),:36/:37/:38/:41 为 .format(**connection_dict) 模板);无 f-string/%/拼接 SQL,无 executemany,无 ORM raw SQL",
+      "parameter_binding": "全代码库无任何 execute(query, params) 形式 —— 驱动内 8 处 execute 均单参数;无 psycopg2.sql.SQL/Identifier、无白名单、无准备语句",
+      "source_boundary": "flask_restful reqparse RequestParser().parse_args() 于 management_resources.py:133(POST /api/v2/postgraas_instances,注册于 create_app.py:38);db_name/db_username/db_pwd 均 required=True, type=str 仅类型强制,无验证;端点无任何认证",
+      "deployment_precondition": "SQL 通道仅在 backends/__init__.py:4 BACKENDS['pg_cluster'] 选择时存在(默认 'docker');与修复提交说明『If using the PostgreSQL backend…』一致,属部署前置条件而非假路径",
+      "sink_api": "psycopg2 DB-API cursor.execute,接收者 cur 来自 with con.cursor() as cur(driver :21/:35/:63/:73),危险参数为位置参数 0(SQL 文本)"
+    }
+  },
+  "findings": [
+    {
+      "alert_id": "pass5-result-0",
+      "sarif_location": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:22 (col 25-88)",
+      "sink_line_verified": "cur.execute(\"SELECT 1 FROM pg_database WHERE datname='{}';\".format(db_name))",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "source": {
+        "file": "postgraas_server/management_resources.py",
+        "line": 133,
+        "kind": "HTTP reqparse (POST /api/v2/postgraas_instances)",
+        "attacker_controlled": "args['db_name'] 满字符串,无认证、无验证(仅 type=str 强制)"
+      },
+      "sink": {
+        "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+        "line": 22,
+        "api": "psycopg2 cursor.execute, 参数 0 = SQL 文本",
+        "real_execution": true
+      },
+      "controlled_sql_part": "WHERE datname='{}' 的字符串字面量值(单引号包裹、无转义 —— db_name 含 ' 即可逃逸字面量并改写语句结构)",
+      "construction_matches_code": true,
+      "barrier_evidence": "无:execute 无第二参数(无绑定通道);无引号处理;MySanitizers 为空集与源码一致",
+      "preconditions": "pg_cluster 后端被 operator 配置(默认 docker);POST 端点可达且无认证;攻击者提供不已存在的 db_name/db_username 否则 :31 提前抛错(平凡满足)",
+      "path_verification": {
+        "codeflows": 4,
+        "faithful": "flow0 完整且逐行吻合真实代码:133 parse_args -> 143 args['db_name'] 入 db_credentials -> backends/__init__.py:9 connection_info 参数 -> :11 pgcd.create_postgres_db(connection_info) -> driver:30 connection_dict -> :31 connection_dict[\"db_name\"] -> :19 db_name 参数 -> :22 execute。flow2(:144 db_username)/flow3(:145 db_pwd)为字典容器级污点导致的元素级不精确(键混淆),但源与汇相同;flow1 经 DBInstance(:151 postgraas_instance_name kwarg)属对象级过染 —— 真实的 exists 路径(:158 -> backends:27 -> :19 -> :22)由 :152 db_name=args['db_name'] 驱动,同样真实。",
+        "verdict": "主路径(flow0)运行时真实,一阶可达(同一 POST 请求内 :31 即调用 check_db_or_user_exists)"
+      },
+      "rationale": "与用户提供的修复提交中 check_db_or_user_exists 的 code_before 逐字一致(该行修复为 datname=%s 绑定)。一阶无认证 REST 输入经 format 直接进入 psycopg2 execute 的 SQL 文本,无任何屏障。likely_tp。"
+    },
+    {
+      "alert_id": "pass5-result-1",
+      "sarif_location": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:24 (col 25-85)",
+      "sink_line_verified": "cur.execute(\"SELECT 1 FROM pg_roles WHERE rolname='{}';\".format(db_user))",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "source": {
+        "file": "postgraas_server/management_resources.py",
+        "line": 133,
+        "kind": "HTTP reqparse (POST /api/v2/postgraas_instances)",
+        "attacker_controlled": "args['db_username'] 满字符串"
+      },
+      "sink": {
+        "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+        "line": 24,
+        "api": "psycopg2 cursor.execute, 参数 0 = SQL 文本",
+        "real_execution": true
+      },
+      "controlled_sql_part": "WHERE rolname='{}' 字符串字面量值(单引号逃逸)",
+      "construction_matches_code": true,
+      "barrier_evidence": "无(同上,全库无绑定参数)",
+      "preconditions": "同 result-0",
+      "path_verification": {
+        "codeflows": 4,
+        "faithful": "flow2 是精确链:133 -> :144 args['db_username'] -> backends:9/:11 -> driver:30 -> :31:60-90 connection_dict[\"db_username\"] -> :19 db_user -> :24。flow0(db_name 键污及 db_username 元素)为容器级不精确;flow1(DBInstance username kwarg :153 -> entity.username)真实存在于 exists 路径(backends:27 第二实参)。",
+        "verdict": "存在一条逐行精确的真实链"
+      },
+      "rationale": "同 result-0,为修复提交中 check_db_or_user_exists 第二条语句(rolname='{}' -> rolname=%s)。likely_tp。"
+    },
+    {
+      "alert_id": "pass5-result-2",
+      "sarif_location": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:43 (col 29-40)",
+      "sink_line_verified": "cur.execute(create_role)  # create_role = \"CREATE USER {db_username} WITH PASSWORD '{db_pwd}';\".format(**connection_dict)  (:36)",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "source": {
+        "file": "postgraas_server/management_resources.py",
+        "line": 133,
+        "kind": "HTTP reqparse (POST /api/v2/postgraas_instances)",
+        "attacker_controlled": "db_username 与 db_pwd 均在模板中被引用,均为满字符串攻击者输入"
+      },
+      "sink": {
+        "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+        "line": 43,
+        "api": "psycopg2 cursor.execute, 参数 0 = 预构造 SQL 文本变量",
+        "real_execution": true
+      },
+      "controlled_sql_part": "db_username:未加引号的标识符位置(直接控制 SQL 结构);db_pwd:单引号字符串字面量(' 逃逸)—— 两个通道均可行",
+      "construction_matches_code": true,
+      "barrier_evidence": "无:模板无任何引号/转义,execute 无绑定;修复版正是改为 SQL(\"...PASSWORD %s\") + (pwd,) 绑定与 Identifier(username)",
+      "preconditions": "pg_cluster 后端;:31 存在性检查通过(新 db/用户名);:43 在 try 块内顺序执行(无条件分支)",
+      "path_verification": {
+        "codeflows": 4,
+        "faithful": "flow1(:144 db_username)与 flow2(:145 db_pwd)为精确链(值确在 :36 模板中);flow0 经 :143(db_name 键,不在 CREATE USER 模板中)属 **connection_dict 容器级过染**——告警结论不受影响,因为 db_username/db_pwd 确实进入该语句;flow3 为容器级(:142 -> :164)。",
+        "verdict": "告警真实;个别 thread 为容器级不精确"
+      },
+      "rationale": "与修复提交 create_postgres_db code_before 的 create_role 语句逐字一致,且为提交信息所述核心漏洞(CREATE USER ... PASSWORD)。likely_tp。"
+    },
+    {
+      "alert_id": "pass5-result-3",
+      "sarif_location": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:44 (col 29-39)",
+      "sink_line_verified": "cur.execute(grant_role)  # grant_role = 'GRANT {db_username} TO \"{postgraas_user}\";'.format(db_username=connection_dict['db_username'], postgraas_user=get_normalized_username(config['username']))  (:38-40)",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "source": {
+        "file": "postgraas_server/management_resources.py",
+        "line": 133,
+        "kind": "HTTP reqparse (POST /api/v2/postgraas_instances)",
+        "attacker_controlled": "db_username(经 :39 connection_dict['db_username'] 显式取值)"
+      },
+      "sink": {
+        "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+        "line": 44,
+        "api": "psycopg2 cursor.execute, 参数 0",
+        "real_execution": true
+      },
+      "controlled_sql_part": "db_username 处于未加引号的被授权角色标识符位置,单独即可改变 SQL 结构;postgraas_user 为 operator 配置(get_normalized_username(config['username']),:56-57 仅 split('@'),来自 application.cfg,非攻击者控制)",
+      "construction_matches_code": true,
+      "barrier_evidence": "postgraas_user 的双引号包裹只是部分标识符引用且其值非攻击者数据,不构成对受控片段(db_username)的任何保护;无绑定",
+      "preconditions": "pg_cluster 后端;:43 create_role 先成功(攻击者可用合法语句满足)",
+      "path_verification": {
+        "codeflows": 4,
+        "faithful": "flow1 为精确链:133 -> :144 -> backends:9/:11 -> driver:30 -> :39:29-59 connection_dict['db_username'] 下标 -> :38 format 结果 -> :44。flow0(db_name)/flow2(db_pwd)的键不在 :38 模板中,为容器级过染 thread;告警本身由 flow1 支撑。",
+        "verdict": "存在一条精确真实链"
+      },
+      "rationale": "与修复提交 create_postgres_db code_before 的 grant_role 语句一致(修复后两个占位均改 Identifier)。likely_tp。"
+    },
+    {
+      "alert_id": "pass5-result-4",
+      "sarif_location": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:50 (col 29-44)",
+      "sink_line_verified": "cur.execute(create_database)  # create_database = \"CREATE DATABASE {db_name} OWNER {db_username};\".format(**connection_dict)  (:41)",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "source": {
+        "file": "postgraas_server/management_resources.py",
+        "line": 133,
+        "kind": "HTTP reqparse (POST /api/v2/postgraas_instances)",
+        "attacker_controlled": "db_name 与 db_username 均在模板中"
+      },
+      "sink": {
+        "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+        "line": 50,
+        "api": "psycopg2 cursor.execute, 参数 0",
+        "real_execution": true
+      },
+      "controlled_sql_part": "CREATE DATABASE 库名与 OWNER 角色名两个未加引号标识符位置(结构级注入)",
+      "construction_matches_code": true,
+      "barrier_evidence": "无(无引号、无绑定、无白名单)",
+      "preconditions": "pg_cluster 后端;:43/:44 先成功(CREATE DATABASE 不能在事务块内,故 :34 设 AUTOCOMMIT,条件真实成立)",
+      "path_verification": {
+        "codeflows": 4,
+        "faithful": "flow0(db_name)/flow1(db_username)为精确链(两键均在 :41 模板);flow2(db_pwd,不在模板)为容器级过染 thread;flow3 容器级。",
+        "verdict": "告警真实"
+      },
+      "rationale": "与修复提交 create_postgres_db code_before 的 create_database 语句一致(修复后改 SQL+Identifier)。likely_tp。"
+    },
+    {
+      "alert_id": "pass5-result-5",
+      "sarif_location": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:52 (col 29-38)",
+      "sink_line_verified": "cur.execute(drop_role)  # drop_role = \"DROP ROLE {db_username};\".format(**connection_dict)  (:37)",
+      "verdict": "likely_tp",
+      "confidence": 0.7,
+      "source": {
+        "file": "postgraas_server/management_resources.py",
+        "line": 133,
+        "kind": "HTTP reqparse (POST /api/v2/postgraas_instances)",
+        "attacker_controlled": "db_username(在 :37 模板中)"
+      },
+      "sink": {
+        "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+        "line": 52,
+        "api": "psycopg2 cursor.execute, 参数 0",
+        "real_execution": true
+      },
+      "controlled_sql_part": "DROP ROLE 的未加引号标识符位置",
+      "construction_matches_code": true,
+      "barrier_evidence": "无",
+      "preconditions": "pg_cluster 后端;且 :50 CREATE DATABASE 抛 psycopg2.ProgrammingError 才进入 :52 清理路径(攻击者可构造使 CREATE DATABASE 失败但 CREATE USER 已成功的输入,例如 db_name 造成语法/权限错误;条件可达性由标签 p5-e-074 同样记录)",
+      "path_verification": {
+        "codeflows": 4,
+        "faithful": "flow1(db_username)为精确链;flow0(db_name)/flow2(db_pwd)键不在 :37 模板,为容器级过染 thread。",
+        "verdict": "告警真实,执行条件为异常清理分支(有条件可达)"
+      },
+      "rationale": "与修复提交 create_postgres_db code_before 的 drop_role 语句一致(修复后改 SQL+Identifier)。条件执行路径使置信度略降。likely_tp。"
+    },
+    {
+      "alert_id": "pass5-result-6",
+      "sarif_location": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:65 (col 29-70)",
+      "sink_line_verified": "cur.execute('''DROP DATABASE \"{}\";'''.format(db_name))",
+      "verdict": "uncertain",
+      "confidence": 0.55,
+      "source": {
+        "file": "postgraas_server/management_resources.py",
+        "line": 133,
+        "kind": "HTTP reqparse (POST) —— 但注意:真实运行时链为二阶(POST 持久化 -> DELETE 重读),非告警所渲染的一阶链",
+        "attacker_controlled": "db_name 满字符串(POST 时无验证持久化于 DBInstance.db_name, management_resources.py:152/:175-176)"
+      },
+      "sink": {
+        "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+        "line": 65,
+        "api": "psycopg2 cursor.execute, 参数 0",
+        "real_execution": true
+      },
+      "controlled_sql_part": "DROP DATABASE 的双引号标识符位置 —— 双引号仅为部分引用,db_name 含 \" 即逃逸标识符并改写语句",
+      "construction_matches_code": true,
+      "barrier_evidence": "无(无绑定;双引号不构成屏障;split 不适用于此处)",
+      "preconditions": "pg_cluster 后端;真实路径需两请求:(1) 无认证 POST 持久化恶意 db_name;(2) DELETE /api/v2/postgraas_instances/<id> 携带攻击者自设 db_pwd 通过 :81 连接校验 -> :95 exists -> :107 backend.delete(entity) -> backends:18 -> driver:60 -> :65。攻击者同时控制两步,链路可驱动。",
+      "path_verification": {
+        "codeflows": 4,
+        "faithful": "四条 thread 均存在 **summary 边汇合错误(conflation)**:污点从 :158 exists(db_entry) 的 POST 一阶绑定进入 PGClusterBackend.exists entity 参数(backends:26),再经 pgClusterFieldStep 流到 *delete 分支* 的 entity.db_name 装载(backends:18)——单请求内不存在该运行时边(POST handler 从不调用 backend.delete;PGClusterBackend.create 不调用 delete_database)。query_generation_notes.md §6 本预测 :65 不会出现在正式结果中,其出现证实 pgClusterFieldStep 对 :18/:19 装载的过泛化。",
+        "real_underlying_chain": "二阶链代码上成立:POST(:133→:152→:175-176 持久化)→ DELETE(:76 query.get → :107 → backends:18 → driver:60 → :65);但该 source(query.get:76)在标签中为 candidate,未渲染进正式 key。",
+        "verdict": "告警渲染路径为假(一阶 conflation);底层二阶注入在 DB-content-as-source 威胁模型下真实存在。不在本次提供的修复提交函数清单(create_postgres_db / check_db_or_user_exists)之内。"
+      },
+      "rationale": "渲染 codeFlow 不是运行时真实路径(summary 过泛化);若仅按一阶威胁模型应为 FP,若采纳二阶(持久化污点)威胁模型则为 TP。代码本身对该 sink 无任何屏障且攻击者可完整驱动两步,故倾向真实漏洞,但因路径失真且超出提供的真值函数范围,判 uncertain。"
+    },
+    {
+      "alert_id": "pass5-result-7",
+      "sarif_location": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py:75 (col 29-92)",
+      "sink_line_verified": "cur.execute('''DROP USER \"{}\";'''.format(get_normalized_username(username)))",
+      "verdict": "uncertain",
+      "confidence": 0.55,
+      "source": {
+        "file": "postgraas_server/management_resources.py",
+        "line": 133,
+        "kind": "HTTP reqparse (POST) —— 同 result-6,真实链为二阶(entity.username 持久化自 POST 的 db_username, :153)",
+        "attacker_controlled": "username 满字符串"
+      },
+      "sink": {
+        "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+        "line": 75,
+        "api": "psycopg2 cursor.execute, 参数 0",
+        "real_execution": true
+      },
+      "controlled_sql_part": "DROP USER 的双引号标识符位置(get_normalized_username 的 split('@')[0](:56-57)不去除引号字符,前缀污点保留,含 \" 仍可逃逸)",
+      "construction_matches_code": true,
+      "barrier_evidence": "无(双引号部分引用非屏障;无绑定)",
+      "preconditions": "同 result-6 的两请求二阶链(backends:19 -> driver:70 -> :75);DELETE 需以攻击者自设凭据通过 :81 连接校验",
+      "path_verification": {
+        "codeflows": 4,
+        "faithful": "与 result-6 相同的 conflation(:158 exists 绑定 -> backends:26 entity 参数 -> pgClusterFieldStep 过泛化至 :19 delete 分支装载 -> driver:70)。flow1 中 :75->:56/:57->:75 的 get_normalized_username 步骤在函数内部真实。",
+        "real_underlying_chain": "二阶链成立(POST :153 持久化 username → DELETE :76/:107 → backends:19 → driver:70 → :75)。",
+        "verdict": "同 result-6:渲染路径失真,底层二阶注入真实;不在提供的真值函数清单内。"
+      },
+      "rationale": "同 result-6。判 uncertain。"
+    }
+  ],
+  "ground_truth_hit_analysis": {
+    "provided_reference": {
+      "commit": "https://github.com/blue-yonder/postgraas_server/commit/7cd8d016edc74a78af0d81c948bfafbcc93c937c",
+      "cwe": "CWE-89",
+      "vulnerable_functions": ["create_postgres_db", "check_db_or_user_exists"],
+      "file": "postgraas_server/backends/postgres_cluster/postgres_cluster_driver.py",
+      "backend_component": "PostgreSQL Backend Handler (pg_cluster)"
+    },
+    "code_identity_check": "源码树中 postgres_cluster_driver.py 的 check_db_or_user_exists(:19-:27)与 create_postgres_db(:30-:53)与提交的 code_before 逐字一致;源码即为修复前(vulnerable)版本。",
+    "function_level_hits": [
+      {
+        "function": "check_db_or_user_exists",
+        "vulnerable_statements": [
+          {"line": 22, "sql": "SELECT 1 FROM pg_database WHERE datname='{}';", "hit_by": "pass5-result-0 (likely_tp)"},
+          {"line": 24, "sql": "SELECT 1 FROM pg_roles WHERE rolname='{}';", "hit_by": "pass5-result-1 (likely_tp)"}
+        ],
+        "hit": true,
+        "coverage": "2/2 条注入语句全部命中;修复方式(改为 %s 绑定)反向印证这正是注入点"
+      },
+      {
+        "function": "create_postgres_db",
+        "vulnerable_statements": [
+          {"line": 43, "sql": "CREATE USER {db_username} WITH PASSWORD '{db_pwd}'; (模板 :36)", "hit_by": "pass5-result-2 (likely_tp)"},
+          {"line": 44, "sql": "GRANT {db_username} TO \"{postgraas_user}\"; (模板 :38)", "hit_by": "pass5-result-3 (likely_tp)"},
+          {"line": 50, "sql": "CREATE DATABASE {db_name} OWNER {db_username}; (模板 :41)", "hit_by": "pass5-result-4 (likely_tp)"},
+          {"line": 52, "sql": "DROP ROLE {db_username}; (模板 :37, 异常清理路径)", "hit_by": "pass5-result-5 (likely_tp)"}
+        ],
+        "hit": true,
+        "coverage": "4/4 条被执行注入语句全部命中;三条 .format 模板(:36/:37/:38/:41)全部被对应告警覆盖;修复方式(SQL/Identifier/%s)反向印证注入点"
+      },
+      {
+        "function": "_create_pg_connection",
+        "note": "漏洞描述中并列提及,但该函数仅 psycopg2.connect 连接参数(凭据通道),不构造 SQL 文本;正确地未产生任何告警,非漏报"
+      }
+    ],
+    "additional_alerts_beyond_ground_truth": [
+      {"location": "driver:65 (delete_database, DROP DATABASE)", "alert": "pass5-result-6 (uncertain, 二阶)"},
+      {"location": "driver:75 (delete_user, DROP USER)", "alert": "pass5-result-7 (uncertain, 二阶)"}
+    ],
+    "conclusion": "命中。正式 Pass 5 结果 8 条中 6 条(likely_tp)逐一对应修复提交两个真实漏洞函数的全部 6 处注入语句(100% 语句级覆盖),Source 为无认证 REST 输入、Sink 为真实 psycopg2 cursor.execute、构造方式为 str.format、全库无参数化——四要素与真实漏洞完全吻合。另 2 条(:65/:75)指向提交函数清单之外的 delete 路径(二阶、渲染路径失真),不构成对本次真值的漏报或污染。"
+  },
+  "overall_conclusion": {
+    "verdict_counts": {"likely_tp": 6, "likely_fp": 0, "uncertain": 2},
+    "false_positive_categories_checked": {
+      "orm_safe_query_misflagged": false,
+      "fixed_sql_constant_misflagged": false,
+      "test_or_migration_script": false,
+      "operator_config_treated_as_attacker": false,
+      "bound_parameter_value_treated_as_sql_text": false,
+      "other_cwe_or_nosql_mixed_in": false,
+      "diagnostics_or_native_baseline_mixed_in": false
+    },
+    "notes": [
+      "prometheus_app.py:40 静态字面量 SQL 与全部 ORM 通道被正确排除(未出现在正式结果)。",
+      "pg_cluster 部署前置条件(默认 docker)与修复提交说明一致,不判为假路径。",
+      ":65/:75 两条 uncertain 的渲染 codeFlow 存在 pgClusterFieldStep 过泛化(单请求一阶假路径);底层二阶注入在无认证 + 无验证 + 双引号可逃逸条件下代码上成立,采纳 DB-content-as-source 威胁模型时可升为 TP。",
+      "本轮没有发现把诊断查询结果或原生 CodeQL py/sql-injection 基线计入正式 Augur TP 的情况。"
+    ]
+  }
+}
