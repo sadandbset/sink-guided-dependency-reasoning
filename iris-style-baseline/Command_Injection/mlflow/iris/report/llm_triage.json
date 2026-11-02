@@ -1,0 +1,182 @@
+{
+  "triage": {
+    "project": "mlflow",
+    "snapshot": "2.5.1.dev0 (sha 330bf0b38b07d4adf3fae99af1b44c8e857f514a)",
+    "pass": 2,
+    "cwe": "CWE-78 (CWE-077/078/088)",
+    "analyst": "independent LLM path review (GLM)",
+    "date": "2026-11-02",
+    "query_id": "py/augur/mlflow/pass2-command-injection",
+    "source_tree": "dataset/codeql_databases/mlflow_vuln",
+    "database": "dataset/codeql_databases/mlflow-db"
+  },
+  "sarif_status": {
+    "requested_file": "results/pass2.sarif",
+    "exists": false,
+    "finding": "results/pass2.sarif 不存在；results/ 目录中只有 pass2.bqrs（正式查询结果，38 行 source/sink 对）。iris_report.md（2026-10-15 09:30 生成）的 Finding Counts 表为空，早于 pass2.bqrs（2026-10-15 18:11）——报告是在正式分析运行之前生成的，且从未更新。",
+    "resolution": "CodeQL 分析成功且命中了 6 条正式 CWE-78 污点路径告警（存于 pass2.bqrs）。为复核 codeFlows，用同一正式查询 queries/Pass2_CommandInjection.ql 对同一数据库 mlflow-db 重新导出 SARIF（CodeQL 报告 'No need to rerun'，直接复用缓存查询结果），输出到 triage_work/pass2.sarif。未修改原始 SARIF（原本不存在）、BQRS、标签、查询或源码树。诊断查询（diagnostics/*.csv）结果未作为正式 TP 依据。"
+  },
+  "constraints": {
+    "pyvul_ground_truth_read": false,
+    "original_sarif_modified": false,
+    "labels_modified": false,
+    "queries_modified": false,
+    "diagnostic_results_used_as_tp": false
+  },
+  "alerts": [
+    {
+      "alert_id": 0,
+      "rule_id": "py/augur/mlflow/pass2-command-injection",
+      "sink_location": "mlflow/models/container/__init__.py:203:58",
+      "sink_code": "inference_server_process = Popen([\"/bin/bash\", \"-c\", \" && \".join(bash_cmds)], env=cmd_env)",
+      "sink_type": "bash -c list element (isBashDashCElementSink)",
+      "source_location": "mlflow/models/container/__init__.py:71",
+      "source_code": "m = Model.load(model_config_path)  # MLmodel 元数据（模型容器内的不可信模型工件）",
+      "source_type": "isModelMetadataSource (Model.load 返回值)",
+      "codeflow_summary": "container/__init__.py:71 (Model.load 返回 m) -> :82 (_serve_pyfunc(m,...) 实参) -> :144 (model 形参) -> :203 (sink 元素)",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "Source 本身合格：MLmodel 来自部署的模型工件（威胁模型第 3 类不可信模型元数据）。但 source 到 sink 的最后一段不是真实数据流。",
+        "q2_propagation_evidence": "路径 144->203 之间没有任何真实代码传播。_serve_pyfunc 中 model 的全部使用是：:79/:81/:150 的 flavor 成员判断、:152 `pyfunc.ENV in conf` 布尔判断、:154 把常量 MODEL_PATH 传给 _install_pyfunc_deps。command 字符串的实际构成是常量（'source /miniconda/...' 等）加 get_cmd(model_uri=MODEL_PATH,...) 的返回值；已核实 mlflow/pyfunc/scoring_server/__init__.py:326 与 mlflow/pyfunc/mlserver.py:12 的 get_cmd 均只用 model_uri/host/port/timeout/nworkers，不读任何 MLmodel 内容。144->203 这条边是 MySummaries 中人为合成的 servePyfuncContainerStep (snk-021) 概括边，不是代码里存在的数据依赖。",
+        "q3_sink_executes_commands": "是。Popen(['/bin/bash','-c',...]) 真实执行 shell 命令。",
+        "q4_command_content_influenced": "否。model 只影响控制流（往 bash_cmds 里追加哪些常量字符串），不影响命令内容。",
+        "q5_sanitization": "不适用——问题在于传播本身不成立。",
+        "q6_business_function": "模型容器 serving 是正常业务功能。",
+        "q7_overapproximation": "是：由概要模型（snk-021 标签边）造成的假路径，Source/Sink 本身都真实但中间无数据依赖。"
+      }
+    },
+    {
+      "alert_id": 1,
+      "rule_id": "py/augur/mlflow/pass2-command-injection",
+      "sink_location": "mlflow/projects/databricks.py:379:27",
+      "sink_code": "return [\"bash\", \"-c\", shell_command]",
+      "sink_type": "bash -c list element (isBashDashCElementSink, snk-047)",
+      "source_location": "mlflow/cli.py:166 (--experiment-id, click STRING, envvar MLFLOW_EXPERIMENT_ID)",
+      "source_code": "@click.option(\"--experiment-id\", envvar=MLFLOW_EXPERIMENT_ID.name, type=click.STRING)",
+      "source_type": "isCliParamSource (mlflow run CLI 参数)",
+      "codeflow_summary": "cli.py:166 experiment_id -> projects/__init__.py:60 `return str(experiment_id)`(_resolve_experiment_id 原样返回，无校验) -> databricks.py:180-185 posixpath.join(DBFS_EXPERIMENT_DIR_BASE, str(experiment_id), 'projects-code', hash) -> :187/:196 dbfs_fuse_uri 返回 -> :276 _get_databricks_run_cmd -> :362-378 shell_command f-string 模板 -> :379 ['bash','-c',shell_command]",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "reasoning": {
+        "q1_source_boundary": "部分成立。experiment_id 是 `mlflow run --experiment-id` 的 click STRING 参数（无类型校验，_resolve_experiment_id 在 cli.py:60 直接 `str(experiment_id)` 原样返回），也可经 MLFLOW_EXPERIMENT_ID 环境变量注入。按本实验声明的威胁模型（CLI 参数属于外部输入）是合格 source；但 2.5.1 中无任何 REST 端点触发 mlflow run，实际入口只有本地 CLI/SDK，即注入者通常就是运行命令的人自己（或向 mlflow 传不可信参数的包装脚本/自动化）。",
+        "q2_propagation_evidence": "真实。逐行核实：databricks.py:180-185 把 str(experiment_id) 直接拼进 dbfs_path，:187 拼成 /dbfs 前缀 URI 并从 _upload_project_to_dbfs 返回（:196），:276 传入 _get_databricks_run_cmd，:369 `rsync -a -v --ignore-existing {dbfs_fuse_tar_uri} {DB_TARFILE_BASE}` 未加引号插值进 shell 模板，:379 以 bash -c 提交为 Databricks 作业 shell 命令。中间两处 AdditionalTaintStep（:180/:187）对应标签概括边，但其底层代码（posixpath.join + 返回值传递）真实存在。",
+        "q3_sink_executes_commands": "是。['bash','-c',shell_command] 作为 Databricks job 命令在集群上经 shell 执行。",
+        "q4_command_content_influenced": "是。experiment_id 未加引号直接进入 shell 命令字符串，`--experiment-id 'x; <cmd>;'` 即可注入。",
+        "q5_sanitization": "无。同函数其余部分 mlflow_run_arr 的每个元素都经过 quote()（databricks.py:334/:361），说明作者有意加引号，但 dbfs_fuse_tar_uri/container_tar_path/project_dir 这三个插值点未引用——防护不一致，属于实现缺陷而非有白名单。",
+        "q6_business_function": "在 Databricks 上运行项目是正常功能，但未引用的 URI 插值不是受支持的语义。",
+        "q7_overapproximation": "否，路径真实可达（CLI --backend databricks 同步路径）。"
+      },
+      "caveat": "安全影响受限：注入者需控制本地 CLI 参数或进程环境变量；mlflow run 本身就会执行不可信 MLproject 的 entry point 命令，因此独立增量风险主要是绕过 quote 防护在集群侧 shell 中执行。若以“本地 CLI 自注入不算攻击边界”为标准，此条应降级为 uncertain。"
+    },
+    {
+      "alert_id": 2,
+      "rule_id": "py/augur/mlflow/pass2-command-injection",
+      "sink_location": "mlflow/projects/backend/local.py:277:51",
+      "sink_code": "process = subprocess.Popen([\"bash\", \"-c\", command], close_fds=True, cwd=work_dir, env=env)",
+      "sink_type": "bash -c list element (isBashDashCElementSink, snk-060)",
+      "source_locations": [
+        "mlflow/projects/_project_spec.py:34 (yaml.safe_load(MLproject)) [codeFlow 0]",
+        "mlflow/projects/_project_spec.py:165 (os.environ.get('SHELL')) [codeFlow 1]",
+        "mlflow/utils/conda.py:54 (MLFLOW_CONDA_HOME) / :59 (CONDA_EXE) [codeFlows 2,3]"
+      ],
+      "codeflow_summary": [
+        "cf0: _project_spec.py:34 yaml.safe_load -> :53 docker_env -> :82/:158 Project.docker_env -> local.py:84 load_project -> :134 volumes=project.docker_env.get('volumes') -> :284 _get_docker_command -> :335-336 `cmd += ['-v', v]` -> :341 return cmd -> :130 command_args += ... -> :182 command_str = ' '.join(command_args) -> :184 _run_entry_point(command_str) -> :277 Popen(['bash','-c',command])",
+        "cf1: _project_spec.py:165 os.environ.get('SHELL') -> :167 f'{ext_to_cmd[ext]} {quote(entry_point)}' -> EntryPoint.command -> :232-237 compute_command -> utils.py:327-330 -> local.py:181-184 -> :277",
+        "cf2/cf3: conda.py:54/:59 (MLFLOW_CONDA_HOME / CONDA_EXE) -> :34/:38 activate 路径 -> environment.py:578-585 _activate_cmd -> local.py:174-175 get_activate_command -> :181-184 -> :277"
+      ],
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "reasoning": {
+        "q1_source_boundary": "cf0 的 source 是 MLproject YAML（yaml.safe_load 于 _project_spec.py:34），属于威胁模型第 3 类“不可信项目工件”——攻击者控制的 git 仓库/目录里的 MLproject docker_env.volumes / environment 字符串。cf1/cf2/cf3 的 source 是本地进程环境变量（$SHELL、MLFLOW_CONDA_HOME、CONDA_EXE），由进程所有者设置，不是远程可影响边界。",
+        "q2_propagation_evidence": "cf0 真实且逐行核实：MLproject 的 volumes 列表（_project_spec.py:60-69 仅校验“是字符串列表”，无内容校验；docker.py:56 validate_docker_env 只查 image/name）作为 `-v {v}` 原样元素进入 docker argv（local.py:335-336），environment 条目进入 `-e {k}={v}`（:321/:339）；整个 argv 列表在 local.py:130 被并进 command_args，:182 用空格 join 成单一字符串，:184 传给 _run_entry_point，:277 以 bash -c 在宿主机执行。cf1-cf3 的传播亦真实（均为已核实的代码），但 source 边界不成立。",
+        "q3_sink_executes_commands": "是。Popen(['bash','-c',command])（:277）/ Popen(['cmd','/c',command])（:280）。",
+        "q4_command_content_influenced": "是（cf0）：volumes/environment 字符串未加任何引号或转义进入宿主机 shell 命令；包含 `;`、`$(...)`、反引号的 volume 值会在宿主机执行。",
+        "q5_sanitization": "无针对 volumes/environment 的引用或白名单。对比之下 entry_point 命令模板中的脚本名有 quote()（_project_spec.py:167/:172），参数值经 _sanitize_param_dict 的 quote()（:241），而 docker_env 的插值点完全未防护。",
+        "q6_business_function": "用 docker_env 运行项目是受支持功能，且 MLflow 文档明示“运行项目即执行其代码”；但 docker 分支给用户的语义是容器内执行，而该污点在容器外的宿主机 shell 中解释，属于实现层面的防护缺口。",
+        "q7_overapproximation": "否（cf0 为原生数据流，路径真实可达：mlflow run <untrusted-project> 且项目声明 docker_env、同步模式）。cf1-cf3 为 source 边界过宽（环境变量）导致的弱路径。"
+      },
+      "caveat": "成立前提是受害者对不可信 MLproject 执行 mlflow run（与威胁模型一致，也是 MLflow 历史安全公告的典型前提）。4 条 codeFlow 中只有 cf0（docker volumes/environment -> 宿主 bash -c）是真路径；cf1（$SHELL）、cf2/cf3（conda 环境变量）为 FP 子路径。"
+    },
+    {
+      "alert_id": 3,
+      "rule_id": "py/augur/mlflow/pass2-command-injection",
+      "sink_location": "mlflow/projects/backend/local.py:280:50",
+      "sink_code": "process = subprocess.Popen([\"cmd\", \"/c\", command], close_fds=True, cwd=work_dir, env=env)",
+      "sink_type": "cmd /c list element (isBashDashCElementSink, snk-060 的 Windows 分支)",
+      "source_locations": "与 alert 2 完全相同的 4 条 codeFlow（仅 sink 行不同：Windows 下 cmd /c）",
+      "codeflow_summary": "同 alert 2（source/sink/中间节点一致，末梢为 :280 cmd /c）。",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "reasoning": {
+        "q1_q2_q3_q4": "同 alert 2：cf0 的 MLproject docker_env -> `-v {v}` -> ' '.join -> cmd /c 在宿主机解释执行，字符串中的 cmd 元字符（&、^、|）同样可注入；cf1-cf3 为环境变量 source 的 FP 子路径。",
+        "q5_sanitization": "无。",
+        "q6_business_function": "同 alert 2。",
+        "q7_overapproximation": "否（cf0 真实）。"
+      },
+      "caveat": "与 alert 2 是同一污点链在两个分支 sink 的重复告警；结论与前提相同（受害者运行不可信项目）。"
+    },
+    {
+      "alert_id": 4,
+      "rule_id": "py/augur/mlflow/pass2-command-injection",
+      "sink_location": "mlflow/utils/process.py:96:9",
+      "sink_code": "process = subprocess.Popen(cmd, env=env, text=True, **kwargs)",
+      "sink_type": "isPopenCommandArgSink (snk-063, _exec_cmd 中央 Popen)",
+      "source_locations": [
+        "mlflow/projects/_project_spec.py:34 (yaml.safe_load -> python_env) [codeFlow 0]",
+        "mlflow/cli.py:383/--host(STRING), :384/--port(INT), :385/--workers(INT) (mlflow server CLI) [codeFlows 1-3]"
+      ],
+      "codeflow_summary": [
+        "cf0: _project_spec.py:34 yaml.safe_load -> :90 python_env -> :92 python_env_path(经 os.path.exists 校验) -> :98 Project.env_config_path -> local.py:84/:174 get_or_create_conda_env -> conda.py:220/:287 -> :117-138 _create_conda_env -> process.py:32/:96 _exec_cmd Popen",
+        "cf1/2/3: cli.py:383-385 host/port/workers -> server/__init__.py:168-192 _build_waitress_command/_build_gunicorn_command -> :248-251 _exec_cmd -> process.py:32/:96"
+      ],
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "cf0 的 source 是不可信 MLproject 的 python_env 字段（合格边界）；cf1-3 是本地 `mlflow server` CLI 的 host/port/workers（操作者自设，非远程边界；host 为 STRING，port/workers 为 click INT）。",
+        "q2_propagation_evidence": "传播真实，但终点形态使注入不成立：cf0 中 conda_env_path 进入的是 `_create_conda_env` 的 argv 列表 `[conda_env_create_path, 'env', 'create', '-n', project_env_name, '--file', conda_env_path, '--quiet']`（conda.py:125-138），conda_env_path 是 `--file` 之后的单个 argv 元素；cf1-3 中 host/port/workers 进入 `['gunicorn','-b',f'{host}:{port}','-w',str(workers),...]` / `['waitress-serve',...,f'--host={host}',...]` 列表，每个值都是一个完整的 argv 元素。",
+        "q3_sink_executes_commands": "Popen 执行命令，但**无 shell**。已核实两条链上 _exec_cmd 的调用（conda.py:125-138 与 server/__init__.py:251）均未传 shell= / 未转发任何 shell 关键字，Popen 收到的是字符串列表，Windows/POSIX 都不会做 shell 元字符解释。sink 模型把 process.py:95 标为 sink 的理由是“其他调用方会经 **kwargs 转发 shell（如 virtualenv.py:137）”，但本告警的两条链都不经过那些调用方。",
+        "q4_command_content_influenced": "只影响 argv 元素内容（如 --file 指向哪个 YAML、绑定哪个地址），不会被 shell 解释，无法构成命令注入。project_env_name 是 sha1 哈希（conda.py:74），不可注入。",
+        "q5_sanitization": "cf0 的 python_env_path 有 os.path.exists 存在性校验（_project_spec.py:93-96）+ argv 隔离；cf1-3 有 click INT 类型 + 固定前缀元素。",
+        "q6_business_function": "conda env create / 启动 gunicorn/waitress 均为正常功能。",
+        "q7_overapproximation": "是：sink 模型按“可能转发 shell”的过度近似命中了一个实际无 shell 的执行点，CWE-78（shell 命令注入）不适用；残余风险最多是 argv 级参数注入（CWE-88 意义上也有限，因为均由本地操作者提供）。"
+      }
+    },
+    {
+      "alert_id": 5,
+      "rule_id": "py/augur/mlflow/pass2-command-injection",
+      "sink_location": "mlflow/models/wheeled_model.py:222:28",
+      "sink_code": "subprocess.run([download_command], check=True, shell=True, capture_output=True)",
+      "sink_type": "isShellTrueRunSink (snk-090)",
+      "source_location": "mlflow/models/wheeled_model.py:214",
+      "source_code": "pip_wheel_options = MLFLOW_WHEELED_MODEL_PIP_DOWNLOAD_OPTIONS.get()",
+      "source_type": "isEnvReadSource (MLFLOW_* 环境变量)",
+      "codeflow_summary": "wheeled_model.py:214 MLFLOW_WHEELED_MODEL_PIP_DOWNLOAD_OPTIONS.get() -> :216-218 f'{sys.executable} -m pip wheel {pip_wheel_options} --wheel-dir=... -r...' -> :222 run([download_command], shell=True)",
+      "verdict": "likely_fp",
+      "confidence": "medium-high",
+      "reasoning": {
+        "q1_source_boundary": "不成立。Source 是 MLFLOW_WHEELED_MODEL_PIP_DOWNLOAD_OPTIONS 环境变量，只能在加载模型的进程环境中由进程所有者设置；2.5.1 中没有请求参数、模型工件或其他不可信输入能写入该变量（模型不能自设环境变量）。docstring（:202-210）明确说明该变量就是给运维传 pip 选项的官方机制。",
+        "q2_propagation_evidence": "真实：env 值 -> pip_wheel_options -> f-string 拼接 -> shell=True 的 run 参数，无任何引用/过滤。",
+        "q3_sink_executes_commands": "是，shell=True 真实经 shell 解释。",
+        "q4_command_content_influenced": "是（代码层面）：环境变量值未加引号进入 shell 命令。",
+        "q5_sanitization": "无——但威胁不成立。",
+        "q6_business_function": "是。这是项目明确文档化的运维定制功能（覆盖 pip wheel 下载选项），设置者与受害者是同一进程所有者，无权限边界跨越。",
+        "q7_overapproximation": "路径本身不是近似（数据流真实），但 source 建模把“进程自己的环境变量”当作攻击者边界属于威胁模型层面的过度包含，导致告警实际无安全意义。"
+      }
+    }
+  ],
+  "summary": {
+    "total_formal_alerts": 6,
+    "likely_tp": 3,
+    "likely_fp": 3,
+    "uncertain": 0,
+    "tp_alert_ids": [1, 2, 3],
+    "fp_alert_ids": [0, 4, 5],
+    "notes": [
+      "所有 6 条均为正式 Pass2_CommandInjection.ql (path-problem) 结果，非诊断查询输出。",
+      "TP 的 3 条共享同一前提：入口只有本地 CLI/SDK（mlflow run / mlflow server），无 REST 面；其中 alert 2/3 依赖受害者运行不可信 MLproject（与本实验声明的威胁模型第 3 类一致），alert 1 依赖 CLI 参数/环境变量承载不可信值。",
+      "FP 的 3 种成因各不相同：alert 0 是概要模型合成边（servePyfuncContainerStep）制造了不存在的数据依赖；alert 4 是 sink 模型对 _exec_cmd 的 shell 转发过度近似，实际两条链均为无 shell 的 argv 列表；alert 5 是 source 建模把运维自设的 MLFLOW_* 环境变量当攻击边界，且该变量是文档化业务功能。",
+      "本轮未读取 PyVul 漏洞真值（mlflow_vuln/ 下存在 cmd_sinks.csv、confirmed_vulns.json 等，均已避开）、修复提交与 CVE 公告。"
+    ]
+  }
+}

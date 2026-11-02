@@ -1,0 +1,286 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation", "Step 3: compile + run + export"],
+    "generated": "2026-10-15",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\mlflow\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 against the mlflow_vuln source tree (MLflow version 2.5.1.dev0 per mlflow/version.py:5), which is the same snapshot the CodeQL database was created from (sha 330bf0b). All file/line evidence below was verified against this checkout."
+  },
+  "target": {
+    "project": "mlflow",
+    "projectDescription": "MLflow platform: tracking server (Flask REST API), model registry, project execution engine (MLproject entry points run via subprocess with explicit shells), pyfunc model deployment/serving with environment managers (conda/virtualenv/pip), MLflow AI gateway (FastAPI + gunicorn/uvicorn), and a multi-command click CLI.",
+    "pass": 2,
+    "cwes": ["CWE-78"],
+    "focus": "Command/Argument Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\mlflow_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (mlflow-db/codeql-database.yml)",
+      "mlflow/ package with ~435 non-test .py files (plus mlflow/R and mlflow/java auxiliary trees)",
+      "setup.py + pyproject.toml: setuptools packaging of the 'mlflow' distribution"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\mlflow-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\mlflow_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "330bf0b38b07d4adf3fae99af1b44c8e857f514a",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-27T01:30:07.308214800Z"
+    },
+    "baselineLinesOfCode": 165891,
+    "finalised": true
+  },
+  "toolchain": {
+    "qlpack": "iris/mlflow-cwe78 (dependencies: codeql/python-all: \"\")",
+    "packResolutionExpected": "codeql/python-all 7.1.2 resolved from the local pack cache (~/.codeql/packages) by qlpack.yml",
+    "codeqlExecution": "codeql query compile + codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "flask",
+          "confidence": 0.95,
+          "evidence": [
+            "mlflow/server/__init__.py:38 'app = Flask(__name__, static_folder=REL_STATIC_DIR)' - tracking/model-registry REST server",
+            "mlflow/server/__init__.py:42-43 'for http_path, handler, methods in handlers.get_endpoints(): app.add_url_rule(...)'",
+            "mlflow/server/handlers.py:13 'from flask import Response, request, current_app, send_file'",
+            "mlflow/pyfunc/scoring_server/__init__.py:194 'app = flask.Flask(__name__)' - pyfunc inference server",
+            "requirements/flask.setup.py referenced by setup.py"
+          ]
+        },
+        {
+          "name": "click",
+          "confidence": 0.9,
+          "evidence": [
+            "mlflow/cli.py:48 '@click.group(cls=AliasedGroup)' - mlflow run/server/gc/doctor commands",
+            "mlflow/cli.py:55 '@click.argument(\"uri\")' and 30 @click.option/@click.argument decorators total",
+            "mlflow/deployments/cli.py:84 '@click.group(...)' deployments CLI (11 click decorators)",
+            "mlflow/gateway/cli.py - gateway CLI (5 click decorators)"
+          ]
+        },
+        {
+          "name": "fastapi",
+          "confidence": 0.7,
+          "evidence": [
+            "mlflow/gateway/app.py:1 'from fastapi import FastAPI, HTTPException, Request'",
+            "mlflow/gateway/app.py:35 'class GatewayAPI(FastAPI)' - MLflow AI gateway service (secondary surface)"
+          ]
+        }
+      ]
+    },
+    "selected": "flask (primary: tracking server + pyfunc scoring server), click (CLI), fastapi (gateway, secondary)",
+    "notes": "Flask is the primary web framework; the gateway is a FastAPI service started indirectly through a gunicorn subprocess (mlflow/gateway/runner.py). Click is the CLI framework. Source/sink shapes below are derived from repository evidence per references/python.md and references/patterns.md plus the framework shapes for flask/click."
+  },
+  "inputBoundaryInventory": {
+    "summary": "Externally influenced data enters through (1) the Flask REST API of the tracking/model-registry server (query string, JSON bodies, protobuf-parsed request messages, artifact upload streams), (2) the pyfunc scoring server HTTP surface (JSON/CSV prediction requests, content type), (3) the click CLI (mlflow run/deploy/gateway commands and options), (4) untrusted project/model artifacts: MLproject YAML entry-point commands, MLmodel/conda/python_env YAML loaded by Model.load and environment managers, (5) environment variables (MLFLOW_* settings incl. MLFLOW_CONDA_HOME and MLFLOW_WHEELED_MODEL_PIP_DOWNLOAD_OPTIONS), and (6) general file reads (model artifacts, config files). Command execution concentrates in the project execution engine (bash -c / cmd /c of MLproject commands), the pyfunc/model deployment backends, the container serving entrypoint, the sagemaker deployment path (os.system), and the central _exec_cmd wrapper in mlflow/utils/process.py used by conda/virtualenv/pip environment managers.",
+    "sourceFamilies": [
+      {
+        "family": "flask_request_http",
+        "evidence": [
+          "mlflow/server/handlers.py:384 '_get_request_json(flask_request=request): flask_request.get_json(force=True, silent=True)'",
+          "mlflow/server/handlers.py:388-429 '_get_request_message(...)' - parses query_string via querystring_parser, JSON bodies via _get_request_json, double-encoded JSON via json.loads, then protobuf parse_dict",
+          "mlflow/server/handlers.py:549/1491 'request.query_string.decode(\"utf-8\")' (search experiments/runs filter)",
+          "mlflow/server/handlers.py:1021 'request.args.to_dict(flat=False).get(\"run_id\", [])'",
+          "mlflow/server/handlers.py:1036 'request.args.get(\"metric_key\")'",
+          "mlflow/server/handlers.py:1754 'chunk = request.stream.read(chunk_size)' (artifact upload)",
+          "mlflow/pyfunc/scoring_server/__init__.py:227 'flask.request.content_type.split(\";\")'",
+          "mlflow/pyfunc/scoring_server/__init__.py:257-261 'flask.request.data.decode(\"utf-8\")' -> parse_csv_input / parse_json_input",
+          "mlflow/server/__init__.py:42-43 endpoint handler registration via handlers.get_endpoints()"
+        ]
+      },
+      {
+        "family": "cli_click",
+        "evidence": [
+          "mlflow/cli.py:55 '@click.argument(\"uri\")' + cli.py:159 'def run(' - mlflow run <uri> with -P parameters, --env-manager, --docker-args",
+          "mlflow/cli.py:376 'def server(' - mlflow server with --backend-store-uri etc.",
+          "mlflow/cli.py:487 'def gc(', cli.py:639 'def doctor('",
+          "mlflow/deployments/cli.py:84 '@click.group' - create/delete/update deployments CLI",
+          "mlflow/gateway/cli.py - gateway start/config CLI",
+          "mlflow/models/container/__init__.py:61 'sys.argv' referenced on unrecognized _init cmd"
+        ]
+      },
+      {
+        "family": "json_yaml_decode",
+        "evidence": [
+          "mlflow/server/handlers.py:424 'request_json = json.loads(request_json)' (double-encoded JSON bodies)",
+          "mlflow/pyfunc/scoring_server/__init__.py:95 'decoded_input = json.loads(json_input)'",
+          "mlflow/models/model.py:486 'cls.from_dict(yaml.safe_load(f.read()))' - MLmodel file",
+          "mlflow/projects/_project_spec.py:34 'yaml_obj = yaml.safe_load(mlproject_file)' - MLproject entry points (commands!)",
+          "mlflow/gateway/config.py:275 'configuration = yaml.safe_load(path.read_text())' - gateway route config",
+          "mlflow/utils/environment.py:116/121/532 - python_env/conda_env YAML",
+          "mlflow/utils/conda.py:329 'conda_yaml = yaml.safe_load(f)'",
+          "mlflow/projects/__init__.py:414 'yaml_obj = yaml.safe_load(job_template.read())' - kubernetes job template"
+        ]
+      },
+      {
+        "family": "environment_variables",
+        "evidence": [
+          "mlflow/environment_variables.py:8-51 '_EnvironmentVariable' with get_raw/get reading os.getenv/os.environ - the MLFLOW_* variable registry",
+          "75 call sites 'MLFLOW_*.get()/get_raw()/is_defined' across mlflow/",
+          "mlflow/models/container/__init__.py:74 'os.environ[DEPLOYMENT_CONFIG_KEY_FLAVOR_NAME]' (MLFLOW_DEPLOYMENT_FLAVOR_NAME selects serving path)",
+          "mlflow/models/container/__init__.py:146-148 'os.getenv(DISABLE_NGINX / ENABLE_MLSERVER / DISABLE_ENV_CREATION)'",
+          "mlflow/utils/conda.py:54 'conda_home = os.environ.get(MLFLOW_CONDA_HOME)' - conda binary location flows into exec commands",
+          "mlflow/models/wheeled_model.py:210 'pip_wheel_options = MLFLOW_WHEELED_MODEL_PIP_DOWNLOAD_OPTIONS.get()' - interpolated into a shell=True download command at wheeled_model.py:213-222",
+          "mlflow/projects/_project_spec.py:53 'os.environ.get(\"SHELL\", \"bash\")' - shell used to run project scripts"
+        ]
+      },
+      {
+        "family": "config_file_load",
+        "evidence": [
+          "mlflow/models/model.py:461 'Model.load(path)' - MLmodel metadata (flavors, env paths)",
+          "mlflow/projects/_project_spec.py:99 'load_project(directory)' + EntryPoint(name, parameters, command) - project spec incl. entry point command templates",
+          "mlflow/gateway/config.py:272 '_load_route_config(path)' - gateway model route config",
+          "mlflow/utils/environment.py '_PythonEnv.load' / conda env loads",
+          "open() calls (~228 non-test sites) reading project/model/config/artifact files"
+        ]
+      },
+      {
+        "family": "internal_input_wrappers",
+        "evidence": [
+          "mlflow/server/handlers.py:384 '_get_request_json' / :388 '_get_request_message' - central HTTP request decoding for every REST endpoint",
+          "mlflow/pyfunc/scoring_server/__init__.py:88 'parse_json_input' / :135 'parse_csv_input' - inference payload decoding",
+          "mlflow/models/model.py:461 'Model.load' - model metadata input",
+          "mlflow/projects/_project_spec.py:99 'load_project' - project metadata input"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "subprocess_exec_api",
+        "evidence": [
+          "mlflow/utils/process.py:95 'process = subprocess.Popen(cmd, ...)' - inside _exec_cmd, the central command wrapper used by conda.py, environment.py, virtualenv.py, projects/docker.py",
+          "mlflow/utils/requirements_utils.py:197 'proc = subprocess.Popen(cmd, ...)' - inside _run_command (pip subprocess)",
+          "mlflow/projects/backend/local.py:252/259 'subprocess.Popen(mlflow_run_arr, ...)' - inside _run_mlflow_run_cmd",
+          "mlflow/pyfunc/backend.py:243 'child_proc = subprocess.Popen(command, ...)' - PyFuncBackend.execute; :282 'Popen([conda_path, \"--version\"])' - can_score_model",
+          "mlflow/gateway/runner.py:59 'self.process = subprocess.Popen([sys.executable, \"-m\", \"gunicorn\", ...])' - Runner.start",
+          "mlflow/rfunc/backend.py:86/106 'process = subprocess.Popen(...)' - R flavor backend",
+          "mlflow/sagemaker/__init__.py:1132 'proc = Popen(cmd, ...)' (from subprocess import Popen)",
+          "mlflow/recipes/utils/step.py:110 'subprocess.run([open_tool, html_file_path], check=True)'",
+          "mlflow/utils/databricks_utils.py:178 'subprocess.call([\"mountpoint\", \"/dbfs\"], ...)'",
+          "mlflow/utils/__init__.py:206/211 'subprocess.Popen([\"nc\", ...])' - check_port_connectivity"
+        ]
+      },
+      {
+        "family": "shell_true_exec",
+        "evidence": [
+          "mlflow/models/container/__init__.py:224 'mleap = Popen(serve_cmd, shell=True)' - _serve_mleap, single string command through the shell",
+          "mlflow/models/wheeled_model.py:222 'subprocess.run([download_command], check=True, shell=True, capture_output=True)' - _download_wheels, f-string command incl. MLFLOW_WHEELED_MODEL_PIP_DOWNLOAD_OPTIONS and paths",
+          "mlflow/utils/virtualenv.py:133-137 '_exec_cmd(..., shell=not _IS_UNIX)' - pyenv commands run with shell=True on Windows"
+        ]
+      },
+      {
+        "family": "explicit_shell_arg_list",
+        "evidence": [
+          "mlflow/projects/backend/local.py:277 'subprocess.Popen([\"bash\", \"-c\", command], ...)' - _run_entry_point, command from MLproject entry point (compute_command)",
+          "mlflow/projects/backend/local.py:280 'subprocess.Popen([\"cmd\", \"/c\", command], ...)' - Windows variant",
+          "mlflow/pyfunc/backend.py:237 'command = [\"bash\", \"-c\", command]' + backend.py:243 Popen(command, ...) - PyFuncBackend.execute (scoring server cmd via get_cmd)",
+          "mlflow/models/container/__init__.py:114 'Popen([\"bash\", \"-c\", conda_create_model_env])' - _install_pyfunc_deps (conda env create, f-string from env path)",
+          "mlflow/models/container/__init__.py:130/139 'Popen([\"bash\", \"-c\", \" && \".join(activate_cmd + install_...)])'",
+          "mlflow/models/container/__init__.py:203 'Popen([\"/bin/bash\", \"-c\", \" && \".join(bash_cmds)], env=cmd_env)' - _serve_pyfunc, bash_cmds includes inference_server.get_cmd(...) output"
+        ]
+      },
+      {
+        "family": "os_system",
+        "evidence": [
+          "mlflow/sagemaker/__init__.py:158 'os.system(cmd)' - push_image_to_ecr: 'aws ecr get-login-password | docker login ... ; docker tag ... ; docker push ...' joined with ;/&&, region/account/image interpolated"
+        ]
+      },
+      {
+        "family": "internal_exec_wrappers",
+        "evidence": [
+          "mlflow/utils/process.py:31 'def _exec_cmd(cmd, *, throw_on_error=True, ...)' - central wrapper (Popen at :95); callers: mlflow/utils/conda.py:125/140 (_create_conda_env), mlflow/utils/environment.py:615, mlflow/utils/virtualenv.py:101/133/143/250/281/418, mlflow/projects/docker.py:38",
+          "mlflow/utils/requirements_utils.py:185 'def _run_command(cmd, timeout_seconds, env=None)' (Popen at :197)",
+          "mlflow/projects/backend/local.py:249 '_run_entry_point(command, work_dir, experiment_id, run_id)' and :238 '_run_mlflow_run_cmd(mlflow_run_arr, env_map)'",
+          "mlflow/pyfunc/backend.py 'PyFuncBackend.execute(...)' (Popen at :243)",
+          "mlflow/models/container/__init__.py:87 '_install_pyfunc_deps', :144 '_serve_pyfunc', :212 '_serve_mleap', :50 '_init'",
+          "mlflow/models/docker_utils.py:227 '_build_image_from_context' (Popen at :245)",
+          "mlflow/gateway/runner.py:44 'Runner.start' (Popen at :59)",
+          "mlflow/sagemaker/__init__.py:110 'push_image_to_ecr' (os.system at :158)",
+          "mlflow/rfunc/backend.py 'execute' (:86) / serving (:106)"
+        ]
+      },
+      {
+        "family": "command_template_format",
+        "evidence": [
+          "mlflow/models/container/__init__.py:113 'conda_create_model_env = f\"conda env create -n custom_env -f {env_path_dst}\"' - env path from model conda.yaml (copied artifact) into bash -c",
+          "mlflow/models/wheeled_model.py:211-216 'download_command = f\"{sys.executable} -m pip wheel {pip_wheel_options} --wheel-dir={dst_path} -r{pip_requirements_path} ...\"' - env-var options + artifact paths into shell=True subprocess.run",
+          "mlflow/pyfunc/scoring_server/__init__.py:343-346 'command = f\"gunicorn {' '.join(args)} ${{GUNICORN_CMD_ARGS}} -- mlflow.pyfunc.scoring_server.wsgi:app\"' - returned by get_cmd and executed via bash -c in pyfunc/backend.py",
+          "mlflow/sagemaker/__init__.py:140-156 docker_login/tag/push f-string assembly fed to os.system",
+          "mlflow/projects/_project_spec.py:236 'command_with_params = self.command.format(**params)' - MLproject command template with parameter substitution"
+        ]
+      }
+    ],
+    "sanitizerObservations": [
+      "mlflow/utils/string_utils.py:130-131 'quote()' = shlex.quote (posix) / mslex_quote (windows) - applied to project parameters in mlflow/projects/_project_spec.py:246 '_sanitize_param_dict' before command.format(); a real shell-quoting barrier for MLproject parameters, though the command template itself and un-quoted segments (e.g. extra_args '--{key} {value}' joined unquoted at _project_spec.py:238) still flow into bash -c at local.py:277",
+      "mlflow/server/handlers.py uses 'validate_path_is_safe' / schema assertion helpers on REST request fields - path traversal guards, not shell sanitizers",
+      "The pyfunc/conda/virtualenv environment managers pass commands either as argument lists without shell=True (conda env create, pip install) or through explicit ['bash','-c', ...] wrappers; no escaping is applied to the interpolated command strings themselves"
+    ],
+    "nonVulnerabilityNote": "Running an MLproject entry point command, building docker images, and creating conda/pip environments is intended MLflow functionality and is NOT automatically treated as a vulnerability; these sites are recorded only as candidate boundaries for labeling (attack requires attacker influence over project/model artifacts, request fields, or environment)."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query compile, then codeql query run (sequential, one at a time) followed by codeql bqrs decode --format=csv; NOT database analyze / SARIF",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output is decoded directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); alias-aware, only genuine resolved calls into external modules",
+      "ast": "pure AST shape match (attribute/name text, syntactic module prefix, receiver name, decorator shapes); catches dynamic or unresolved shapes that API graphs miss and is subject to name-collision noise"
+    },
+    "flowKinds": {
+      "sources": ["return", "http", "env", "cli", "config", "file", "param", "internal_transfer"],
+      "sinks": ["arg", "shell_true", "shell_arg_list", "internal_exec_wrapper", "cmd_format"]
+    },
+    "exclusions": [
+      "test directories excluded from candidate rows: any path under /tests/ (root tests/ and pylint_plugins/tests/), plus conftest.py fixtures; ~376 test .py files would otherwise dominate every family",
+      "examples/ kept (sample project scripts, small count, they document the project-entry-point surface)",
+      "logging-only helpers (logger.* / _logger.* / print) are not extracted as candidates; f-strings inside logging calls are excluded from cmd_format rows"
+    ]
+  },
+  "uncoveredCases": [
+    "mlflow/utils/process.py:_exec_cmd forwards **kwargs into subprocess.Popen; dynamic keyword plumbing (e.g. shell=... from virtualenv.py:137) is matched only at the _exec_cmd wrapper level (internal_exec_wrapper), not per-kwarg.",
+    "mlflow/server/__init__.py:42-43 registers handlers from the HANDLERS dict in mlflow/server/handlers.py (values are plain function references, keys are protobuf service classes); handler functions are matched via their @catch_mlflow_exception decorator and by flask request.* reads instead of resolving the dict registration.",
+    "Protobuf field reads (request_message.filter etc. after parse_dict) are structurally plain attribute reads on a local variable and are not distinguishable from other attribute reads; the _get_request_message call rows (internal_transfer) plus handler-param rows carry the boundary instead.",
+    "mlflow/gateway/app.py FastAPI request bodies (pydantic models / Request objects) - the gateway surface is secondary; covered only via json/yaml/env families and the gateway Runner.start sink, not via FastAPI-specific request models.",
+    "Bare-name (from-import) subprocess sinks are matched for distinctive names (Popen, check_call, check_output, system, popen, getoutput, getstatusoutput); bare 'run'/'call' are too collision-prone. In this snapshot the from-import forms actually used are Popen (mlflow/models/container, mlflow/models/docker_utils.py, mlflow/sagemaker/__init__.py) and check_call (mlflow/models/container/__init__.py), both covered.",
+    "os.execv/spawn* families and commands.getoutput/getstatusoutput are covered by the exec-API table but do not occur in this snapshot's non-test code.",
+    "Windows-specific cmd /c and POSIX bash -c branches in mlflow/projects/backend/local.py:277-280 are mutually exclusive at runtime; both are emitted as shell_arg_list candidates."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/references/flask.md",
+    "augur-0.3.0/references/fastapi.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: mlflow_vuln/confirmed_vulns.json, mlflow_vuln/cmd_sinks*.csv and mlflow-db/cmd_sinks.csv / baseline-info.json were deliberately not read. Candidate families are derived from repository evidence and the loaded language/pattern references only. Project source and database were not modified. Only iris/exploration/detection.json, iris/extraction/sources.ql, iris/extraction/sinks.ql (and compiled/run artifacts under iris/extraction plus notes under iris/diagnostics) were written."
+  }
+}
