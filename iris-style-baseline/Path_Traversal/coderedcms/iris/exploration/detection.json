@@ -1,0 +1,275 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-21",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\coderedcms\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the coderedcms_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database coderedcms-db sits INSIDE the source tree root (as a sibling of the coderedcms/ package), so all exploration, file traversal and grep evidence collection excluded coderedcms-db; both generated queries also filter it out of result rows. The database sourceLocationPrefix matches the explored tree (creation sha acc37d2c), so file/line evidence below refers to the same snapshot the database was built from. The audit target is coderedcms 0.22.2 (coderedcms/__init__.py release), a Wagtail 2.14 / Django 3.x CMS. Source-location ground truth present in the source root (VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv) was deliberately NOT opened, per the experimental-independence constraint."
+  },
+  "target": {
+    "project": "coderedcms",
+    "projectDescription": "coderedcms 0.22.2 (coderedcms/__init__.py release = ['0','22','2','','']) - a Wagtail 2.14 / Django 3.0-3.2 marketing-website CMS (setup.py install_requires: wagtail==2.14.*, Django>=3.0,<3.3, wagtail-import-export, icalendar, PIL via wagtail). Path-traversal-relevant architecture: (1) the protected-media channel - coderedcms/urls.py:21-25 registers re_path(r'^{PROTECTED_MEDIA_URL}(?P<path>.*)$', serve_protected_file) so the entire URL path below /protected/ is injected as the `path` view kwarg; coderedcms/views.py:110-123 serve_protected_file (guarded only by @login_required) does fullpath = os.path.join(cr_settings['PROTECTED_MEDIA_ROOT'], path) at :114, os.path.isfile(fullpath) at :115 and open(fullpath, 'rb') at :117 - the file response construction with NO base-directory containment, no '..' rejection and no percent-decode needed (Django already decodes the URL path before routing); (2) the form-upload channel - CoderedFormPage.process_data (coderedcms/models/page_models.py:1194-1220) and wagtail_flexible_forms Steps.save_files (coderedcms/wagtail_flexible_forms/models.py:226-248) take multipart UploadedFile values, use request.session.session_key as the storage directory (server-generated random key) and build the destination as str(Path(directory) / val.name) at page_models.py:1211 / wff models.py:244 (pathlib semantics: an absolute client-supplied filename REPLACES the directory), then storage.get_available_name(...) and storage.open(path, 'wb+') write the upload; the extension whitelist/blacklist check in coderedcms/forms.py:60-74 (SecureFileField via os.path.splitext(value.name)) validates the extension only; (3) the submission/thumbnail channel - SessionFormSubmission.get_thumbnail_path (wff models.py:323-350) takes a path stored in the submission form_data JSON (json.loads at :204/:444), re-reads it via Image.open(storage.path(path)) at :342 and writes thumbnail.save(storage.path(thumbnail_path)) at :344; delete_file/delete_files (wff models.py:376-384, :482-499) call storage.delete(path), storage.listdir(directory) and Path(storage.path(directory)).rmdir() over stored submission paths; (4) the CSV page-import channel - coderedcms/views.py:229-263 import_pages_from_csv_file (login_required) reads the uploaded file content via form.cleaned_data['file'].read() at :241 (memory-only, no filesystem write) and delegates to wagtailimportexport (external); (5) the CLI channel - coderedcms/bin/coderedcms.py scaffolds projects from sys.argv via CreateProject.handle (options['template'] flows into os.path.join(codered_path, 'project_template') at :60-:63, operator trust level); (6) config - coderedcms/settings.py cr_settings defaults (PROTECTED_MEDIA_ROOT = os.path.join(BASE_DIR, 'protected') at :13, PROTECTED_MEDIA_URL '/protected/', upload whitelist/blacklist) read as cr_settings[...] subscripts across views/forms/page_models/utils. Wagtail page serving, FileSystemStorage internals, the multipart filename parser and wagtailimportexport are all external-library code not present in this CodeQL database (baseline 7924 LOC covers only the coderedcms repo).",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\coderedcms_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (coderedcms-db/codeql-database.yml)",
+      "source layout: the audit target is the python package coderedcms/ (views.py, urls.py, models/, blocks/, wagtail_flexible_forms/, bin/ - 124 .py files in the tree, 7924 baseline LOC)",
+      "build manifests: setup.py + pyproject.toml at the source root packaging coderedcms 0.22.2 (install_requires Django/wagtail); coderedcms/__init__.py release = ['0','22','2','','']"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\coderedcms_vuln\\coderedcms-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\coderedcms_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "acc37d2c1002b6242718c467da73caeaf2826709",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:57:25.144671500Z"
+    },
+    "baselineLinesOfCode": 7924,
+    "finalised": true,
+    "locationNote": "coderedcms-db is nested inside the source tree root (a sibling of the coderedcms/ package directory); it was excluded from all exploration and is excluded from extraction result rows via the path filters in both queries. Both queries scope positively to %/coderedcms/% (the shipped package directory), which leaves the root-level setup.py (its README open() call is deployment/build tooling, not request-reachable), docs/, ci/ and tutorial/ trees outside the candidate tables. Within the package, %/coderedcms/migrations/% (25 generated migration modules), %/coderedcms/tests/% (incl. blocks/tests and models/tests) and %/coderedcms/project_template/% (the basic/sass project scaffolding copied into new projects by the CLI) are excluded as generated/scaffold/test code per WORKFLOW.md 4.3.2; the remaining ~30 core modules are the audit surface. The os.path/pathlib propagation families and the storage/open/Image sink families all apply to this same scope."
+  },
+  "toolchain": {
+    "qlpack": "iris/coderedcms-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace from Step 0",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1; local CLI verified: 2.25.1 unpacked in E:\\codeql)",
+    "compatibilityBasis": "API facts used by the generated queries were cross-checked against the cached python-all 7.1.2 library sources and against the queries of this series that already RAN on this same CLI + pack family (aiohttp, airflow ran both sources and sinks; ansible ran sources): AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), AstNode.getScope() and Scope.getEnclosingModule() (semmle/python/AstExtended.qll), Module.getName() and Module.getFile().getShortName() (semmle/python/Module.qll), Call.getFunc()/getArg() (semmle/python/Exprs.qll), Attribute.getName()/getObject(), Subscript.getObject()/getIndex() (semmle/python/Exprs.qll:90), Function.getName()/getAnArg()/getEnclosingScope()/getKwarg() (semmle/python/Function.qll - getAnArg() covers positional parameters only, the **options kwarg parameter of bin/coderedcms.py is reached through getKwarg(), which resolves to a Parameter per Function.qll:303 isKwargs), Parameter.isSelf()/getPosition()/getName() (semmle/python/Function.qll:280-:286, proven by the airflow project), Class.getName() (semmle/python/Class.qll), AstNode.getParentNode() (used for the request.session parent-attribute exclusion in airflow sources.ql), API::moduleImport(m) with chained .getMember(...).getMember(...) and .getACall() (semmle/python/ApiGraphs.qll:31-:173 - the two-level os->path->member chain is standard per the library's own documented access-path pattern) plus the API::CallNode -> ControlFlowNode -> AstNode -> Call chain cn.getNode().getNode().(Call) (astCallOf helper, proven by airflow and ansible). The two queries reuse only structural shapes already proven in this series (moduleHintOf/receiverHint/normalizedPathOf helpers, bindingset[path] scope predicates, AST-cast matching with unbound receivers, no QL classes, no API::Node-to-DataFlow::Node assignment, variable named moduleHint instead of `module`, no @kind problem on the multi-column select). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name, no unbound `this`, no {{...}} template placeholders left in the generated files. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "Django",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package: django imported in every core module (django.http, django.urls, django.contrib.auth.decorators.login_required on views.py:109/:229, django.conf.settings in settings.py, django.db models throughout models/)",
+            "route/decorator: urlpatterns + path()/re_path() route registrations in coderedcms/urls.py:16-38, coderedcms/admin_urls.py, coderedcms/search_urls.py; @login_required view decorators",
+            "runtime/bootstrap: setup.py install_requires Django>=3.0,<3.3 + classifiers 'Framework :: Django'; settings/bootstrap layout (manage.py in project templates)",
+            "directory/layout: migrations/, templatetags/, urls.py, views.py, forms.py, apps.py"
+          ]
+        },
+        {
+          "name": "Wagtail",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package: from wagtail.core.models import Page / from wagtail.core import urls as wagtailcore_urls (urls.py:3/:37), wagtail.contrib.forms models/views/forms in forms.py and wagtail_flexible_forms/models.py, wagtail.admin messages/hooks",
+            "route/decorator: page serving is dispatched by wagtailcore_urls (urls.py:37 include) to Page.serve()/CoderedPage.get_template overrides (page_models.py:415-:422, serve at :1452/:714/:780/:825/:1940); wagtail admin ModelAdmin URL registration in wagtail_flexible_forms/wagtail_hooks.py:302-:308",
+            "runtime/bootstrap: setup.py install_requires wagtail==2.14.*; coderedcms page models subclass wagtail Page/AbstractForm/AbstractEmailForm; wagtail_flexible_forms is a vendored copy of the wagtail flexible-forms app",
+            "directory/layout: wagtail_hooks.py, streamfield blocks/, migrations generated by wagtail"
+          ],
+          "referenceNote": "No references/wagtail.md exists in the Augur installation; Wagtail is treated as a Django application framework whose request handling is Django-style, so references/django.md is the applicable framework reference. Wagtail-internal serving machinery (URL-to-Page routing, document/media serving) is external library code, not in this CodeQL database."
+        },
+        {
+          "name": "Flask",
+          "confidence": 0.0,
+          "evidence": ["no `from flask import` / flask route decorators anywhere in the coderedcms package"]
+        },
+        {
+          "name": "FastAPI",
+          "confidence": 0.0,
+          "evidence": ["no `from fastapi import` anywhere in the coderedcms package"]
+        }
+      ],
+      "nonPythonCandidates": ["Gin/Echo (go), Spring (java), Express (javascript), ASP.NET Core (csharp): not applicable, database language is python"],
+      "result": "Django detected as primary framework (confidence 1.0) with Wagtail as its co-framework (1.0, no dedicated reference file); references/django.md was loaded per WORKFLOW.md 4.2.3 and its source signatures (request.GET/POST, route parameters, file operations using request-derived paths, safe_join-style guards to look for) were cross-checked against the actual code - the coderedcms request reads and the serve_protected_file route-parameter shape match the Django reference; no safe_join usage was found in the project's own code."
+    }
+  },
+  "inputBoundaryInventory": {
+    "summary": "coderedcms is a Django/Wagtail web CMS, so the untrusted-input boundaries are: (1) the URL path variable of the protected-media route - the (?P<path>.*) group injects the whole request path below /protected/ into serve_protected_file(request, path) which joins it onto PROTECTED_MEDIA_ROOT and opens it; (2) request.GET/POST/FILES/META reads across views.py, page_models.py, wagtail_flexible_forms and wagtail_hooks (search/filter/pagination params, event ical POST params, form POST/FILES, HTTP_REFERER); (3) multipart upload file names - file.name / val.name / value.name attribute reads that flow into str(Path(directory) / name) destination construction; (4) uploaded file content reads (file.chunks(), val.chunks(), form.cleaned_data['file'].read()); (5) the DB-submission boundary - json.loads of stored form_data / thumbnails_by_path / subscriber_json_data whose values were user-supplied at submission time and are re-used as file paths (get_thumbnail_path, delete_file, delete_files); (6) the session store (request.session / self.request.session reads and the session_key directory component - server-generated random value, not automatically attacker-controlled); (7) the CLI (sys.argv and the argparse options dict of coderedcms/bin/coderedcms.py, operator trust level); (8) cr_settings configuration subscripts (deployment-level constants). The sink side funnels through builtin open() (one site - the protected-media view), the Django FileSystemStorage API (storage.open/path/get_available_name/delete/listdir/url + the FileSystemStorage constructor), pathlib Path()/mkdir/rmdir/with_suffix/attribute propagation, PIL Image.open/thumbnail.save, file-handle write, and the os.path join/check/resolve propagation pipeline.",
+    "sourceFamilies": [
+      {
+        "family": "route_param",
+        "shape": "the `path` parameter of serve_protected_file(request, path) - module-level view function in coderedcms/views.py",
+        "trustChain": "coderedcms/urls.py:21-25 re_path(r'^{0}(?P<path>.*)$'.format(PROTECTED_MEDIA_URL.lstrip('/')), serve_protected_file) - Django decodes the URL path and injects everything below /protected/ as the `path` kwarg; views.py:114 joins it onto PROTECTED_MEDIA_ROOT and :117 opens the result",
+        "evidenceSites": ["coderedcms/views.py:110 (def serve_protected_file(request, path)), :114, :117", "coderedcms/urls.py:21-25 (route registration)", "coderedcms/settings.py:11-13 (PROTECTED_MEDIA_URL '/protected/', PROTECTED_MEDIA_ROOT)"]
+      },
+      {
+        "family": "http (request fields)",
+        "shape": "request.GET / request.POST / request.FILES / request.META attribute reads, request.<field>.get(...) calls and request.<field>[...] subscripts; request.session / self.request.session reads incl. .get(...) and [...] forms",
+        "trustChain": "standard Django request boundary; values are client-controlled query-string, form-body, multipart and header data",
+        "evidenceSites": ["coderedcms/views.py:33 (SearchForm(request.GET)), :86 (request.GET.get('p')), :142-:146 (request.POST['event_pk']/['datetime_start']/['datetime_end']), :167, :185, :188 (request.POST.get('page_id')), :208/:213/:214 (request.GET.get), :238 (ImportPagesFromCSVFileForm(request.POST, request.FILES))", "coderedcms/models/page_models.py:484-:493 (request.GET len/get 'c'/classifier terms), :511 ('p'), :1404 (form_class(request.POST, request.FILES)), :1941/:1947 ('data-format'/'viewport')", "coderedcms/wagtail_flexible_forms/models.py:180 (self.request.session.get), :190 (self.request.session[...]), :213 (request.POST.get('step')), :218 (request.POST, request.FILES), :239 (self.request.session.session_key), :656 (request.GET.get('step')), :690/:693 (request.session.session_key)", "coderedcms/wagtail_flexible_forms/wagtail_hooks.py:222 (request.GET.get('status')), :228 ('revert' in request.GET), :239 (request.META.get('HTTP_REFERER')), :275 (request.GET['page_id'])", "coderedcms/templatetags/coderedcms_tags.py:94 (SearchForm(request.GET))"]
+      },
+      {
+        "family": "session_key",
+        "shape": "request.session.session_key / self.request.session.session_key attribute reads",
+        "trustChain": "server-generated random session identifier (Django session store); used as the upload storage DIRECTORY component in page_models.py:1206 and wff models.py:239 - recorded because the directory name is request-derived state, but the key content itself is generated by the server, so labeling should judge the trust level (not automatically an attacker source)",
+        "evidenceSites": ["coderedcms/models/page_models.py:1203/:1206, :1661/:1665/:1668", "coderedcms/wagtail_flexible_forms/models.py:239, :690/:693"]
+      },
+      {
+        "family": "upload_name",
+        "shape": "file.name / val.name / value.name attribute reads on multipart UploadedFile objects",
+        "trustChain": "the client-supplied filename of multipart uploads (Secure File form field); flows into str(Path(directory) / val.name) destination construction (pathlib semantics: an absolute name replaces the directory) and into the os.path.splitext extension checks; the MultiPartParser-side sanitization that Django applies is external to this database and cannot be verified from this code",
+        "evidenceSites": ["coderedcms/models/page_models.py:1211 (str(Path(directory) / val.name))", "coderedcms/wagtail_flexible_forms/models.py:244 (str(Path(directory) / file.name)), :232 (form.cleaned_data[name] = file.name)", "coderedcms/forms.py:68/:73 (os.path.splitext(value.name) whitelist/blacklist checks)"]
+      },
+      {
+        "family": "upload_content",
+        "shape": ".chunks() / .read() calls on uploaded file objects (file.chunks(), val.chunks(), form.cleaned_data['file'].read())",
+        "trustChain": "client-controlled file bytes; written into storage via destination.write(chunk) and parsed as CSV pages in the import view",
+        "evidenceSites": ["coderedcms/wagtail_flexible_forms/models.py:246 (file.chunks())", "coderedcms/models/page_models.py:1213 (val.chunks())", "coderedcms/views.py:241 (form.cleaned_data['file'].read().decode('utf-8').splitlines())"]
+      },
+      {
+        "family": "db_json",
+        "shape": "json.loads(...) of stored submission/model JSON fields (api and ast rows)",
+        "trustChain": "submission.form_data / self.form_data / self.thumbnails_by_path / self.data / subscriber_json_data are DB-persisted values that were user-supplied at form-submission time (uploaded-file relative paths among them); parsed values are re-used as file paths by get_thumbnail_path / delete_file / delete_files",
+        "evidenceSites": ["coderedcms/wagtail_flexible_forms/models.py:204 (json.loads(submission.form_data)), :327/:356/:377 (json.loads(self.thumbnails_by_path)), :444 (json.loads(self.form_data)), :605 (json.loads(self.data))", "coderedcms/models/integration_models.py:46/:48 (json.loads(value)), :118 (json.loads(self.subscriber_json_data))"]
+      },
+      {
+        "family": "cli / cli_options",
+        "shape": "sys.argv attribute/subscript reads and the argparse options dict of CreateProject.handle (parameter, options[...] subscripts, options.get/pop calls) in coderedcms/bin/coderedcms.py",
+        "trustChain": "operator-supplied command line (coderedcms start <name> --template ...); options['template'] flows into os.path.join(codered_path, 'project_template', template) and options['name']/['directory'] select the project target - operator trust level, not automatically an attacker source",
+        "evidenceSites": ["coderedcms/bin/coderedcms.py:37 (def handle(self, **options)), :39-:40 (options.pop), :58-:63 (options['template'] -> os.path.join), :67 (os.path.isdir), :77-:96 (options.get), :128/:146/:153/:173 (sys.argv)"]
+      },
+      {
+        "family": "config",
+        "shape": "cr_settings[...] subscript reads",
+        "trustChain": "deployment-level settings constants (PROTECTED_MEDIA_ROOT/URL, upload whitelist/blacklist) derived from django settings + DEFAULTS in coderedcms/settings.py - operator trust level; included for labeling completeness, not attacker input",
+        "evidenceSites": ["coderedcms/views.py:114 (cr_settings['PROTECTED_MEDIA_ROOT'])", "coderedcms/settings.py:13 (DEFAULTS entry)", "coderedcms/forms.py:67/:68/:72/:73", "coderedcms/models/page_models.py:1216/:1224/:1225/:1715/:1716", "coderedcms/utils.py:30"]
+      }
+    ],
+    "sinkChannels": [
+      {
+        "channel": "builtin open()",
+        "argIndex": 0,
+        "evidenceSites": ["coderedcms/views.py:117 open(fullpath, 'rb') - THE protected-media file read, fullpath = os.path.join(PROTECTED_MEDIA_ROOT, path) with the URL-injected path at :114 (no containment guard between join and open; isfile check at :115 only proves existence)"]
+      },
+      {
+        "channel": "os.path propagation/validation pipeline (join/check/resolve; api + ast rows)",
+        "argIndex": 0,
+        "evidenceSites": ["coderedcms/views.py:114 os.path.join(cr_settings['PROTECTED_MEDIA_ROOT'], path) - joins the URL-injected path onto the base directory (os.path.join semantics: an absolute or leading-'..' path component escapes the base)", "coderedcms/views.py:115 os.path.isfile(fullpath)", "coderedcms/forms.py:68/:73 os.path.splitext(value.name) - extension-only validation of upload names", "coderedcms/models/page_models.py:1491 / wff models.py:769/:814 os.path.splitext(self.template) - template-name manipulation (admin-editable template choices)", "coderedcms/settings.py:6/:7/:9/:13 (BASE_DIR/PROTECTED_MEDIA_ROOT construction, deployment constants)", "coderedcms/bin/coderedcms.py:57/:60/:61/:67/:128 (CLI template-path join/isdir/basename)"]
+      },
+      {
+        "channel": "pathlib Path constructor and receiver-path methods",
+        "argIndex": "0 for Path(...); -1 for receiver-path methods (.mkdir/.rmdir/.with_suffix)",
+        "evidenceSites": ["coderedcms/wagtail_flexible_forms/models.py:241 Path(storage.path(directory)).mkdir(parents=True, exist_ok=True) - directory creation (session-key directory)", ":244 str(Path(directory) / file.name) - destination construction from the multipart filename", ":336/:337/:338 Path(path)/path.with_suffix(...)/path.suffix - thumbnail path derivation from a stored submission path", ":403 Path(value).name", ":491-:493 Path(path)/directory.parent/Path(directory.root)", ":499 Path(storage.path(directory)).rmdir() - empty-directory removal", "coderedcms/models/page_models.py:1208 Path(storage.path(directory)).mkdir(...), :1211 str(Path(directory) / val.name)"]
+      },
+      {
+        "channel": "Django FileSystemStorage API (storage.<member> on the local `storage` name and on self.get_storage() receivers)",
+        "argIndex": "0 (path/name/directory argument of every member)",
+        "evidenceSites": ["coderedcms/wagtail_flexible_forms/models.py:245 storage.open(path, 'wb+') - upload write; :243/:340 storage.get_available_name(...); :342/:344 storage.path(path/thumbnail_path) - path resolution into the storage root; :379 self.get_storage().delete(path) - stored-path deletion; :397/:398/:402 storage.url(value) - protected-media URL generation (bridge to serve_protected_file; not a direct fs access); :488 storage.delete(path); :495 storage.listdir(directory); :499 storage.path(directory)", "coderedcms/models/page_models.py:1208/:1210/:1212 (mkdir base path, get_available_name, storage.open write)", "coderedcms/models/page_models.py:1222-:1226 and :1713-:1717 FileSystemStorage(location=cr_settings['PROTECTED_MEDIA_ROOT'], base_url=...) - the storage wrapper constructors; wff models.py:669 returns default_storage instead", "NOTE: FileSystemStorage.path()/open()/delete() containment and name-sanitization behavior is implemented in Django (external to this CodeQL database) and cannot be verified from the extracted code"]
+      },
+      {
+        "channel": "PIL image file access",
+        "argIndex": 0,
+        "evidenceSites": ["coderedcms/wagtail_flexible_forms/models.py:342 Image.open(storage.path(path)) - opens the stored submission path for thumbnailing; :344 thumbnail.save(storage.path(thumbnail_path)) - writes the thumbnail next to it"]
+      },
+      {
+        "channel": "file-handle write",
+        "argIndex": "-1 (path was bound at storage.open; the receiver is the opened handle)",
+        "evidenceSites": ["coderedcms/wagtail_flexible_forms/models.py:245-:247 with storage.open(path, 'wb+') as destination: destination.write(chunk)", "coderedcms/models/page_models.py:1212-:1214"]
+      },
+      {
+        "channel": "internal_file_wrapper definition rows (functions whose body directly performs a filesystem operation)",
+        "evidenceSites": ["coderedcms/views.py serve_protected_file(:110) - open() at :117", "coderedcms/wagtail_flexible_forms/models.py Steps.save_files(:226) - mkdir/storage.open/write at :241-:247", "coderedcms/models/page_models.py CoderedFormMixin.process_data(:1194) - mkdir/storage.open/write at :1208-:1214", "coderedcms/wagtail_flexible_forms/models.py SessionFormSubmission.get_thumbnail_path(:323) - Image.open/thumbnail.save at :342/:344", "coderedcms/wagtail_flexible_forms/models.py SessionFormSubmission.delete_file(:376) - self.get_storage().delete at :379", "coderedcms/wagtail_flexible_forms/models.py delete_files(:483 signal receiver) - storage.delete/listdir/rmdir at :488/:495/:499", "coderedcms/bin/coderedcms.py CreateProject.handle(:37) - os.path.isdir at :67 (CLI scaffolding, fs-check only)"]
+      }
+    ],
+    "guardsAndEvidence": [
+      {
+        "guard": "protected-media route: NO traversal containment (guard absence, CWE-022 primary evidence)",
+        "evidence": "coderedcms/views.py:110-:123 - fullpath = os.path.join(cr_settings['PROTECTED_MEDIA_ROOT'], path) at :114 followed directly by os.path.isfile at :115 and open(fullpath, 'rb') at :117. No base-directory containment check, no '..' rejection, no basename extraction, no normpath/realpath comparison, no safe_join. os.path.join semantics let a leading-'..' or absolute path component escape PROTECTED_MEDIA_ROOT. The only gate is @login_required (:109) - an authentication boundary that limits WHO can request, not WHAT path is opened. TOCTOU note: the isfile check at :115 and the open at :117 are separate syscalls.",
+        "cwe": "CWE-022 / CWE-023 / CWE-073"
+      },
+      {
+        "guard": "upload extension whitelist/blacklist (partial)",
+        "evidence": "coderedcms/forms.py:60-:74 SecureFileField.validate -> _check_whitelist/_check_blacklist use os.path.splitext(value.name)[1].lower() against cr_settings['PROTECTED_MEDIA_UPLOAD_WHITELIST'] / BLACKLIST (blacklist default: .sh .exe .bat .ps1 .app .jar .py .php .pl .rb, settings.py:14). Extension-only validation: it constrains the suffix, not path separators or absolute names in value.name.",
+        "cwe": "CWE-022 (partial mitigation)"
+      },
+      {
+        "guard": "pathlib division destination construction (semantics, not a guard)",
+        "evidence": "coderedcms/models/page_models.py:1211 and wff models.py:244 - str(Path(directory) / val.name): pathlib semantics replace `directory` entirely when val.name is absolute (e.g. 'C:\\x' on Windows or '/x' on POSIX); when relative, subdirectory traversal via '..' segments survives. The directory component is the server-generated session_key. storage.get_available_name (page:1210, wff:243) only deduplicates names (appends suffixes); any sanitization it applies is Django-internal and external to this database.",
+        "cwe": "CWE-022 / CWE-073"
+      },
+      {
+        "guard": "external-library boundaries (cannot be verified from this DB)",
+        "evidence": "The MultiPartParser-side handling of client filenames, FileSystemStorage.path()/open()/delete() containment (Django implements path() resolution and raises on paths escaping the storage root), wagtail page-URL routing, and wagtailimportexport are all outside the coderedcms repo and thus outside the CodeQL database; their behavior is recorded as an evidence gap rather than assumed either way.",
+        "cwe": "CWE-022 (evidence gap)"
+      },
+      {
+        "guard": "login boundaries on file-serving/import views",
+        "evidence": "coderedcms/views.py:109 @login_required on serve_protected_file and :229 @login_required on import_pages_from_csv_file; wagtail_flexible_forms/wagtail_hooks.py admin views run under wagtail admin permissions. These limit the attacker population (authenticated users / staff) but do not sanitize the path or filename values - Django auth middleware is contextual, not sanitization (django.md section 8).",
+        "cwe": "CWE-022 (contextual)"
+      },
+      {
+        "guard": "CSV import is memory-only in this repo",
+        "evidence": "coderedcms/views.py:240-:243 - convert_csv_to_json(form.cleaned_data['file'].read().decode('utf-8').splitlines(), ...) parses the uploaded content in memory; import_pages (coderedcms/importexport.py:22-:78) operates on the parsed JSON via the ORM only - no open()/path usage in the coderedcms side of the import chain.",
+        "cwe": "CWE-022 (non-channel)"
+      }
+    ],
+    "notObserved": [
+      "no FileResponse/send_file/send_from_directory/static-handler file-serving in the coderedcms package - file serving is hand-rolled via open() + HttpResponse in serve_protected_file (views.py:117-:118); wagtail document/media serving is external",
+      "no archive handling: no tarfile/zipfile/shutil.extractall/extract member usage anywhere in the package (tests excluded); the ansible-style archive_entry family is not emitted",
+      "no os.remove/os.unlink/os.rmdir/os.makedirs/os.listdir/os.symlink/os.rename/os.replace/shutil.* direct calls in the package (the only delete/listdir/ mkdir operations go through the Django storage API and pathlib); no os.open, no io.open, no tempfile usage",
+      "no os.environ / os.environ.get / os.getenv reads in the package - configuration comes from django settings + cr_settings defaults, so no env source family is emitted",
+      "no URL percent-decoding of file paths in this repo - Django decodes the request path before route injection (the route_param family captures the post-decode value); no urllib.parse unquote calls in the package",
+      "no symlink/realpath/normpath containment logic, no explicit '..' string rejection, no startswith(base_dir) checks, no safe_join usage in the project's own code",
+      "no message-queue consumers, no cron/scheduled watchers, no RPC deserializers, no subprocess/command execution, no eval/exec in the package",
+      "no async file handlers (all views and storage calls are synchronous); no alias imports of os (`from os import path` does not occur - all os.path usage is the qualified os.path.<member> form), Path is always the bare from-imported name, Image is the from-imported PIL name"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql (this run, generated)",
+      "iris/extraction/sinks.ql (this run, generated)"
+    ],
+    "executionPlan": [
+      "cd iris && codeql pack install (qlpack.yml already present: iris/coderedcms-cwe22, codeql/python-all: \"*\")",
+      "codeql query run extraction/sources.ql --database C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/coderedcms_vuln/coderedcms-db --output extraction/sources.bqrs",
+      "codeql bqrs decode extraction/sources.bqrs --format=csv --output=extraction/sources.csv",
+      "codeql query run extraction/sinks.ql --database <same db> --output extraction/sinks.bqrs",
+      "codeql bqrs decode extraction/sinks.bqrs --format=csv --output=extraction/sinks.csv",
+      "sequential execution only (WORKFLOW.md 3.2-3.3); no database analyze, no SARIF in this round"
+    ],
+    "metadataForm": "plain multi-column select queries (10 columns) for codeql query run + bqrs decode; @kind problem is intentionally NOT set (wrong shape for candidate tables - it requires exactly element+string) and @kind table is not assumed to exist",
+    "columnContract": ["node", "role (source_candidate|sink_candidate)", "callableName", "flowKind", "receiver", "moduleHint", "argIndex", "file", "line", "matchKind (api|ast)"],
+    "matchKindSemantics": "api = call resolved to the real API through API graphs (API::moduleImport(...).getMember(...)[.getMember(...)].getACall(); json.loads in sources and the os.path member family in sinks), alias-aware; ast = syntax-level shape match (request field reads, route parameter, upload name/content, session reads, CLI reads, storage/pathlib/PIL call shapes, wrapper definition rows). The same call site may legitimately appear as both an api and an ast row (identical to the airflow project of this series); labeling dedupes by file/line/signature. All source families except json.loads and all wrapper/storage/pathlib/PIL sink families are ast rows by construction.",
+    "flowKinds": {
+      "sources": ["route_param", "http", "session", "session_key", "upload_name", "upload_content", "db_json", "cli", "cli_options", "config"],
+      "sinks": ["file_open", "path_join", "path_check", "path_resolve", "path_ctor", "path_propagate", "file_dir_create", "file_dir_delete", "storage_open", "storage_path", "storage_name", "storage_delete", "storage_listdir", "storage_url", "storage_get", "storage_ctor", "image_open", "image_save", "file_obj_write", "internal_file_wrapper"]
+    },
+    "exclusions": [
+      "%/coderedcms-db/% (CodeQL database nested in the source tree) - excluded from every row in both queries",
+      "positive scope %/coderedcms/% in both queries: root setup.py, docs/, ci/ and tutorial/ are never candidates",
+      "%/coderedcms/migrations/% (25 generated Django/wagtail migration modules), %/coderedcms/tests/ (incl. blocks/tests and models/tests) and %/coderedcms/project_template/% (basic/sass scaffolding copied into new projects) are excluded as generated/scaffold/test code per WORKFLOW.md 4.3.2"
+    ],
+    "expectedVolume": {
+      "sources": "roughly 100 rows: http ~36 (attr ~15, get ~16, subscript ~5), session ~10, session_key ~8, upload_name 5, upload_content 3, db_json ~18 (9 sites x api+ast rows), cli 4, cli_options ~12, config ~10, route_param 1",
+      "sinks": "roughly 85 rows: builtin open 1, os.path api+ast ~17 sites x 2 = ~34 rows (join 4, isfile 1, splitext 5, dirname 4, abspath 1, isdir 1, basename 1), Path ctor 8, mkdir 2, rmdir 1, with_suffix 1, pathlib attr ~6, storage member calls ~16, get_storage calls ~7, FileSystemStorage ctor 2, Image.open 1, thumbnail.save 1, destination.write 2, internal_file_wrapper 7",
+      "note": "volumes estimated from grep counts over the explored tree; the CSV decode of the next round yields the exact numbers"
+    }
+  },
+  "uncoveredCases": [
+    "BinaryExpr path construction: str(Path(directory) / val.name) (page_models.py:1211, wff models.py:244) - the `/` operator expression itself is not emitted as a family (the Path ctor call, the file.name read and the destination storage.open rows capture the pieces); a summary step for pathlib __truediv__ must be added later in MySummaries.qll if the pass-1 flow needs it. Same for '%s%s' % string formatting (wff models.py:337 thumbnail suffix, page_models.py:1216 URL construction) and '{0}{1}'.format(...) (utils.py:11/:16, page_models.py:1574-:1580) - BinOp/format API ambiguity, left to MySummaries.",
+    "external-library behavior invisible to this CodeQL database: Django MultiPartParser filename handling, FileSystemStorage.path()/get_available_name() containment and name sanitization, wagtail page-URL routing into Page.serve(), wagtail document/media serving, and wagtailimportexport import machinery - all imported but not part of the 7924-LOC baseline; their semantics must be treated as an external boundary during labeling and taint analysis.",
+    "request.user / request.build_absolute_uri / request.method reads are not extracted (auth identity, host URL, HTTP verb - not path-bearing input); request.META is captured only for the HTTP_REFERER read in wagtail_hooks.py:239.",
+    "wagtail admin URL-injected PK parameters (SetStatusView instance_pk, request.GET['page_id'] in wagtail_hooks.py:275) are integer-typed identifiers rather than path components - the raw request.GET rows capture the values, but no route_param rows are emitted for them.",
+    "dynamic attribute plumbing in wagtail_hooks.py add_data_bridge (:280-:285, setattr-created data_bridge closures reading obj.get_data().get(name)) - dynamic dispatch cannot be shape-matched; the underlying json.loads boundary rows cover the data source one step earlier.",
+    "receiver-name collisions: upload_name matches .name on locals named file/val/value (the actual uploaded-file locals in this codebase); storage families match locals named storage and self.get_storage() call receivers (the actual shapes); mkdir/rmdir/with_suffix are receiver-agnostic (in this codebase they only occur on pathlib objects); cr_settings subscripts are restricted to the imported settings dict name. Non-matching same-named locals would survive to labeling as noise.",
+    "request.session.session_key is server-generated (Django random session id); it is extracted as session_key rows for completeness but is expected to label as a non-source or low-trust source - the directory component is request-derived state, not attacker-chosen content.",
+    "coderedcms/settings.py module-level BASE_DIR/PROTECTED_MEDIA_ROOT construction is module-scope code (no enclosing Function), so it yields os.path family rows but no internal_file_wrapper row; the same applies to any future module-level file access.",
+    "API-graph/syntax double rows: json.loads (sources) and os.path.<member> (sinks) call sites can each yield one api row and one ast row with different matchKind - intentional, identical to the airflow project; labels.json deduplication handles it.",
+    "async/await handlers: not applicable - all coderedcms views and storage operations are synchronous."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction contract in 4.3; Python pitfalls in section 9; migration/test FP heuristics in 5.3.2)",
+    "augur-0.3.0/references/patterns.md (always loaded per 4.2.3)",
+    "augur-0.3.0/references/python.md (always loaded per 4.2.3; pass-1 sink families: open/Path/filesystem operations, archive extraction destination handling - the archive family does not apply, no archive usage observed)",
+    "augur-0.3.0/references/django.md (framework reference: detection heuristics matched - django imports, urlpatterns, path()/re_path(); source patterns request.GET/POST/body and route parameters matched; sink patterns file operations using request-derived paths matched; safe_join sanitizer pattern checked - no safe_join usage in coderedcms's own code; pass-1 note 'focus on file manager endpoints and download handlers' - the protected-media route is exactly that shape)",
+    "augur-0.3.0/assets/extraction/README.md (starter template contract and minimum output columns)",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl and python_sinks.ql.tmpl (language starter stubs - placeholder bodies filled from repo evidence; the @kind problem metadata of the stubs is intentionally dropped because the multi-column select is the wrong shape for problem queries)",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl and extract_sinks.ql.tmpl (generic skeletons consulted for the column contract)",
+    "no references/wagtail.md exists in the Augur installation; Wagtail is handled as a Django application framework (django.md) with its serving machinery treated as an external boundary"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": "The source root contains audit/ground-truth artifacts (VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv) and test trees. None of them was opened or read; all evidence above comes from first-hand source reading of the coderedcms package only. The coderedcms_vuln tree, coderedcms-db, the Augur installation and the sibling project workspaces (aiohttp, airflow, ansible) were read where needed for cross-project column-contract consistency (the 10-column CSV contract and the proven QL shapes) but never modified; only the three files of this run were written into this project's iris workspace.",
+    "notes": "No CodeQL execution, no BQRS decode, and no LLM labeling were performed in this round (Step 1-2 only); the queries are compile-ready for the local toolchain (CLI 2.25.1 + codeql/python-all 7.1.x) but their execution is deferred to the next round per the task contract."
+  }
+}

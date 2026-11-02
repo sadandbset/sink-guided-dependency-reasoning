@@ -1,0 +1,141 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "aiohttp-pass1-llm-independent-recheck-20261021",
+    "generated_at": "2026-10-21",
+    "model": "glm-5.3",
+    "scope": "Independent LLM path re-review of formal Pass 1 SARIF codeFlows, ruleId py/augur/aiohttp/pass1-path-traversal only",
+    "inputs_reviewed": [
+      "results/pass1.sarif",
+      "report/iris_report.md",
+      "labels/labels.json",
+      "report/query_generation_notes.md",
+      "aiohttp/web_urldispatcher.py (real source, lines 510-700, 1135-1160, 1236-1252)",
+      "aiohttp/web_fileresponse.py (real source, lines 41-100, 125-150, 275-300)"
+    ],
+    "constraints_compliance": "SARIF, labels and formal queries not modified; no PyVul ground-truth files, fix commits or CVE advisories were consulted beyond the commit record supplied verbatim in the task prompt for the hit-analysis section."
+  },
+  "sarif_integrity": {
+    "runs": 1,
+    "rules": ["py/augur/aiohttp/pass1-path-traversal"],
+    "results_total": 4,
+    "other_rule_ids_present": false,
+    "diagnostics_or_codeql_builtin_mixed_in": false,
+    "notes": "The single run contains exactly one rule and 4 results, all ruleId py/augur/aiohttp/pass1-path-traversal with 2 threadFlows each. run.invocations.toolExecutionNotifications are level='none' CodeQL extraction-baseline notes (about aiohttp/_find_header.h and test files), not results; they are not counted as Pass 1 alerts. Review point 10 satisfied: no other CWE, no CodeQL built-in security query results, no diagnostics leaked into the formal result set."
+  },
+  "shared_flow_analysis": {
+    "source": {
+      "location": "aiohttp/web_urldispatcher.py:635",
+      "code": "rel_url = request.match_info['filename']",
+      "attacker_controlled": true,
+      "evidence": [
+        "web_urldispatcher.py:615-626 StaticResource.resolve: path = request.rel_url.raw_path; match_dict = {'filename': _unquote_path(path[len(self._prefix)+1:])}",
+        "web_urldispatcher.py:616 raw (undecoded) request path straight off the HTTP request line",
+        "web_urldispatcher.py:1242-1243 _unquote_path = URL.build(path=value, encoded=True).path — exactly ONE percent-decode pass; %2e%2e%2f -> ../, %2f -> separator",
+        "web_urldispatcher.py:619 only constraint: path must start with the route prefix; the remainder after the prefix is 100% attacker-controlled"
+      ],
+      "review_point_1": "YES — the source is the URL path remainder after the static route prefix, percent-decoded once, fully settable by any network client (GET/HEAD). No auth is required to reach it beyond route registration."
+    },
+    "propagation": {
+      "steps": [
+        "web_urldispatcher.py:635 rel_url = request.match_info['filename'] (source, matches SARIF threadFlow steps 0-1: Subscript / Attribute 'match_info')",
+        "web_urldispatcher.py:637 filename = Path(rel_url) (str->Path, SARIF steps 2-4; modeled summary p1-sink-067)",
+        "web_urldispatcher.py:638-642 anchor guard: if filename.anchor: raise HTTPForbidden (absolute/UNC/drive-letter forms rejected BEFORE join)",
+        "web_urldispatcher.py:643 filepath = self._directory.joinpath(filename).resolve() (SARIF steps 5-8; summaries p1-sink-070 joinpath arg0->result, p1-sink-069 resolve receiver->result)",
+        "web_urldispatcher.py:644-645 CONDITIONAL containment guard: if not self._follow_symlinks: filepath.relative_to(self._directory)",
+        "sink lines 657 / 667 / 668 / 683"
+      ],
+      "review_point_2": "YES — the codeFlow is entirely intra-function inside StaticResource._handle and matches the real source line-for-line; no fabricated async hop, no invented wrapper. The async boundary to the real file work (FileResponse.prepare -> run_in_executor -> stat/open/sendfile) is covered by the constructor argument sink at :668, which is the accurate taint entry point (web_fileresponse.py:54 stores pathlib.Path(path))."
+    },
+    "allowed_root": {
+      "value": "self._directory",
+      "evidence": [
+        "web_urldispatcher.py:534-542 StaticResource.__init__: operator-supplied directory, ~-expanded (:536) and .resolve()d at registration (:537), is_dir validated",
+        "web_urldispatcher.py:1135-1146 add_static exposes prefix/path/show_index/follow_symlinks/append_version to application config",
+        "follow_symlinks default False (web_urldispatcher.py:529, :1144); True is a documented, supported opt-in"
+      ],
+      "review_point_4": "Under follow_symlinks=False (default) the controlled input cannot point outside the root (see guard analysis). Under the supported opt-in follow_symlinks=True the containment check is skipped entirely and ../ chains in the decoded filename resolve outside the root — arbitrary read."
+    },
+    "guard_analysis": {
+      "review_point_5": "Percent-decoding: exactly one decode pass (:625 via _unquote_path); no double-decode exists (router matches on raw path :616, decodes only the remainder). Absolute paths/UNC/drives: blocked by the anchor guard (:638-642). '..' chains: NOT blocked anywhere in this pre-fix code — no '..' literal rejection, no normpath (grep-verified: 'normpath' does not appear in web_urldispatcher.py), no filename whitelist. Symlinks: resolve() (:643) follows them; under follow_symlinks=True resolved symlink targets outside the root are served.",
+      "review_point_6": "Guards that DO exist and run BEFORE the file accesses (anchor :638 -> join/resolve :643 -> containment :645 -> is_dir/is_file :657/:667 -> FileResponse :668 -> FileResponse re-stat web_fileresponse.py:141 -> open :288 -> sendfile :93): (a) anchor rejection — real but only covers absolute forms; (b) canonicalize-then-contain relative_to — genuinely sound (resolve runs before the check, both sides canonical, self._directory itself resolved at :537, ValueError -> 404 at :646-648) BUT ONLY in the default follow_symlinks=False branch. The guard is conditional on configuration, not an unconditional barrier.",
+      "review_point_7": "No. The reviewed model correctly does NOT treat Path.resolve/normpath/startsWith/login as barriers (resolve is a taint-preserving summary, p1-sink-069; documented in query_generation_notes.md §2.3). The opposite defect exists at the workflow level: iris_report.md's Step 6 FP heuristic ('path traversal guard heuristic') treated the conditional relative_to guard as sufficient and downgraded all 4 findings to likely_fp — but the guard is absent in the follow_symlinks=True configuration, so the alerts are not refuted."
+    },
+    "review_point_8": "In the default configuration this is normal authorized static file serving (contained). In the follow_symlinks=True configuration it is unauthorized arbitrary-file read outside the declared root — the maintainers' own fix for exactly this code (task-supplied commit) adds normpath+relative_to validation in that very branch, confirming it is treated as a CWE-22 vulnerability, not intended behavior. Not test code, not unreachable, not fixed constants.",
+    "review_point_9": "No modeling over-generalization detected: sources/sinks/summaries are site-anchored to exact lines; the flow exists in real code with real consumers. The only judgment call is the config precondition, documented below."
+  },
+  "alerts": [
+    {
+      "alert_index": 0,
+      "rule_id": "py/augur/aiohttp/pass1-path-traversal",
+      "location": "aiohttp/web_urldispatcher.py:657 (is_dir)",
+      "code": "if filepath.is_dir():",
+      "verdict": "likely_tp",
+      "confidence": 0.7,
+      "actual_operation": "os.stat-class filesystem probe (path existence + type oracle) on the resolved path; also the branch gate for directory listing / HTTPForbidden",
+      "taint_flow": "match_info['filename'] (:635) -> Path (:637) -> joinpath+resolve (:643) -> filepath -> is_dir (:657)",
+      "precondition": "StaticResource/add_static registered with follow_symlinks=True (supported non-default option, web_urldispatcher.py:529/:1144)",
+      "reasoning": "Source is fully attacker-controlled; sink is a real filesystem access; the only containment guard (:644-645) is skipped when follow_symlinks=True, so ../ chains in the percent-decoded filename reach this stat outside the root. Under the default config the canonicalize-then-contain guard blocks the flow (FP in default config). The existence/type oracle itself leaks information and gates the stronger sinks at :661/:668."
+    },
+    {
+      "alert_index": 1,
+      "rule_id": "py/augur/aiohttp/pass1-path-traversal",
+      "location": "aiohttp/web_urldispatcher.py:667 (is_file)",
+      "code": "elif filepath.is_file():",
+      "verdict": "likely_tp",
+      "confidence": 0.7,
+      "actual_operation": "os.stat-class filesystem probe; the gate that, when true, immediately triggers the arbitrary-file-read sink at :668",
+      "taint_flow": "match_info['filename'] (:635) -> Path (:637) -> joinpath+resolve (:643) -> filepath -> is_file (:667) -> FileResponse (:668)",
+      "precondition": "follow_symlinks=True",
+      "reasoning": "Same unguarded flow as alert 0; this probe is on the direct path to the file-serving sink, so a successful traversal request passes through it. Real FS access with attacker-influenced target under the precondition."
+    },
+    {
+      "alert_index": 2,
+      "rule_id": "py/augur/aiohttp/pass1-path-traversal",
+      "location": "aiohttp/web_urldispatcher.py:668 (FileResponse)",
+      "code": "return FileResponse(filepath, chunk_size=self._chunk_size)",
+      "verdict": "likely_tp",
+      "confidence": 0.75,
+      "actual_operation": "Full file read + HTTP transmission: FileResponse.__init__ stores pathlib.Path(path) (web_fileresponse.py:54); prepare() -> _get_file_path_stat_and_gzip -> filepath.stat() (web_fileresponse.py:141) -> filepath.open('rb') (web_fileresponse.py:288) -> loop.sendfile / chunked write (:93/:70). Not a pure concatenation/path-object sink — the file content is opened and streamed.",
+      "taint_flow": "match_info['filename'] (:635) -> Path (:637) -> joinpath+resolve (:643) -> filepath -> FileResponse arg 0 (:668) -> stat/open/sendfile in web_fileresponse.py",
+      "precondition": "follow_symlinks=True",
+      "reasoning": "This is the primary arbitrary-file-read sink of the StaticResource path: with follow_symlinks=True the joinpath(filename).resolve() result is never containment-checked, so an attacker-supplied decoded ../ chain makes FileResponse open and stream any file readable by the server process (e.g. /etc/passwd). The pre-fix code contains no normpath, no '..' rejection, no whitelist between the source and this sink (grep-verified). Strongest finding of the four; it is precisely the code path repaired by the maintainers' 'Validate static paths' change (see ground-truth hit analysis)."
+    },
+    {
+      "alert_index": 3,
+      "rule_id": "py/augur/aiohttp/pass1-path-traversal",
+      "location": "aiohttp/web_urldispatcher.py:683 (iterdir)",
+      "code": "dir_index = filepath.iterdir()",
+      "verdict": "likely_tp",
+      "confidence": 0.55,
+      "actual_operation": "Directory listing (scandir) rendered into the index HTML — discloses file names of any directory the path resolves to",
+      "taint_flow": "match_info['filename'] (:635) -> Path (:637) -> joinpath+resolve (:643) -> filepath -> _directory_as_html (:661, :672) -> iterdir (:683)",
+      "precondition": "follow_symlinks=True AND show_index=True (two operator opt-ins)",
+      "reasoning": "Same unguarded taint flow, but reaching this sink additionally requires show_index=True and the resolved path to be a directory. Information disclosure (directory contents outside the root) rather than file-body read. Weakest of the four; if the grading standard requires single-precondition or default-config reachability this one is better read as uncertain, but the flow, the missing guard under follow_symlinks=True, and the read operation are all real."
+    }
+  ],
+  "pipeline_disagreement_note": "iris_report.md classified all 4 findings as Likely FP (Step 6 guard heuristic 'reject|deny|block.*\\.\\.', citing the canonicalize-then-contain guard). This re-review disagrees: the guard at web_urldispatcher.py:644-645 is conditional on `not self._follow_symlinks` and is entirely absent in the supported follow_symlinks=True configuration, in which the exact flagged flows serve arbitrary files. The formal query/detection (Step 5) did hit the vulnerable path; the Step 6 triage heuristic over-credited a configuration-conditional guard. All four verdicts here are conditioned on follow_symlinks=True; in the default configuration the same alerts would be false positives.",
+  "ground_truth_commit_hit_analysis": {
+    "commit": "https://github.com/aio-libs/aiohttp/commit/1c335944d6a8b1298baf179b7c0b3069f10c514b",
+    "cwe": "CWE-22",
+    "commit_message": "Validate static paths (#8079)",
+    "hit": true,
+    "hit_level": "request-reachable vulnerable flow fully covered by formal alerts; the exploit-precondition branch (follow_symlinks=True) is exactly the branch the fix adds validation to",
+    "evidence": [
+      "1. Database source matches code_before exactly: web_urldispatcher.py:643-645 is `filepath = self._directory.joinpath(filename).resolve(); if not self._follow_symlinks: filepath.relative_to(self._directory)` — the pre-fix form. The fixed form (unresolved_path / os.path.normpath / relative_to-before-resolve in the follow_symlinks branch) is absent; 'normpath' does not appear anywhere in web_urldispatcher.py (grep-verified).",
+      "2. The primary patched function `StaticResource._handle` is exactly where all 4 formal alerts fire: source match_info['filename'] (:635, the same `rel_url = request.match_info['filename']` line as in the diff), Path (:637), joinpath+resolve (:643, the patched statement), and the sinks is_dir (:657) / is_file (:667) / FileResponse (:668) / iterdir (:683) — all lines present in both code_before and the alert codeFlows.",
+      "3. Alert index 2 (:668 FileResponse -> stat/open/sendfile in web_fileresponse.py:141/:288/:93) is the direct arbitrary-file-read consequence the fix addresses: with follow_symlinks=True there is no validation between the attacker-controlled decoded path and the file open.",
+      "4. Exploit chain confirmed in real source: GET /static/%2e%2e%2f%2e%2e%2f... -> resolve(:615) prefix match (:619) -> _unquote_path single decode (:625) -> match_info['filename'] (:635) -> anchor empty so anchor guard passes (:638) -> joinpath+resolve escapes root (:643) -> follow_symlinks=True skips relative_to (:644) -> is_file (:667) -> FileResponse streams the file (:668).",
+      "5. The second patched function `url_for` (web_urldispatcher.py:558-592) was NOT hit: no alert fires there because its joinpath/open/is_file were excluded from sinks as application-input (fp) flows — defensible, since url_for's filename argument comes from application code, not from request data; no request-reachable path to it exists in-tree. The vulnerability's remotely exploitable half (_handle) is the half that was hit."
+    ],
+    "caveats": [
+      "The alerts themselves do not encode the follow_symlinks=True precondition — the identical alert set would also fire on the safe default configuration, which is why the workflow's own Step 6 triage marked them likely_fp. The hit is therefore a detection-level hit on the vulnerable flow with the vulnerability's real-world preconditions (which also require follow_symlinks=True), not a config-aware confirmation.",
+      "If 'hit' is judged at the level of the final IRIS report (0 likely TP, 4 likely FP) rather than the raw formal SARIF codeFlows, the pipeline failed to recognize the true positive; this independent re-review overturns that classification to likely_tp (conditional)."
+    ]
+  },
+  "conclusion": {
+    "formal_alerts_present": true,
+    "codeql_analysis_succeeded": true,
+    "summary": "4 formal Pass 1 path-traversal alerts, all in StaticResource._handle (aiohttp/web_urldispatcher.py:657/:667/:668/:683), all sharing the verified taint flow match_info['filename'] -> Path -> joinpath+resolve -> file access. Source is attacker-controlled URL path (one percent-decode), sinks are real stat/open/sendfile/iterdir operations, and the only containment guard is conditional on follow_symlinks=False — absent in the supported follow_symlinks=True configuration, which is precisely the CWE-22 vulnerability repaired by commit 1c335944. All 4 re-reviewed as likely_tp (conditional on follow_symlinks=True; alert 3 additionally on show_index=True); the pipeline's Step 6 likely_fp classification over-credited the conditional guard. The real vulnerability WAS hit by the formal alerts at the flow level, including the direct arbitrary-file-read sink at :668; the url_for half of the fix was not and is not request-reachable."
+  }
+}

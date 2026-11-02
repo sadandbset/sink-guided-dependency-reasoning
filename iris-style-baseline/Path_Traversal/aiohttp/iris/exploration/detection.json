@@ -1,0 +1,219 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-21",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\aiohttp\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the aiohttp_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database aiohttp-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded aiohttp-db. The database sourceLocationPrefix matches the explored tree (creation sha 33ccdfb0), so file/line evidence below refers to the same snapshot the database was built from. The audit target is the aiohttp library itself (version 4.0.0a2.dev0), an async HTTP client/server framework: the audited server surface is the router (web_urldispatcher.py, incl. StaticResource static-file serving), the request object (web_request.py, incl. multipart/form POST parsing), FileResponse (web_fileresponse.py, incl. stat/open/sendfile), plus the client-side cookie persistence (cookiejar.py) and netrc loading (helpers.py)."
+  },
+  "target": {
+    "project": "aiohttp",
+    "projectDescription": "aiohttp 4.0.0a2.dev0 (aiohttp/__init__.py __version__) - the aiohttp framework/library source tree: asyncio HTTP client and server. Server side: aiohttp.web Application/UrlDispatcher routing (PlainResource/DynamicResource/PrefixResource), StaticResource static-file serving (add_static -> StaticResource(prefix, directory) -> resolve() percent-decodes the raw request path remainder into match_info['filename'] -> _handle() builds Path(rel_url), rejects anchors, joins self._directory, resolve()s and relative_to() containment-checks, then serves via FileResponse -> pathlib stat()/open('rb')/loop.sendfile or run_in_executor chunked reads, with optional show_index directory listing via iterdir()); web_request.Request (path/raw_path/rel_url/query/headers/cookies/match_info accessors, post() multipart parsing into FileField objects stored in auto-named tempfile.TemporaryFile()); web_middlewares.normalize_path_middleware (raw_path/path redirect logic); http_parser.py pure-Python request-line parser (line.split -> URL.build). Client side: cookiejar.CookieJar.save/load (pathlib.Path(file_path).open('wb'/'rb') + pickle), helpers.py netrc loading (os.environ NETRC -> Path -> netrc.netrc(str(path))), payload.py file-object upload payloads (pre-opened file objects read via value.read()).",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\aiohttp_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (aiohttp-db/codeql-database.yml)",
+      "the database source archive (aiohttp-db/src.zip) covers 129 .py files: 45 under aiohttp/, 59 under tests/, 17 under examples/, 5 under tools/, plus requirements/docs single files",
+      "pyproject.toml (setuptools >= 46.4.0 build backend) packaging the aiohttp package; setup.py present; aiohttp/__init__.py __version__ = 4.0.0a2.dev0"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\aiohttp_vuln\\aiohttp-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\aiohttp_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "33ccdfb0a12690af5bb49bda2319ec0907fa7827",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:35:38.638990600Z"
+    },
+    "baselineLinesOfCode": 46837,
+    "finalised": true,
+    "locationNote": "aiohttp-db is nested inside the source tree; it was excluded from all exploration and will be excluded from extraction result rows via the path filter in both queries. The database snapshot also covers tests/ (59 files) and partially examples/ (17 files) and tools/ (5 files); both queries filter /tests/, /aiohttp-db/ and /docs/ paths. examples/ and tools/ files are kept in scope (bootstrap/dev scripts with mostly literal paths - expected to be labeled none/FP) so the application/library code under aiohttp/ dominates the candidate rows."
+  },
+  "toolchain": {
+    "qlpack": "iris/aiohttp-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1; local CLI reports 2.25.1)",
+    "compatibilityBasis": "API facts used by the generated queries were cross-checked against the cached python-all 7.1.2 library sources: AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), AstNode.getScope() and Scope.getEnclosingModule() (semmle/python/Scope.qll:25), Module.getName() (semmle/python/Module.qll:46), Call.getFunc()/getPositionalArg(index) (semmle/python/AstGenerated.qll, index must be bound before lookup), Attribute.getName()/getObject(), Subscript.getObject()/getIndex() (AstGenerated.qll:1376), StringLiteral.getText() (semmle/python/Exprs.qll:557 - not getValue()), Function.getAnArg() (Function.qll:67), Parameter.isSelf()/getPosition() (Function.qll:280 - getPosition is defined through Function.getArg(result)), class Class (semmle/python/Class.qll), BinaryExpr.getOp()/getLeft()/getRight(). The two queries reuse the structural shapes already proven on this same CLI + pack family in the SQL_Injection/superset run of this series (moduleHintOf/receiverHint/receiverHintOfCall helpers, bindingset[path] excludedPath, AST-cast matching with unbound receivers, no QL classes, no API::Node-to-DataFlow::Node assignment, variable named moduleHint instead of `module`). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name, no unbound `this`, no {{...}} template placeholders. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "aiohttp (the project IS the framework - async HTTP server/client library, not an application built on a framework)",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package +0.45: the package defines the framework itself: aiohttp/__init__.py exports web (from . import web); examples use `from aiohttp import web` (examples/static_files.py, server_simple.py, web_srv.py etc.); aiohttp.web re-exports Application, UrlDispatcher, static routes (aiohttp/web.py __all__)",
+            "route/decorator +0.30: router registration surface defined in aiohttp/web_urldispatcher.py - UrlDispatcher.add_route/add_static/add_get/add_post (lines 1123-1233), ResourceRoute, DynamicResource pattern routes; examples register routes via app.router.add_get/add_static (examples/static_files.py:7)",
+            "runtime/bootstrap +0.20: run_app/AppRunner/TCPSite/UnixSite in aiohttp/web.py and web_runner.py; Application._handle request loop in web_app.py:373-389; RequestHandler protocol in web_protocol.py",
+            "directory/layout +0.05: web_*.py module family (web_app, web_request, web_response, web_fileresponse, web_urldispatcher, web_middlewares, web_protocol, web_runner, web_server)"
+          ]
+        },
+        {
+          "name": "yarl (URL parsing dependency, not a web framework)",
+          "kind": "url-library",
+          "confidence": 1.0,
+          "evidence": [
+            "yarl.URL is the URL type used everywhere: web_urldispatcher.py:36 `from yarl import URL, __version__ as yarl_version`; _quote_path/_unquote_path (web_urldispatcher.py:1236-1243) implement the path percent-decode boundary via URL.build(path=value, encoded=True).path; web_request.py builds _rel_url from the parsed URL"
+          ]
+        },
+        { "name": "flask", "confidence": 0.0, "evidence": ["no flask import anywhere in the tree - request.args/form/json proxy sources NOT observed and NOT emitted; references/flask.md was not loaded"] },
+        { "name": "django", "confidence": 0.0, "evidence": ["no django import - references/django.md was not loaded"] },
+        { "name": "fastapi", "confidence": 0.0, "evidence": ["no fastapi import - references/fastapi.md was not loaded"] },
+        { "name": "click / celery (CLI / task boundaries)", "confidence": 0.0, "evidence": ["no click or celery usage; the only CLI surface is the home-grown argparse-based `python -m aiohttp.web` entry (aiohttp/web.py main(), sys.argv at web.py:599) and the dev scripts under tools/ (check_changes.py Path(argv[0]) at tools/check_changes.py:35)"] }
+      ]
+    },
+    "selected": "aiohttp (primary, confidence 1.0 - the audit target is the framework's own server-side request handling and static-file serving code, plus the client-side file persistence code)",
+    "notes": "No references/aiohttp.md framework reference exists in the Augur installation, so no framework reference was loaded (per the task contract: framework reference only read when the file exists). All framework-specific shapes below are derived from repository evidence only. references/python.md and references/patterns.md were loaded: python.md Pass 1 sink cues (open/Path/os.path/shutil, archive extraction) map onto the observed pathlib usage; its source cues (request path/query/header values, handler parameters) map onto the observed request accessors; its sanitizer cues (canonicalize + base containment, explicit '..' rejection, basename-only) map onto the observed resolve()/relative_to()/anchor guards. patterns.md Pass 1 sink families (file open/read/write APIs with user-controlled path, resource loader methods taking path strings) map onto FileResponse/StaticResource/CookieJar/netrc."
+  },
+  "inputBoundaryInventory": {
+    "summary": "The audit target is the aiohttp framework itself, so the untrusted-input boundaries are the wire-to-request pipeline and the static-file routing pipeline it implements: (1) the HTTP wire - http_parser.py:556 request-line split (method, path, version = line.split(' ', maxsplit=2)) feeding URL.build, and the feed_data/data_received protocol entry points (http_parser.py:286/:648/:785/:935, web_protocol.py:358); (2) the request object - request.path/raw_path/path_qs/rel_url.url (web_request.py:444-467 reify properties), request.rel_url.raw_path reads in the router (web_urldispatcher.py:616 StaticResource.resolve, :997 UrlDispatcher.resolve) and in normalize_path_middleware (web_middlewares.py:86-109 request.raw_path/request.path), request.headers.get reads (web_fileresponse.py:145 ACCEPT_ENCODING, web_app.py:380 EXPECT, web_urldispatcher.py:309/:804, web_protocol.py:682, web_log.py:128), request.query/query_string/cookies accessors (no read sites in the package besides their definitions); (3) routed path variables - StaticResource.resolve percent-decodes the raw path remainder into match_info['filename'] (web_urldispatcher.py:625 _unquote_path(path[len(self._prefix)+1:])), consumed in StaticResource._handle via request.match_info['filename'] (web_urldispatcher.py:635) and passed to Path() at :637 - THE dominant attacker-controlled file-location input; DynamicResource._match also percent-decodes match values (web_urldispatcher.py:472); (4) multipart upload filenames - request.post() parses multipart/form-data: field.filename from Content-Disposition (multipart.py:535-541 content_disposition_filename, web_request.py:724/:745) is stored in FileField (web_request.py:74-79) but the file content goes to an auto-named tempfile.TemporaryFile() (web_request.py:726) - the upload filename never reaches a filesystem path construction in this tree; (5) CLI - the `python -m aiohttp.web` argparse entry (web.py:599 main(sys.argv[1:]), -U/--path unix socket path arg) and tools/check_changes.py:35 Path(argv[0]); (6) environment - os.environ reads (helpers.py:197 NETRC -> Path(netrc_env) -> netrc.netrc read at :218, helpers.py:77 AIOHTTP_NO_EXTENSIONS, web_fileresponse.py:38 AIOHTTP_NOSENDFILE) - operator/local-process trust level; (7) operator-configured file paths (NOT attacker input, emitted for labeling to classify): StaticResource directory / add_static path (web_urldispatcher.py:534, :1138), CookieJar.save/load file_path (cookiejar.py:105-113, includes pickle.load), UnixSite path (web_runner.py:134). The dominant filesystem-operation channels are: pathlib stat (web_fileresponse.py:136/:141, web_urldispatcher.py:538/:584/:657/:667, helpers.py:224), pathlib open (web_urldispatcher.py:587, cookiejar.py:107 write / :112 read, web_fileresponse.py:288 bare filepath.open reference executed via run_in_executor), loop.sendfile (web_fileresponse.py:93), iterdir directory listing (web_urldispatcher.py:683), netrc file read (helpers.py:218), tempfile creation (web_request.py:726) and unix socket creation (web_runner.py:158 create_unix_server).",
+    "sourceFamilies": [
+      { "family": "request_path_attr", "flow_kind": "http_path", "evidence": "request.path / request.raw_path / request.path_qs attribute reads (web_middlewares.py:86/:87/:91/:95/:97/:109; request.path/raw_path are reify properties defined at web_request.py:444/:460); request.rel_url attribute reads (web_urldispatcher.py:616/:997, web_request.py:288 definition)" },
+      { "family": "rel_url_member", "flow_kind": "http_path", "evidence": "request.rel_url.raw_path attribute-chain reads: web_urldispatcher.py:616 (StaticResource.resolve) and :997 (UrlDispatcher.resolve) - the raw, not-yet-decoded request path used for route matching" },
+      { "family": "request_state_attr", "flow_kind": "http_request", "evidence": "request.query / request.query_string / request.headers / request.cookies attribute read sites (no package-internal read sites beyond definitions observed - family kept for cross-project recall consistency; expected ~0 rows)" },
+      { "family": "request_headers_get", "flow_kind": "http_header", "evidence": "request.headers.get(...) call sites: web_fileresponse.py:145 (ACCEPT_ENCODING - only toggles the .gz sibling lookup), web_app.py:380 (EXPECT), web_urldispatcher.py:309 (EXPECT) and :804 (HOST, Domain.match), web_protocol.py:682 (Accept), web_log.py:128 (access-log format)" },
+      { "family": "match_info_subscript", "flow_kind": "route_var", "evidence": "request.match_info[...] subscript reads - web_urldispatcher.py:635 request.match_info['filename'] in StaticResource._handle is the single routed-variable read feeding the static-file path construction; match_info property defined at web_request.py:884" },
+      { "family": "multipart_filename", "flow_kind": "multipart_filename", "evidence": "field.filename attribute reads (web_request.py:724/:745 in request.post() FileField construction; multipart.py:552 value.filename in content-disposition serialization) and content_disposition_filename(...) calls (multipart.py:532 name, :541 filename - the Content-Disposition filename parser; client-side mirror client_reqrep.py:804). Filename value never reaches a filesystem path in this tree (see notObserved)." },
+      { "family": "request_line_split", "flow_kind": "http_wire", "evidence": "http_parser.py:556 method, path, version = line.split(' ', maxsplit=2) - the pure-Python request-line parser (fallback when C extensions are unavailable); the network path string enters here" },
+      { "family": "url_unquote", "flow_kind": "url_decode", "evidence": "_unquote_path(...) calls (web_urldispatcher.py:625 StaticResource.resolve filename decode, :472 DynamicResource._match match-value decode; helper defined at :1242-1243 as URL.build(path=value, encoded=True).path) - the percent-decode boundary between raw_path and the filename match variable" },
+      { "family": "os_environ", "flow_kind": "env", "evidence": "os.environ.get(...) reads: helpers.py:197 NETRC (flows into Path(netrc_env) at :200 and netrc file read at :218), helpers.py:77 AIOHTTP_NO_EXTENSIONS, helpers.py:80 PYTHONASYNCIODEBUG, web_fileresponse.py:38 AIOHTTP_NOSENDFILE - operator/local-process trust level, only NETRC is path-relevant" },
+      { "family": "cli_argv", "flow_kind": "cli", "evidence": "sys.argv reads: web.py:599 main(sys.argv[1:]) (argparse entry, -U/--path unix socket path flows to run_app(path=...)); tools/check_changes.py:35 Path(argv[0])" },
+      { "family": "server_entry_params", "flow_kind": "param", "evidence": "parameters named `request` of server-side functions in web_*.py modules (web_urldispatcher.py:634 StaticResource._handle, :132/:347/:615/:740/:846 resolve overloads, :763/:803 match, :303 _default_expect_handler, :912 SystemRoute._handle, :928 View._iter; web_app.py:373 Application._handle; web_fileresponse.py:143 FileResponse.prepare) - the framework-injected request objects carrying all HTTP input" },
+      { "family": "wire_data_params", "flow_kind": "param", "evidence": "parameters named `data`/`chunk` of feed_data (http_parser.py:286/:648/:785/:935) and data_received (web_protocol.py:358) - raw bytes off the socket before parsing" }
+    ],
+    "sinkChannels": [
+      { "channel": "pathlib.Path construction", "evidence": "Path(rel_url) with attacker-controlled rel_url (web_urldispatcher.py:637 - StaticResource._handle); Path(directory) (web_urldispatcher.py:534 StaticResource ctor, operator-config); pathlib.Path(path) (web_fileresponse.py:54 FileResponse ctor - receives the joined/checked filepath at :668); Path(netrc_env) (helpers.py:200, env-controlled); Path(name).name basename extraction (helpers.py:360 guess_filename - sanitizer shape); Path(argv[0]) (tools/check_changes.py:35); Path(__file__) (helpers.py:203, tools/cleanup_changes.py:28, examples/fake_server.py:55, examples/static_files.py:7)" },
+      { "channel": "path join + canonicalize + containment (the StaticResource pipeline)", "evidence": "web_urldispatcher.py:643 filepath = self._directory.joinpath(filename).resolve() (arg 0 = attacker-controlled Path; same shape at :577 in url_for with caller-supplied filename); containment check filepath.relative_to(self._directory) at :645 (and :579, :678, :686) enforced only when follow_symlinks=False (default); absolute-path guard filename.anchor at :638 (rejects /machine/c$ and D:\\path style anchors with HTTPForbidden); os.path.expanduser at :536 for ~prefixed operator directories" },
+      { "channel": "pathlib stat/is_dir/is_file", "evidence": "web_fileresponse.py:136 gzip_path.stat() and :141 filepath.stat() (FileResponse.prepare, in executor); web_urldispatcher.py:538 directory.is_dir(), :584/:667 filepath.is_file(), :657 filepath.is_dir(); helpers.py:224 netrc_path.is_file()" },
+      { "channel": "pathlib open / builtin open", "evidence": "web_urldispatcher.py:587 filepath.open('rb') (url_for hash computation); web_fileresponse.py:288 bare filepath.open attribute reference passed to loop.run_in_executor (opened 'rb' for serving); cookiejar.py:107 file_path.open(mode='wb') (cookie persistence WRITE) and :112 file_path.open(mode='rb'); examples/web_ws.py:21 open(WS_FILE, 'rb') and tools/gen.py:170/:173, tools/bench-asyncio-write.py:131 (literal paths)" },
+      { "channel": "sendfile / chunked file transmission", "evidence": "web_fileresponse.py:93 loop.sendfile(transport, fobj, offset, count) (arg 1 = already-open file object); chunked fallback reads fobj.read via bare attribute references at web_fileresponse.py:68/:74 executed in the executor" },
+      { "channel": "FileResponse wrapper (file access follows from construction)", "evidence": "web_urldispatcher.py:668 FileResponse(filepath, chunk_size=self._chunk_size) - the checked filepath at arg 0; FileResponse.__init__ itself stores pathlib.Path(path) (web_fileresponse.py:54) and its prepare() performs the stat/open/sendfile above" },
+      { "channel": "directory listing", "evidence": "web_urldispatcher.py:683 filepath.iterdir() in _directory_as_html (show_index) plus _file.relative_to(self._directory) at :686 - reads directory entries under the (already containment-checked) filepath" },
+      { "channel": "netrc read", "evidence": "helpers.py:218 netrc.netrc(str(netrc_path)) - reads the NETRC env-designated file; netrc_path built from os.environ NETRC or Path.home()" },
+      { "channel": "tempfile / socket creation", "evidence": "web_request.py:726 tempfile.TemporaryFile() (auto-generated name - upload content sink, name NOT attacker-controlled); web_runner.py:158 loop.create_unix_server(server, self._path, ...) (arg 1 = operator-configured unix socket path)" },
+      { "channel": "cookie pickle persistence", "evidence": "cookiejar.py:107-108 file_path.open(mode='wb') + pickle.dump / :112-113 .open(mode='rb') + pickle.load - operator-configured path; the pickle.load is an unsafe-deserialization shape (Pass 6 material, recorded for labeling context only)" }
+    ],
+    "guardsAndEvidence": [
+      { "guard": "absolute-path (anchor) rejection", "evidence": "web_urldispatcher.py:638-642 - `if filename.anchor: raise HTTPForbidden()` - rejects request filenames that resolve to an absolute path (\\\\machine\\c$, D:\\path style) before the join; the ONLY absolute-path defense, and `anchor` is empty for pure-relative ..\\ traversal strings" },
+      { "guard": "base-directory containment via relative_to", "evidence": "web_urldispatcher.py:643-645 - filepath = self._directory.joinpath(filename).resolve(); filepath.relative_to(self._directory) raising ValueError -> HTTPNotFound when follow_symlinks=False (the DEFAULT; follow_symlinks=True disables the check) - classic canonicalize-then-contain; same guard in url_for at :577-580 and echoed in the listing code at :678/:686" },
+      { "guard": "canonicalization", "evidence": "web_urldispatcher.py:643 .resolve() collapses .. and symlink targets before the relative_to check (defense depends on full resolution; partial Windows \\.. normalization interplay is a labeling concern, not an extraction rule)" },
+      { "guard": "symlink policy", "evidence": "StaticResource follow_symlinks defaults to False (web_urldispatcher.py:529); with False, a resolved filepath outside the base raises ValueError at :645" },
+      { "guard": "basename extraction", "evidence": "helpers.py:360 guess_filename returns Path(name).name (basename-only) for client upload filename guessing - a sanitizer-shaped node in the client payload path" },
+      { "evidence": "percent-decode boundary", "note": "exactly ONE decode pass between wire and filename: raw_path is used as-is for prefix matching, then _unquote_path (web_urldispatcher.py:1242-1243, yarl URL.build(...).path) decodes the remainder at :625; encoded separators (%2f) and %2e%2e therefore reach Path()/joinpath as literal .. / separators after this single decode" },
+      { "evidence": "TOCTOU window", "note": "web_urldispatcher.py:643-645 resolve+relative_to check, then :657/:667 is_dir/is_file, then FileResponse(web_urldispatcher.py:668) re-stats at web_fileresponse.py:141 and re-opens at :288 - a symlink-swap window exists between the containment check and the final open; recorded as evidence, TOCTOU is not separately extractable as a candidate row" },
+      { "evidence": "mixed separators / Windows", "note": "pathlib.Path on Windows treats / and \\ as separators; the anchor check at :638 is the only guard against drive/UNC anchors; on POSIX a leading backslash is not an anchor (treated as a filename character)" },
+      { "evidence": "upload filename never reaches a path", "note": "web_request.py:724-750 - field.filename is stored in FileField and the content is written to an auto-named tempfile.TemporaryFile() at :726; NO path construction from multipart filename exists in this tree (grep-verified: no os.path.join / joinpath / Path() with field.filename)" },
+      { "evidence": "double-decode / requote", "note": "_requote_path (web_urldispatcher.py:1246-1252) preserves existing %-sequences when re-quoting route strings at registration; DynamicResource._match decodes match values once at :472 - registration-time operator strings, not attacker input" }
+    ],
+    "notObserved": [
+      "os.path.join / os.path.abspath / os.path.normpath / os.path.realpath / os.path.dirname / os.path.basename: zero call sites in the package (only os.path.expanduser at web_urldispatcher.py:536) - NOT emitted, no rules fabricated",
+      "zipfile / tarfile / shutil / extract / extractall: zero imports and zero call sites in the whole database snapshot - archive extraction channels NOT emitted",
+      "os.remove / os.unlink / os.rmdir / os.rename / os.replace / pathlib .unlink/.rename/.move: zero call sites - no delete/move sink families emitted",
+      "pathlib read_text / read_bytes / write_text / write_bytes: zero call sites - NOT emitted",
+      "io.open / os.open: zero call sites (all opens go through builtin open() or pathlib .open()) - NOT emitted",
+      "any file write whose path is attacker-controlled: the only write channels are CookieJar.save (operator-configured file_path) and tempfile.TemporaryFile() (auto-named) - recorded as evidence, no write-path traversal channel exists in this snapshot",
+      "request.query / request.cookies / request.json read sites inside the package (only their definitions in web_request.py and the self.headers-based cookie parse at web_request.py:573): source families kept as shapes but expected to yield ~0 rows",
+      "click / celery / argparse-decorated handler trees: not present (single hand-rolled argparse main() in web.py) - no CLI/task decorator families emitted",
+      "vendor/ directory: present in the source tree but NOT covered by the database src.zip (only aiohttp/, tests/, examples/, tools/, docs/, requirements/) - nothing to extract there"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution is deferred to the next round per the task contract (generation only).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO source or sink row is expected to resolve at API level: the file-access channels flow through pathlib instance attributes on local variables (filepath/self._path/self._directory) and framework-internal values (request/field/match_info) that API graphs cannot bind to stdlib members, and pathlib/yarl/netrc are not part of the database (only the aiohttp tree is). The column is kept 'ast' for all families for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, request/match_info/tempfile/os.environ name conventions). Member-name matching (.open/.stat/.resolve/...) is receiver-name-agnostic on purpose: receiver identity cannot be proven syntactically (a .resolve() on a non-path object would be a name-collision row - none observed on these paths in this snapshot, and receiver hints like filepath/self/_directory are emitted for the labeling step)."
+    },
+    "flowKinds": {
+      "sources": [
+        "http_path",
+        "http_request",
+        "http_header",
+        "route_var",
+        "multipart_filename",
+        "http_wire",
+        "url_decode",
+        "env",
+        "cli",
+        "param"
+      ],
+      "sinks": [
+        "path_ctor",
+        "path_join",
+        "path_resolve",
+        "path_containment_check",
+        "path_guard",
+        "path_expand",
+        "file_open",
+        "file_open_ref",
+        "file_stat",
+        "file_read",
+        "file_response",
+        "file_send",
+        "file_create",
+        "file_create_temp",
+        "file_api_def"
+      ]
+    },
+    "exclusions": [
+      "paths containing /tests/ (59 files of the database snapshot - the workflow's noise rule for tests and fixtures)",
+      "/aiohttp-db/ (the CodeQL database directory nested inside the source tree)",
+      "/docs/ (documentation tree; defensive)",
+      "/node_modules/ (defensive; not observed in the snapshot)",
+      "examples/ and tools/ are NOT excluded: they are inside the database and carry only literal __file__-relative paths; their rows are expected to be labeled none/FP (kept for auditability, consistent with prior projects in this series)"
+    ],
+    "expectedVolume": "roughly 60-120 source rows (request path/rel_url attr + rel_url.raw_path chain reads ~10, headers.get rows ~6, match_info subscript rows 1, multipart filename rows ~4, content_disposition_filename calls 3, request-line split 1, _unquote_path calls ~2, os.environ rows ~4, cli rows ~2-3, request-param rows across web_*.py ~25-40, feed_data/data_received data params ~5) and roughly 55-90 sink rows (Path ctor ~8-10 incl. examples/tools, joinpath 2, resolve 3, relative_to 4, anchor 1, expanduser 1, .open/open calls ~6-8, bare open/read/seek refs ~8 (4 in web_fileresponse, 4 in payload), stat/is_file/is_dir ~7, read/iterdir ~4, FileResponse ctor 1, sendfile 1, TemporaryFile 1, create_unix_server 1, netrc 1, file_api_def 6). This is in line with prior projects in this series (maltrail 617/52; this target is a compact framework library, so a smaller candidate volume is the honest expectation - the static-file pipeline is the single concentrated attack surface)."
+  },
+  "uncoveredCases": [
+    "Pathlib `/` operator constructions (home_dir / '_netrc' at helpers.py:213, folder / '_find_header.c' at tools/gen.py:170/:173) are NOT captured: BinaryExpr division is used for numeric division throughout the codebase, and no receiver-type resolution exists to distinguish Path.__truediv__; these sites are documented here instead of being extracted as noisy rows.",
+    "Bare method-reference file operations are captured only for the names open/read/seek in the file-content modules (web_fileresponse.py:66/:68/:74, :288 fobj.seek/fobj.read/filepath.open passed to loop.run_in_executor; payload.py:300/:303/:348/:356 self._value.read upload-payload reads); the socket-stream self-reference at streams.py:624 (self.read) is deliberately excluded by the module restriction, and other executor-submitted bound methods elsewhere would be missed (none observed with path-relevant semantics).",
+    "Dynamic dispatch ambiguity: .resolve()/.relative_to()/.is_file() matching is name-based; a non-pathlib receiver with the same member name would produce a false candidate row (no such collision observed on the static-file path in this snapshot; receiver hints filepath/self/_directory/netrc_path are emitted for labeling).",
+    "The C-extension request-line parser (_http_parser.pyx) is not part of the database (only .py files are extracted); the http_wire family therefore covers only the pure-Python parser at http_parser.py:556. The decoded-path boundary it feeds (yarl URL) is identical to the C path, so the router-level families (rel_url.raw_path, _unquote_path, match_info['filename']) are unaffected.",
+    "Alias imports: from pathlib import Path (web_urldispatcher.py:9, helpers.py:26) vs import pathlib (web_fileresponse.py:4, cookiejar.py:6) are both matched (Name 'Path' and Attribute 'Path' on Name 'pathlib' shapes); an aliased import (from pathlib import Path as P) would be missed - not observed.",
+    "request.headers.get() sites where the header value influences only response metadata (ACCEPT_ENCODING at web_fileresponse.py:145 toggles the .gz sibling lookup; EXPECT/HOST/Accept at web_app.py:380, web_urldispatcher.py:309/:804, web_protocol.py:682, web_log.py:128) are extracted as http_header source rows; they do not control file locations and are expected to be labeled none - kept because header reads are a genuine untrusted-input family per the extraction contract.",
+    "FileField filename propagation beyond the library: applications consuming request.post() FileField.filename decide whether it becomes a filesystem path; inside this tree it never does (web_request.py:726 tempfile). The FileField definition itself is emitted as a multipart_filename source family member via field.filename reads at :724/:745.",
+    "keyword-argument path forms: run_app(app, path=args.path) at web.py:595 passes the CLI unix-socket path as a keyword; the sink-side create_unix_server row reports arg 1 (self._path as positional argument 1 of loop.create_unix_server), and the CLI-side row anchors on the sys.argv read at web.py:599 rather than the keyword pass-through - the mapping between them is left to labeling.",
+    "StaticResource url_for filename path (web_urldispatcher.py:558-592): filename comes from url-building code (operator/application input), not from the request; the joinpath/resolve/relative_to/open rows at :577-588 are extracted as sinks regardless (channel shape identical to _handle), with the trust difference documented here for labeling.",
+    "Compile validation: both extraction queries were compiled with `codeql query compile --check-only` against the local toolchain (CodeQL CLI 2.25.1 + codeql/python-all 7.1.x resolved from the user pack cache) and compile clean. The initial draft had two binding errors ('path' is not bound to a value in serverRequestModule/multipartModule bodies, because `matches` is a checked position that does not bind its receiver); they were fixed by adding bindingset[path] annotations on those two predicates - the only helper predicates whose bodies rely on matches() rather than literal-equality binding. `codeql query run` execution against the database and bqrs decode remain deferred to the next round per the task contract.",
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql)",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "no framework reference was loaded: references/aiohttp.md does not exist in the Augur installation (references/flask.md / django.md / fastapi.md exist but match no import evidence in this tree)"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: VULNERABILITY_AUDIT_REPORT.md and path_traversal_sinks.csv at the aiohttp_vuln repo root were NOT opened during this step (they were only listed to be explicitly avoided); candidate families are derived from repository evidence and the loaded language/pattern references only. aiohttp-db was used solely to read codeql-database.yml and the src.zip path listing (metadata/scope) and was otherwise excluded. Project source, the database, and the Augur installation were not modified. Only the three Phase-1 Step-1/2 artifacts under iris_manual/Path_Traversal/aiohttp/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). Both queries passed a check-only compile against the local CLI 2.25.1 after the bindingset fix; `codeql query run`/bqrs decode execution and LLM labeling are deferred to later steps per the task contract; run_manifest.json and summary.md belong to Step 0 / post-execution steps and were not fabricated."
+  }
+}

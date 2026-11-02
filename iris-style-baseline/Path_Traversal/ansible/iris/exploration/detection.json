@@ -1,0 +1,292 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-21",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\ansible\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the ansible_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database ansible-db sits INSIDE the source tree, so all exploration, file traversal, grep evidence collection excluded ansible-db. The database sourceLocationPrefix matches the explored tree (creation sha cef62967), so file/line evidence below refers to the same snapshot the database was built from. The audit target is ansible 2.9.6.post0 (lib/ansible/release.py __version__), an agentless automation engine with NO web surface: all exploration therefore followed the CLI -> play/task templating -> action/lookup plugin -> DataLoader/connection-plugin file channel chain instead of the HTTP route/request chain. Source-location ground truth (PATH_TRAVERSAL_AUDIT_REPORT.md, CVE_APPLICATION_REPORT.md, CVE申请报告.md, 漏洞审查报告.md, path_traversal_sinks.csv, test trees) present in the source root was deliberately NOT opened, per the experimental-independence constraint."
+  },
+  "target": {
+    "project": "ansible",
+    "projectDescription": "ansible 2.9.6.post0 (lib/ansible/release.py:24) - the ansible controller/library source tree. Architecture relevant to path traversal: bin/ansible* wrappers forward sys.argv into lib/ansible/cli/*.py (CLI base + 9 <Name>CLI(CLI) subclasses; options parsed at cli/__init__.py:367 and stored globally in ansible.context.CLIARGS); lib/ansible/executor/task_executor.py templars task fields against host variables (self._task.post_validate(templar=...) at :588) whose values include remote ansible_facts merged at :694/:758 and CLI --extra-vars, then dispatches to the 85 action plugins under lib/ansible/plugins/action/ whose run(self, tmp, task_vars) read self._task.args (fetch.py:51-:55 src/dest/flat, copy.py:412-:416, assemble.py:93-:100, template.py:56-:64, include_vars.py, script.py, net_get/net_put, unarchive, synchronize); the 63 lookup plugins under plugins/lookup/ whose LookupModule.run(self, terms, variables, **kwargs) turn playbook terms into controller-side file paths (file.py:64-:72, fileglob.py:56-:65, filetree.py, first_found.py, ini.py, csvfile.py, shelvefile.py:47 shelve.open, passwordstore.py); ansible.parsing.dataloader.DataLoader as the vault-aware file access wrapper (path_dwim family :173-:314, _get_file_contents open() at :157, get_real_file open() at :355, find_vars_files :394); ActionBase file channels (plugins/action/__init__.py:415 _transfer_file -> self._connection.put_file, :433 _transfer_data, :1167 _find_needle, :569/:608 remote stat/checksum, :984/:990 _parse_returned_data json.loads of module stdout - the remote trust boundary); 21 connection plugins defining put_file/fetch_file(in_path, out_path) (local.py copies into the local filesystem); lib/ansible/galaxy role install pipeline (role.py:271 tarfile.open of a downloaded archive, :319-:330 member extraction with partial '..' filtering at :324-:329); lib/ansible/parsing/vault (FileVaultSecret._read_file open() at :423 fed by get_file_vault_secret's realpath/expanduser of the CLI --vault-password-file at :373-:374); lib/ansible/config/manager.py (ANSIBLE_CONFIG via os.getenv at :215, config file open() at :304/:320); and lib/ansible/modules/ (3908 modules executed on managed nodes, 356 open() sites fed by task arguments at runtime).",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\ansible_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (ansible-db/codeql-database.yml)",
+      "source layout: the audit target is the python package lib/ansible/ (controller code + module_utils + modules; 3908 .py files under lib/ansible/modules alone)",
+      "build manifests: setup.py + requirements.txt at the source root packaging the ansible package; lib/ansible/release.py __version__ = 2.9.6.post0"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\ansible_vuln\\ansible-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\ansible_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "cef6296735a0baebcd2f25d967c7bdb770ed6b08",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:50:00.267584600Z"
+    },
+    "baselineLinesOfCode": 1539348,
+    "finalised": true,
+    "locationNote": "ansible-db is nested inside the source tree; it was excluded from all exploration and will be excluded from extraction result rows via the path filters in both queries. Both queries scope positively to %/lib/ansible/% (the shipped package), which leaves the top-level test/, hacking/, examples/, docs/, contrib/, changelogs/ and bin/ trees out of the candidate tables without extra exclusion logic. The direct filesystem-operation sink families (open, os/shutil/tarfile/zipfile/glob/shelve/tempfile, archive extraction, makedirs_safe/unfrackpath wrappers) include %/lib/ansible/modules/% because modules execute on managed nodes and their file operations are real sinks fed by task arguments; the source families and the os.path propagation/validation family are restricted to the controller tree (lib/ansible minus modules) because the captured input boundaries (task args, task_vars, lookup terms, CLI, remote result parse) are controller-side, and module-side propagation rows would be source-free noise."
+  },
+  "toolchain": {
+    "qlpack": "iris/ansible-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace from Step 0",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1)",
+    "compatibilityBasis": "API facts used by the generated queries were cross-checked against the cached python-all 7.1.2 library sources: AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), AstNode.getScope() and Scope.getEnclosingModule() (semmle/python/AstExtended.qll:17), Module.getName() and Module.getFile().getShortName() (semmle/python/Module.qll), Call.getFunc()/getArg(index) (semmle/python/Exprs.qll:104-:167, index bound through the fsMemberTable/osPathMemberTable predicate first), Call.getANamedArg() not used, Attribute.getName()/getObject(), Subscript.getObject()/getIndex(), StringLiteral.getText() (semmle/python/Exprs.qll - not getValue()), Function.getName()/getAnArg()/getEnclosingScope() (semmle/python/Function.qll:10, AstGenerated.qll:539), Parameter.isSelf()/getPosition() (aiohttp-project-proven on this same CLI + pack family), Class.getName()/getABase(): Expr (semmle/python/Class.qll:89/:150), API::moduleImport(m).getMember(member).getACall() plus the API::CallNode -> ControlFlowNode -> AstNode -> Call chain cn.getNode().getNode().(Call) (semmle/python/ApiGraphs.qll:439/:475, semmle/python/dataflow/new/internal/DataFlowPublic.qll:209-:228 CfgNode.getNode(): ControlFlowNode, semmle/python/Flow.qll:126 ControlFlowNode.getNode(): AstNode) - the astCallOf pattern proven by the airflow project of this series on the same toolchain. The two queries reuse the structural shapes already proven in this series (moduleHintOf/receiverHint helpers, bindingset[path] path predicates, AST-cast matching with unbound receivers, no QL classes, no API::Node-to-DataFlow::Node assignment - the api family only chains predicate results, variable named moduleHint instead of `module`). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name, no unbound `this`, no {{...}} template placeholders. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "FastAPI",
+          "confidence": 0.0,
+          "evidence": ["no `from fastapi import` / `import fastapi` anywhere in lib/ansible (grep over the tree)"]
+        },
+        {
+          "name": "Django",
+          "confidence": 0.0,
+          "evidence": ["no django imports, no urlpatterns/views.py layout in lib/ansible"]
+        },
+        {
+          "name": "Flask",
+          "confidence": 0.0,
+          "evidence": ["no `from flask import` in lib/ansible"]
+        }
+      ],
+      "nonPythonCandidates": ["Gin/Echo (go), Spring (java), Express (javascript), ASP.NET Core (csharp): not applicable, database language is python"],
+      "result": "No web framework matched (all scores 0.0 < 0.50); references/fastapi.md, flask.md and django.md were NOT loaded. Ansible is a CLI/agentless automation engine: the role a web framework plays elsewhere is played here by ansible's own plugin architecture (ansible.plugins.loader loading action/lookup/callback/connection/filter plugins, the CLI dispatcher in lib/ansible/cli, and the Task/DataLoader/Templar pipeline in executor/parsing/vars). No reference file exists for that architecture, so the source/sink shapes were derived from repository evidence plus references/python.md and references/patterns.md only, as WORKFLOW.md 4.2.3 prescribes for the no-framework case. Assumptions are recorded in this file."
+    }
+  },
+  "inputBoundaryInventory": {
+    "summary": "ansible has no HTTP surface, so the untrusted-input boundaries are: (1) playbook/task arguments after templating (playbook YAML, --extra-vars, and remote ansible_facts all merge into self._task.args), (2) task_vars host variables (inventory + remote facts, incl. task_vars['inventory_hostname'] used as a fetch dest path component), (3) lookup plugin terms, (4) the operator CLI (sys.argv, CLI.__init__ args, context.CLIARGS: --roles-path, -i, --vault-password-file, --tree), (5) os.environ/os.getenv (ANSIBLE_CONFIG etc., operator trust level), (6) remote module output parsed by json.loads (_parse_returned_data), (7) result['ansible_facts'] merged into host variables, (8) tar member names of galaxy-downloaded role archives. The sink side funnels through builtin open(), os/shutil/tarfile/zipfile APIs, the os.path pipeline, and three ansible-internal wrapper chains (DataLoader, ActionBase/ActionModule, connection put_file/fetch_file).",
+    "sourceFamilies": [
+      {
+        "family": "task_args",
+        "shape": "self._task.args attribute read (plus task_args_get: self._task.args.get(key) with the key at argument 0, and task_args_item: self._task.args[key])",
+        "trustChain": "executor/task_executor.py:588 self._task.post_validate(templar=templar) templates every task field against host variables; the templar variables include remote ansible_facts (task_executor.py:694/:758 vars_copy.update(result['ansible_facts'])) and CLI --extra-vars; C.INJECT_FACTS_AS_VARS warning at :583 confirms fact values can be spliced into args",
+        "evidenceSites": ["plugins/action/fetch.py:51 (src), :52 (dest), :53-:55", "plugins/action/copy.py:412-:416, :221, :249, :324, :333, :542-:563", "plugins/action/assemble.py:93-:100", "plugins/action/template.py:41-:64, :99, :161, :175", "plugins/action/script.py:47-:86", "plugins/action/net_get.py:53-:66", "plugins/action/net_put.py", "plugins/action/include_vars.py:78-:100", "plugins/action/set_fact.py:42-:45", "plugins/action/unarchive.py", "plugins/action/synchronize.py"]
+      },
+      {
+        "family": "task_vars / task_vars_get",
+        "shape": "task_vars[...] / task_vars.get(...) subscripts anywhere in the controller tree; variables[...] / variables.get(...) restricted to plugins/lookup/",
+        "trustChain": "host variables = inventory vars + group vars + gathered remote facts + extra vars; remote facts are remote-controlled",
+        "evidenceSites": ["plugins/action/fetch.py:129 task_vars['inventory_hostname'] -> dest path component at :132", "plugins/action/network.py:173-:175 task_vars['ansible_facts']['network_os']", "plugins/action/net_base.py:56-:58", "plugins/action/net_get.py:171"]
+      },
+      {
+        "family": "lookup_terms",
+        "shape": "terms parameter of LookupModule.run(self, terms, variables, **kwargs) - 63 plugins/lookup/*.py definitions",
+        "trustChain": "terms are playbook-templated lookup arguments (with_file/with_fileglob/with_first_found/with_ini/with_csvfile etc.)",
+        "evidenceSites": ["plugins/lookup/file.py:60/:64/:68", "plugins/lookup/fileglob.py:56-:64", "plugins/lookup/filetree.py:128-:194", "plugins/lookup/first_found.py:115-:168", "plugins/lookup/ini.py:107-:112", "plugins/lookup/csvfile.py", "plugins/lookup/shelvefile.py:43-:52", "plugins/lookup/passwordstore.py:148-:180/:259-:274"]
+      },
+      {
+        "family": "cli / cli_args / cli_options",
+        "shape": "sys.argv attribute and subscript reads; the args parameter of CLI.__init__ (cli/__init__.py:61) and of the 9 <Name>CLI(CLI) subclass __init__s in lib/ansible/cli/*.py; context.CLIARGS attribute/subscript/get reads",
+        "trustChain": "bin/ansible* pass sys.argv to the CLI classes; parsed options land in ansible.context.CLIARGS (cli/__init__.py:367 parse_args(self.args[1:])) and are read by library code (galaxy/role.py:210 keep_scm_meta, :308 force, galaxy/__init__.py:60 type; --roles-path/--vault-password-file/-i/--tree are the path-relevant options)",
+        "evidenceSites": ["cli/pull.py:159 ' '.join(sys.argv) and :225 os.path.dirname(os.path.abspath(sys.argv[0]))", "cli/arguments/option_helpers.py:181", "cli/vault.py:55 os.path.basename(sys.argv[0])", "cli/scripts/ansible_cli_stub.py:69/:116", "cli/scripts/ansible_connection_cli_stub.py:259", "ansible/context.py", "config/manager.py:215 os.getenv('ANSIBLE_CONFIG')"]
+      },
+      {
+        "family": "env",
+        "shape": "os.environ / os.environ[...] / os.environ.get(...) / os.getenv(...) reads",
+        "trustChain": "operator/local-process trust level (not automatically an attacker source; labeling classifies); path-relevant entries observed: ANSIBLE_CONFIG (config/manager.py:215 selects the config file opened at :320), ANSIBLE_ROLES_PATH, DEFAULT_LOCAL_TMP, vault password file env forms",
+        "evidenceSites": ["config/manager.py:215", "galaxy/role.py:186/:331 (roles paths fallback)", "cli/galaxy.py", "utils/display.py"]
+      },
+      {
+        "family": "remote_result",
+        "shape": "json.loads(...) calls that parse remote module stdout (file-restricted family)",
+        "trustChain": "module output comes off the SSH/WinRM/PSRP wire from the managed node - genuinely remote-controlled data (file contents, remote paths, facts)",
+        "evidenceSites": ["plugins/action/__init__.py:990 _parse_returned_data (result of every module execution, incl. slurp content/source)", "executor/task_executor.py:1106/:1109", "executor/interpreter_discovery.py:101", "plugins/connection/winrm.py:494", "plugins/connection/psrp.py:508", "plugins/connection/network_cli.py:362"]
+      },
+      {
+        "family": "remote_facts",
+        "shape": "result['ansible_facts'] subscript reads in executor/task_executor.py",
+        "trustChain": "the fact dict produced by the remote module is merged into host variables and re-templated into later task arguments",
+        "evidenceSites": ["executor/task_executor.py:694, :697, :758, :761"]
+      },
+      {
+        "family": "archive_entry",
+        "shape": "member.name attribute reads in galaxy/role.py",
+        "trustChain": "tar member names of a role archive downloaded from the galaxy API/github (galaxy/role.py:186-:203 Role.fetch downloads remote content into a NamedTemporaryFile; the archive is opened at :271 and members iterated at :319)",
+        "evidenceSites": ["galaxy/role.py:282, :324, :329"]
+      },
+      {
+        "family": "inventory_addr",
+        "shape": "self._play_context.remote_addr attribute reads in plugins/action/",
+        "trustChain": "inventory-controlled host address used as the fetch dest path fallback",
+        "evidenceSites": ["plugins/action/fetch.py:131 (target_name = self._play_context.remote_addr -> dest component at :132)"]
+      }
+    ],
+    "sinkChannels": [
+      {
+        "channel": "builtin open / io.open / os.open / shelve.open",
+        "argIndex": 0,
+        "evidenceSites": ["plugins/action/fetch.py:175 open(to_bytes(dest, errors='surrogate_or_strict'), 'wb') - THE fetch destination write", "plugins/action/template.py:112 open(b_tmp_source, 'rb') and :172 open(to_bytes(result_file), 'wb')", "plugins/action/__init__.py:1144 open(source, 'rb') in _get_diff_data", "parsing/dataloader.py:157 open(b_file_name, 'rb') in _get_file_contents and :355 in get_real_file", "parsing/vault/__init__.py:423 open(filename, 'rb') in FileVaultSecret._read_file", "galaxy/__init__.py:39, galaxy/role.py:112/:132/:155", "config/manager.py:304/:320", "plugins/action/assemble.py:55 open(get_real_file(fragment), 'rb')", "executor/discovery/python_target.py:19 io.open(path, encoding=...)", "356 additional module-side open() sites under lib/ansible/modules/"]
+      },
+      {
+        "channel": "os.* / shutil.* filesystem operations (API-graph-resolved and module-qualified syntax forms)",
+        "argIndex": "0 (1 for os.symlink/os.link - the created path)",
+        "evidenceSites": ["plugins/action/fetch.py:168 makedirs_safe(os.path.dirname(dest))", "plugins/action/copy.py:112-:199 _walk_dirs: os.walk, os.path.islink, os.path.realpath, os.path.isfile, os.path.readlink, os.stat, os.path.join", "copy.py:388-:402 tempfile.mkstemp/os.fdopen/os.remove (fd-based, name auto-generated)", "copy.py:481 os.path.isdir(to_bytes(source))", "galaxy/role.py:316 os.makedirs(self.path), :349 os.unlink(tmp_file)", "utils/path.py:85 os.makedirs (inside makedirs_safe)", "plugins/connection/local.py put_file/fetch_file shutil.copy/stat"]
+      },
+      {
+        "channel": "archive extraction (tarfile.open/is_tarfile, zipfile.ZipFile, .extract(member, path), .extractall, .extractfile)",
+        "argIndex": "0 for archive_open/extractall/extractfile, 1 for .extract (destination directory)",
+        "evidenceSites": ["galaxy/role.py:268 tarfile.is_tarfile(tmp_file), :271 role_tar_file = tarfile.open(tmp_file, 'r'), :294 extractfile(meta_file), :330 role_tar_file.extract(member, self.path)", "lib/ansible/modules/files/unarchive.py and archive.py (module-side extract/extractall/ZipFile sites)"]
+      },
+      {
+        "channel": "os.path propagation/validation pipeline",
+        "argIndex": 0,
+        "evidenceSites": ["plugins/action/fetch.py:111 expanduser(dest), :113 isdir, :121 basename(source_local), :122/:132 join(dest, base)/join(path_dwim(dest), target_name, source_local)", "plugins/action/copy.py:114/:119/:125/:481/:494", "plugins/action/assemble.py:51 fragment = '%s/%s' % (src_path, f) - string form, see uncoveredCases", "galaxy/role.py:324/:329 join of filtered member parts", "parsing/dataloader.py:181-:314 (path_dwim family uses startswith(os.path.sep)/'~' absolute checks and os.path.join search stacks)", "plugins/action/include_vars.py:103/:106/:149/:155/:165/:207 path.exists/isdir/join/splitext (`from os import path` name form) and :173 walk() (`from os import walk`)"]
+      },
+      {
+        "channel": "ansible path wrappers (makedirs_safe, unfrackpath)",
+        "argIndex": 0,
+        "evidenceSites": ["plugins/action/fetch.py:168 makedirs_safe(os.path.dirname(dest))", "utils/path.py:31-:62 unfrackpath (expanduser+expandvars+realpath+normpath), :65-:87 makedirs_safe (realpath-based symlink-race guard)", "config/manager.py:164/:173 resolve_path -> unfrackpath"]
+      },
+      {
+        "channel": "DataLoader file API (self._loader.<member>)",
+        "argIndex": "0 (2 for path_dwim_relative(_stack), 1 for find_vars_files)",
+        "evidenceSites": ["plugins/lookup/file.py:72 self._loader._get_file_contents(lookupfile)", "plugins/lookup/filetree.py:183 self._loader.path_dwim_relative(basedir, 'files', dirname)", "plugins/action/fetch.py:125 self._loader.path_dwim(dest)", "plugins/action/copy.py:240 self._loader.get_real_file(source_full, decrypt=...), :306 cleanup_tmp_file", "plugins/action/template.py:105 self._loader.get_real_file(source)", "plugins/action/script.py:86", "plugins/action/net_get.py:106/:123"]
+      },
+      {
+        "channel": "ActionBase file API (self.<member>)",
+        "argIndex": "0 and 1 for _transfer_file, 0 for _transfer_data/_remote_* APIs, 1 for _find_needle(needle)",
+        "evidenceSites": ["plugins/action/__init__.py:415/:434 _transfer_file -> self._connection.put_file(local_path, remote_path)", "plugins/action/copy.py:300 self._transfer_file(source_full, tmp_src), :464 _find_needle('files', source)", "plugins/action/assemble.py:111 _find_needle, :146 _transfer_file(path, remote_path)", "plugins/action/template.py:95 _find_needle('templates', source)", "plugins/action/script.py:86 _find_needle + get_real_file + :107 _transfer_file", "plugins/action/fetch.py:125 path_dwim + :172 self._connection.fetch_file(source, dest)"]
+      },
+      {
+        "channel": "connection file API (self._connection.put_file/fetch_file; 21 put_file + 21 fetch_file definitions)",
+        "argIndex": "0 (source) and 1 (destination)",
+        "evidenceSites": ["plugins/action/__init__.py:434 put_file(local_path, remote_path)", "plugins/action/fetch.py:172 fetch_file(source, dest) - remote->controller pull, dest is the controller-side path", "plugins/connection/local.py:138/:156 put_file/fetch_file (shutil on the local filesystem), chroot.py:128/:155, docker.py:286/:319, kubectl.py, paramiko_ssh.py:453 sftp, winrm.py, psrp.py"]
+      },
+      {
+        "channel": "LookupBase file API (self.find_file_in_search_path)",
+        "argIndex": 2,
+        "evidenceSites": ["plugins/lookup/__init__.py:108-:120", "plugins/lookup/file.py:68", "plugins/lookup/fileglob.py:61", "plugins/lookup/first_found.py:168"]
+      },
+      {
+        "channel": "file_api_def definition rows (library's own path-taking APIs)",
+        "evidenceSites": ["parsing/dataloader.py DataLoader: _get_file_contents(:134), get_real_file(:337), path_dwim(:173), path_dwim_relative(:209), path_dwim_relative_stack(:264), find_vars_files(:394), load_from_file(:74), path_exists(:100), is_file(:104), is_directory(:108), list_directory(:112), cleanup_tmp_file(:377)", "plugins/action/__init__.py ActionBase: _transfer_file(:415), _transfer_data(:433), _find_needle(:1167), _remote_expand_user(:637), _execute_remote_stat(:569), _remote_checksum(:608), _remote_file_exists(:148), _get_diff_data(:1098)", "plugins/lookup/__init__.py LookupBase.find_file_in_search_path(:108)", "utils/path.py unfrackpath(:31), makedirs_safe(:65), cleanup_tmp_file(:111)", "parsing/vault/__init__.py FileVaultSecret._read_file(:415), ScriptVaultSecret._read_file(:445)", "plugins/connection/*.py put_file/fetch_file(in_path, out_path) - 21+21 definitions"]
+      }
+    ],
+    "guardsAndEvidence": [
+      {
+        "guard": "galaxy role tar member sanitization (partial)",
+        "evidence": "galaxy/role.py:323-:329 - only member.isreg()/issym() are extracted; parts are built from member.name.replace(archive_parent_dir, '', 1).split(os.sep) and a part is dropped when part == '..' or '~' in part or '$' in part; the surviving parts are re-joined with os.path.join and extracted into self.path. Absolute-path members: os.path.join(*final_parts) with a leading '/' component yields an absolute path only if the first surviving part is absolute (leading '/' parts become '' after split, so re-joining yields a relative path); however isreg() symlinks (issym) extract link targets verbatim - the target string is not filtered.",
+        "cwe": "CWE-022/CWE-023"
+      },
+      {
+        "guard": "fetch flat-dest basename handling",
+        "evidence": "plugins/action/fetch.py:118-:123 - when dest ends with os.sep, base = os.path.basename(source_local) is joined onto dest (basename neutralizes directory traversal in the filename); :123 `if not dest.startswith(\"/\")` sends relative dests through self._loader.path_dwim (search-path resolution, dataloader.py:173-:186); the non-flat branch at :128-:132 does NOT basename source_local - the full remote path (which can be remote-returned via slurpres.get('source') at :100-:102) is appended under <dest>/<inventory_hostname>/.",
+        "cwe": "CWE-022/CWE-073"
+      },
+      {
+        "guard": "makedirs_safe symlink/TOCTOU guard",
+        "evidence": "utils/path.py:65-:87 - rpath = os.path.realpath(os.path.dirname(path)) is computed and existence checked before os.makedirs (EEXIST race tolerated, other OSErrors raised); guards directory creation only, not the file write that follows (fetch.py:168 then open(dest, 'wb') at :175 - TOCTOU between the realpath check and the open remains).",
+        "cwe": "CWE-059/CWE-022"
+      },
+      {
+        "guard": "DataLoader path_dwim absolute-path check",
+        "evidence": "parsing/dataloader.py:181 (path_dwim), :222 (path_dwim_relative), :283 (path_dwim_relative_stack) - `if given.startswith(to_text(os.path.sep)) or given.startswith(u'~')` treats the value as absolute/homedir and returns it (expanded via unfrackpath) instead of joining the basedir; relative values are joined onto the basedir - this is resolution, not containment: there is no base-directory containment check (no realpath-relative_to style guard) anywhere in the DataLoader.",
+        "cwe": "CWE-022/CWE-073"
+      },
+      {
+        "guard": "unfrackpath canonicalization",
+        "evidence": "utils/path.py:31-:62 - os.path.expanduser + os.path.expandvars + optional os.path.realpath + os.path.normpath, joined onto a basedir when relative (expandvars means environment variables inside paths are substituted).",
+        "cwe": "CWE-022/CWE-073"
+      },
+      {
+        "guard": "copy _walk_dirs symlink dereferencing",
+        "evidence": "plugins/action/copy.py:117-:125 - os.path.islink followed by os.path.realpath and os.path.isfile on the target; local_follow controls whether symlinked files are dereferenced (symlink targets outside the source tree are copied when local_follow=True).",
+        "cwe": "CWE-059/CWE-036"
+      },
+      {
+        "guard": "ansible-internal remote-side join/unquote (not a controller guard)",
+        "evidence": "plugins/action/fetch.py:71-:72 - source = self._connection._shell.join_path(source) + self._remote_expand_user(source): remote-side shell join and ~ expansion of the REMOTE source path (join_path quotes/unquotes per shell plugin, shlex quoting in posix shells); no '..' rejection observed anywhere in the fetch pipeline.",
+        "cwe": "CWE-022"
+      },
+      {
+        "guard": "vault secret file path canonicalization",
+        "evidence": "parsing/vault/__init__.py:373-:374 - get_file_vault_secret applies os.path.realpath(os.path.expanduser(filename)) to the CLI --vault-password-file value before existence check and open() at :423 (canonicalization only, no containment).",
+        "cwe": "CWE-022"
+      },
+      {
+        "guard": "config file selection",
+        "evidence": "config/manager.py:200-:226 - find_ini_config_file prefers os.getenv('ANSIBLE_CONFIG'), then cwd/ansible.cfg, then ~/.ansible.cfg, /etc/ansible/ansible.cfg; _parse_config_file opens the chosen file at :320 (operator-controlled trust level).",
+        "cwe": "CWE-022 (operator boundary)"
+      }
+    ],
+    "notObserved": [
+      "no web routes, HTTP request-path handling, URL percent-decoding of file paths, request headers/cookies/multipart upload filenames, or static-file serving (FileResponse/send_file/static handlers) - ansible is a CLI automation engine with no web surface; nothing was fabricated for the HTTP-oriented source checklist items",
+      "no pathlib usage in the audited tree: the three Path( grep hits are false positives (dellemc_idrac.py importPath(), vmware.py FindByInventoryPath, vmware_tools.py FindByInventoryPath); pathlib.Path.open/read_text/write_text/resolve/relative_to families are therefore NOT emitted",
+      "no zipfile/tarfile usage in the controller tree beyond galaxy/role.py (tarfile) - zipfile.ZipFile appears only in lib/ansible/modules/ and test/ trees; the archive family is emitted for the package scope so module-side unarchive/archive sites are included",
+      "no io.open in the controller tree except executor/discovery/python_target.py:19; no os.open observed in the controller tree (os.open appears in module code only, included via the package-wide os.* family)",
+      "no message-queue consumer, no RPC deserializer entry, no cron/scheduled file-watcher channel"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql (this run, generated)",
+      "iris/extraction/sinks.ql (this run, generated)"
+    ],
+    "executionPlan": [
+      "cd iris && codeql pack install (qlpack.yml already present: iris/ansible-cwe22, codeql/python-all: \"*\")",
+      "codeql query run extraction/sources.ql --database C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/ansible_vuln/ansible-db --output extraction/sources.bqrs",
+      "codeql bqrs decode extraction/sources.bqrs --format=csv --output=extraction/sources.csv",
+      "codeql query run extraction/sinks.ql --database <same db> --output extraction/sinks.bqrs",
+      "codeql bqrs decode extraction/sinks.bqrs --format=csv --output=extraction/sinks.csv",
+      "sequential execution only (WORKFLOW.md 3.2-3.3); no database analyze, no SARIF in this round"
+    ],
+    "metadataForm": "plain multi-column select queries (10 columns) for codeql query run + bqrs decode; @kind problem is intentionally NOT set (wrong shape for candidate tables - it requires exactly element+string) and @kind table is not assumed to exist",
+    "columnContract": ["node", "role (source_candidate|sink_candidate)", "callableName", "flowKind", "receiver", "moduleHint", "argIndex", "file", "line", "matchKind (api|ast)"] ,
+    "matchKindSemantics": "api = call resolved to the real stdlib API through API graphs (API::moduleImport(moduleHint).getMember(member).getACall(), alias-aware); ast = syntax-level shape match (module-qualified attribute calls, name calls, attribute/subscript reads, parameter definition rows). The same call site may legitimately appear as both an api and an ast row (identical to the airflow project of this series); labeling dedupes by file/line/signature. All source families and all wrapper/definition families are ast rows by construction; only the os/shutil/io/tarfile/zipfile/glob/shelve sink family has api rows.",
+    "flowKinds": {
+      "sources": ["task_args", "task_args_get", "task_args_item", "task_vars", "task_vars_get", "lookup_terms", "cli", "cli_args", "cli_options", "env", "remote_result", "remote_facts", "archive_entry", "inventory_addr"],
+      "sinks": ["file_open", "file_delete", "file_dir_create", "file_create", "file_move", "file_copy", "file_stat", "file_read", "file_perms", "archive_open", "archive_extract", "archive_read", "path_glob", "file_create_temp", "path_join", "path_resolve", "path_expand", "path_check", "loader_file_api", "action_file_api", "connection_file_api", "lookup_file_api", "file_api_def"]
+    },
+    "exclusions": [
+      "%/ansible-db/% (CodeQL database nested in the source tree) - excluded from every row in both queries",
+      "positive scope %/lib/ansible/% in both queries: top-level test/, hacking/, examples/, docs/, contrib/, changelogs/ and bin/ trees are never candidates (bin/ansible* wrappers contain no filesystem operations; they only pass sys.argv into lib/ansible/cli, which is captured by the cli_args family)",
+      "sources.ql and the os.path/propagation+wrapper families in sinks.ql exclude %/lib/ansible/modules/%; the direct filesystem-operation families in sinks.ql include modules (documented in database.locationNote)"
+    ],
+    "expectedVolume": {
+      "sources": "roughly 1000-1300 rows: task_args/task_args_get/task_args_item ~350 (293 _task.args grep lines in the controller tree, several shapes per site), task_vars/task_vars_get ~120, lookup_terms 63, cli/cli_args ~30, cli_options ~300 (291 context.CLIARGS grep lines, attribute+subscript+get forms), env ~250, remote_result ~8, remote_facts 4, archive_entry ~3, inventory_addr a handful",
+      "sinks": "roughly 2000-2600 rows: builtin open ~660 (304 controller + 356 module sites), os/shutil/tarfile/zipfile/glob/shelve/tempfile api+syntax rows ~300 (incl. api/ast double rows for the same call site, as in the airflow project), archive extract/extractall/extractfile ~30, ansible wrappers ~45, os.path propagation/validation ~800 (controller only), loader/action/connection/lookup wrapper call sites ~90, file_api_def definition rows ~130 (incl. 42 connection put_file/fetch_file parameter rows)",
+      "note": "volumes estimated from grep counts over the explored tree; the CSV decode of the next round yields the exact numbers"
+    }
+  },
+  "uncoveredCases": [
+    "module.params boundary (remote-side mirror of self._task.args): ~28k read sites across 3908 modules - deliberately NOT extracted (would drown the candidate table); modules are covered on the sink side only. A future module-focused pass should add module.params[...] / module.params.get(...) families with module_spec argument filtering.",
+    "%-format path construction: plugins/action/fetch.py:132 dest = \"%s/%s/%s\" % (self._loader.path_dwim(dest), target_name, source_local) and :134 dest.replace(\"//\", \"/\") - the BinaryExpr modulo operator cannot be told apart from numeric modulo without type resolution, so no BinOp family is emitted; the taint step must be added later in MySummaries.qll if the pass-1 flow needs it. Same for string concatenation with + and f-strings (none observed constructing paths in the audited controller tree).",
+    "remote result dict reads beyond the json.loads boundary: values extracted from parsed module results, e.g. fetch.py:100-:102 remote_source = slurpres.get('source') (the remote-returned expanded path that REPLACES the fetch source and flows into source_local -> dest construction) and copy.py:355-:356 dest = dest_status_nofollow['lnk_source'] - not captured as source rows (dynamic result dicts); the boundary is captured one step earlier at the _parse_returned_data json.loads row (family remote_result).",
+    "self._task.args.pop(key) / .copy() / iteration forms: the bare self._task.args attribute row (family task_args) covers the receiver node, but the pop/copy call nodes themselves are not separate rows; set_fact.py:42 args.pop('cacheable') and task_executor.py:573-:581 _variable_params splicing are the concrete sites.",
+    "shell-plugin remote path joining and quoting: plugins/action/fetch.py:71 self._connection._shell.join_path(source) and :106 _unquote - remote-side semantics implemented per shell plugin (plugins/shell/*.py), out of the controller path-traversal scope; only _remote_expand_user (ActionBase) is captured as an action_file_api wrapper.",
+    "dynamic plugin loading: ansible.plugins.loader resolves action/lookup/callback plugin paths from configuration (collections paths, DEFAULT_ACTION_PLUGIN_PATH etc. via config/manager + unfrackpath); plugin file names are operator-configured, not attacker-controlled, and the loader's os.path.join/exists chains are captured by the generic os.path families only where they occur in the controller tree.",
+    "os.fdopen is not a sink family: its argument 0 is a file descriptor from tempfile.mkstemp (copy.py:389, assemble.py:44, action/__init__.py:442, dataloader.py:326) - the tempfile family rows record the mkstemp calls with the dir= keyword destination (argIndex -1).",
+    "`from os import path` alias form matched only in the three files that use it (plugins/action/include_vars.py, module_utils/infinibox.py, module_utils/pure.py); other aliased os.path imports (`from os.path import basename/expanduser` at playbook/role_include.py:21, module_utils/azure_rm_common.py:14, plugins/callback/*.py) would need from-import name matching - the basename/expanduser call sites there are low-value for pass 1 and are left to labeling via the generic families if they use qualified forms.",
+    "receiver-name collisions: the .extract/.extractall/.extractfile family is receiver-agnostic (possible non-archive receivers survive to labeling); the os.path name-form family is restricted to the three `from os import path` files; task_vars/variables/result/member/path name matches are ordinary local names but restricted by family shape and (for variables/result/member) by file path conditions.",
+    "API-graph/syntax double rows: the same os.* call site can yield one api row and one ast row (matchKind differs) - intentional, identical to the airflow project; labels.json deduplication handles it.",
+    "async/await handlers: not applicable (no async file handlers in the controller tree; ansible uses threads/processes, and the connection plugins' put/fetch implementations are synchronous)."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction contract in 4.3; Python pitfalls in section 9)",
+    "augur-0.3.0/references/patterns.md (always loaded per 4.2.3)",
+    "augur-0.3.0/references/python.md (always loaded per 4.2.3; pass-1 sink families: open/Path/filesystem operations, archive extraction destination handling)",
+    "augur-0.3.0/assets/extraction/README.md (starter template contract and minimum output columns)",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl and python_sinks.ql.tmpl (language starter stubs - placeholder bodies filled from repo evidence)",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl and extract_sinks.ql.tmpl (generic skeletons consulted for the column contract)",
+    "framework references NOT loaded: references/fastapi.md, flask.md, django.md exist locally but no web framework matched this project (all scores 0.0), so per WORKFLOW.md 4.2.3 no framework reference applies; the python.md language reference carried the source/sink shapes"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": "The source tree contains audit/ground-truth artifacts (PATH_TRAVERSAL_AUDIT_REPORT.md, CVE_APPLICATION_REPORT.md, CVE申请报告.md, 漏洞审查报告.md, path_traversal_sinks.csv, and the test/ trees). None of them was opened or read; all evidence above comes from first-hand source reading (lib/ansible only). The ansible_vuln tree, ansible-db, the Augur installation and the sibling project workspaces (aiohttp, airflow) were read where needed for cross-project column-contract consistency but never modified; only the three files of this run were written into this project's iris workspace.",
+    "notes": "No CodeQL execution, no BQRS decode, and no LLM labeling were performed in this round (Step 1-2 only); the queries are compile-ready for the local toolchain (CLI 2.25.1 + codeql/python-all 7.1.x) but their execution is deferred to the next round per the task contract."
+  }
+}

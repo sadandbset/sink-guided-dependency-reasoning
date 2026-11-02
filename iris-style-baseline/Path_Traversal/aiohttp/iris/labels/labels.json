@@ -1,0 +1,4009 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "aiohttp-pass1-step3-llm-labeling-20261021",
+    "generated_at": "2026-10-21T09:11:14.714881+00:00",
+    "language": "python",
+    "framework": "aiohttp",
+    "model": "glm-5.3",
+    "project": "aiohttp (4.0.0a2.dev0, aiohttp_vuln source tree)",
+    "notes": [
+      "Pass 1 only (CWE-022/023/036/073 Path Traversal); single pass block per task contract.",
+      "All 108 source-candidate and 85 sink-candidate rows from Phase 1 Step 2 were labeled (total 193); every row received exactly one decision (asserted programmatically), no row skipped or invented.",
+      "Deduplication: zero exact duplicate (file, line, callable, node-kind) pairs exist in either CSV; same-line pairs such as request.headers.get + request.headers attribute are distinct AST node shapes and were retained as separate entries. No entries were merged or dropped.",
+      "Exclusions: candidates labeled role=none/classification=fp with per-row exclusion basis (dev tools with literal paths, boolean env flags, headers with no path consumer, internal request-carrier params, DNS-resolve name collisions, example echo handlers). All exclusion rationales are recorded per entry in labels_raw_pass1.json.",
+      "Labeling performed in one session by glm-5.3 (the Claude Code CLI agent model; no external LLM API calls). 6 analysis batches over the real source: B1=Static-resource core (web_urldispatcher.py, web_fileresponse.py); B2=Request / multipart / wire input (web_request.py, multipart.py, http_parser.py, web_protocol.py); B3=Routing / middleware / response plumbing (web_app.py, web_middlewares.py, web_response.py, web_ws.py, web_log.py, web.py, web_runner.py); B4=Client-side file persistence (cookiejar.py, helpers.py, payload.py, connector.py); B5=Build & dev tooling (setup.py, tools/*, requirements/*); B6=Examples (examples/*). Batch membership and counts per batch are recorded in labels_raw_pass1.json.",
+      "matchKind is 'ast' (syntax-level) for every row; dynamic-dispatch ambiguity and receiver hints are documented in exploration/detection.json.",
+      "Key pass-1 finding recorded during labeling: the request-reachable static-file flow (raw_path -> _unquote_path -> match_info['filename'] -> Path -> joinpath -> resolve -> anchor guard + relative_to containment -> FileResponse stat/open/sendfile) is guarded by canonicalize-then-contain with follow_symlinks=False (default); residual risks (follow_symlinks=True opt-out, TOCTOU window between :645 and FileResponse re-stat/re-open, multipart filename reaching no in-tree path) are documented in labels/phase1_review.md.",
+      "Constraint compliance: no PyVul ground truth (VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv), no patch diffs, no CVE advisories were consulted; source tree, CodeQL database, Augur installation and the Phase 1 CSVs were not modified."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": [
+        {
+          "id": "p1-src-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "argv",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/check_changes.py",
+            "line": 35
+          },
+          "rationale": "argv[0] is the script's own path (main(sys.argv) -> Path(argv[0]) -> get_root); fixed by the invoking operator, not attacker data. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": null,
+            "callable": "argv",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/check_changes.py",
+            "line": 59
+          },
+          "rationale": "sys.argv read at the CLI entry of the CHANGES-folder check tool. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "argv",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/check_sum.py",
+            "line": 50
+          },
+          "rationale": "Dev-tool CLI arguments (hash file names) supplied by the local operator. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": null,
+            "callable": "argv",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/check_sum.py",
+            "line": 50
+          },
+          "rationale": "sys.argv read at the check_sum.py CLI entry. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-005",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 77
+          },
+          "rationale": "Environment read of a boolean feature flag; the value is coerced with bool() and never used as, or concatenated into, a filesystem path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "environ",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 77
+          },
+          "rationale": "Environment read of a boolean feature flag; the value is coerced with bool() and never used as, or concatenated into, a filesystem path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 80
+          },
+          "rationale": "Environment read of a boolean feature flag; the value is coerced with bool() and never used as, or concatenated into, a filesystem path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "environ",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 80
+          },
+          "rationale": "Environment read of a boolean feature flag; the value is coerced with bool() and never used as, or concatenated into, a filesystem path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-009",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 197
+          },
+          "rationale": "NETRC environment variable controls a file-read location: netrc_env -> Path(netrc_env) at helpers.py:200 -> netrc.netrc(str(netrc_path)) at helpers.py:218. Genuine CWE-73 'external control of file name' shape, but the env var is set by the local process owner/operator, not by a remote attacker; retained as candidate for human review, not a confirmed remotely-untrusted source.",
+          "evidence": [
+            "helpers.py:197-200 netrc_env = os.environ.get('NETRC'); if netrc_env is not None: netrc_path = Path(netrc_env)",
+            "helpers.py:218 return netrc.netrc(str(netrc_path))"
+          ]
+        },
+        {
+          "id": "p1-src-010",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "environ",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 197
+          },
+          "rationale": "os.environ attribute read backing the NETRC .get() at the same line; same trust analysis as the paired get() row.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-011",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.http_parser",
+            "type": null,
+            "callable": "split",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/http_parser.py",
+            "line": 145
+          },
+          "rationale": "Header-line split (bname, bvalue = line.split(b':', 1)): parses header names/values. Header values are untrusted but, in this tree, no header value ever reaches a filesystem path (see the http_header rows, all labeled none for pass 1).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-012",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.http_parser",
+            "type": "HttpParser",
+            "callable": "feed_data",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/http_parser.py",
+            "line": 288
+          },
+          "rationale": "feed_data(data) of HttpRequestParser receives the raw request bytes off the socket: the ultimate network input boundary, upstream of the request-line path extraction at http_parser.py:556. Genuine untrusted entry, but for pass-1 recall the precise source is the request-line split; starting taint at raw wire bytes adds noise.",
+          "evidence": [
+            "http_parser.py:554-556 line = lines[0].decode(...); method, path, version = line.split(' ', maxsplit=2)"
+          ]
+        },
+        {
+          "id": "p1-src-013",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.http_parser",
+            "type": null,
+            "callable": "split",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/http_parser.py",
+            "line": 556
+          },
+          "rationale": "Request-line split: method, path, version = line.split(' ', maxsplit=2). The `path` string is the attacker-controlled request target straight off the wire; it is fed into URL.build(path=path_part, ...) at http_parser.py:589 and becomes request.rel_url (whose raw_path read is the router-level source). The dominant network entry of the request path.",
+          "evidence": [
+            "http_parser.py:556 method, path, version = line.split(' ', maxsplit=2)",
+            "http_parser.py:582-594 path_part partition + url = URL.build(path=path_part, query_string=qs_part, ..., encoded=True)",
+            "http_parser.py:624-628 return RawRequestMessage(method, path, ...)"
+          ]
+        },
+        {
+          "id": "p1-src-014",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.http_parser",
+            "type": "HttpResponseParser",
+            "callable": "feed_data",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/http_parser.py",
+            "line": 650
+          },
+          "rationale": "feed_data of HttpResponseParser: client-side parsing of *response* bytes from a (possibly malicious) server. The parsed content (status/reason/headers) never reaches a filesystem path in this tree.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.http_parser",
+            "type": null,
+            "callable": "split",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/http_parser.py",
+            "line": 662
+          },
+          "rationale": "Response status-line split (version, status = line.split(maxsplit=1)): client-side response metadata; no path consumer.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-016",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.http_parser",
+            "type": "HttpPayloadParser",
+            "callable": "feed_data",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/http_parser.py",
+            "line": 786
+          },
+          "rationale": "HttpPayloadParser.feed_data(chunk): request body bytes, i.e. the carrier of multipart/form-data content whose Content-Disposition carries the untrusted filename (see multipart.py:541 source row). Genuine untrusted boundary one level upstream of the parsed filename; kept as candidate since the precise pass-1 source is the parsed filename itself.",
+          "evidence": [
+            "multipart.py:540-541 parse_content_disposition(...) -> content_disposition_filename(params, 'filename')"
+          ]
+        },
+        {
+          "id": "p1-src-017",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.http_parser",
+            "type": "DeflateBuffer",
+            "callable": "feed_data",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/http_parser.py",
+            "line": 935
+          },
+          "rationale": "DeflateBuffer.feed_data(chunk): decompressed body bytes. Same wire-content trust analysis as the payload-parser row, one decompression step deeper; indirect for path traversal.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-018",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.multipart",
+            "type": null,
+            "callable": "content_disposition_filename",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/multipart.py",
+            "line": 532
+          },
+          "rationale": "BodyPartReader.name reify: parses the Content-Disposition 'name' parameter of a multipart part from the (untrusted) request body. Real attacker-controlled input boundary of the multipart family.",
+          "evidence": [
+            "multipart.py:531-532 _, params = parse_content_disposition(self.headers.get(CONTENT_DISPOSITION)); return content_disposition_filename(params, 'name')"
+          ]
+        },
+        {
+          "id": "p1-src-019",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.multipart",
+            "type": null,
+            "callable": "content_disposition_filename",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/multipart.py",
+            "line": 541
+          },
+          "rationale": "BodyPartReader.filename reify: parses the Content-Disposition 'filename' parameter of an uploaded multipart part. THE untrusted multipart filename; in-tree it flows only into FileField metadata (web_request.py:743-749) - the part *content* is written to an auto-named tempfile.TemporaryFile() (web_request.py:726), and no path is ever constructed from the filename inside this tree (grep-verified in Step 1). Downstream applications consuming FileField.filename are the real consumers.",
+          "evidence": [
+            "multipart.py:540-541 _, params = parse_content_disposition(self.headers.get(CONTENT_DISPOSITION)); return content_disposition_filename(params, 'filename')",
+            "web_request.py:726 tmp = tempfile.TemporaryFile()  # auto-generated name, not field.filename"
+          ]
+        },
+        {
+          "id": "p1-src-020",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.multipart",
+            "type": null,
+            "callable": "filename",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/multipart.py",
+            "line": 552
+          },
+          "rationale": "value.name read in BodyPartReaderPayload.__init__: the parsed multipart parameter name is re-serialized into an outbound Content-Disposition header (client-side payload mirroring). Read of an already-parsed untrusted value; no filesystem use in-tree.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-021",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.multipart",
+            "type": null,
+            "callable": "filename",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/multipart.py",
+            "line": 553
+          },
+          "rationale": "value.filename read in BodyPartReaderPayload.__init__ (params['filename'] = value.filename): re-serializes the parsed untrusted multipart filename into an outbound Content-Disposition header; no filesystem use in-tree.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "match_info",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/examples/server_simple.py",
+            "line": 6
+          },
+          "rationale": "Example/demo handler: the route variable is echoed into response text only; no filesystem flow exists in the handler.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-023",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/setup.py",
+            "line": 11
+          },
+          "rationale": "Environment read of a boolean feature flag; the value is coerced with bool() and never used as, or concatenated into, a filesystem path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-024",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "environ",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/setup.py",
+            "line": 11
+          },
+          "rationale": "Environment read of a boolean feature flag; the value is coerced with bool() and never used as, or concatenated into, a filesystem path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-025",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web",
+            "type": null,
+            "callable": "argv",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web.py",
+            "line": 599
+          },
+          "rationale": "CLI entry `python -m aiohttp.web`: main(sys.argv[1:]) feeds argparse; the only path-bearing argument (-U/--path) selects the local unix-socket path for run_app(path=...). CLI args are an operator-local trust boundary, not remotely untrusted input for pass 1.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": null,
+            "callable": "argv",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web.py",
+            "line": 599
+          },
+          "rationale": "sys.argv attribute read at the same CLI entry; see the paired Subscript row.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-027",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_app",
+            "type": "Application",
+            "callable": "_handle",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_app.py",
+            "line": 373
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). Application._handle resolves the router and dispatches to the matched handler; the input-boundary nodes are the wire source (http_parser.py:556) and the request accessor sites.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-028",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_app",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_app.py",
+            "line": 380
+          },
+          "rationale": "Header value only influences protocol negotiation, error-page formatting, domain matching or access-log text in this tree; verified that it never reaches a filesystem path (no path-relevant consumer in the enclosing function).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-029",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_app",
+            "type": null,
+            "callable": "headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_app.py",
+            "line": 380
+          },
+          "rationale": "Header value only influences protocol negotiation, error-page formatting, domain matching or access-log text in this tree; verified that it never reaches a filesystem path (no path-relevant consumer in the enclosing function).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-030",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "cookies",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/examples/web_cookies.py",
+            "line": 21
+          },
+          "rationale": "Example handler: request.cookies is pretty-printed into the response body; no filesystem flow.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-031",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 38
+          },
+          "rationale": "Environment read of a boolean feature flag; the value is coerced with bool() and never used as, or concatenated into, a filesystem path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-032",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "environ",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 38
+          },
+          "rationale": "Environment read of a boolean feature flag; the value is coerced with bool() and never used as, or concatenated into, a filesystem path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-033",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": "FileResponse",
+            "callable": "_sendfile",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 80
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). FileResponse._sendfile: request is used for transport/writer only; the file path was fixed at construction.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-034",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": "FileResponse",
+            "callable": "_not_modified",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 107
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). FileResponse._not_modified: request used for conditional-header response preparation only.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-035",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": "FileResponse",
+            "callable": "_precondition_failed",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 118
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). FileResponse._precondition_failed: request used for response preparation only.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-036",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": "FileResponse",
+            "callable": "prepare",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 143
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). FileResponse.prepare: request is used for conditional headers (If-Match/If-Range/Range) and ACCEPT_ENCODING; the served path is self._path, fixed at construction.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-037",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 145
+          },
+          "rationale": "ACCEPT_ENCODING header read in FileResponse.prepare: the value only gates whether the .gz sibling (filepath.with_name(filepath.name + '.gz'), a path derived from the already-built serving path) is probed; the header value itself never enters any path string.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-038",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": null,
+            "callable": "headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 145
+          },
+          "rationale": "request.headers attribute read backing the ACCEPT_ENCODING .get() in FileResponse.prepare; no path-relevant consumer.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-039",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_log",
+            "type": "AccessLogger",
+            "callable": "_format_i",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_log.py",
+            "line": 122
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). AccessLogger._format_i: request.headers value formatting for the access log.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-040",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_log",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_log.py",
+            "line": 128
+          },
+          "rationale": "Header value only influences protocol negotiation, error-page formatting, domain matching or access-log text in this tree; verified that it never reaches a filesystem path (no path-relevant consumer in the enclosing function).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-041",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_log",
+            "type": null,
+            "callable": "headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_log.py",
+            "line": 128
+          },
+          "rationale": "Header value only influences protocol negotiation, error-page formatting, domain matching or access-log text in this tree; verified that it never reaches a filesystem path (no path-relevant consumer in the enclosing function).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-042",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_log",
+            "type": "AccessLogger",
+            "callable": "_format_o",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_log.py",
+            "line": 132
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). AccessLogger._format_o: response header formatting for the access log.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-043",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_log",
+            "type": null,
+            "callable": "path_qs",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_log.py",
+            "line": 161
+          },
+          "rationale": "request.path_qs read in AccessLogger._format_r for the access-log request line. The value is untrusted request-path data but is only ever formatted into a log record; no filesystem flow (log injection is pass 11 material, not pass 1).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-044",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_log",
+            "type": "AccessLogger",
+            "callable": "_format_line",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_log.py",
+            "line": 187
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). AccessLogger._format_line: log-line assembly only.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-045",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_log",
+            "type": "AccessLogger",
+            "callable": "log",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_log.py",
+            "line": 191
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). AccessLogger.log: log record assembly only.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-046",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "_check_request_resolves",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 22
+          },
+          "rationale": "_check_request_resolves(request, path) re-binds a derived path onto a cloned request (alt_request = request.clone(rel_url=path)) and re-resolves it against the router. This clone+re-resolve step is how normalize_path_middleware routes a normalized raw_path back into (potentially static) resources, so a taint step modeling request.clone(rel_url=X) may be needed for realistic propagation. Human review point: confirm whether the generated summary should map the path argument into the cloned request's rel_url.",
+          "evidence": [
+            "web_middlewares.py:23 alt_request = request.clone(rel_url=path)",
+            "web_middlewares.py:25 match_info = await request.app.router.resolve(alt_request)"
+          ]
+        },
+        {
+          "id": "p1-src-047",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "impl",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 83
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). normalize_path_middleware impl: request is a carrier; the in-function raw_path/path reads (labeled source) are the actual input nodes.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-048",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "match_info",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 84
+          },
+          "rationale": "match_info.route isinstance(SystemRoute) check inside normalize_path_middleware; routing metadata only, no path-to-filesystem flow.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-049",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "raw_path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 86
+          },
+          "rationale": "request.raw_path read in normalize_path_middleware: the raw (undecoded) request path including query string. The derived path is re-bound onto a cloned request via request.clone(rel_url=path) in _check_request_resolves (web_middlewares.py:23) and re-resolved against the router, so a slash-normalized static route can be re-entered. Genuine untrusted path source.",
+          "evidence": [
+            "web_middlewares.py:86-87 if '?' in request.raw_path: path, query = request.raw_path.split('?', 1)",
+            "web_middlewares.py:23 alt_request = request.clone(rel_url=path)"
+          ]
+        },
+        {
+          "id": "p1-src-050",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "raw_path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 87
+          },
+          "rationale": "request.raw_path read (else-branch: plain path without query) in normalize_path_middleware; same trust analysis as the paired read at :86.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-051",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "raw_path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 91
+          },
+          "rationale": "request.raw_path read used as the base for the merge-slashes candidate path; untrusted request-path data feeding the re-resolution/redirect logic.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-052",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 95
+          },
+          "rationale": "request.path read (decoded path) in the append_slash branch of normalize_path_middleware; untrusted request-path data feeding candidate paths that are re-resolved and redirected.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-053",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 97
+          },
+          "rationale": "request.path read (decoded path) in the remove_slash branch; same trust analysis.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-054",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "raw_path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 109
+          },
+          "rationale": "request.raw_path + query is used as the redirect Location target (redirect_class(...)); untrusted path data. For pass 1 it is a genuine untrusted path read; the open-redirect consequence is pass 9 material.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-055",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "impl",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 117
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). _fix_request_current_app impl: request used only for the set_current_app context manager.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-056",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "match_info",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 118
+          },
+          "rationale": "match_info.set_current_app(app) context manager in _fix_request_current_app; routing metadata only.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-057",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_protocol",
+            "type": "AccessLoggerWrapper",
+            "callable": "log",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_protocol.py",
+            "line": 100
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). AccessLoggerWrapper.log: delegates to the access logger; log record assembly only.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-058",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_protocol",
+            "type": "RequestHandler",
+            "callable": "data_received",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_protocol.py",
+            "line": 358
+          },
+          "rationale": "RequestHandler.data_received(data): the raw socket-bytes callback of the server protocol (asyncio BaseProtocol) - the ultimate network boundary feeding the request parser (self._request_parser.feed_data(data) at web_protocol.py:366). Same trust analysis as the parser feed_data row: genuine untrusted entry, noisy as a pass-1 source anchor.",
+          "evidence": [
+            "web_protocol.py:366 messages, upgraded, tail = self._request_parser.feed_data(data)"
+          ]
+        },
+        {
+          "id": "p1-src-059",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_protocol",
+            "type": "RequestHandler",
+            "callable": "log_access",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_protocol.py",
+            "line": 427
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). RequestHandler.log_access: delegates to the access logger.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-060",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_protocol",
+            "type": "RequestHandler",
+            "callable": "_handle_request",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_protocol.py",
+            "line": 460
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). RequestHandler._handle_request: internal dispatch of the parsed request to the matched handler; the input-boundary nodes are the parser wire source and the request accessor sites.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-061",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_protocol",
+            "type": "RequestHandler",
+            "callable": "finish_response",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_protocol.py",
+            "line": 615
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). RequestHandler.finish_response: response prepare/write_eof/log plumbing.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-062",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_protocol",
+            "type": "RequestHandler",
+            "callable": "handle_error",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_protocol.py",
+            "line": 654
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). RequestHandler.handle_error: error response construction (Accept header for HTML formatting).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-063",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_protocol",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_protocol.py",
+            "line": 682
+          },
+          "rationale": "Header value only influences protocol negotiation, error-page formatting, domain matching or access-log text in this tree; verified that it never reaches a filesystem path (no path-relevant consumer in the enclosing function).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-064",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_protocol",
+            "type": null,
+            "callable": "headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_protocol.py",
+            "line": 682
+          },
+          "rationale": "Header value only influences protocol negotiation, error-page formatting, domain matching or access-log text in this tree; verified that it never reaches a filesystem path (no path-relevant consumer in the enclosing function).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-065",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_protocol",
+            "type": null,
+            "callable": "handler",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_protocol.py",
+            "line": 706
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). Error-handler closure created by _make_error_handler; delegates to handle_error.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-066",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_request",
+            "type": null,
+            "callable": "filename",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_request.py",
+            "line": 724
+          },
+          "rationale": "field.filename read in Request.post(): the parsed multipart filename branches into the FileField construction. Attacker-controlled value from the request body; in-tree it is stored as FileField metadata only - the part content goes to an auto-named tempfile.TemporaryFile() (web_request.py:726) and no path is built from the filename. Key recall point for downstream applications that persist uploads under client-supplied names.",
+          "evidence": [
+            "web_request.py:724-726 if field.filename: tmp = tempfile.TemporaryFile()",
+            "web_request.py:743-749 ff = FileField(field.name, field.filename, cast(io.BufferedReader, tmp), ...)"
+          ]
+        },
+        {
+          "id": "p1-src-067",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_request",
+            "type": null,
+            "callable": "filename",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_request.py",
+            "line": 745
+          },
+          "rationale": "field.filename passed into the FileField constructor in Request.post(); same attacker-controlled multipart filename as the :724 read.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-068",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_response",
+            "type": "StreamResponse",
+            "callable": "_start_compression",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_response.py",
+            "line": 325
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). StreamResponse._start_compression: ACCEPT_ENCODING negotiation only.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-069",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_response",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_response.py",
+            "line": 329
+          },
+          "rationale": "Header value only influences protocol negotiation, error-page formatting, domain matching or access-log text in this tree; verified that it never reaches a filesystem path (no path-relevant consumer in the enclosing function).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-070",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_response",
+            "type": null,
+            "callable": "headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_response.py",
+            "line": 329
+          },
+          "rationale": "Header value only influences protocol negotiation, error-page formatting, domain matching or access-log text in this tree; verified that it never reaches a filesystem path (no path-relevant consumer in the enclosing function).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-071",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_response",
+            "type": "StreamResponse",
+            "callable": "prepare",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_response.py",
+            "line": 335
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). StreamResponse.prepare: response preparation plumbing.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-072",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_response",
+            "type": "StreamResponse",
+            "callable": "_start",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_response.py",
+            "line": 343
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). StreamResponse._start: response start plumbing.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-073",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_response",
+            "type": "Response",
+            "callable": "_start",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_response.py",
+            "line": 675
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). Response._start: response start plumbing.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-074",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "match_info",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/examples/web_srv.py",
+            "line": 38
+          },
+          "rationale": "Example/demo handler: the route variable is echoed into response text only; no filesystem flow exists in the handler.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-075",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "match_info",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/examples/web_srv_route_deco.py",
+            "line": 44
+          },
+          "rationale": "Example/demo handler: the route variable is echoed into response text only; no filesystem flow exists in the handler.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-076",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "match_info",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/examples/web_srv_route_table.py",
+            "line": 38
+          },
+          "rationale": "Example/demo handler: the route variable is echoed into response text only; no filesystem flow exists in the handler.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-077",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "AbstractResource",
+            "callable": "resolve",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 132
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). AbstractResource.resolve (abstract): routing dispatch carrier.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-078",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "AbstractRoute",
+            "callable": "handle_expect_header",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 217
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). AbstractRoute.handle_expect_header: delegates to the Expect-header handler.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-079",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "_default_expect_handler",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 303
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). _default_expect_handler: only the Expect header value is read (100-continue check).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-080",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 309
+          },
+          "rationale": "Header value only influences protocol negotiation, error-page formatting, domain matching or access-log text in this tree; verified that it never reaches a filesystem path (no path-relevant consumer in the enclosing function).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-081",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 309
+          },
+          "rationale": "Header value only influences protocol negotiation, error-page formatting, domain matching or access-log text in this tree; verified that it never reaches a filesystem path (no path-relevant consumer in the enclosing function).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-082",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "Resource",
+            "callable": "resolve",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 347
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). Resource.resolve: routing dispatch carrier; the in-function raw_path read at :350 is the input node.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-083",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "raw_path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 350
+          },
+          "rationale": "request.rel_url.raw_path read in Resource.resolve: the raw request path passed to DynamicResource._match; untrusted path data used for route matching (match values are percent-decoded at :472).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-084",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "rel_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 350
+          },
+          "rationale": "request.rel_url attribute read backing the raw_path chain in Resource.resolve.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-085",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "_unquote_path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 472
+          },
+          "rationale": "DynamicResource._match percent-decodes each regex match value via {key: _unquote_path(value)}. The function is a pure decode (URL.build(path=value, encoded=True).path) that preserves taint from argument to return; CodeQL does not propagate taint through this unresolved call by default, so a summary step arg0->return is required for realistic propagation.",
+          "evidence": [
+            "web_urldispatcher.py:471-473 return {key: _unquote_path(value) for key, value in match.groupdict().items()}",
+            "web_urldispatcher.py:1242-1243 def _unquote_path(value): return URL.build(path=value, encoded=True).path"
+          ]
+        },
+        {
+          "id": "p1-src-086",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "StaticResource",
+            "callable": "resolve",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 615
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). StaticResource.resolve: the in-function raw_path read at :616 and the _unquote_path decode at :625 are the input nodes.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-087",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "raw_path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 616
+          },
+          "rationale": "request.rel_url.raw_path chain read in StaticResource.resolve: the raw, not-yet-decoded request path used for prefix matching and sliced into the filename that is percent-decoded at :625. Directly upstream of THE dominant attacker-controlled file-location input.",
+          "evidence": [
+            "web_urldispatcher.py:616 path = request.rel_url.raw_path",
+            "web_urldispatcher.py:625 match_dict = {'filename': _unquote_path(path[len(self._prefix) + 1:])}"
+          ]
+        },
+        {
+          "id": "p1-src-088",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "rel_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 616
+          },
+          "rationale": "request.rel_url attribute read backing the raw_path chain at the same line; rel_url is the yarl URL built from the wire request-line path (http_parser.py:589).",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-089",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "_unquote_path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 625
+          },
+          "rationale": "THE percent-decode boundary of the static-file pipeline: StaticResource.resolve builds match_dict = {'filename': _unquote_path(path[len(self._prefix)+1:])}. Exactly one decode pass between the wire and the filename, so encoded separators (%2f) and %2e%2e become literal ../ after this step. Taint-preserving arg0->return summary step.",
+          "evidence": [
+            "web_urldispatcher.py:625 match_dict = {'filename': _unquote_path(path[len(self._prefix) + 1:])}",
+            "web_urldispatcher.py:1242-1243 def _unquote_path(value): return URL.build(path=value, encoded=True).path"
+          ]
+        },
+        {
+          "id": "p1-src-090",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "StaticResource",
+            "callable": "_handle",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 634
+          },
+          "rationale": "StaticResource._handle is the framework handler entry: the injected request carries match_info['filename'] (the source at :635). The precise source is the match_info subscript; a summary edge modeling request -> request.match_info may help taint propagation in downstream application code that forwards request objects. Human review point.",
+          "evidence": [
+            "web_urldispatcher.py:635 rel_url = request.match_info['filename']"
+          ]
+        },
+        {
+          "id": "p1-src-091",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "match_info",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 635
+          },
+          "rationale": "request.match_info['filename'] in StaticResource._handle: THE routed path variable feeding the static-file path construction. The attacker controls the entire remainder of the request URL after the static prefix, percent-decoded exactly once (StaticResource.resolve -> _unquote_path at :625), so the value may contain ../, literal separators (from %2f) and backslashes. Full attacker-controlled filename scope.",
+          "evidence": [
+            "web_urldispatcher.py:625 match_dict = {'filename': _unquote_path(path[len(self._prefix) + 1:])}",
+            "web_urldispatcher.py:635 rel_url = request.match_info['filename']",
+            "web_urldispatcher.py:637 filename = Path(rel_url)"
+          ]
+        },
+        {
+          "id": "p1-src-092",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "match_info",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 635
+          },
+          "rationale": "request.match_info attribute access backing the ['filename'] subscript at the same line; the match_info property is defined at web_request.py:884 and populated by StaticResource.resolve with the decoded filename.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-093",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "PrefixedSubAppResource",
+            "callable": "resolve",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 740
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). PrefixedSubAppResource.resolve: delegates to the sub-application router.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-094",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "AbstractRuleMatching",
+            "callable": "match",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 763
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). AbstractRuleMatching.match (abstract): rule-matching carrier.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-095",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "Domain",
+            "callable": "match",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 803
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). Domain.match: reads only the HOST header for domain matching.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-096",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 804
+          },
+          "rationale": "HOST header read in Domain.match for sub-application domain matching; the value is compared against a validated domain, never used as a path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-097",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 804
+          },
+          "rationale": "request.headers attribute read backing the HOST .get() in Domain.match; no path-relevant consumer.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-098",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "MatchedSubAppResource",
+            "callable": "resolve",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 846
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). MatchedSubAppResource.resolve: rule match + sub-app router delegation.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-099",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "SystemRoute",
+            "callable": "_handle",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 912
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). SystemRoute._handle: raises the stored HTTP exception; no data flow.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-100",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "UrlDispatcher",
+            "callable": "resolve",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 988
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). UrlDispatcher.resolve: routing walk carrier; the in-function raw_path read at :997 is the input node.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-101",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "raw_path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 997
+          },
+          "rationale": "request.rel_url.raw_path read in UrlDispatcher.resolve: the router walks the raw request path backwards over registered resources; untrusted path data driving route resolution.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-102",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "rel_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 997
+          },
+          "rationale": "request.rel_url attribute read backing the raw_path chain in UrlDispatcher.resolve.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-103",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_ws",
+            "type": "WebSocketResponse",
+            "callable": "prepare",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_ws.py",
+            "line": 168
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). WebSocketResponse.prepare: websocket upgrade plumbing.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-104",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_ws",
+            "type": "WebSocketResponse",
+            "callable": "_handshake",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_ws.py",
+            "line": 181
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). WebSocketResponse._handshake: handshake header validation.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-105",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_ws",
+            "type": null,
+            "callable": "headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_ws.py",
+            "line": 183
+          },
+          "rationale": "WebSocket handshake headers (Upgrade/Connection/Sec-WebSocket-Protocol) validated for the protocol upgrade; no path-relevant consumer.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-106",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_ws",
+            "type": "WebSocketResponse",
+            "callable": "_pre_start",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_ws.py",
+            "line": 265
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). WebSocketResponse._pre_start: handshake plumbing.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-107",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_ws",
+            "type": "WebSocketResponse",
+            "callable": "_post_start",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_ws.py",
+            "line": 283
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). WebSocketResponse._post_start: handshake plumbing.",
+          "evidence": []
+        },
+        {
+          "id": "p1-src-108",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_ws",
+            "type": "WebSocketResponse",
+            "callable": "can_prepare",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_ws.py",
+            "line": 299
+          },
+          "rationale": "Internal plumbing parameter: the framework-injected Request object is a taint carrier, but the precise input-boundary nodes are the request-path / match_info / multipart accessor sites labeled source in this pass. Marking every `request` parameter a source would over-taint (python.md 7.4). WebSocketResponse.can_prepare: handshake feasibility check.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/bench-asyncio-write.py",
+            "line": 131
+          },
+          "rationale": "Benchmark script writing a literal 'bench.md' output file; no untrusted path. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/check_changes.py",
+            "line": 25
+          },
+          "rationale": "script_path.resolve().parent walk to find the git root of the repo the tool lives in. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "exists",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/check_changes.py",
+            "line": 26
+          },
+          "rationale": "(folder / '.git').exists() repo-root probe in a dev tool. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "anchor",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/check_changes.py",
+            "line": 28
+          },
+          "rationale": "folder.anchor loop-termination check (walked past the filesystem root) in a dev tool; anchor is used here as a sentinel, not as a security guard. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-005",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/check_changes.py",
+            "line": 35
+          },
+          "rationale": "Path(argv[0]) - the script's own path; no attacker control. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "iterdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/check_changes.py",
+            "line": 39
+          },
+          "rationale": "changes.iterdir() listing the fixed repo CHANGES/ directory. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "exists",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/check_sum.py",
+            "line": 36
+          },
+          "rationale": "dst.exists() checksum cache probe in a dev tool. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/cleanup_changes.py",
+            "line": 28
+          },
+          "rationale": "Path(__file__).parent.parent - fixed repo root. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-009",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "iterdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/cleanup_changes.py",
+            "line": 31
+          },
+          "rationale": "(root / 'CHANGES').iterdir() fixed directory listing. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.connector",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/connector.py",
+            "line": 834
+          },
+          "rationale": "self._resolver.resolve(host, port, family) - asyncio DNS resolution (aiohttp.resolver.AbstractResolver), not a pathlib operation. Name-collision row documented in detection.json; the receiver hint (_resolver) confirms the non-pathlib semantics.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-011",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.connector",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/connector.py",
+            "line": 871
+          },
+          "rationale": "Second DNS-resolve call site in the connector cache path; same name-collision analysis as connector.py:834.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-012",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.cookiejar",
+            "type": "CookieJar",
+            "callable": "save",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/cookiejar.py",
+            "line": 105
+          },
+          "rationale": "CookieJar.save(file_path) is a genuine file-write API whose path parameter is opened for writing (file_path.open(mode='wb') at :107) and pickled into. In-tree the path is always operator/application configuration (no request-derived value reaches it), so it is a sink signature for downstream misuse rather than a confirmed pass-1 finding. Human review point.",
+          "evidence": [
+            "cookiejar.py:106-108 file_path = pathlib.Path(file_path); with file_path.open(mode='wb') as f: pickle.dump(self._cookies, f, ...)"
+          ]
+        },
+        {
+          "id": "p1-sink-013",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/cookiejar.py",
+            "line": 106
+          },
+          "rationale": "pathlib.Path(file_path) constructor inside CookieJar.save: a type-coercion step, not a file access; the access happens at :107 (labeled on its own row).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-014",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.cookiejar",
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/cookiejar.py",
+            "line": 107
+          },
+          "rationale": "file_path.open(mode='wb') - the actual cookie-store write. Path parameter of the enclosing save() is operator/application-supplied; kept as a sink signature with the same candidate status as CookieJar.save.",
+          "evidence": [
+            "cookiejar.py:107 with file_path.open(mode='wb') as f: pickle.dump(...)"
+          ]
+        },
+        {
+          "id": "p1-sink-015",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.cookiejar",
+            "type": "CookieJar",
+            "callable": "load",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/cookiejar.py",
+            "line": 110
+          },
+          "rationale": "CookieJar.load(file_path): file-read API whose path parameter is opened at :112 and pickled back in (pickle.load inside - unsafe deserialization shape, pass 6 material recorded for context). Same operator-config trust analysis as save().",
+          "evidence": [
+            "cookiejar.py:112-113 with file_path.open(mode='rb') as f: self._cookies = pickle.load(f)"
+          ]
+        },
+        {
+          "id": "p1-sink-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/cookiejar.py",
+            "line": 111
+          },
+          "rationale": "pathlib.Path(file_path) constructor inside CookieJar.load; type coercion, not a file access.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-017",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.cookiejar",
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/cookiejar.py",
+            "line": 112
+          },
+          "rationale": "file_path.open(mode='rb') - the actual cookie-store read; same trust analysis as CookieJar.load.",
+          "evidence": [
+            "cookiejar.py:112 with file_path.open(mode='rb') as f"
+          ]
+        },
+        {
+          "id": "p1-sink-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/examples/fake_server.py",
+            "line": 39
+          },
+          "rationale": "Test-support fake DNS resolver; not a pathlib operation.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/examples/fake_server.py",
+            "line": 55
+          },
+          "rationale": "pathlib.Path(__file__) - fixed example-module path for the TLS cert files.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-020",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "exists",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/gen.py",
+            "line": 10
+          },
+          "rationale": "Generated-header existence probe in the Cython header codegen tool. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/gen.py",
+            "line": 170
+          },
+          "rationale": "(folder / '_find_header.c').open('w') with a literal generated filename. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/tools/gen.py",
+            "line": 173
+          },
+          "rationale": "(folder / '_headers.pxi').open('w') with a literal generated filename. Developer/bootstrap tool: input is argv[0]/literal __file__-derived paths controlled by the local operator; not reachable by remote request traffic (tools/ rows kept per extraction contract for auditability).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-023",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 200
+          },
+          "rationale": "Path(netrc_env) converts the NETRC environment string into a Path object that is then read by netrc.netrc(str(netrc_path)) at :218. Taint-preserving str->Path conversion; summary step candidate paired with the env source candidate at :197 and the netrc read sink candidate at :218.",
+          "evidence": [
+            "helpers.py:199-200 if netrc_env is not None: netrc_path = Path(netrc_env)"
+          ]
+        },
+        {
+          "id": "p1-sink-024",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "home",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 203
+          },
+          "rationale": "Path.home() - fixed user-home location for the default .netrc/_netrc path; not attacker-influenced.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-025",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "netrc",
+            "type": null,
+            "callable": "netrc",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 218
+          },
+          "rationale": "netrc.netrc(str(netrc_path)) performs the actual file read of the NETRC-designated path (netrc opens and parses the file). The path is environment-controlled (NETRC var) or the fixed home default - a CWE-73 'external control of file name or path' shape requiring local env control, not remote input. Human review point.",
+          "evidence": [
+            "helpers.py:197-200 netrc_env = os.environ.get('NETRC'); netrc_path = Path(netrc_env)",
+            "helpers.py:218 return netrc.netrc(str(netrc_path))"
+          ]
+        },
+        {
+          "id": "p1-sink-026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.helpers",
+            "type": null,
+            "callable": "is_file",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 224
+          },
+          "rationale": "netrc_path.is_file() existence probe used only to decide whether to warn about an unreadable netrc; the actual access is the netrc.netrc read at :218 (labeled on its own row).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-027",
+          "role": "sanitizer",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/helpers.py",
+            "line": 360
+          },
+          "rationale": "guess_filename() returns Path(name).name: basename-only extraction that strips all directory components from a (client-supplied) filename. Classic path-traversal neutralization per python.md sanitizer cue 'basename-only extraction when semantics allow' - any ../ or separator content in `name` is discarded. Note: this sanitizes the *client upload filename guess* (payload Content-Disposition), not the StaticResource request path.",
+          "evidence": [
+            "helpers.py:357-361 def guess_filename(obj, default=None): name = getattr(obj, 'name', None); if name and isinstance(name, str) and name[0] != '<' and name[-1] != '>': return Path(name).name"
+          ]
+        },
+        {
+          "id": "p1-sink-028",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.payload",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/payload.py",
+            "line": 279
+          },
+          "rationale": "self._value.read (or value.read for StringIOPayload) reads a *pre-opened* file/IO object supplied by the application caller; the file location was chosen at open time by the caller, and no path string flows here.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-029",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.payload",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/payload.py",
+            "line": 300
+          },
+          "rationale": "self._value.read (or value.read for StringIOPayload) reads a *pre-opened* file/IO object supplied by the application caller; the file location was chosen at open time by the caller, and no path string flows here.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-030",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.payload",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/payload.py",
+            "line": 303
+          },
+          "rationale": "self._value.read (or value.read for StringIOPayload) reads a *pre-opened* file/IO object supplied by the application caller; the file location was chosen at open time by the caller, and no path string flows here.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-031",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.payload",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/payload.py",
+            "line": 348
+          },
+          "rationale": "self._value.read (or value.read for StringIOPayload) reads a *pre-opened* file/IO object supplied by the application caller; the file location was chosen at open time by the caller, and no path string flows here.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-032",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.payload",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/payload.py",
+            "line": 356
+          },
+          "rationale": "self._value.read (or value.read for StringIOPayload) reads a *pre-opened* file/IO object supplied by the application caller; the file location was chosen at open time by the caller, and no path string flows here.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-033",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/setup.py",
+            "line": 12
+          },
+          "rationale": "pathlib.Path(__file__).parent in the build script; fixed path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-034",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "exists",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/setup.py",
+            "line": 13
+          },
+          "rationale": "(HERE / '.git').exists() git-repo probe in the build script.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-035",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "exists",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/setup.py",
+            "line": 20
+          },
+          "rationale": "(HERE / 'vendor/llhttp/README.md').exists() submodule probe in the build script.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-036",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/examples/static_files.py",
+            "line": 7
+          },
+          "rationale": "Example add_static('/', Path(__file__).parent): the static base directory is a fixed literal; the request-driven serving logic is StaticResource in web_urldispatcher.py, which is labeled on its own rows.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-037",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/requirements/sync-direct-runtime-deps.py",
+            "line": 8
+          },
+          "rationale": "Path('setup.cfg') literal config read in a make-helper script.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-038",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/requirements/sync-direct-runtime-deps.py",
+            "line": 13
+          },
+          "rationale": "open(Path('requirements', 'runtime-deps.in'), 'w') literal output path.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-039",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/requirements/sync-direct-runtime-deps.py",
+            "line": 13
+          },
+          "rationale": "Path('requirements', 'runtime-deps.in') literal output path construction.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-040",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_app",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_app.py",
+            "line": 374
+          },
+          "rationale": "self._router.resolve(request) - router dispatch (UrlDispatcher.resolve), not a pathlib operation; name-collision row.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-041",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": "FileResponse",
+            "callable": "__init__",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 46
+          },
+          "rationale": "FileResponse.__init__(path) stores pathlib.Path(path) as self._path and prepare() then stats it (:141), optionally its .gz sibling (:136) and opens it for transmission (:288) / loop.sendfile (:93). This is THE file-response sink signature of the framework: any caller that passes a request-derived path here (StaticResource passes its containment-checked filepath at web_urldispatcher.py:668; standalone application usage is unchecked) yields file access. Dangerous parameter: path (positional index 1 incl. self).",
+          "evidence": [
+            "web_fileresponse.py:54 self._path = pathlib.Path(path)",
+            "web_fileresponse.py:141 return filepath, filepath.stat(), False",
+            "web_fileresponse.py:288 fobj = await loop.run_in_executor(None, filepath.open, 'rb')"
+          ]
+        },
+        {
+          "id": "p1-sink-042",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 54
+          },
+          "rationale": "pathlib.Path(path) coercion inside FileResponse.__init__: a constructor step, not a file access; the sink is anchored at the __init__ path parameter (:46) and the stat/open sites in prepare().",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-043",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": null,
+            "callable": "seek",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 66
+          },
+          "rationale": "fobj.seek bound-method reference executed via run_in_executor: operates on the already-open file object; the path was fixed at the open (:288).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-044",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 68
+          },
+          "rationale": "fobj.read bound-method reference (chunked fallback): content read of an already-open file object; not a path operation.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-045",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 74
+          },
+          "rationale": "fobj.read bound-method reference (min(chunk_size, count) tail loop): same analysis as :68.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-046",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": null,
+            "callable": "sendfile",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 93
+          },
+          "rationale": "loop.sendfile(transport, fobj, offset, count): the zero-copy file transmission channel of the serving pipeline. The path is not an argument (fobj is already open from :288), so path-relevance is inherited from the open; kept as a genuine file-send sink signature with arg 1 (fobj) as the file channel.",
+          "evidence": [
+            "web_fileresponse.py:93 await loop.sendfile(transport, fobj, offset, count)",
+            "web_fileresponse.py:288 fobj = await loop.run_in_executor(None, filepath.open, 'rb')"
+          ]
+        },
+        {
+          "id": "p1-sink-047",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": null,
+            "callable": "with_name",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 134
+          },
+          "rationale": "filepath.with_name(filepath.name + '.gz') derives the gzip sibling path from the serving path: taint-preserving receiver->result derivation feeding the stat at :136. Summary-step candidate; human review point (the derived path keeps the directory of self._path and only appends a suffix).",
+          "evidence": [
+            "web_fileresponse.py:134 gzip_path = filepath.with_name(filepath.name + '.gz')"
+          ]
+        },
+        {
+          "id": "p1-sink-048",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": null,
+            "callable": "stat",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 136
+          },
+          "rationale": "gzip_path.stat() - real filesystem stat of the .gz sibling of the serving path, executed in an executor from prepare(). The sibling path is derived from self._path (the FileResponse path parameter), so the stat is path-controlled by whoever constructed the response.",
+          "evidence": [
+            "web_fileresponse.py:136 return gzip_path, gzip_path.stat(), True"
+          ]
+        },
+        {
+          "id": "p1-sink-049",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": null,
+            "callable": "stat",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 141
+          },
+          "rationale": "filepath.stat() in _get_file_path_stat_and_gzip - THE stat of the served file performed on every FileResponse.prepare(); the mtime/size feed the ETag and the open/sendfile that follow. Path-controlled by the FileResponse constructor argument.",
+          "evidence": [
+            "web_fileresponse.py:141 return filepath, filepath.stat(), False"
+          ]
+        },
+        {
+          "id": "p1-sink-050",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_fileresponse",
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_fileresponse.py",
+            "line": 288
+          },
+          "rationale": "filepath.open passed to loop.run_in_executor(..., filepath.open, 'rb') - THE actual open of the served file, executed in an executor from FileResponse.prepare(). Together with the stat at :141 and sendfile at :93 this completes the read chain of the static-file pipeline. The path is the receiver object (self._path from the constructor).",
+          "evidence": [
+            "web_fileresponse.py:288 fobj = await loop.run_in_executor(None, filepath.open, 'rb')"
+          ]
+        },
+        {
+          "id": "p1-sink-051",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_middlewares",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_middlewares.py",
+            "line": 25
+          },
+          "rationale": "request.app.router.resolve(alt_request) in _check_request_resolves - router dispatch, not a pathlib operation.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-052",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": null,
+            "callable": "TemporaryFile",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_request.py",
+            "line": 726
+          },
+          "rationale": "tempfile.TemporaryFile() for multipart upload content: the name is auto-generated by the OS/tempfile module and is NOT attacker-controlled (the client filename never becomes a path in this tree). The untrusted *content* sink is a pass-1 non-issue.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-053",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_runner",
+            "type": "UnixSite",
+            "callable": "__init__",
+            "arg_index": 2,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_runner.py",
+            "line": 134
+          },
+          "rationale": "UnixSite.__init__(runner, path) merely stores self._path; the filesystem creation happens at start() (:156, labeled on its own row). Input is operator configuration.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-054",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_runner",
+            "type": null,
+            "callable": "create_unix_server",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_runner.py",
+            "line": 156
+          },
+          "rationale": "loop.create_unix_server(server, self._path) creates a unix listening socket at a filesystem path (arg 1). Genuine filesystem-object-creation API; in-tree the path is operator configuration (run_app/UnixSite), with the CLI --path entry as the only external-ish input. Human review point: keep as sink signature for application misuse.",
+          "evidence": [
+            "web_runner.py:156-158 self._server = await loop.create_unix_server(server, self._path, ssl=..., backlog=...)"
+          ]
+        },
+        {
+          "id": "p1-sink-055",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "StaticResource",
+            "callable": "__init__",
+            "arg_index": 2,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 523
+          },
+          "rationale": "StaticResource.__init__(prefix, directory): the base directory is operator/application configuration supplied via add_static(); it is not request-derived. The traversal-relevant flow starts inside _handle (labeled on its own rows).",
+          "evidence": [
+            "web_urldispatcher.py:534-538 directory = Path(directory); ...; directory = directory.resolve(); if not directory.is_dir(): raise ValueError('Not a directory')"
+          ]
+        },
+        {
+          "id": "p1-sink-056",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 534
+          },
+          "rationale": "Path(directory) coercion of the operator-configured base directory.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-057",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 536
+          },
+          "rationale": "Path(os.path.expanduser(str(directory))) - ~ expansion of the operator-configured directory; not applied to request input.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-058",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": null,
+            "callable": "expanduser",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 536
+          },
+          "rationale": "os.path.expanduser on the operator-configured static directory only. Important negative evidence: ~ expansion is NEVER applied to the request filename, so a request containing ~/ or ~user cannot be expanded into a home-directory escape here.",
+          "evidence": [
+            "web_urldispatcher.py:535-536 if str(directory).startswith('~'): directory = Path(os.path.expanduser(str(directory)))"
+          ]
+        },
+        {
+          "id": "p1-sink-059",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 537
+          },
+          "rationale": "directory.resolve() canonicalizes the configured base directory at registration time. This is config-side canonicalization and is a prerequisite for the sound resolve()+relative_to() containment at :643-645 (both sides must be canonical), but it does not process tainted input, so it is not itself a pass-1 sanitizer node.",
+          "evidence": [
+            "web_urldispatcher.py:537 directory = directory.resolve()"
+          ]
+        },
+        {
+          "id": "p1-sink-060",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "is_dir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 538
+          },
+          "rationale": "directory.is_dir() registration-time validation of the operator-configured base directory.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-061",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 577
+          },
+          "rationale": "url_for: self._directory.joinpath(filename).resolve() canonicalizes an application/caller-supplied filename (URL-building code, not request data - documented in detection.json). No file access at this node; the access is the open at :587.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-062",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "joinpath",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 577
+          },
+          "rationale": "url_for: joinpath(filename) joins a caller-supplied filename into the base directory - the same shape as the request-side join at :643 but fed by application code building URLs (trust difference documented). Summary-step candidate for the application-input flow.",
+          "evidence": [
+            "web_urldispatcher.py:577 filepath = self._directory.joinpath(filename).resolve()"
+          ]
+        },
+        {
+          "id": "p1-sink-063",
+          "role": "sanitizer",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "relative_to",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 579
+          },
+          "rationale": "url_for: filepath.relative_to(self._directory) applies the same canonicalize-then-contain guard as :645, but on the application-supplied url_for path (append_version=True flow). Candidate rather than tp because the guarded input is not request-derived in-tree.",
+          "evidence": [
+            "web_urldispatcher.py:578-580 if not self._follow_symlinks: filepath.relative_to(self._directory)"
+          ]
+        },
+        {
+          "id": "p1-sink-064",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "is_file",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 584
+          },
+          "rationale": "url_for: filepath.is_file() is a real filesystem stat, but the probed path is built from the caller-supplied url_for filename (application code), not from request data - not remotely reachable with attacker input in this tree.",
+          "evidence": [
+            "web_urldispatcher.py:575-584 if append_version: ... filepath = self._directory.joinpath(filename).resolve() ... if filepath.is_file():"
+          ]
+        },
+        {
+          "id": "p1-sink-065",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 587
+          },
+          "rationale": "url_for: filepath.open('rb') + f.read() hash the file for cache-busting URLs. Real file read, but the filename comes from the url_for() caller (application/operator code); no request-derived value reaches this open in this tree. Rejected for the pass-1 remote threat model; the request-reachable open is web_fileresponse.py:288.",
+          "evidence": [
+            "web_urldispatcher.py:584-588 if filepath.is_file(): with filepath.open('rb') as f: file_bytes = f.read()"
+          ]
+        },
+        {
+          "id": "p1-sink-066",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 588
+          },
+          "rationale": "url_for: file_bytes = f.read() reads the file already opened at :587 for the cache-busting hash. Operates on the open file object, not a path; the enclosing flow is the url_for application-input path (see the :587 decision).",
+          "evidence": [
+            "web_urldispatcher.py:587-588 with filepath.open('rb') as f: file_bytes = f.read()"
+          ]
+        },
+        {
+          "id": "p1-sink-067",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": null,
+            "callable": "Path",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 637
+          },
+          "rationale": "Path(rel_url) converts the percent-decoded request filename (source at :635) into a pathlib object. A constructor, not a file access, but a required taint-preserving step (str -> Path) connecting the source to the joinpath at :643; CodeQL will not model the ctor return without a summary edge.",
+          "evidence": [
+            "web_urldispatcher.py:635-637 rel_url = request.match_info['filename']; filename = Path(rel_url)"
+          ]
+        },
+        {
+          "id": "p1-sink-068",
+          "role": "sanitizer",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "anchor",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 638
+          },
+          "rationale": "if filename.anchor: raise HTTPForbidden() - absolute-path rejection: refuses request filenames that carry a drive/UNC anchor (/machine/c$, D:\\path, \\\\machine\\c$) before the join. Real, executed-before-file-access guard; incomplete in isolation (anchor is empty for pure-relative ../ traversal, and on POSIX a leading backslash is not an anchor), but it is the first half of a sound combined defense with resolve()+relative_to() at :643-645.",
+          "evidence": [
+            "web_urldispatcher.py:638-642 if filename.anchor: raise HTTPForbidden()"
+          ]
+        },
+        {
+          "id": "p1-sink-069",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 643
+          },
+          "rationale": "filepath = self._directory.joinpath(filename).resolve(): resolve() canonicalizes the joined path (collapses ../ and follows symlinks) BEFORE the containment check at :645, which is what makes that check sound. It is taint-preserving (the resolved path remains attacker-positioned), so it is a summary step, not a barrier: marking it a sanitizer would incorrectly sever the source->sink flow.",
+          "evidence": [
+            "web_urldispatcher.py:643 filepath = self._directory.joinpath(filename).resolve()"
+          ]
+        },
+        {
+          "id": "p1-sink-070",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "joinpath",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 643
+          },
+          "rationale": "self._directory.joinpath(filename) joins the attacker-controlled filename (arg 0) into the operator base directory: the point where the tainted path component enters a full path. Taint-preserving construction step feeding resolve() and the containment guard.",
+          "evidence": [
+            "web_urldispatcher.py:643 filepath = self._directory.joinpath(filename).resolve()"
+          ]
+        },
+        {
+          "id": "p1-sink-071",
+          "role": "sanitizer",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "relative_to",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 645
+          },
+          "rationale": "THE base-directory containment guard: filepath.relative_to(self._directory) raises ValueError -> HTTPNotFound when the resolved path escapes the configured base, and it runs on the post-resolve (canonical) path, before any file access (:657/:667/:668). Classic canonicalize-then-contain (python.md sanitizer cue). Enforced only when follow_symlinks=False, which is the DEFAULT (follow_symlinks=True disables the check - documented residual-risk configuration, not a default vulnerability).",
+          "evidence": [
+            "web_urldispatcher.py:643-645 filepath = self._directory.joinpath(filename).resolve(); if not self._follow_symlinks: filepath.relative_to(self._directory)",
+            "web_urldispatcher.py:646-648 except (ValueError, FileNotFoundError) as error: raise HTTPNotFound() from error",
+            "web_urldispatcher.py:529 follow_symlinks: bool = False  (ctor default)"
+          ]
+        },
+        {
+          "id": "p1-sink-072",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "is_dir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 657
+          },
+          "rationale": "filepath.is_dir(): real filesystem stat-type probe on the resolved path inside _handle; decides between directory listing (show_index) and file serving. In the in-tree flow the path has already passed the :645 containment, but the signature (stat-type probe on a path derived from tainted data) is a genuine pass-1 sink anchor (existence oracle).",
+          "evidence": [
+            "web_urldispatcher.py:657 if filepath.is_dir():"
+          ]
+        },
+        {
+          "id": "p1-sink-073",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "is_file",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 667
+          },
+          "rationale": "filepath.is_file(): the file-existence probe that gates FileResponse serving; same analysis as :657.",
+          "evidence": [
+            "web_urldispatcher.py:667 elif filepath.is_file(): return FileResponse(filepath, chunk_size=self._chunk_size)"
+          ]
+        },
+        {
+          "id": "p1-sink-074",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "FileResponse",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 668
+          },
+          "rationale": "FileResponse(filepath, chunk_size=...) hands the (containment-checked) resolved path to the serving engine, which stats it (web_fileresponse.py:141), opens it (:288) and transmits it (:93). THE file-response sink of the request-reachable static pipeline. Dangerous parameter: filepath (arg 0).",
+          "evidence": [
+            "web_urldispatcher.py:667-668 elif filepath.is_file(): return FileResponse(filepath, chunk_size=self._chunk_size)",
+            "web_fileresponse.py:288 fobj = await loop.run_in_executor(None, filepath.open, 'rb')"
+          ]
+        },
+        {
+          "id": "p1-sink-075",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "is_dir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 676
+          },
+          "rationale": "_directory_as_html sanity assert filepath.is_dir() - executes after the :645 guard on the already-checked path; display code, not an enforcement point.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-076",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "relative_to",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 678
+          },
+          "rationale": "filepath.relative_to(self._directory).as_posix() in _directory_as_html: computes the display path for the directory index heading; post-guard display computation, not a file-access enforcement point (the guard is at :645).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-077",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "iterdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 683
+          },
+          "rationale": "filepath.iterdir() in _directory_as_html: reads the directory entries of the (containment-checked) filepath when show_index=True - a real directory-listing file read on a path derived from tainted data. Enabled only by the operator opt-in show_index.",
+          "evidence": [
+            "web_urldispatcher.py:657-662 if filepath.is_dir(): if self._show_index: return Response(text=self._directory_as_html(filepath), ...)",
+            "web_urldispatcher.py:683 dir_index = filepath.iterdir()"
+          ]
+        },
+        {
+          "id": "p1-sink-078",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "relative_to",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 686
+          },
+          "rationale": "_file.relative_to(self._directory).as_posix() in the listing loop: display URL computation for each listed entry (entries come from iterdir of the guarded filepath, so they are inside by construction).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-079",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "is_dir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 690
+          },
+          "rationale": "_file.is_dir() in the listing loop: decides whether to append '/' to the displayed entry name; display metadata only.",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-080",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 741
+          },
+          "rationale": "Router/resource .resolve() dispatch (AbstractRouter/AbstractResource.resolve on 'router'), not a pathlib operation; documented name-collision shape (receiver-name-agnostic AST matching).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-081",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 849
+          },
+          "rationale": "Router/resource .resolve() dispatch (AbstractRouter/AbstractResource.resolve on 'router'), not a pathlib operation; documented name-collision shape (receiver-name-agnostic AST matching).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-082",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 1000
+          },
+          "rationale": "Router/resource .resolve() dispatch (AbstractRouter/AbstractResource.resolve on 'candidate'), not a pathlib operation; documented name-collision shape (receiver-name-agnostic AST matching).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-083",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": null,
+            "callable": "resolve",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 1018
+          },
+          "rationale": "Router/resource .resolve() dispatch (AbstractRouter/AbstractResource.resolve on 'resource'), not a pathlib operation; documented name-collision shape (receiver-name-agnostic AST matching).",
+          "evidence": []
+        },
+        {
+          "id": "p1-sink-084",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "aiohttp.web_urldispatcher",
+            "type": "UrlDispatcher",
+            "callable": "add_static",
+            "arg_index": 2,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/aiohttp/web_urldispatcher.py",
+            "line": 1138
+          },
+          "rationale": "UrlDispatcher.add_static(prefix, path): operator-facing registration API whose path argument is application configuration (literal or config-derived). Not attacker input; the request-driven serving logic inside StaticResource is labeled on its own rows.",
+          "evidence": [
+            "web_urldispatcher.py:1135-1146 def add_static(self, prefix, path, *, ..., show_index=False, follow_symlinks=False, ...)"
+          ]
+        },
+        {
+          "id": "p1-sink-085",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/aiohttp_vuln/examples/web_ws.py",
+            "line": 21
+          },
+          "rationale": "Example handler opening WS_FILE = os.path.join(os.path.dirname(__file__), 'websocket.html'): a fixed literal path, unrelated to any request value.",
+          "evidence": []
+        }
+      ]
+    }
+  ]
+}

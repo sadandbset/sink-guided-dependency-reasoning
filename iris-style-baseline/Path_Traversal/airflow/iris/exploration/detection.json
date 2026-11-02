@@ -1,0 +1,286 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation (queries only; compile/run/decode are later steps)"],
+    "generated": "2026-10-21",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\airflow\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Pass 1 (Path Traversal, CWE-22/23/36/73) against the airflow_vuln source tree (Apache Airflow 2.7.0.dev0 per airflow/__init__.py, sha 2811ba7 in the DB creation metadata). All file/line evidence below was verified against this checkout. The airflow-db CodeQL database is nested inside the source tree; all exploration greps and reads excluded airflow-db/, tests/, and the root-level ground-truth/analysis files."
+  },
+  "target": {
+    "project": "airflow",
+    "projectDescription": "Apache Airflow 2.7.0.dev0 scheduler/orchestrator: Flask + Flask-AppBuilder (FAB) webserver (airflow/www/views.py, 66 @expose views), connexion/Flask REST API v1 (airflow/api_connexion, OpenAPI spec airflow/api_connexion/openapi/v1.yaml), deprecated experimental Flask API (airflow/www/api/experimental), a standalone gunicorn 'serve-logs' Flask app that serves worker log files over HTTP (airflow/utils/serve_logs.py), argparse-based CLI (airflow/cli), DAG file processor/scheduler (airflow/dag_processing, airflow/jobs, airflow/models/dagbag.py) reading the DAGs folder (plain .py and .zip), task log handlers writing/reading under BASE_LOG_FOLDER (airflow/utils/log), and inlined providers under airflow/providers/ (remote hooks, remote task log handlers).",
+    "pass": 1,
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\airflow_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (airflow-db/codeql-database.yml)",
+      "airflow/ package with 1678 .py files (excluding the nested airflow-db/ database directory); root tests/ tree has 1987 .py files and is excluded from candidates",
+      "setup.py + pyproject.toml: setuptools packaging of the 'apache-airflow' distribution"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\airflow_vuln\\airflow-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\airflow_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "2811ba710991d71466afa21c500ee55aeda5d8a1",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:34:04.734377900Z"
+    },
+    "baselineLinesOfCode": 512281,
+    "finalised": true,
+    "nestedInSourceTree": true
+  },
+  "toolchain": {
+    "qlpack": "iris/airflow-cwe22 (dependencies: codeql/python-all: \"\") - iris/qlpack.yml already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolved from the local pack cache by qlpack.yml (validated toolchain: CodeQL CLI 2.25.1, same CLI that created the database)",
+    "codeqlExecution": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF for the extraction queries"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "flask_appbuilder",
+          "confidence": 1.0,
+          "evidence": [
+            "airflow/www/views.py:46 'from flask_appbuilder import BaseView, ModelView, expose'",
+            "airflow/www/views.py: 66 @expose route decorators, 89 @action decorators (flask_appbuilder.actions.action, views.py:47)",
+            "airflow/www/extensions/init_appbuilder.py:82 'appbuilder = AppBuilder(app, db.session)' (also :91, :414) - FAB bootstrap of the webserver",
+            "airflow/www/fab_security/views.py: 1 @expose (FAB auth views)",
+            "airflow/www/ layout (views.py, fab_security/, extensions/, templates/, static/)"
+          ]
+        },
+        {
+          "name": "flask",
+          "confidence": 0.95,
+          "evidence": [
+            "airflow/www/app.py:23 'from flask import Flask' (webserver WSGI app factory)",
+            "airflow/www/views.py:44-59 'from flask import (..., request, send_from_directory, session as flask_session, ...)'",
+            "airflow/utils/serve_logs.py:43 'flask_app = Flask(__name__, static_folder=None)' + :107 '@flask_app.route(\"/log/<path:filename>\")' - standalone log-serving app",
+            "airflow/www/blueprints.py:25 '@routes.route(\"/\")' and airflow/www/api/experimental/endpoints.py: @api_experimental.route(...) blueprint routes",
+            "164 request.* read sites in airflow/www/views.py alone"
+          ]
+        },
+        {
+          "name": "argparse",
+          "confidence": 0.7,
+          "evidence": [
+            "airflow/cli/cli_config.py:59 'class DefaultHelpParser(argparse.ArgumentParser)' + the Arg/ActionCommand/GroupCommand CLI definition framework (cli_config.py:100-150)",
+            "airflow/cli/cli_parser.py:94 'def get_parser(...)' builds the full argparse tree; all airflow CLI commands defined as argparse commands",
+            "airflow/cli/commands/ layout: handler functions receiving a parsed 'args' namespace (e.g. dag_processor_command.py:45-47 'dag_directory=args.subdir')",
+            "no click usage anywhere in airflow/cli/ (click is NOT used by this snapshot's CLI)"
+          ]
+        },
+        {
+          "name": "connexion",
+          "confidence": 0.6,
+          "evidence": [
+            "airflow/api_connexion/exceptions.py:24 'from connexion import FlaskApi, ProblemException, problem'",
+            "airflow/api_connexion/openapi/v1.yaml - OpenAPI 3 spec driving REST API v1 routing; handlers are plain keyword-arg functions (e.g. log_endpoint.py:47 'def get_log(*, dag_id, dag_run_id, task_id, task_try_number, ...)')",
+            "airflow/api_connexion/endpoints/ layout: 23 endpoint modules whose parameters are injected by connexion from the request path/query"
+          ]
+        }
+      ]
+    },
+    "selected": "flask_appbuilder (primary web UI framework), flask (foundation + standalone serve-logs app + experimental API), connexion (REST API v1 layer on Flask), argparse (CLI)",
+    "notes": "Flask-AppBuilder is the primary web framework (all UI endpoints use @expose). Connexion routes REST API v1 handlers via the OpenAPI spec, so their inputs arrive as function kwargs rather than flask request reads - a handler-parameter source family is required for them. No FastAPI exists anywhere in airflow/ (zero import matches); no click in the CLI. references/flask.md was loaded for the Flask shapes; no flask_appbuilder.md / connexion.md / argparse.md reference exists in augur-0.3.0/references/, so those shapes are derived from repository evidence only."
+  },
+  "inputBoundaryInventory": {
+    "summary": "Externally influenced data enters through (1) the FAB web UI (query args, form fields, values, headers, one multipart upload in VariableModelView.varimport), (2) the connexion REST API v1 (path/query params injected as handler kwargs, JSON bodies via request_dict.get_json_request_dict, itsdangerous-signed tokens), (3) the deprecated experimental Flask API, (4) the standalone serve-logs Flask app where the URL path variable <path:filename> selects a file under BASE_LOG_FOLDER (JWT-equality guarded), (5) the argparse CLI (file-path flags such as --subdir, --cfg-path, import/export positional file paths, --log-file/--stdout/--stderr/--pid, -o/--output-path), and (6) environment variables and airflow configuration (AIRFLOW_HOME, AIRFLOW__SECTION__KEY overrides, conf.get* of dags_folder/base_log_folder) - the latter two are config-trust-level, not attacker sources. Filesystem access concentrates in: task log reading/writing (FileTaskHandler: Path(local_base, rendered_rel_path).glob/read_text, open(full_path, 'a')), serve-logs send_from_directory, DAG file handling (open_maybe_zipped -> open / ZipFile(...).open, SourceFileLoader execution), .airflowignore-aware directory walking, CLI import/export open() sites, and provider-local file operations (sftp/ftp/gcs/s3 hooks and remote task log handlers). No archive extraction (extract/extractall) exists anywhere in this snapshot, so the Zip-Slip family is absent.",
+    "sourceFamilies": [
+      {
+        "family": "flask_request_http",
+        "evidence": [
+          "airflow/www/views.py:102 request.args.get sites (e.g. :1593 metadata, :1594 format, :1411-1414 dag_id/task_id/map_index/execution_date) plus request.args[...] subscripts (:1590, :1676, :3812) and getlist (:702 tags)",
+          "airflow/www/views.py:24 request.form.get (:2247-2265 clear-form fields) and request.form.getlist (:1031, :1066, :1107, :1211 dag_ids, :2256 map_index)",
+          "airflow/www/views.py:8 request.values.get sites (:1944-1946 origin/redirect_url, :1978-1982 trigger conf) and whole-dict reads 'args = request.args' (:2606) / 'args = request.form' (:2708, :2764)",
+          "airflow/www/views.py:5170 'json.loads(request.files[\"file\"].read())' - varimport, the only multipart upload; the uploaded filename is never used in a path",
+          "airflow/www/views.py:571/:2222/:2678 request.headers.get(\"Accept\"); airflow/www/decorators.py:141 request.headers.get(\"Accept-Encoding\", \"\")",
+          "airflow/api_connexion/endpoints/request_dict.py:26 'request.get_json()' (module-local 'from flask import request' at :25) called by dag_run/task_instance/pool/variable endpoints",
+          "airflow/www/api/experimental/endpoints.py:86/:376 'request.get_json(force=True)'; :169 'request.args.get(\"state\")'",
+          "airflow/www/auth.py:42-44 request.args.get(\"dag_id\") / request.form.get(\"dag_id\") / request.json.get(\"dag_id\"); airflow/www/utils.py:395 request.path",
+          "airflow/www/decorators.py:95/:103 request.values.items(...) / request.view_args.items() (action_logging parameter capture)",
+          "airflow/utils/serve_logs.py:63 'request_filename = request.view_args[\"filename\"]' - the URL path variable of the log server",
+          "alias shapes: airflow/www/views.py:205-225 helper parameter www_request.args.get(...) (www_request is a flask request alias); no 'flask.request' module-qualified reads and no request.cookies/get_data usage found in core www"
+        ]
+      },
+      {
+        "family": "handler_param",
+        "evidence": [
+          "FAB views: airflow/www/views.py @expose('/dags/<string:dag_id>/code') -> def code(self, dag_id, ...) (:1272/:1280); trigger (:1967/:1976), grid (:2839/:2850), calendar (:2918/:2928), graph (:3053/:3064) etc. - 66 @expose views + 89 @action views; airflow/www/fab_security/views.py: 1 @expose",
+          "flask routes: airflow/utils/serve_logs.py:107-108 '@flask_app.route(\"/log/<path:filename>\") def serve_logs_view(filename)' (path converter); airflow/www/api/experimental/endpoints.py: 'trigger_dag(dag_id)' (:81), 'task_info(dag_id, task_id)' (:209), 'get_dag_code(dag_id)' (:196) etc.",
+          "connexion REST API v1: handlers are keyword-only functions whose parameters come from the OpenAPI spec, e.g. airflow/api_connexion/endpoints/log_endpoint.py:47 'def get_log(*, dag_id, dag_run_id, task_id, task_try_number, full_content, map_index, token, session)'; dag_source_endpoint.py:32 'def get_dag_source(*, file_token)'; all modules under airflow/api_connexion/endpoints/ matched as handler modules",
+          "cli (argparse): airflow/cli/commands/* handler functions receive a parsed 'args' namespace, e.g. dag_processor_command.py:45-47 'args.subdir' -> dag_directory; variables import/export (variable_command.py:84/:120 open(args.filepath/args.export)), task --cfg-path (task_command.py:384 open(args.cfg_path)), kubernetes -o (kubernetes_command.py:66), users/roles/pools import/export, daemon --log-file/--stdout/--stderr/--pid flags (defaults built under AIRFLOW_HOME in airflow/utils/cli.py:279-286)"
+        ]
+      },
+      {
+        "family": "json_and_token_decode",
+        "evidence": [
+          "airflow/www/views.py:5170 json.loads(request.files[\"file\"].read()) (varimport); views.py:1599 'metadata: dict = json.loads(metadata_str)' (get_logs_with_metadata query arg)",
+          "airflow/api_connexion/endpoints/dag_source_endpoint.py:37 'path = auth_s.loads(file_token)' - itsdangerous URLSafeSerializer(SECRET_KEY) decode whose output is used directly as the DagCode file path (minted server-side from DagModel.fileloc)",
+          "airflow/api_connexion/endpoints/log_endpoint.py:64 'metadata = URLSafeSerializer(key).loads(token)' - token-supplied log metadata",
+          "pickle/dill loads exist in operators (airflow/operators/python.py:386 self.pickling_library.loads(path.read_bytes())) - listed for labeling triage, XCom deserialization is a separate CWE pass"
+        ]
+      },
+      {
+        "family": "framework_request_wrappers",
+        "evidence": [
+          "airflow/api_connexion/endpoints/request_dict.py:22 'def get_json_request_dict()' -> request.get_json() - central JSON body reader for REST v1",
+          "flask_appbuilder.urltools: airflow/www/views.py:50 'from flask_appbuilder.urltools import get_order_args, get_page_args, get_page_size_args' (4 call sites in views.py) - FAB wrappers over request pagination/order args",
+          "airflow/www/views.py:182 'def get_safe_url(url)' consumes request.values.get('origin'/'redirect_url') and enforces local-only redirect (sanitizer, not a raw source)"
+        ]
+      },
+      {
+        "family": "environment_and_config",
+        "evidence": [
+          "~210 os.environ / os.getenv read sites in non-test airflow/, e.g. airflow/configuration.py:1430 'os.environ.get(\"AIRFLOW_HOME\", \"~/airflow\")' and AIRFLOW__SECTION__KEY config overrides (configuration.py:1483-1541)",
+          "~494 conf.get/conf.getint/conf.getboolean/conf.get_mandatory_value sites; the path-relevant ones: BASE_LOG_FOLDER (serve_logs.py:46, airflow_local_settings.py:51/:98), DAGS_FOLDER (settings.py:196), PLUGINS_FOLDER (settings.py:198), child_process_log_directory (default_airflow.cfg:1228)",
+          "airflow/utils/cli.py:140 'full_command = list(sys.argv)' (command echo)",
+          "trust note: environment variables and conf values are deployment/admin-controlled, not attacker-controlled; they are extracted as env/config-trust rows so the labeling step can decide, not automatic attacker sources"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "builtin_open",
+        "evidence": [
+          "112 plain builtin 'open(' call sites across airflow/ (io.open does NOT occur; no 'from io import open' either)",
+          "airflow/utils/file.py:195 'return open(fileloc, mode=mode)' (inside open_maybe_zipped), :219 open(ignore_file_path) (.airflowignore), :365 open(file_path, \"rb\") (might_contain_dag)",
+          "airflow/utils/log/file_task_handler.py:480 'open(full_path, \"a\")' (log file creation from os.path.join(local_base, rendered rel path) at :472)",
+          "CLI import/export: airflow/cli/commands/variable_command.py:84/:120, pool_command.py:106/:129, user_command.py:179/:193, role_command.py:168/:184, task_command.py:384, kubernetes_command.py:66",
+          "airflow/www/views.py:4200 open(AIRFLOW_CONFIG) (fixed config path); airflow/configuration.py 8 sites; airflow/secrets/local_filesystem.py:66/:108/:131"
+        ]
+      },
+      {
+        "family": "pathlib",
+        "evidence": [
+          "'from pathlib import Path' in 26 files (core: airflow/utils/file.py:27, airflow/utils/log/file_task_handler.py:27, airflow/dag_processing/manager.py:37, airflow/jobs/scheduler_job_runner.py:32, airflow/utils/cli.py:32, airflow/configuration.py qualified 'pathlib.Path')",
+          "constructor: 40 'Path(' sites; methods: .read_text (file_task_handler.py:496 'Path(file).read_text()' - the actual task-log read sink), .read_bytes (utils/file.py:383, operators/python.py:386), .write_text (operators/python.py:380), .write_bytes (:377), .mkdir (configuration.py:1495/:1511, utils/file.py:150, file_task_handler.py:447, file_processor_handler.py:49/:145), .open (providers_manager.py:137/:148 resource files, dbt operator), .glob (file_task_handler.py:492), .chmod (file_task_handler.py:451)",
+          ".resolve/.relative_to are used as canonicalization/validation nodes (dag_processing/manager.py:967, models/dag.py:1291/:3526, utils/file.py:74/:112/:215/:239, s3_task_handler.py:79) - propagation, not file access",
+          "Path.touch and Path.unlink do NOT occur (os.unlink at file_processor_handler.py:123; plain os.path.* APIs carry the rest)"
+        ]
+      },
+      {
+        "family": "os_and_shutil",
+        "evidence": [
+          "os.walk: airflow/utils/file.py:214 (followlinks=True, .airflowignore-aware DAG dir walk), sensors/filesystem.py:72, triggers/file.py:70, cli/commands/webserver_command.py:119, providers_manager.py:531",
+          "os.remove: task_runner/base_task_runner.py:186, cli/commands/task_command.py:388, google cloud_sql.py:659/:668; os.makedirs: kubernetes_command.py:65; os.symlink: file_processor_handler.py:124/:130 (guarded by os.readlink comparison at :122); os.listdir: sagemaker.py:170; os.fdopen: utils/configuration.py:45 (mkstemp at :43)",
+          "os.rename, os.mkdir, os.open, os.path.normpath do NOT occur in this snapshot; os.path.abspath (5 sites: file_processor_handler.py:142, utils/cli.py:179/:288, default_webserver_config.py:31) and os.path.realpath (3 sites) are validation nodes",
+          "shutil.rmtree (5 remote task handlers + cloud_sql.py:654), shutil.copy (configuration.py:1553), shutil.move (cloud_sql.py:544), shutil.copyfileobj (utils/compression.py:39 - file objects, not paths); make_archive/copyfile/copytree do NOT occur"
+        ]
+      },
+      {
+        "family": "zipfile_tarfile_member_access",
+        "evidence": [
+          "zipfile.ZipFile constructors: airflow/models/dagbag.py:381 (_load_modules_from_zip), airflow/dag_processing/manager.py:779, airflow/dag_processing/processor.py:200, airflow/utils/file.py:192 (inside open_maybe_zipped: io.TextIOWrapper(zipfile.ZipFile(archive, mode=mode).open(filename)))",
+          "member reads (in-memory, not disk writes): ZipFile.open (utils/file.py:192/:360), tar.extractfile (providers/docker/operators/docker.py:448)",
+          "NO extract / extractall / archive-member-to-disk write exists anywhere in airflow/ (the Zip-Slip family is absent from this snapshot); zipfile.is_zipfile probes at utils/file.py:177 and correct_maybe_zipped",
+          "tarfile.open write-mode only: sagemaker.py:173 (creates an archive); docker.py:447 reads a docker tar stream"
+        ]
+      },
+      {
+        "family": "file_serving_response",
+        "evidence": [
+          "airflow/utils/serve_logs.py:109 'send_from_directory(log_directory, filename, mimetype=\"application/json\", as_attachment=False)' inside serve_logs_view, route '/log/<path:filename>' - the primary log-serving sink; log_directory = expanduser(conf.get(\"logging\",\"BASE_LOG_FOLDER\")) at :46",
+          "airflow/www/views.py:4088 'send_from_directory(get_airflow_app().static_folder, \"robots.txt\")' - fixed filename, static only",
+          "flask send_file does NOT occur (slack hook send_file is a Slack API upload, not flask)",
+          "log download response: airflow/www/views.py:1654 Response(response=log_stream, headers={'Content-Disposition': f'attachment; filename={attachment_filename}'}) where log_stream comes from TaskLogReader.read_log_stream; DAG source responses at api_connexion/endpoints/dag_source_endpoint.py:44/:47 and experimental get_dag_code"
+        ]
+      },
+      {
+        "family": "internal_file_wrappers",
+        "evidence": [
+          "airflow/utils/file.py:183 open_maybe_zipped(fileloc, mode) -> open (:195) or ZipFile(archive).open(filename) (:192); correct_maybe_zipped (:166) is a redirect node",
+          "airflow/utils/log/file_task_handler.py: _read (:274, Path(self.local_base, worker_log_rel_path) at :321), _read_from_local (:489, parent.glob at :492 + Path(file).read_text() at :496), _init_file (:460, open at :480), _prepare_log_folder (:420, mkdir at :447)",
+          "airflow/utils/log/log_reader.py: read_log_chunks (:40) / read_log_stream (:66) -> log_handler.read -> FileTaskHandler chain",
+          "airflow/models/dagcode.py:176 _get_code_from_file (open_maybe_zipped at :177); airflow/models/dagbag.py: process_file (:278) -> _load_modules_from_file (:341 importlib.machinery.SourceFileLoader(mod_name, filepath).exec_module) / _load_modules_from_zip (:381)",
+          "airflow/utils/file.py: _find_path_from_directory (:198, os.walk at :214), find_dag_file_paths (:309), might_contain_dag_via_default_heuristic (:351), iter_airflow_imports (:380)",
+          "airflow/utils/serve_logs.py:108 serve_logs_view (send_from_directory at :109); airflow/plugins_manager.py:254 SourceFileLoader in plugin loading; CLI import/export handlers (variable/pool/user/role/task/kubernetes commands)"
+        ]
+      },
+      {
+        "family": "importlib_source_file_loader",
+        "evidence": [
+          "airflow/models/dagbag.py:341 'importlib.machinery.SourceFileLoader(mod_name, filepath).exec_module()' - file path at argument index 1; airflow/plugins_manager.py:254 same shape for plugin files",
+          "included as a file-execution sink family (module-qualified ast match); the webserver normally parses DAGs from the DB (read_dags_from_db), so reachability is scheduler/CLI-side"
+        ]
+      }
+    ],
+    "sanitizerObservations": [
+      "airflow/utils/serve_logs.py:62-75 - the only guard on the log-serving send_from_directory: JWT token payload 'filename' must equal request.view_args['filename'] (abort 403 otherwise); no abspath/normpath/startswith containment check in application code (Flask's send_from_directory applies werkzeug safe_join internally)",
+      "airflow/utils/log/file_processor_handler.py:93-96 - 'if filename.startswith(airflow_directory):' then os.path.join(\"native_dags\", os.path.relpath(filename, airflow_directory)) - a startswith-based path remap on non-normalized strings (classic prefix-check weakness, recorded for labeling)",
+      "airflow/api_connexion/endpoints/dag_source_endpoint.py:34-40 - path only obtainable via URLSafeSerializer(SECRET_KEY) signed token; BadSignature/FileNotFoundError -> 404",
+      "airflow/www/views.py:182-200 get_safe_url - rejects non-local scheme/netloc for origin/redirect_url values (redirect sanitizer)",
+      "os.path.abspath / realpath / Path.resolve / Path.relative_to / is_zipfile appear as canonicalization and validation nodes (5/3/many sites); os.path.normpath does not occur anywhere",
+      "request-derived log-reading inputs (dag_id/task_id/execution_date/map_index) are used only as DB lookup keys; the path components reaching Path() are DB-stored TI fields, the DB LogTemplate filename and try_number (int) - traversal would require DB-stored values containing separators (DAG authorship trust level)",
+      "TOCTOU note: os.path.isfile/getmtime checks (dagbag.py:289/:295) precede file opens, and os.symlink links are re-checked via os.readlink (file_processor_handler.py:122) - existence-probe patterns recorded, not extracted as sinks"
+    ],
+    "nonVulnerabilityNote": "Serving DAG source code, reading task logs, walking the DAGs folder, executing DAG/plugin files and writing log files is intended Airflow functionality and is NOT automatically treated as a vulnerability; these sites are recorded only as candidate boundaries for labeling (attack requires attacker influence over request fields, signed tokens, DB-stored dag/task metadata, CLI invocation, or deployment configuration)."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) followed by codeql bqrs decode --format=csv; NOT database analyze / SARIF",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output is decoded directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); alias-aware, only genuine resolved calls into external modules",
+      "ast": "pure AST shape match (attribute/name text, syntactic module prefix, receiver name, decorator shapes, module-path membership for handler families); catches dynamic or unresolved shapes that API graphs miss and is subject to name-collision noise"
+    },
+    "flowKinds": {
+      "sources": ["http", "param", "return", "env", "config", "cli", "internal_transfer"],
+      "sinks": ["arg", "method", "internal_file_wrapper"]
+    },
+    "exclusions": [
+      "test locations excluded from candidate rows: any path under /tests/ or \\tests\\ and conftest.py (root tests/ tree has 1987 .py files; provider tests live under tests/ as well)",
+      "the nested airflow-db/ CodeQL database directory is never part of the extracted source set (all exploration greps excluded it; the DB's own files are not python sources of the repo tree)",
+      "dev/ and scripts/ tooling (breeze, ci scripts) are kept in the candidate set for consistency with prior projects and are expected to be filtered at labeling; logging-only helpers are not extracted as source candidates"
+    ]
+  },
+  "uncoveredCases": [
+    "Flask-AppBuilder @expose/@action route variables are matched as handler function parameters (excluding self); FAB's internal URL routing/converters are not modeled, so a <string:dag_id> row does not carry the converter type (no <path:...> converter exists outside serve_logs.py's /log/<path:filename>).",
+    "connexion (REST API v1) does not read the flask request object for path/query parameters: they arrive as handler kwargs driven by openapi/v1.yaml. All functions defined under airflow.api_connexion.endpoints are treated as handlers (their non-parameter helpers included); the OpenAPI spec itself is YAML and outside CodeQL python analysis.",
+    "request aliasing: the www_request parameter of get_date_time_num_runs_dag_runs_form_data (airflow/www/views.py:205-225) is matched by name as a request alias; other local aliases of flask request would be missed (no flow-sensitive alias resolution at extraction time).",
+    "DB-derived path fields (DagModel.fileloc, TaskInstance dag_id/task_id/run_id, LogTemplate filename) are attacker-influenced only through DAG authorship and are NOT extracted as sources (no DB taint source in a path-traversal pass without an established boundary); the handlers that pass them into file APIs appear as sinks/internal wrappers instead.",
+    "importlib.machinery.SourceFileLoader(...).exec_module (dagbag.py:341, plugins_manager.py:254) executes a file by path; it is extracted as a sink family, but the exec_module() method call itself is not separately modeled.",
+    "Dynamic/aliased file wrappers: correct_maybe_zipped returns a transformed path (redirect node, not extracted); file wrappers reached only through kwargs indirection (e.g. set_file_paths programmatic injection, dag_processor_command args.subdir default from settings.DAGS_FOLDER) rely on the wrapper/param families rather than per-hop dataflow.",
+    "Providers' remote filesystem hooks (sftp/ftp/gcs/s3 local-to-remote copies, e.g. providers/sftp/operators/sftp.py Path usage) are covered by the generic open/Path/os/shutil families, but remote-path arguments of hook APIs (hook.get/put) are not a distinct family - only local filesystem operations are in scope for CWE-22 on this pass.",
+    "No multipart write-to-disk exists: request.files appears once (varimport) and the uploaded filename is never used in a path; FileStorage/secure_filename/.save() do not occur - so the upload-filename source family is intentionally empty (not fabricated).",
+    "No archive extraction exists (no extract/extractall anywhere), so no Zip-Slip sink family is emitted; ZipFile(...).open member reads are matched by the .open method family."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/references/flask.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul ground truth or prior analysis was consulted: the root-level AIRFLOW-VULNERABILITY-REPORT.md, CRITICAL_VULNS_SUMMARY.md, REAL_VULN_VALIDATION.md, UNFIXED_VULNS_DETAIL.md, SINK_BACKWARD_TRACKING_REPORT.md, vulnerability_analysis_report.md, sink_analysis_report.md, path_traversal_sinks.csv, airflow_sinks_sample.txt and analyze_sinks.py were deliberately not opened. Candidate families are derived from repository evidence and the loaded language/pattern/flask references only. Neither airflow_vuln, airflow-db, the Augur installation, nor any other project's results were modified; only the three Step 1-2 artifacts under the airflow workspace (iris/exploration/detection.json, iris/extraction/sources.ql, iris/extraction/sinks.ql) were written. CodeQL execution and LLM labeling are out of scope for this step."
+  }
+}

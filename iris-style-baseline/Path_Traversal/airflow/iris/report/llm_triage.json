@@ -1,0 +1,110 @@
+{
+  "review": {
+    "reviewer": "independent LLM path re-review (LLM triage)",
+    "date": "2026-10-21",
+    "target": "Apache Airflow 2.7.0.dev0 (sha 2811ba7) — IRIS/Augur Pass 1 Path Traversal (CWE-22/23/36/73)",
+    "scope": "Only ruleId 'py/augur/airflow/pass1-path-traversal' formal SARIF results with codeFlows in results/pass1.sarif",
+    "inputs_reviewed": [
+      "results/pass1.sarif (2 formal results, single ruleId, 1 invocation)",
+      "report/iris_report.md",
+      "report/query_generation_notes.md",
+      "labels/labels.json (P1-S-1115, P1-K-0630, P1-K-0631 entries verified)",
+      "airflow/utils/serve_logs.py",
+      "airflow/utils/log/file_task_handler.py",
+      "airflow/www/views.py (trigger view)",
+      "airflow/models/dag.py (create_dagrun)",
+      "airflow/config_templates/default_airflow.cfg (log_filename_template)",
+      "tests/utils/test_serve_logs.py",
+      "setup.cfg (flask>=2.2,<2.3; werkzeug>=2.0)"
+    ],
+    "sarif_purity_check": {
+      "question_10_no_mixed_rules": "PASS — the SARIF contains exactly one rule (py/augur/airflow/pass1-path-traversal), 2 results, 1 invocation. No CodeQL built-in security-query results, no diagnostics-only entries, no other CWE rules are present in the formal results.",
+      "result_1_codeflow": "none (no codeFlows array; sink = parameter node only)",
+      "result_2_codeflow": "threadFlow of 2 steps: serve_logs.py:108 'filename' (param) -> serve_logs.py:109 'filename' (arg of send_from_directory)"
+    },
+    "summary": {
+      "formal_alerts": 2,
+      "likely_tp": 0,
+      "likely_fp": 2,
+      "uncertain": 0,
+      "real_vulnerability_hit": false
+    }
+  },
+  "findings": [
+    {
+      "id": "pass1-finding-1",
+      "sarif_location": "airflow/utils/serve_logs.py:108 (startColumn 25, endColumn 33 — the 'filename' parameter of serve_logs_view)",
+      "rule": "py/augur/airflow/pass1-path-traversal",
+      "label_basis": { "source": "P1-S-1115 (handlerParamSource, route param of @flask_app.route('/log/<path:filename>'))", "sink": "P1-K-0630 (wrapperParamSink, serve_logs_view param 'filename', arg_index 0)" },
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "taint_flow_observed": "The alert's source node and sink node are the SAME source-code node: the route parameter 'filename' at serve_logs.py:108 is simultaneously labeled as source (P1-S-1115) and as wrapper-param sink (P1-K-0630). The 'flow' is a one-node tautology with no propagation, no intermediate call, and no file operation at the flagged location.",
+      "source_assessment": "Real attacker-reachable input: URL path captured by the werkzeug <path:> converter of route '/log/<path:filename>' (percent-decoded, slashes allowed). Q1: yes, genuine external boundary — but it is only a *source* here.",
+      "sink_assessment": "Q3: the flagged node is a function parameter, not a file access. Pure parameter/placeholder positions are not sinks per the review criteria; the actual file operation of this function is at line 109 (send_from_directory), which is separately reported as finding 2. This alert is the modeling shadow of finding 2 created by rendering the same audited wrapper both as source and sink.",
+      "guards": "Same as finding 2 (JWT filename-equality in before_request at serve_logs.py:55-105; werkzeug root containment inside send_from_directory) — see finding 2 for the guard analysis, which applies to the only real file access downstream of this parameter.",
+      "fp_cause": "Q9: over-general sink modeling — the 79 wrapperParamSink labels (Appendix A of query_generation_notes.md) mark parameters whose value *flows into* file operations, but when the source predicate and the wrapper-sink predicate resolve to the identical node, the emitted alert carries no file-operation semantics and no non-trivial path. Duplicate of pass1-finding-2.",
+      "preconditions_for_being_tp": "None — there is no path to an actual file operation at this location, and the downstream operation is guarded (finding 2)."
+    },
+    {
+      "id": "pass1-finding-2",
+      "sarif_location": "airflow/utils/serve_logs.py:109 (startColumn 51, endColumn 59 — argument 1 'filename' of send_from_directory)",
+      "rule": "py/augur/airflow/pass1-path-traversal",
+      "label_basis": { "source": "P1-S-1115 (route param 'filename', serve_logs.py:108)", "sink": "P1-K-0631 (sendFromDirectorySink, arg 1, serve_logs.py:109)" },
+      "verdict": "likely_fp",
+      "confidence": 0.75,
+      "taint_flow": "serve_logs.py:108 'filename' (flask route variable of '/log/<path:filename>') -> serve_logs.py:109 send_from_directory(log_directory, filename, mimetype='application/json', as_attachment=False). Path length 2; the flow itself is real and correctly modeled (no async hop, no fabricated wrapper).",
+      "source_assessment": "Q1: YES — genuine. The werkzeug <path:> converter delivers the attacker-supplied, percent-decoded URL path (slashes allowed) as the view argument. This is a real external boundary, on the standalone serve-logs gunicorn app (port WORKER_LOG_SERVER_PORT, default 8793, bound 0.0.0.0 on worker hosts).",
+      "sink_assessment": "Q3: YES — a real file-response operation. flask.send_from_directory reads a file from disk under log_directory (log_directory = os.path.expanduser(conf.get('logging','BASE_LOG_FOLDER')), serve_logs.py:46) and streams its contents in the HTTP response. This is a sensitive read/file-disclosure sink, not a mere path construction.",
+      "allowed_root": "Q4: the implied allowed root is BASE_LOG_FOLDER (expanded). The intended file set is the task-log tree 'dag_id=.../run_id=.../task_id=.../attempt=N.log' (default log_filename_template, default_airflow.cfg:440). With a raw parameter, '..'-laden or absolute filenames could point outside this root — so the *uncontrolled* version of this flow would be a true path traversal.",
+      "traversal_vectors": "Q5: werkzeug decodes percent-encoding once before routing (no double-decode point exists in this app); the <path:> converter permits embedded slashes; '..' segments and absolute paths are syntactically deliverable; on Windows the backslash alt-separator is also a candidate vector. All of these are ultimately handed to send_from_directory.",
+      "guard_analysis": {
+        "guard_1_jwt_equality": {
+          "where": "serve_logs.py:55-105 (before_request validate_pre_signed_url)",
+          "mechanism": "Every request must carry an Authorization JWT that is HS-signed with the webserver secret_key (JWTSigner, audience 'task-instance-logs', ~30s clock grace via log_request_clock_grace) AND whose 'filename' claim must exactly equal request.view_args['filename'] (string equality at :68), otherwise abort(403). Unit tests tests/utils/test_serve_logs.py confirm 403 for missing auth, wrong filename, wrong audience, expired/future tokens, missing claims.",
+          "strength": "Blocks arbitrary attacker-chosen filenames: the token cannot be forged without secret_key, and the only minting path is server-side (_fetch_logs_from_service, file_task_handler.py:79-96, which signs {'filename': log_relative_path} for the webserver's own log fetch). It executes before the view (and thus before the file access).",
+          "limitation": "It is an *equality* check against a server-minted value, not a semantic containment: the minted filename itself derives from the ti-rendered log path (which includes run_id). Against the run_id chain (see real-vulnerability section) the token faithfully carries whatever the rendered path contains, so guard_1 alone is not a traversal barrier — it is the second guard that decides this endpoint."
+        },
+        "guard_2_send_from_directory_containment": {
+          "where": "inside flask/werkzeug send_from_directory (framework code, not in the CodeQL DB — src.zip contains 0 werkzeug files, which is why the analysis could not see it)",
+          "mechanism": "flask>=2.2,<2.3 (setup.cfg:89) implies Werkzeug 2.2.x (explicit werkzeug>=2.0). In this line, send_from_directory normalizes the requested relative path (normpath) and rejects absolute paths, '..'-escaping segments and platform alt-separator variants, answering 404 without opening the file. This is the documented contract of the function ('a safe way to serve files from a directory') and is behaviorally identical across the whole Werkzeug 2.0-2.3 range (pre-2.1 via werkzeug.utils.safe_join, 2.1+ via inline normpath+rejection).",
+          "strength": "A genuine normalize-then-root-containment check that executes BEFORE the file is opened — exactly the class of protection review-question Q6 asks about. It neutralizes '..', absolute paths, separator tricks and (normpath collapses 'a/../..'-style indirection) repeated-segment traversal at this sink.",
+          "q7_check": "This is NOT a bare Path.resolve, not a string startsWith-prefix (which 'dag_id=.../run_id=../../..' style same-prefix bypasses would defeat), and not mere login authentication — it is a structural path-safety check inside the file-serving primitive."
+        }
+      },
+      "verdict_reasoning": "Source and sink are both real, and the flow is real, but two guards execute before the file is read: the secret-key-signed JWT filename-equality (blocks attacker-chosen paths) and werkzeug's normalization-based root containment inside send_from_directory (blocks traversal even for a token-minted traversal path). Neither is misjudged here as something weaker than it is (Q7); the containment is strict and pre-access (Q6). Residual uncertainty is limited to the exact deployed Werkzeug build (framework source absent from the DB and from the local environment; web verification unavailable) — hence confidence 0.75 rather than higher. Q8 does not apply (this is a file-serving endpoint, not test/unreachable code); Q10 does not apply (no foreign rules/diagnostics in the formal results).",
+      "relationship_to_project_bugs": "This endpoint is the terminal serving hop of the run_id log-path chain (file_task_handler.py:_read -> _read_from_logs_server -> _fetch_logs_from_service signs the rendered relative path -> this view). The JWT guard does not stop that chain, but guard_2 does at this sink; the unguarded sink of that chain is elsewhere (see real_vulnerability_hit_analysis).",
+      "preconditions_for_being_tp": "Would require a Werkzeug send_from_directory variant that fails to reject '..' (none exists in the 2.0-2.3 range) or a request filename that both equals a legitimately-minted token filename and escapes BASE_LOG_FOLDER after normpath — no such construction is evidenced."
+    }
+  ],
+  "real_vulnerability_hit_analysis": {
+    "task": "Determine whether the real vulnerability present in this snapshot (fixed by apache/airflow commit 05bd90f563649f2e9c8f0c85cf5838315a665a02, 'Sanitize DagRun.run_id' — CWE-22, run_id manipulation enabling unauthorized file access outside the log directory, pre-2.6.3, authenticated-user prerequisite) was hit by the formal Pass 1 results. The commit/diff was supplied in-prompt by the operator; no PyVul ground-truth files, patch repositories, or CVE descriptions were read.",
+    "vulnerability_present_in_snapshot": true,
+    "evidence_vulnerability_present": [
+      "airflow/www/views.py:1978 — trigger() view (route '/dags/<string:dag_id>/trigger', @auth.has_access DAG-edit + DAG-run-create) reads run_id = request.values.get(\"run_id\", \"\") with no validation",
+      "airflow/www/views.py:2100-2105 — only a deprecation flash warning for '/' in run_id; not a block",
+      "grep RUN_ID_REGEX / allowed_run_id_pattern over airflow/ — 0 matches: the fix's sanitization (regex + AirflowException/flash rejection) is entirely absent in this snapshot",
+      "airflow/models/dag.py:2842-2855 — create_dagrun stores the raw run_id into DagRun(...) and session.add(run)",
+      "airflow/utils/log/file_task_handler.py:253-261 — _render_filename renders str_tpl.format(dag_id=..., run_id=ti.run_id, ...); default_airflow.cfg:440 log_filename_template embeds ti.run_id into the log relative path"
+    ],
+    "full_attack_chain_in_source": [
+      "1. SOURCE (request): views.py:1978 run_id = request.values.get('run_id','') — attacker-supplied POST/GET field, post-auth",
+      "2. PERSIST: views.py trigger -> dag.create_dagrun(run_id=run_id) -> dag.py:2842/2855 DagRun(run_id=...) + session.add(run) — DB write, different request/process afterwards",
+      "3. RE-READ: ti.run_id from the ORM/DB in a later log-read request (www task-log view / REST taskInstanceLogs -> FileTaskHandler.read -> _read, file_task_handler.py:274)",
+      "4. RENDER: _render_filename -> format(run_id=ti.run_id) (file_task_handler.py:253-261) with the default template embedding run_id",
+      "5a. UNGUARDED SINK (webserver-local read): file_task_handler.py:321 worker_log_full_path = Path(self.local_base, worker_log_rel_path) -> :322 _read_from_local -> :492 parent.glob(name+'*') and :496 Path(file).read_text() — os-path join + read with NO root containment: run_id containing '..' reads arbitrary files outside BASE_LOG_FOLDER. Also _init_file :472 open(full_path,'a') can create/touch files outside the root",
+      "5b. GUARDED SINK (serve-logs hop): _read_from_logs_server -> _fetch_logs_from_service (file_task_handler.py:93) mints the signed token {'filename': rendered_rel_path} -> worker serve_logs.py:108/109 send_from_directory — the JWT equality passes (token carries the same tainted path), but Werkzeug containment rejects traversal here"
+    ],
+    "hit_by_formal_results": false,
+    "hit_details": "The formal Pass 1 SARIF contains only the two serve_logs.py:108/109 alerts. Their source is the serve-logs route parameter 'filename' (a direct HTTP input on the worker log-server port), not the trigger view's run_id; their sink is the framework-guarded send_from_directory hop. No alert exists on the exploitable webserver-local read (file_task_handler.py:321/492/496, 472/480) or on any path originating at views.py:1978. The real vulnerability is therefore NOT hit: the reported findings are, at best, the guarded tail of the chain, reached with the wrong source and judged standalone false positives.",
+    "miss_reasons": [
+      "DB persistence hop: run_id -> session.add(DagRun) -> later request reads ti.run_id via SQLAlchemy ORM. Static taint tracking cannot cross the inter-request/inter-process database boundary; ti.run_id is DB-derived and is not (and should not be) a labeled source",
+      "Template indirection: _render_filename builds the path via str_tpl.format(**kwargs) with run_id passed as a format keyword from a dict — no MySummaries edge models str.format, and even the notes flag the Path.parent/format gaps (query_generation_notes.md §8, HR-3 DB-hop indirection)",
+      "The sink-side labels that do sit on the chain (P1-K-0625 glob, P1-K-0627 read_text, P1-K-0619/0624 _init_file/_read wrapper params, P1-K-0631 send_from_directory) never received a source path, because every candidate source for them is DB- or template-derived",
+      "The route-parameter source modeling (handlerParamSource) correctly covers serve_logs_view's 'filename' but that surface is framework-guarded; it does not and cannot represent the run_id entry point"
+    ],
+    "classification": "false_negative_for_real_vulnerability__reported_alerts_are_likely_fp",
+    "preconditions_for_the_real_vuln": "Authenticated Airflow user with DAG edit + DAG-run create permission on the target DAG; trigger a run with a crafted run_id (e.g. containing '../' segments); then request that task instance's log through the webserver so FileTaskHandler._read renders and reads the path (webserver-local read has no containment)."
+  },
+  "overall_conclusion": "CodeQL analysis succeeded and the Pass 1 formal results contain exactly 2 alerts (both on the serve-logs file-serving endpoint). Independent path re-review judges both likely_fp: finding 1 is a one-node source==sink tautology over a parameter (no file operation at the flagged location, duplicate shadow of finding 2); finding 2 has a genuine attacker-controlled source and a genuine file-response sink, but the werkzeug send_from_directory root-containment (normalize-then-reject traversal/absolute/alt-separator, pre-access) plus the secret-key-signed JWT filename-equality in before_request neutralize traversal at this sink. The genuinely vulnerable code present in this snapshot — the unsanitized DagRun.run_id flowing through DB persistence and log-filename-template rendering into the unguarded Path(local_base, rel)/read_text/open chain in FileTaskHandler (fixed upstream by run_id regex sanitization) — was NOT hit by any formal alert; the analysis chain is broken at the DB hop and the str.format rendering, consistent with the known Phase 1 limitations (HR-3).",
+  "constraints_respected": "No SARIF, label, or query file was modified; no PyVul ground truth, patch commit, or CVE description files were read (the run_id commit context was supplied by the operator in the review prompt); review stopped after the independent re-review and the requested hit/miss analysis."
+}
