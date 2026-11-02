@@ -1,0 +1,1133 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "bikeshed-iris-pass2-step3-20261013",
+    "generated_at": "2026-10-13T09:18:59+00:00",
+    "language": "python",
+    "framework": "argparse CLI",
+    "model": "glm-5.3",
+    "project": "bikeshed",
+    "notes": [
+      "Scope narrowed to CWE-78 only; Augur's default Pass 2 CWE set (077/078/088) was narrowed per experiment scope.",
+      "Pass 1 block is a schema-compatibility placeholder only (labels_schema.json 'contains' requires a pass with pass_id 1); no CWE-22 analysis was performed and its entries array is empty.",
+      "Labeling standard: role = semantic role for CWE-78; classification tp = role confirmed with concrete code evidence (NOT a confirmed vulnerability); fp = extracted candidacy refuted at this site; candidate = retained with insufficient evidence for recall; sinks identify the dangerous argument position (the command string), never an asserted exploit.",
+      "Batches: sink batch (26 rows), source family batches (InputSource chain, CLI surface, update tooling/HTTP fetch, internal IO). One low-confidence re-check performed (issuelist.py:31 open, initially < 0.55).",
+      "run_manifest.json was not produced by earlier steps; run_id minted at this step. Model identifier recorded per policy: glm-5.3.",
+      "Dedup rules DR-1..DR-5 and the complete per-row audit trail are in labels/labels_raw_pass2.json."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal (placeholder only - not analyzed in this run; schema requires a pass_id 1 entry)",
+      "cwes": [
+        "022"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 2,
+      "focus": "Command/Argument Injection (CWE-78 only; narrowed from Augur default 077/078/088)",
+      "cwes": [
+        "078"
+      ],
+      "entries": [
+        {
+          "id": "p2-sink-001",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "Popen",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "bikeshed/inlineTags/__init__.py",
+            "line": 14
+          },
+          "rationale": "subprocess.Popen(command, ..., shell=True): arg 0 is the dangerous parameter. command = doc.md.inlineTagCommands[tag], the 'Inline Tag Command' metadata value parsed from the external spec input (file, '-' stdin, or https: URL) via metadata.parse; shell=True enables full shell metacharacter interpretation.",
+          "evidence": [
+            "bikeshed/inlineTags/__init__.py:13-14: command = doc.md.inlineTagCommands[tag]; Popen(command, stdin=PIPE, stdout=PIPE, stderr=PIPE, shell=True)",
+            "bikeshed/metadata.py:1051-1054: parseInlineTagCommand stores the raw command string from spec metadata",
+            "bikeshed/InputSource.py:41-51: spec input dispatch (file / '-' / https: URL)"
+          ]
+        },
+        {
+          "id": "p2-sink-002",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.inlineTags",
+            "type": null,
+            "callable": "processTags",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "bikeshed/inlineTags/__init__.py",
+            "line": 7
+          },
+          "rationale": "Internal wrapper: its doc parameter (spec-derived) supplies the command string executed by Popen(..., shell=True) at line 14; param-level sink for recall.",
+          "evidence": [
+            "bikeshed/inlineTags/__init__.py:7-15: processTags(doc) -> command = doc.md.inlineTagCommands[tag] -> Popen(shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-003",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "system",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "bikeshed/cli.py",
+            "line": 669
+          },
+          "rationale": "os.system string formats options.svgFile/options.root/options.leaf ('bikeshed profile' CLI arguments, profileParser cli.py:397-416) into a shell pipeline; the f-string quoting (--root=\"...\") does not prevent shell breakout.",
+          "evidence": [
+            "bikeshed/cli.py:666-673: os.system(\"time python -m cProfile ... {root} {leaf} stat.prof | dot -Tsvg -o {svg} ...\".format(root=root, leaf=leaf, svg=options.svgFile))",
+            "bikeshed/cli.py:397-416: profileParser --root/--leaf/--svg argument definitions"
+          ]
+        },
+        {
+          "id": "p2-sink-004",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "system",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "bikeshed/cli.py",
+            "line": 675
+          },
+          "rationale": "Same pattern as cli.py:669 (options.root/options.leaf interpolation) with the /tmp/stat.prof and xdot variant; CLI values reach the shell command string.",
+          "evidence": [
+            "bikeshed/cli.py:674-679: os.system(\"... {root} {leaf} /tmp/stat.prof | xdot &\".format(root=root, leaf=leaf))"
+          ]
+        },
+        {
+          "id": "p2-sink-005",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.cli",
+            "type": null,
+            "callable": "handleProfile",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "bikeshed/cli.py",
+            "line": 665
+          },
+          "rationale": "CLI options wrapper: options.root/leaf/svgFile (argparse values from profileParser) are formatted into os.system command strings at cli.py:669/675.",
+          "evidence": [
+            "bikeshed/cli.py:665-679: handleProfile(options) -> root/leaf/svg f-strings -> os.system"
+          ]
+        },
+        {
+          "id": "p2-sink-006",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_output",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "bikeshed/boilerplate.py",
+            "line": 36
+          },
+          "rationale": "arg 0 is the string literal 'git remote -v'; shell=True but the command cannot be tainted; cwd=config.scriptPath() (Bikeshed install dir, not document input).",
+          "evidence": [
+            "bikeshed/boilerplate.py:36-41: check_output('git remote -v', cwd=config.scriptPath(), shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-007",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_output",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "bikeshed/boilerplate.py",
+            "line": 49
+          },
+          "rationale": "arg 0 is the string literal git log format command; shell=True; no taintable input in the command argument.",
+          "evidence": [
+            "bikeshed/boilerplate.py:49-54: check_output(r\"git log -1 --format='Bikeshed version %h, updated %cd'\", cwd=config.scriptPath(), shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-008",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_output",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "bikeshed/boilerplate.py",
+            "line": 92
+          },
+          "rationale": "arg 0 is the string literal 'git rev-parse HEAD'; shell=True. cwd=source_dir (doc.inputSource.directory()) is document-derived, but cwd is not the command argument, so there is no CWE-78 argument injection at this site.",
+          "evidence": [
+            "bikeshed/boilerplate.py:92-94: check_output('git rev-parse HEAD', stderr=fnull, shell=True, cwd=source_dir)",
+            "bikeshed/boilerplate.py:87: source_dir = doc.inputSource.directory()"
+          ]
+        },
+        {
+          "id": "p2-sink-009",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_output",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "bikeshed/boilerplate.py",
+            "line": 103
+          },
+          "rationale": "arg 0 is the string literal hg parent command; shell=True; same document-derived cwd note as boilerplate.py:92 (cwd is not the command argument).",
+          "evidence": [
+            "bikeshed/boilerplate.py:103-108: check_output(\"hg parent --temp='{node}'\", stderr=fnull, shell=True, cwd=source_dir)"
+          ]
+        },
+        {
+          "id": "p2-sink-010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.boilerplate",
+            "type": null,
+            "callable": "addBikeshedVersion",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "bikeshed/boilerplate.py",
+            "line": 30
+          },
+          "rationale": "doc parameter never reaches a command argument: commands at lines 37/50 are string literals and cwd=config.scriptPath() (install dir). Sink candidacy refuted.",
+          "evidence": [
+            "bikeshed/boilerplate.py:30-63: addBikeshedVersion(doc) only gates on doc.md.boilerplate"
+          ]
+        },
+        {
+          "id": "p2-sink-011",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.boilerplate",
+            "type": null,
+            "callable": "addSpecVersion",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "bikeshed/boilerplate.py",
+            "line": 78
+          },
+          "rationale": "doc parameter only selects the cwd (doc.inputSource.directory()) for literal git/hg commands; no parameter flows into a command string.",
+          "evidence": [
+            "bikeshed/boilerplate.py:87: source_dir = doc.inputSource.directory()",
+            "bikeshed/boilerplate.py:92,103: literal command strings with cwd=source_dir"
+          ]
+        },
+        {
+          "id": "p2-sink-012",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_output",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "bikeshed/metadata.py",
+            "line": 1169
+          },
+          "rationale": "List-form invocation check_output(['git', 'remote', '-v'], cwd=source_dir) without shell=True - the safe arg-list pattern per references/python.md section 5 (command sanitizers); not a CWE-78 sink at this site.",
+          "evidence": [
+            "bikeshed/metadata.py:1169-1172: subprocess.check_output([\"git\", \"remote\", \"-v\"], stderr=fnull, cwd=source_dir)"
+          ]
+        },
+        {
+          "id": "p2-sink-013",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.metadata",
+            "type": null,
+            "callable": "getSpecRepository",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "bikeshed/metadata.py",
+            "line": 1158
+          },
+          "rationale": "doc param flows only into the cwd of the list-form, no-shell check_output at metadata.py:1169; output is regex-matched against fixed GitHub URL patterns.",
+          "evidence": [
+            "bikeshed/metadata.py:1158-1180: getSpecRepository(doc) -> check_output(['git','remote','-v'], cwd=source_dir)"
+          ]
+        },
+        {
+          "id": "p2-sink-014",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "release",
+            "type": null,
+            "callable": "createRelease",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 8
+          },
+          "rationale": "Takes no parameters; the shell-call interpolations at release.py:83/97/121 are tracked as separate per-site entries (p2-sink-018/019/022).",
+          "evidence": [
+            "release.py:8: def createRelease() - no parameters"
+          ]
+        },
+        {
+          "id": "p2-sink-015",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_output",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 14
+          },
+          "rationale": "arg 0 is the string literal 'git diff --stat'; shell=True; no taintable input.",
+          "evidence": [
+            "release.py:13-16: check_output('git diff --stat', shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-016",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_output",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 65
+          },
+          "rationale": "arg 0 is the string literal git log format command; shell=True; no taintable input.",
+          "evidence": [
+            "release.py:64-70: check_output(r\"git log -1 --format='Bikeshed version %h, updated %cd'\", shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-017",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "call",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 80
+          },
+          "rationale": "arg 0 is the string literal 'rm -r build dist'; shell=True; no taintable input.",
+          "evidence": [
+            "release.py:80: subprocess.call('rm -r build dist', shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-018",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_call",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 83
+          },
+          "rationale": "twine upload command joins a secrets.json value (opened at release.py:28) into a shell=True string. secrets.json is a local maintainer-controlled file, not external attacker input; retained as candidate (supply-chain adjacent) pending review.",
+          "evidence": [
+            "release.py:83-95: check_call(' '.join(['twine upload', ..., '--password', secrets['test.pypi.org release key'], 'dist/*']), shell=True)",
+            "release.py:28-29: secrets loaded from local secrets.json"
+          ]
+        },
+        {
+          "id": "p2-sink-019",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_call",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 97
+          },
+          "rationale": "Same twine pattern as release.py:83 against production PyPI; secret value from local secrets.json interpolated into a shell=True string - candidate.",
+          "evidence": [
+            "release.py:97-108: check_call(' '.join(['twine upload', '--username __token__', '--password', secrets['pypi.org release key'], 'dist/*']), shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-020",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "call",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 109
+          },
+          "rationale": "arg 0 is the string literal 'rm -r build dist'; shell=True; no taintable input.",
+          "evidence": [
+            "release.py:109: subprocess.call('rm -r build dist', shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-021",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_call",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 117
+          },
+          "rationale": "arg 0 is the string literal git add of two fixed paths; shell=True; no taintable input.",
+          "evidence": [
+            "release.py:117-120: check_call('git add semver.txt bikeshed/spec-data/readonly/bikeshed-version.txt', shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-022",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_call",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 121
+          },
+          "rationale": "f\"git commit -m 'Bump semver to {newVersion}'\" with shell=True; newVersion derives from semver.txt opened at release.py:23. Local maintainer-controlled file, not external input - retained as candidate.",
+          "evidence": [
+            "release.py:121: check_call(f\"git commit -m 'Bump semver to {newVersion}'\", shell=True)",
+            "release.py:23-25: currentVersion read from local semver.txt"
+          ]
+        },
+        {
+          "id": "p2-sink-023",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_call",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 122
+          },
+          "rationale": "arg 0 is the string literal 'git push'; shell=True; no taintable input.",
+          "evidence": [
+            "release.py:122: check_call('git push', shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-024",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "release",
+            "type": null,
+            "callable": "inBikeshedRoot",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 125
+          },
+          "rationale": "Takes no parameters; the check_output arg is the literal 'git remote -v'.",
+          "evidence": [
+            "release.py:125-136: inBikeshedRoot() -> check_output('git remote -v', shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-025",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_output",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 128
+          },
+          "rationale": "arg 0 is the string literal 'git remote -v'; shell=True; no taintable input.",
+          "evidence": [
+            "release.py:128-130: check_output('git remote -v', stderr=subprocess.DEVNULL, shell=True)"
+          ]
+        },
+        {
+          "id": "p2-sink-026",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_call",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 81
+          },
+          "rationale": "arg 0 is the string literal 'python setup.py sdist bdist_wheel'; shell=True; no taintable input.",
+          "evidence": [
+            "release.py:81: check_call('python setup.py sdist bdist_wheel', shell=True)"
+          ]
+        },
+        {
+          "id": "p2-src-001",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.InputSource",
+            "type": "StdinInputSource",
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/InputSource.py",
+            "line": 118
+          },
+          "rationale": "Spec document read from stdin (source '-'); content carries 'Inline Tag Command' metadata that reaches Popen(shell=True) via metadata.parse -> processTags. Primary CWE-78 input boundary.",
+          "evidence": [
+            "bikeshed/InputSource.py:47-48: '-' dispatches to StdinInputSource",
+            "bikeshed/InputSource.py:118-119: read() -> InputContent(sys.stdin.readlines(), None)"
+          ]
+        },
+        {
+          "id": "p2-src-002",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": "sys.stdin",
+            "callable": "readlines",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/InputSource.py",
+            "line": 119
+          },
+          "rationale": "Read primitive underlying StdinInputSource.read; stdin is an external input boundary for the spec document.",
+          "evidence": [
+            "bikeshed/InputSource.py:119: sys.stdin.readlines()"
+          ]
+        },
+        {
+          "id": "p2-src-003",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.InputSource",
+            "type": "UrlInputSource",
+            "callable": "_fetch",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/InputSource.py",
+            "line": 136
+          },
+          "rationale": "Fetches the user-specified https: spec URL (tenacity-retried); response text becomes spec document content that reaches the metadata/Popen pipeline.",
+          "evidence": [
+            "bikeshed/InputSource.py:49-50: https: dispatch",
+            "bikeshed/InputSource.py:136-144: _fetch -> requests.get(self.sourceName, timeout=10)"
+          ]
+        },
+        {
+          "id": "p2-src-004",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "requests",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/InputSource.py",
+            "line": 137
+          },
+          "rationale": "requests.get(self.sourceName): the URL is the CLI-provided spec source (https:...); response.text feeds the document pipeline that reaches md.inlineTagCommands -> Popen(shell=True).",
+          "evidence": [
+            "bikeshed/InputSource.py:137,153: requests.get(self.sourceName, timeout=10); InputContent(response.text.splitlines(True), date)"
+          ]
+        },
+        {
+          "id": "p2-src-005",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.InputSource",
+            "type": "UrlInputSource",
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/InputSource.py",
+            "line": 146
+          },
+          "rationale": "UrlInputSource.read returns the fetched remote spec document content; primary external input boundary for URL-sourced specs.",
+          "evidence": [
+            "bikeshed/InputSource.py:146-153: read() -> InputContent(response.text.splitlines(True), date)"
+          ]
+        },
+        {
+          "id": "p2-src-006",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.InputSource",
+            "type": "FileInputSource",
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/InputSource.py",
+            "line": 168
+          },
+          "rationale": "Spec document file read; primary CWE-78 input boundary (spec file content -> metadata.parse -> md.inlineTagCommands -> Popen(shell=True)).",
+          "evidence": [
+            "bikeshed/InputSource.py:168-173: read() -> open(self.sourceName).readlines()"
+          ]
+        },
+        {
+          "id": "p2-src-007",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/InputSource.py",
+            "line": 169
+          },
+          "rationale": "open(self.sourceName): the file-read primitive of FileInputSource.read; self.sourceName is the CLI-provided spec path.",
+          "evidence": [
+            "bikeshed/InputSource.py:169: with open(self.sourceName, encoding='utf-8') as f"
+          ]
+        },
+        {
+          "id": "p2-src-008",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "argparse",
+            "type": "argparse.ArgumentParser",
+            "callable": "add_argument",
+            "arg_index": 0,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "bikeshed/cli.py",
+            "line": 27
+          },
+          "rationale": "Declares the externally controlled CLI argument surface. For CWE-78, 'profile --root/--leaf/--svg' values demonstrably reach os.system (cli.py:669/675); other arguments have no observed command route. Kept at candidate level: add_argument declares the surface, but values materialize at parse_args/parse_known_args (cli.py:432) - Phase 2 query generation must map source nodes to parsed option values. 75 call sites merged (DR-1); full list in labels_raw_pass2.json.",
+          "evidence": [
+            "bikeshed/cli.py:397-416: profileParser --root/--leaf/--svg -> handleProfile -> os.system",
+            "bikeshed/cli.py:432: options, extras = argparser.parse_known_args() (extraction gap: not a CSV candidate)",
+            "merged sites: 71 x bikeshed/cli.py, 2 x bikeshed/fonts.py:211/217, 2 x release.py:37/42"
+          ]
+        },
+        {
+          "id": "p2-src-009",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "argparse",
+            "type": "argparse.ArgumentParser",
+            "callable": "parse_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/fonts.py",
+            "line": 218
+          },
+          "rationale": "Return of argparse parse - the point where CLI values materialize as a namespace. In fonts.py they drive font processing with no observed route to command APIs; kept as candidate-level CLI source signature (cli.py uses parse_known_args, an extraction gap noted in phase1_review.md).",
+          "evidence": [
+            "bikeshed/fonts.py:218: options = argparser.parse_args()"
+          ]
+        },
+        {
+          "id": "p2-src-010",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": "sys.stdin",
+            "callable": "readlines",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/fonts.py",
+            "line": 174
+          },
+          "rationale": "External stdin content for big-text processing (bikeshed -b/--big-text); no route into process-execution APIs observed; retained for recall.",
+          "evidence": [
+            "bikeshed/fonts.py:173-174: lines = list(sys.stdin.readlines())"
+          ]
+        },
+        {
+          "id": "p2-src-011",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/fonts.py",
+            "line": 176
+          },
+          "rationale": "Spec input file for big-text processing; no route into command execution observed; retained for recall.",
+          "evidence": [
+            "bikeshed/fonts.py:176-177: open(inputFilename, encoding='utf-8')"
+          ]
+        },
+        {
+          "id": "p2-src-012",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/issuelist.py",
+            "line": 31
+          },
+          "rationale": "Issue-list text file (CLI infilename, default '-' -> stdin); content only feeds HTML generation (extractHeaderInfo/printHeader) - no command route. Re-checked after initial confidence < 0.55 per batch policy; kept as candidate.",
+          "evidence": [
+            "bikeshed/issuelist.py:26-41: infilename '-' -> sys.stdin, else open(infilename + suffix); lines -> extractHeaderInfo"
+          ]
+        },
+        {
+          "id": "p2-src-013",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 23
+          },
+          "rationale": "semver.txt content becomes newVersion, interpolated into check_call(f\"git commit -m 'Bump semver to {newVersion}'\", shell=True) at release.py:121. Local maintainer-controlled file, not external input.",
+          "evidence": [
+            "release.py:23-25: currentVersion = open('semver.txt').read().strip()",
+            "release.py:121: f-string interpolation into shell command"
+          ]
+        },
+        {
+          "id": "p2-src-014",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "release.py",
+            "line": 28
+          },
+          "rationale": "secrets.json value interpolated into twine upload shell commands (release.py:83/97); local maintainer file, not external input.",
+          "evidence": [
+            "release.py:28-29: secrets = json.load(open('secrets.json'))"
+          ]
+        },
+        {
+          "id": "p2-src-015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": "os.environ",
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/cli.py",
+            "line": 441
+          },
+          "rationale": "NO_COLOR/TERM lookups for color cosmetics (cli.py:438-445); no route to command execution.",
+          "evidence": [
+            "bikeshed/cli.py:441: 'NO_COLOR' in os.environ / os.environ.get('TERM')"
+          ]
+        },
+        {
+          "id": "p2-src-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "requests",
+            "type": null,
+            "callable": "get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/lint/brokenLinks.py",
+            "line": 27
+          },
+          "rationale": "Data-file update tooling and link linting fetch remote URLs; content is written to local data files or status-checked, with no route into process-execution APIs. HTTP fetching is a Pass 3 (SSRF) source family, not CWE-78. 12 call sites merged (DR-2); full list in labels_raw_pass2.json.",
+          "evidence": [
+            "bikeshed/update/updateBiblio.py:107-123: fetched biblio data written to local files",
+            "bikeshed/lint/brokenLinks.py:27: requests.get(href, verify=False) - link status checking only"
+          ]
+        },
+        {
+          "id": "p2-src-017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "requests",
+            "type": null,
+            "callable": "post",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/publish.py",
+            "line": 32
+          },
+          "rationale": "Publishes the built test tarball to the PR execution service; response is not used in command construction.",
+          "evidence": [
+            "bikeshed/publish.py:32: requests.post(PR_SUBMIT_URL, files=...)"
+          ]
+        },
+        {
+          "id": "p2-src-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/Spec.py",
+            "line": 343
+          },
+          "rationale": "Reads/writes of internal data (spec-data readonly/latest, bigblocks.bsfont, os.devnull, requirements.txt, semver display, biblio.json) and pipeline outputs (rendered HTML, test artifacts, update-tooling data files). Content does not reach command-execution APIs and is not an external CWE-78 input boundary. 45 call sites merged (DR-3); full list in labels_raw_pass2.json.",
+          "evidence": [
+            "bikeshed/Spec.py:343-346: open(outputFilename, 'w') - rendered output write",
+            "bikeshed/config/retrieve.py:27-30: open(location) on scriptPath('spec-data', ...) - install-dir data",
+            "bikeshed/boilerplate.py:90,101 / bikeshed/metadata.py:1167: open(os.devnull)",
+            "bikeshed/update/*: fetched-data file writes; setup.py:3-7: README/long-description reads"
+          ]
+        },
+        {
+          "id": "p2-src-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": "os.environ",
+            "callable": "__getitem__",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": ".github/workflows/update-tests/update.py",
+            "line": 121
+          },
+          "rationale": "GITHUB_TOKEN read for the GitHub API client (rate limits); no route to command execution.",
+          "evidence": [
+            ".github/workflows/update-tests/update.py:121: token = os.environ['GITHUB_TOKEN']"
+          ]
+        },
+        {
+          "id": "p2-src-020",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.config.retrieve",
+            "type": "DataFileRequester",
+            "callable": "fetch",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "bikeshed/config/retrieve.py",
+            "line": 20
+          },
+          "rationale": "Reads Bikeshed's own spec-data files (readonly/latest) resolved under scriptPath(); internal install-dir data, not an external boundary for CWE-78.",
+          "evidence": [
+            "bikeshed/config/retrieve.py:24-37: fetch -> open(self._buildPath(...)); _buildPath -> scriptPath('spec-data', ...)"
+          ]
+        },
+        {
+          "id": "p2-sum-001",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.metadata",
+            "type": null,
+            "callable": "parse",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "bikeshed/metadata.py",
+            "line": 1057
+          },
+          "rationale": "Taint step from external spec text into metadata fields: parse(lines) (param 0) extracts <pre class=metadata> content, including 'Inline Tag Command' values, into the returned MetadataManager (md.inlineTagCommands), which processTags feeds to Popen(shell=True). Required for realistic propagation from InputSource to sink.",
+          "evidence": [
+            "bikeshed/metadata.py:1057-1107: parse(lines) -> MetadataManager via addData",
+            "bikeshed/metadata.py:1051-1054: parseInlineTagCommand splits 'tag command' and stores the raw command"
+          ]
+        },
+        {
+          "id": "p2-sum-002",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.metadata",
+            "type": null,
+            "callable": "fromCommandLine",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "bikeshed/metadata.py",
+            "line": 1110
+          },
+          "rationale": "--md-* argv overrides (param 0, from parse_known_args extras) parsed into MetadataManager fields; key normalization turns '--md-Inline-Tag-Command=...' into 'Inline Tag Command', so CLI text can propagate into command metadata fields.",
+          "evidence": [
+            "bikeshed/metadata.py:1110-1126: fromCommandLine(overrides) -> md.addData(key, val)"
+          ]
+        },
+        {
+          "id": "p2-sum-003",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "bikeshed",
+            "module": "bikeshed.metadata",
+            "type": null,
+            "callable": "fromJson",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "bikeshed/metadata.py",
+            "line": 1129
+          },
+          "rationale": "JSON metadata text (param 0, e.g. computed-metadata macros originating from the spec document) parsed into md fields; propagation step from document text into metadata values.",
+          "evidence": [
+            "bikeshed/metadata.py:1129-1155: fromJson(data) -> json.loads -> md.addData"
+          ]
+        }
+      ]
+    }
+  ]
+}

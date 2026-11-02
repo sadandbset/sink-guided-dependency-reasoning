@@ -1,0 +1,117 @@
+{
+  "project": "bikeshed",
+  "run_stage": "Phase 1 / Step 1 (explore and detect)",
+  "detected_language": "python",
+  "language_evidence": {
+    "database_metadata": "primaryLanguage: python (bikeshed-db/codeql-database.yml, cliVersion 2.25.1)",
+    "file_extensions": "94 .py files under repo root (bikeshed/ package, bikeshed.py, release.py); tests/ holds .bs/.html data files, no .py",
+    "build_manifests": "setup.py, setup.cfg, requirements.txt, requirements-dev.txt, Pipfile"
+  },
+  "toolchain": {
+    "codeql_cli": "2.25.1",
+    "python_pack": "codeql/python-all 7.0.4 (target; queries avoid APIs newer than 7.x baseline)"
+  },
+  "selected_passes": [2],
+  "selected_cwes": ["CWE-78"],
+  "framework_candidates": [
+    {
+      "name": "argparse CLI",
+      "kind": "cli",
+      "confidence": 0.95,
+      "score_breakdown": {
+        "import_evidence": 0.45,
+        "registration_evidence": 0.3,
+        "bootstrap_evidence": 0.2,
+        "layout_evidence": 0.0
+      },
+      "evidence": [
+        "bikeshed/cli.py:1: import argparse",
+        "bikeshed/cli.py:13-14: sys.argv subparser hack ('spec' default subcommand)",
+        "bikeshed/cli.py:24: argparser = argparse.ArgumentParser(...)",
+        "bikeshed/cli.py:81-116: subparsers.add_parser('spec'/'echidna'/'watch'/'serve'/'update'/'issue'/'debug')",
+        "bikeshed/cli.py:84-330+: extensive specParser/echidnaParser/... .add_argument(...) defining the CLI input surface",
+        "bikeshed/cli.py: cli.main() parses args and dispatches to handle* functions"
+      ]
+    },
+    {
+      "name": "http.server (serve mode)",
+      "kind": "http_server_static",
+      "confidence": 0.5,
+      "score_breakdown": {
+        "import_evidence": 0.45,
+        "registration_evidence": 0.0,
+        "bootstrap_evidence": 0.05,
+        "layout_evidence": 0.0
+      },
+      "evidence": [
+        "bikeshed/Spec.py:383-384: import http.server, socketserver (inside Spec.watch)",
+        "bikeshed/Spec.py:387-394: SilentServer(http.server.SimpleHTTPRequestHandler) served via socketserver.TCPServer"
+      ],
+      "note": "Static file serving of the OUTPUT folder only; handler does not parse request parameters into the spec pipeline, so it is not treated as a request-driven source boundary. Watch/serve reprocessing is triggered by file mtime, not by HTTP request content."
+    },
+    {
+      "name": "fastapi",
+      "confidence": 0.0,
+      "evidence": []
+    },
+    {
+      "name": "flask",
+      "confidence": 0.0,
+      "evidence": []
+    },
+    {
+      "name": "django",
+      "confidence": 0.0,
+      "evidence": []
+    }
+  ],
+  "primary_framework": "argparse CLI",
+  "libraries_of_interest": [
+    {"name": "requests", "role": "http_client", "evidence": ["bikeshed/InputSource.py: import requests; UrlInputSource._fetch -> requests.get(self.sourceName, timeout=10)", "bikeshed/lint/brokenLinks.py:27: requests.get(href, verify=False)", "bikeshed/publish.py:32: requests.post(...)", "bikeshed/unsortedJunk.py:1570: requests.get(url, headers=headers)", "bikeshed/update/*.py: requests.get(...) for data-file updates"]},
+    {"name": "aiohttp", "role": "http_client", "evidence": ["bikeshed/update/manifest.py: import aiohttp (async data-file download)"]},
+    {"name": "tenacity", "role": "retry", "evidence": ["bikeshed/InputSource.py: @tenacity.retry on UrlInputSource._fetch"]},
+    {"name": "argparse (stdlib)", "role": "cli", "evidence": ["bikeshed/cli.py: argparse.ArgumentParser with subparsers"]}
+  ],
+  "external_input_surfaces": [
+    {"family": "cli_arguments", "evidence": "argparse add_argument definitions in bikeshed/cli.py; values reach handlers as options.* (e.g. options.root/options.leaf/options.svgFile in handleProfile, options.code/options.jsonCode in handleDebug)", "notes": "metadata.fromCommandLine(extras) additionally parses --md-* overrides from argv"},
+    {"family": "stdin", "evidence": ["bikeshed/InputSource.py:119: StdinInputSource.read -> sys.stdin.readlines()", "bikeshed/fonts.py:174: list(sys.stdin.readlines())", "bikeshed/issuelist.py:27: infile = sys.stdin"], "notes": "spec input '-' reads the whole document from stdin"},
+    {"family": "file_input", "evidence": ["bikeshed/InputSource.py: FileInputSource.read -> open(self.sourceName, encoding='utf-8')", "bikeshed/config/retrieve.py: DataFileRequester.fetch -> open(location, ...)", "many open() reads across the pipeline"], "notes": "spec source file is the primary external document input; its <pre class=metadata> block feeds metadata.parse"},
+    {"family": "http_response", "evidence": ["bikeshed/InputSource.py: UrlInputSource.read -> response.text from requests.get", "bikeshed/update/*.py: requests.get(...).text feeds data-file updates"], "notes": "https: spec URLs are fetched and processed like local files"},
+    {"family": "environment_variables", "evidence": ["bikeshed/cli.py:441: 'NO_COLOR' in os.environ / os.environ.get('TERM')"], "notes": "only color/term cosmetics observed; kept in candidate set for family completeness"}
+  ],
+  "command_execution_sinks": [
+    {"api": "os.system", "evidence": ["bikeshed/cli.py:669,675: handleProfile builds shell command from options.root/options.leaf/options.svgFile"]},
+    {"api": "subprocess.Popen (shell=True)", "evidence": ["bikeshed/inlineTags/__init__.py:14: Popen(command, ..., shell=True) where command = doc.md.inlineTagCommands[tag], i.e. 'Inline Tag Command' metadata parsed from the spec input file/stdin/URL"]},
+    {"api": "subprocess.check_output (shell=True)", "evidence": ["bikeshed/boilerplate.py:36,49,92,103: git commands, cwd=config.scriptPath() or doc-derived paths", "release.py:14,65,128: git commands with f-string interpolation", "bikeshed/metadata.py:1169: git remote -v, cwd=doc.inputSource.directory() (spec-source-derived dir)"]},
+    {"api": "subprocess.check_call (shell=True)", "evidence": ["release.py:81,83,97,109,117,121,122: build/publish commands; release.py:121 interpolates newVersion read from semver.txt"]},
+    {"api": "subprocess.call (shell=True)", "evidence": ["release.py:80,109: 'rm -r build dist'"]},
+    {"api": "os.popen / async subprocess (asyncio.create_subprocess_*)", "evidence": [], "notes": "not observed in repo; families included in sink query per Pass 2 coverage policy, will simply yield no rows"}
+  ],
+  "project_internal_wrapper_functions": {
+    "sink_side": [
+      "bikeshed/inlineTags/__init__.py: processTags(doc) - wraps Popen(shell=True) with metadata-derived command",
+      "bikeshed/boilerplate.py: addBikeshedVersion(doc), addSpecVersion(doc) - wrap subprocess.check_output",
+      "bikeshed/metadata.py: getSpecRepository(doc) - wraps subprocess.check_output",
+      "release.py: build(), commit(newVersion), upload() etc. - wrap subprocess shell calls"
+    ],
+    "source_side": [
+      "bikeshed/InputSource.py: StdinInputSource.read / FileInputSource.read / UrlInputSource.read / UrlInputSource._fetch - external text entry points",
+      "bikeshed/metadata.py: parse(lines), fromCommandLine(overrides), fromJson(data) - external text/metadata parsing entry points",
+      "bikeshed/config/retrieve.py: DataFileRequester.fetch - file/config data input"
+    ]
+  },
+  "reference_files_loaded": [
+    "references/patterns.md",
+    "references/python.md"
+  ],
+  "framework_references_loaded": [],
+  "framework_reference_decision": "No web framework detected. Per WORKFLOW.md 4.2.3, source/sink shapes were derived from repository code using the Python language reference only; assumptions recorded in this file.",
+  "assumptions": [
+    "Project is a CLI document-processing tool: the attacker-relevant input boundary is the spec source (file path, '-' stdin, or https: URL) plus CLI arguments, not HTTP request parameters.",
+    "serve mode's http.server handler serves static output files only; it is not modeled as a request source.",
+    "tests/ contains no Python files; a defensive path-based test filter is kept in both queries.",
+    "release.py is build/release tooling at repo root but part of the database; it is kept as candidates and left for LLM labeling rather than pre-filtered.",
+    "sys.argv is only used for the argparse subparser hack (len/append); the argparse add_argument surface is extracted instead as the CLI source family.",
+    "eval/exec usage exists (bikeshed/cli.py:573,578, bikeshed/extensions.py:8, bikeshed/highlight.py:385) but is Pass 4 (code injection) territory; out of scope for this Pass 2 extraction."
+  ]
+}

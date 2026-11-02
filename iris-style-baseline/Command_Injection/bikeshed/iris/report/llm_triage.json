@@ -1,0 +1,108 @@
+{
+  "triage": {
+    "project": "bikeshed",
+    "pass": 2,
+    "cwe": "CWE-78 (查询范围收窄为仅 cwe-078)",
+    "analyst": "independent LLM path review (GLM)",
+    "date": "2026-11-02",
+    "query_id": "py/bikeshed/iris/pass2-command-injection",
+    "database": "dataset/codeql_databases/bikeshed-db",
+    "sarif": "results/pass2.sarif (3 条正式 path-problem 告警, CodeQL 2.25.1, python-all 7.0.4)"
+  },
+  "evidence_source_note": "告警涉及的两个文件（bikeshed/cli.py、release.py）已与 DB 快照（bikeshed-db/src.zip）逐一 diff：完全一致——本项目的磁盘树与被分析代码无分歧（与 ansible/abilian-devtools 不同）。代码验证直接使用 dataset/codeql_databases/bikeshed_vuln 树（同时即 DB 快照内容）。未读取 PyVul 真值、修复提交与 CVE 公告。",
+
+  "alerts": [
+    {
+      "alert_id": 0,
+      "rule_id": "py/bikeshed/iris/pass2-command-injection",
+      "sink_location": "bikeshed/cli.py:665:19-26",
+      "sink_code": "def handleProfile(options):  # p2-sink-005：param 级 wrapper sink（options 形参）",
+      "sink_type": "p2-sink-005 WrapperParameterSinks：handleProfile 的 options 形参（tp 标签，置信 0.8）",
+      "source_location": "bikeshed/cli.py:432:23-51",
+      "source_code": "options, extras = argparser.parse_known_args()  # p2-src-008 candidate：argparse CLI 面（映射到 parse 返回值）",
+      "source_type": "CommandLineSurface：parse_args/parse_known_args 返回的 Namespace（p2-src-008/009 candidate 级重映射）",
+      "codeflows": [
+        "cf0: cli.py:432 parse_known_args() 返回值 [source] -> :432 options -> :470 handleProfile(options) 实参 -> :665 options 形参 [sink]",
+        "cf1/cf2: 同上（经 Tuple / IterableElement 解包变体）"
+      ],
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "不成立。source 是 `bikeshed profile` 子命令自身的 argparse 参数（profileParser 的 --root/--leaf/--svg，cli.py:397-416）——由运行 bikeshed 的本地用户自己在命令行输入。无请求/远程/不可信文件边界：能控制这些值的人就是能直接运行任意命令的操作者本人。",
+        "q2_propagation_evidence": "真实且极短：Namespace(432) -> options(470 实参) -> 形参(665)。全部原生数据流，无合成边（MySummaries 的三个 metadata 步骤与本链无关）。",
+        "q3_sink_executes_commands": "被命中的 sink 节点只是 handleProfile 的 options **形参**（wrapper 补偿型 sink）。真正的执行点在其函数体内：cli.py:669/675 的 os.system（p2-sink-003/004）——这两处 arg 级 sink **未**告警，因为标准传播不提供 Namespace→属性值污点（notes §2.3/§3.3 预测，已验证成立）。",
+        "q4_command_content_influenced": "是（若手动续接函数体）：root/leaf 经 f'--root=\"{options.root}\"' 双引号包裹（可被含 \" 或 $()/反引号的值逃逸）、svg 完全未引用——但所有值均来自操作者自己的 CLI 标志。",
+        "q5_sanitization": "无有效防护（双引号非转义）；但输入边界即操作者本人，无防护必要。",
+        "q6_business_function": "是：`bikeshed profile` 是开发者性能分析辅助命令（帮助文本明示需要 graphviz/gprof2dot/xdot），--root/--leaf/--svg 是其文档化剪枝/输出选项。",
+        "q7_overapproximation": "路径真实（CLI Namespace 确实传入 handleProfile），但 p2-src-008（argparse 面 candidate 级）把工具自身用户当作攻击边界 + param 级 wrapper sink 在属性污点缺失时的补偿设计，使告警无安全意义。"
+      },
+      "additional_context": "标签集里真正有外部输入语义的 source（p2-src-001~007：spec 文档文件/stdin/URL 内容）到 inlineTags/__init__.py:14 `Popen(command, ..., shell=True)`（p2-sink-001，command = doc.md.inlineTagCommands[tag]，即 spec 元数据控制的 shell 命令）的规范链**本轮未命中**——notes §3.1 预告的 metadata.join/MetadataManager 属性链传播缺口（未标签化摘要）使污点止步于 mdDocument/mdCommandLine。因此本轮 3 条告警全部是操作者输入链，外部 spec 内容链未出现。此为事实记录，不构成补报。"
+    },
+    {
+      "alert_id": 1,
+      "rule_id": "py/bikeshed/iris/pass2-command-injection",
+      "sink_location": "release.py:84:17-93:18 (跨行区域，check_call 调用)",
+      "sink_code": "subprocess.check_call(\" \".join([\"twine upload\", \"--repository-url https://test.pypi.org/legacy/\", \"--username __token__\", \"--password\", secrets[\"test.pypi.org release key\"], \"dist/*\"]), shell=True)",
+      "sink_type": "p2-sink-018 ProcessExecutionSinks：check_call arg0（candidate 标签，置信 0.6）",
+      "source_location": "release.py:28:14-34",
+      "source_code": "with open(\"secrets.json\") as fh: secrets = json.load(fh)  # p2-src-014 candidate",
+      "source_type": "RetainedCandidateReads：open(\"secrets.json\") 调用值（candidate 级，置信 0.55）",
+      "codeflows": [
+        "cf0: release.py:28 open('secrets.json') [source] -> :28 fh -> :29 secrets [Decoding-JSON] -> :84 secrets['test.pypi.org release key'] 插值进 ' '.join(...) -> check_call(..., shell=True) [sink]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "不成立。secrets.json 是维护者仓库根目录下的本地文件（PyPI 上传令牌）。标签自身 rationale 明言“local maintainer-controlled file, not external attacker input”。能写该文件者已能改写仓库任意源码，注入 twine 命令毫无增量。",
+        "q2_propagation_evidence": "真实：open -> json.load [Decoding-JSON 步] -> secrets[...] -> join 进 shell 字符串，每一步都在源码中可见（release.py:28-29, 83-95）。",
+        "q3_sink_executes_commands": "真实：check_call(..., shell=True) 经 shell 解释整条 twine 命令。",
+        "q4_command_content_influenced": "是：令牌值作为 --password 元素未加引用进入命令串（含空格的值甚至会破坏 twine 参数边界——健壮性缺陷而非安全边界）。",
+        "q5_sanitization": "无引用/过滤（join 空格拼接）；但输入是维护者自己的令牌文件。",
+        "q6_business_function": "是：release.py 是维护者手动运行的发版脚本（createRelease，从仓库根目录执行），上传 sdist/wheel 到 PyPI 是其全部功能。",
+        "q7_overapproximation": "路径真实；candidate 级 source（本地文件读）按 notes §3.4 的设计被保留“for recall”，正是预告的 Step-6 FP 家族（release.py local-file → twine 插值）。"
+      }
+    },
+    {
+      "alert_id": 2,
+      "rule_id": "py/bikeshed/iris/pass2-command-injection",
+      "sink_location": "release.py:98:17-106:18 (跨行区域，check_call 调用)",
+      "sink_code": "subprocess.check_call(\" \".join([\"twine upload\", \"--username __token__\", \"--password\", secrets[\"pypi.org release key\"], \"dist/*\"]), shell=True)",
+      "sink_type": "p2-sink-019 ProcessExecutionSinks：check_call arg0（candidate 标签，置信 0.6）",
+      "source_location": "release.py:28:14-34",
+      "source_code": "secrets = json.load(open('secrets.json'))（同告警 1）",
+      "source_type": "RetainedCandidateReads：open(\"secrets.json\")（p2-src-014 candidate）",
+      "codeflows": [
+        "cf0: release.py:28 open [source] -> :29 secrets [Decoding-JSON] -> :98 secrets['pypi.org release key'] -> ' '.join(...) -> check_call(..., shell=True) [sink]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_q2_q3_q4_q5": "与告警 1 完全同链（同一 source、同一插值模式），仅分支不同：options.test 为假时的生产 PyPI 上传（release.py:97-108）。source 仍为维护者本地 secrets.json。",
+        "q6_business_function": "同告警 1：发版脚本的正式上传分支。",
+        "q7_overapproximation": "同告警 1：candidate 级本地文件 source 的 recall 保留产物。"
+      }
+    }
+  ],
+  "summary": {
+    "total_formal_alerts": 3,
+    "likely_tp": 0,
+    "likely_fp": 3,
+    "uncertain": 0,
+    "fp_alert_ids": [0, 1, 2],
+    "notes": [
+      "3 条均为正式 Pass2_CommandInjection.ql path-problem 结果；诊断查询（Pass2_DiagnosticParameter.ql，diagnostics/ 下无已解码输出）未计入。",
+      "3 条告警分两条链：(a) CLI argparse Namespace -> handleProfile 形参 sink（告警 0）；(b) 本地 secrets.json -> twine upload check_call shell=True（告警 1/2，test/生产两分支）。两条链的 source 都是操作者自身输入（自己的 CLI 标志 / 自己维护的本地令牌文件），均无攻击者可达边界。",
+      "告警 0 的被命中 sink 只是 param 级 wrapper（options 形参）；argparse 属性级 os.system sink（cli.py:669/675）按 notes §2.3/§3.3 预测未触发（Namespace→属性污点缺失）。手动续接函数体可见 root/leaf 双引号可逃逸、svg 未引用——但值全部来自操作者自己的 --root/--leaf/--svg 标志。",
+      "标签集中最具外部输入语义的规范链（spec 文档内容 -> metadata.inlineTagCommands -> inlineTags/__init__.py:14 Popen shell=True，p2-sink-001/p2-sink-002）本轮未命中：metadata.join 与 MetadataManager 属性链未被建模为摘要（notes §3.1 预告的传播缺口），污点止步于 mdDocument/mdCommandLine。故本轮无外部内容驱动的命令执行告警——如实记录，不虚构。",
+      "iris_report.md（3 raw / 3 candidate / 0 likely-TP / 0 likely-FP）与 SARIF 一致；本轮逐条复核后 3 条全部 likely_fp（与报告的“candidate 待审”定位相容：三条即 notes §3.4 预告的 release.py candidate FP 家族 + CLI 面 wrapper 告警）。",
+      "约束：未修改原始 SARIF、标签或查询；未读取 PyVul 漏洞真值、修复提交和 CVE 公告。"
+    ]
+  },
+  "constraints": {
+    "pyvul_ground_truth_read": false,
+    "original_sarif_modified": false,
+    "labels_modified": false,
+    "queries_modified": false,
+    "diagnostic_results_used_as_tp": false
+  }
+}
