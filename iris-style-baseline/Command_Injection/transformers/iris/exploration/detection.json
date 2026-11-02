@@ -1,0 +1,237 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-19",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\transformers\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 for the transformers target. The task brief described a phone/desktop connectivity project (socket protocol, plugins, predefined commands); that description does not match this source tree. The tree at transformers_vuln (commit 87a6cf4, the CodeQL database creation sha) is the HuggingFace transformers machine-learning library. All exploration, evidence, and query generation below are derived from the actual source code, not from the brief's description. Per experiment constraints, the PyVul ground-truth files present in the tree (confirmed_vulns.json, CVE application report, cmd_sinks.csv, cmd_safe_sinks.csv) were NOT read; no vulnerability locations, CVE diffs, or descriptions were consulted, and no rules target known locations."
+  },
+  "target": {
+    "project": "transformers (HuggingFace)",
+    "projectDescription": "State-of-the-art machine-learning library for PyTorch/TensorFlow/JAX: model implementations, tokenizers/processors, training (Trainer), inference pipelines (text/audio/vision), and a setuptools argparse-based CLI (transformers-cli, transformers.onnx) that shells out to git, git-lfs, ffmpeg and optimum.exporters.onnx.",
+    "pass": 2,
+    "cwes": ["CWE-78"],
+    "focus": "Command/Argument Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\transformers_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (transformers-db/codeql-database.yml)",
+      "2781 .py files in the source tree; src/transformers/ package (1516 files in the DB source archive) plus setup.py, hubconf.py, conftest.py",
+      "setup.py: setuptools.setup(packages=find_packages('src'), package_dir={'': 'src'}, python_requires='>=3.8')"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\transformers-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\transformers_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "87a6cf41d0faa2df5bd464273534e928c6ac6e99",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-27T01:36:20.885639300Z"
+    },
+    "baselineLinesOfCode": 989200,
+    "finalised": true,
+    "coverageNote": "The database covers the WHOLE repository, not just the library: the DB source archive contains 1516 files under src/transformers/ and 903 files under tests/, plus examples/, utils/ (CI scripts) and docs. Both extraction queries therefore apply a path filter restricting candidate rows to src/transformers/ (see extraction.exclusions)."
+  },
+  "toolchain": {
+    "qlpack": "iris/transformers-cwe78 (dependencies: codeql/python-all: \"*\"), already present at iris/qlpack.yml",
+    "packResolutionExpected": "codeql/python-all resolved from the local pack cache by qlpack.yml",
+    "codeqlExecution": "deferred (this step only generates queries; codeql query run / bqrs decode happen in a later step)"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] },
+        { "name": "django", "confidence": 0.0, "evidence": [] },
+        { "name": "flask", "confidence": 0.0, "evidence": [] }
+      ]
+    },
+    "selected": "none (pure library + argparse-based CLI)",
+    "notes": "No web framework detected; all framework scores are below the 0.50 threshold, so no framework reference is loaded. The externally reachable surfaces relevant to CWE-78 are (1) the transformers-cli / transformers.onnx argparse command layer and (2) the git-lfs custom transfer agent that receives line-delimited JSON on stdin. Source/sink shapes below are derived from repository evidence per references/python.md and references/patterns.md (language reference path, since no framework reference matches).",
+    "customBoundaryEvidence": [
+      "src/transformers/commands/transformers_cli.py:16 'from argparse import ArgumentParser' - CLI entry, registers 10 subcommands (ConvertCommand, DownloadCommand, EnvironmentCommand, RunCommand, ServeCommand, UserCommands, AddNewModelCommand, AddNewModelLikeCommand, LfsCommands, PTtoTFCommand)",
+      "src/transformers/commands/transformers_cli.py:47 'args = parser.parse_args()' followed by :54 'service = args.func(args)' and :55 'service.run()' - dynamic dispatch of parsed CLI args into command objects",
+      "src/transformers/commands/lfs.py:105-117 'read_msg()' - 'json.loads(sys.stdin.readline().strip())': git-lfs sends init/transfer messages as line-delimited JSON over this process's stdin; :165 same shape in LfsUploadCommand.run",
+      "src/transformers/commands/lfs.py:63/72 'set_defaults(func=lambda args: LfsEnableCommand(args))' - command construction through argparse defaults",
+      "src/transformers/onnx/__main__.py:188-236 'main()' - ArgumentParser for the ONNX exporter; :232 'args = parser.parse_args()'; dispatches to export_with_transformers(args) / export_with_optimum(args)",
+      "src/transformers/hf_argparser.py - HfArgumentParser: dataclass-to-argparse bridge used by Trainer scripts ('parse_args_into_dataclasses', 'parse_args', file_args + sys.argv[1:] at :330)",
+      "src/transformers/configuration_utils.py:825-828 '_dict_from_json_file' - 'json.loads(text)' decoding (possibly hub-downloaded) config JSON into the config dict passed to PretrainedConfig; same decode shape in feature_extraction_utils.py:527/614, image_processing_utils.py:365/459, modelcard.py:231, generation/configuration_utils.py:796, modeling_utils.py:464",
+      "src/transformers/pipelines/base.py:649 'for line in sys.stdin:' - CsvPipelineDataFormat.__iter__ consumes stdin rows",
+      "hub download boundary: huggingface_hub.hf_hub_download / snapshot_download used throughout (e.g. modeling_utils, utils/hub.py); requests.get for remote images in image_processing_utils.py:539 and image_utils.py:314"
+    ]
+  },
+  "inputBoundaryInventory": {
+    "summary": "This is a library, not a network service: there are no listening sockets in src/transformers. Attacker-influenced data for CWE-78 enters through (1) CLI arguments of transformers-cli / transformers.onnx / Trainer scripts (argparse, HfArgParser, sys.argv), (2) line-delimited JSON that git-lfs writes to the stdin of the lfs-multipart-upload transfer agent (oid, path, action.href, action.header fields), (3) environment variables (WANDB_*, COMET_*, MLFLOW_*, TRANSFORMERS_*, XLA_*), (4) JSON decoded from hub-downloaded config/preprocessor files, and (5) values returned by network fetches (requests, huggingface_hub). Command-execution sinks concentrate in the CLI/lfs layer (subprocess with an f-string command in lfs, a shell=True ' '.join(cmd_line) in the ONNX exporter, fixed argv lists for git/git-lfs/ninja version probes) and in the audio pipelines that spawn ffmpeg. In this snapshot none of the exec sites shell-quotes its interpolated values (no shlex.quote anywhere; the only shlex use is testing_utils.py:1596 shlex.split on a generated string).",
+    "sourceFamilies": [
+      {
+        "family": "stdin_json_protocol",
+        "evidence": [
+          "src/transformers/commands/lfs.py:107 'msg = json.loads(sys.stdin.readline().strip())' - read_msg, per-transfer git-lfs messages",
+          "src/transformers/commands/lfs.py:165 'init_msg = json.loads(sys.stdin.readline().strip())' - LfsUploadCommand.run init handshake",
+          "src/transformers/pipelines/base.py:649 'for line in sys.stdin:' - pipeline data rows from stdin"
+        ]
+      },
+      {
+        "family": "json_decode",
+        "evidence": [
+          "src/transformers/configuration_utils.py:828 'return json.loads(text)' - config dict from (downloaded) config.json",
+          "src/transformers/feature_extraction_utils.py:527/614, image_processing_utils.py:365/459, generation/configuration_utils.py:796, modelcard.py:231 - same preprocessor/modelcard decode pattern",
+          "src/transformers/modeling_utils.py:464 'index = json.load(f)' - weights index of a downloaded snapshot",
+          "src/transformers/commands/add_new_model.py:87/99, add_new_model_like.py:1519 - json.load of local template files"
+        ]
+      },
+      {
+        "family": "cli_args",
+        "evidence": [
+          "src/transformers/commands/transformers_cli.py:47 'args = parser.parse_args()'",
+          "src/transformers/onnx/__main__.py:232 'args = parser.parse_args()' (--model/--feature/--framework/--output feed export_with_optimum's command line)",
+          "src/transformers/hf_argparser.py:330 'args = file_args + sys.argv[1:]' and parse_args/parse_args_into_dataclasses call sites",
+          "src/transformers/models/**/convert_*.py and src/transformers/convert_*.py - additional argparse mains (dev scripts inside the package)"
+        ]
+      },
+      {
+        "family": "env_reads",
+        "evidence": [
+          "src/transformers/modeling_utils.py:101-142 os.environ.get('XLA_USE_BF16'/'ACCELERATE_USE_FSDP'/'LOCAL_RANK'...)",
+          "src/transformers/integrations/integration_utils.py - os.getenv/os.environ reads for WANDB_*/COMET_*/MLFLOW_* (dozens of sites)",
+          "src/transformers/models/deprecated/transfo_xl/tokenization_transfo_xl.py:216 os.environ.get('TRUST_REMOTE_CODE')"
+        ]
+      },
+      {
+        "family": "network_responses",
+        "evidence": [
+          "src/transformers/commands/lfs.py:197 'requests.put(presigned_url, data=data)' / :217 'requests.post(completion_url, json=...)' - URLs taken from the stdin JSON action field",
+          "src/transformers/image_processing_utils.py:539 'response = requests.get(image_url_or_urls, stream=True, headers=headers)'",
+          "src/transformers/image_utils.py:314 'PIL.Image.open(requests.get(image, stream=True, timeout=timeout).raw)'",
+          "huggingface_hub hf_hub_download/snapshot_download call sites throughout the library (resolved via import-side API graphs)"
+        ]
+      },
+      {
+        "family": "handler_entry_points",
+        "evidence": [
+          "src/transformers/commands/transformers_cli.py:30 'main()' - CLI dispatch entry",
+          "*Command classes in src/transformers/commands/*.py: run()/__init__(args) receive the parsed argparse Namespace (LfsEnableCommand.run uses self.args.path as subprocess cwd)",
+          "src/transformers/onnx/__main__.py:35 'export_with_optimum(args)' / :69 'export_with_transformers(args)' - receive the full parsed args"
+        ]
+      },
+      {
+        "family": "internal_message_transfer",
+        "evidence": [
+          "src/transformers/commands/transformers_cli.py:54 'service = args.func(args)' - parsed CLI args handed to a dynamically selected command factory",
+          "src/transformers/commands/transformers_cli.py:55 'service.run()' - command object entered",
+          "src/transformers/commands/lfs.py:179 'msg = read_msg()' - external stdin JSON handed into the upload loop",
+          "src/transformers/onnx/__main__.py:234/236 'export_with_optimum(args)' / 'export_with_transformers(args)'"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "subprocess_exec",
+        "evidence": [
+          "src/transformers/onnx/__main__.py:59 'subprocess.Popen(\" \".join(cmd_line), stdout=subprocess.PIPE, shell=True)' - cmd_line embeds args.model/args.feature/args.framework/args.output from the CLI",
+          "src/transformers/commands/lfs.py:87/90 'subprocess.run(... , check=True, cwd=local_path)' - command string is a constant plus LFS_MULTIPART_UPLOAD_COMMAND, cwd from self.args.path",
+          "src/transformers/commands/user.py:159/165 'subprocess.check_output([\"git\", \"--version\"])' / '[\"git-lfs\", \"--version\"]' - fixed argv lists",
+          "src/transformers/utils/import_utils.py:570 'subprocess.check_output(\"ninja --version\".split())' - fixed argv",
+          "src/transformers/pipelines/audio_utils.py:34/221 'subprocess.Popen(ffmpeg_command, ...)' and :238 'subprocess.run(command, ...)' - ffmpeg argv lists",
+          "src/transformers/pipelines/audio_classification.py:54 'subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)'",
+          "src/transformers/testing_utils.py:1991 'subprocess.check_output(command, stderr=subprocess.STDOUT)' inside run_command (List[str] parameter); :1845 'asyncio.create_subprocess_exec(cmd[0], *cmd[1:], ...)'"
+        ]
+      },
+      {
+        "family": "shell_true_flag",
+        "evidence": "exactly one site passes shell=True in src/transformers: onnx/__main__.py:59 (Popen of a joined command string); all other exec sites use list argv without shell"
+      },
+      {
+        "family": "command_template_format",
+        "evidence": [
+          "src/transformers/onnx/__main__.py:54-57 f-strings '--model {args.model}', '--task {args.feature}', '--framework {args.framework}', '{args.output}' concatenated into the shell command line",
+          "src/transformers/onnx/__main__.py:59 '\" \".join(cmd_line)' - string join feeding the shell=True Popen",
+          "src/transformers/commands/lfs.py:91 'f\"git config lfs.customtransfer.multipart.args {LFS_MULTIPART_UPLOAD_COMMAND}\".split()'",
+          "src/transformers/utils/import_utils.py:570 '\"ninja --version\".split()'"
+        ]
+      },
+      {
+        "family": "internal_exec_wrappers",
+        "evidence": [
+          "src/transformers/commands/lfs.py:79 LfsEnableCommand.run",
+          "src/transformers/onnx/__main__.py:35 export_with_optimum",
+          "src/transformers/utils/import_utils.py:~560 _is_ninja_available",
+          "src/transformers/testing_utils.py:1985 run_command and :~1840 the async execute wrapper around asyncio.create_subprocess_exec",
+          "src/transformers/pipelines/audio_utils.py:10 ffmpeg_read, :215 _ffmpeg_stream, :231 _get_microphone_name",
+          "src/transformers/pipelines/audio_classification.py:~40 ffmpeg_read_bpayload"
+        ]
+      }
+    ],
+    "sanitizerObservations": [
+      "No shlex.quote / pipes.quote / shell-escaping wrapper exists at any exec site in this snapshot; the only shlex usage is testing_utils.py:1596 shlex.split (tokenization of a generated command, not escaping of interpolated values).",
+      "Most exec sites use fixed list argv without shell (user.py git/git-lfs probes, import_utils.py ninja probe, audio ffmpeg_command lists) - argument-list invocation, a structural (not proof-level) mitigating shape for labeling.",
+      "lfs.py exec commands interpolate only in-repo constants and the module-level LFS_MULTIPART_UPLOAD_COMMAND; the externally controlled value at that site is local_path, passed as cwd=, not as part of the command string.",
+      "onnx/__main__.py:59 joins CLI-derived values into a shell=True command with no quoting - recorded as candidate only; final vulnerability judgment is deferred to taint analysis and labeling."
+    ],
+    "nonVulnerabilityNote": "The predefined CLI functionality (transformers-cli commands, ffmpeg pipeline helpers, version probes, test helpers) is normal intended functionality and is NOT automatically treated as a vulnerability; these are recorded only as candidate boundaries for labeling."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) followed by codeql bqrs decode --format=csv; NOT database analyze / SARIF",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output is decoded directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); alias-aware, only genuine resolved calls into external modules",
+      "ast": "pure AST shape match (attribute/name text, syntactic module prefix, receiver name); catches dynamic or unresolved shapes that API graphs miss and is subject to name-collision noise"
+    },
+    "flowKinds": {
+      "sources": ["return", "param", "env", "cli", "stdin", "internal_transfer"],
+      "sinks": ["arg", "shell_true", "internal_exec_wrapper", "cmd_format", "cmd_join", "cmd_fstring"]
+    },
+    "pathFilter": "both queries restrict rows to files under src/transformers/ via a case-insensitive path regexp on the node's absolute file path (the DB covers the whole repo including tests/examples/utils)",
+    "exclusions": [
+      "tests/ (903 files in the DB) and the repo-root examples/, utils/, docs/, .circleci/ trees are excluded by the src/transformers/ path filter (test fixtures, CI scripts and generated code per WORKFLOW noise rules)",
+      "generic *.from_pretrained(...) call sites (2112 in src/transformers) are NOT extracted as source rows: they are the model-loading boundary but would dominate the candidate table with a single repeated signature; they are recorded here and can be modeled as a MySummaries taint step in Phase 2 if labeling needs them",
+      "logging-only helpers (logger.* / logging.*) are not extracted as candidates",
+      "docstring/doctest code (requests.get examples in modeling docstrings) is not real AST and is not matched"
+    ]
+  },
+  "uncoveredCases": [
+    "transformers_cli.py:54 'args.func(args)' - the command factory is attached dynamically via parser.set_defaults(func=lambda args: XCommand(args)); the lambda body target is not resolvable at extraction time. Mitigated by emitting the args.func(args) call as an internal_transfer row plus run()/__init__ handler-param rows for *Command classes.",
+    "*.from_pretrained(...) (2112 sites) - the dominant external-data boundary (model id -> hub download -> config.json -> PretrainedConfig kwargs). Excluded from row extraction for volume; a Phase 2 MySummaries step (parameter 0 taint into the loaded config/objects) is the right modeling point.",
+    "huggingface_hub and requests library internals are not part of the database; only import-side API-graph resolution is used, so 'return' rows for requests/hf_hub_download mark the boundary, and flow through library internals relies on the later taint configuration.",
+    "os.environ.get(...) / os.environ[...] reads are captured at the os.environ attribute node; bound-method (map(os.environ.get, ...)) shapes and os.environb are not modeled.",
+    "Bare-name (from-import) execution APIs are only matched for distinctive names (system, popen, getoutput, getstatusoutput); bare call/run/check_call are too collision-prone. In this snapshot every exec site is attribute-qualified (subprocess.*, asyncio.*), so the gap is not exercised.",
+    "f-strings (Fstring AST nodes) are only extracted inside functions that directly execute OS commands; f-string usage elsewhere is not a candidate.",
+    "Dynamic dispatch via importlib/importlib.importlib, __import__ and getattr(...) is not extracted.",
+    "eval/exec dynamic code execution is out of scope for pass 2 (covered by pass 4)."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth (confirmed_vulns.json, cmd_sinks.csv, cmd_safe_sinks.csv, CVE application report), CVE fix diffs, or vulnerability descriptions were consulted; candidate families are derived from repository evidence and the loaded language/pattern references only. No rules were added that target known vulnerability locations. Project source, the CodeQL database, and the Augur installation were not modified. Only iris/exploration/detection.json, iris/extraction/sources.ql and iris/extraction/sinks.ql were written; CodeQL execution and LLM labeling are deferred to later steps."
+  }
+}

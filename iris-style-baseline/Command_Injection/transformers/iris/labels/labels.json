@@ -1,0 +1,944 @@
+{
+  "version": "0.3.0",
+  "metadata": {
+    "run_id": "transformers-cwe78-phase1-step3-20260119",
+    "generated_at": "2026-10-19T12:00:00+00:00",
+    "language": "python",
+    "framework": null,
+    "model": "glm-5.3",
+    "project": "transformers (HuggingFace)",
+    "notes": [
+      "Pass 2 (CWE-78 Command/Argument Injection) labeling only; generated from iris/extraction/sources.csv (1034 rows) and sinks.csv (53 rows) — 1087 candidate rows processed in 9 batches by the model recorded above (Claude Code CLI harness).",
+      "Per-row audit trail with every disposition, dedup note and exclusion reason is in labels/labels_raw_pass2.json; labels.json holds the deduplicated signature-level entries used for Phase 2 library generation.",
+      "classification semantics: labels.json entries are signature-level judgments (tp = role confirmed at code level for that signature/shape; candidate = plausible boundary retained for recall, pending taint analysis; fp = judged non-dangerous shape). Site-level judgments (e.g. fixed-argv call sites vs shell=True) are in the raw artifact.",
+      "No sanitizer entries: no shlex.quote/pipes.quote or equivalent escaping exists at any exec site in src/transformers; argv-list invocation (no shell) is the only structural mitigation and is recorded per site in the raw artifact. Phase 2 isBarrier will resolve to none().",
+      "Pass 1 entry is a placeholder required by the labels_schema.json 'passes/contains' constraint (it demands a pass_id 1 entry); path traversal was not analyzed in this run, so its entries list is empty.",
+      "Ground-truth files present in the target tree (confirmed_vulns.json, cmd_sinks.csv, cmd_safe_sinks.csv, CVE report) were not read; labels derive from repository source code and the Augur references only."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 2,
+      "focus": "Command/Argument Injection (CWE-78)",
+      "cwes": [
+        "78"
+      ],
+      "entries": [
+        {
+          "id": "src-sys-stdin",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": null,
+            "callable": "stdin",
+            "flow_kind": "field",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/commands/lfs.py",
+            "line": 107
+          },
+          "rationale": "Genuine external input boundary: git-lfs writes line-delimited JSON protocol messages to this process's stdin (read_msg at lfs.py:107, init handshake at :165), and pipelines/base.py reads piped pipeline rows. Protocol envelope fields (event/type) are validated, but message values (oid, path, action.href, action.header) are not content-validated; in this snapshot they flow only into requests.put/post targets and file reads, never into a command string.",
+          "evidence": [
+            "src/transformers/commands/lfs.py:107 msg = json.loads(sys.stdin.readline().strip())",
+            "src/transformers/commands/lfs.py:165 init_msg = json.loads(sys.stdin.readline().strip())",
+            "src/transformers/pipelines/base.py:649 for line in sys.stdin:",
+            "covers 3 candidate rows"
+          ]
+        },
+        {
+          "id": "src-sys-argv",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": null,
+            "callable": "argv",
+            "flow_kind": "field",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/hf_argparser.py",
+            "line": 330
+          },
+          "rationale": "Raw CLI argument strings read in HfArgumentParser (file_args + sys.argv[1:]) — the argument-injection boundary for Trainer scripts and CLI-invoked workflows.",
+          "evidence": [
+            "src/transformers/hf_argparser.py:330 args = file_args + sys.argv[1:]",
+            "HfArgumentParser bridges dataclass TrainingArguments to argparse (parse_args/parse_args_into_dataclasses)",
+            "covers 4 candidate rows"
+          ]
+        },
+        {
+          "id": "src-argparse-parse-args",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "argparse",
+            "type": null,
+            "callable": "parse_args",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/commands/transformers_cli.py",
+            "line": 47
+          },
+          "rationale": "parse_args() return marks the parsed CLI Namespace. Two covered sites are installed entry points whose parsed values reach command construction: transformers-cli (commands/transformers_cli.py:47 -> args.func(args) dispatch into command handlers) and transformers.onnx (onnx/__main__.py:232 -> --model/--task/--framework/--output feed the shell=True command built in export_with_optimum). The remaining ~201 sites are developer model-conversion script mains under models/**: retained for recall, FP-filterable in Phase 2 (dev-script heuristic).",
+          "evidence": [
+            "src/transformers/commands/transformers_cli.py:47 args = parser.parse_args()",
+            "src/transformers/commands/transformers_cli.py:54-55 service = args.func(args); service.run()",
+            "src/transformers/onnx/__main__.py:232 args = parser.parse_args()",
+            "src/transformers/onnx/__main__.py:50-59 cmd_line built from args.model/args.feature/args.framework/args.output",
+            "covers 204 candidate rows"
+          ]
+        },
+        {
+          "id": "src-argparse-parse-known-args",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "argparse",
+            "type": null,
+            "callable": "parse_known_args",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/hf_argparser.py",
+            "line": 331
+          },
+          "rationale": "HfArgumentParser.parse_known_args consumes CLI/args-file strings; same CLI boundary family as parse_args (args files are also read from disk at hf_argparser.py:323-326).",
+          "evidence": [
+            "src/transformers/hf_argparser.py:317/331 parse_known_args on CLI and args-file strings",
+            "covers 2 candidate rows"
+          ]
+        },
+        {
+          "id": "src-os-environ",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "environ",
+            "flow_kind": "field",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/utils/hub.py",
+            "line": 75
+          },
+          "rationale": "Environment reads (TRANSFORMERS_OFFLINE, HF_*/cache-path variables, WANDB_*/COMET_*/MLFLOW_* integration flags, LOCAL_RANK/XLA flags). Marked source for recall over service/CI deployments where env values can be attacker-influenced; in this snapshot no env value was observed flowing into command construction.",
+          "evidence": [
+            "src/transformers/utils/hub.py:75/82/94-96 offline flag and cache-path envs",
+            "src/transformers/training_args.py:79+ distributed-training env flags",
+            "covers 86 candidate rows"
+          ]
+        },
+        {
+          "id": "src-os-getenv",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "getenv",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/utils/hub.py",
+            "line": 82
+          },
+          "rationale": "os.getenv return: same family as os.environ (feature flags, cache locations, integration secrets); no path to command execution observed in this snapshot; kept for recall.",
+          "evidence": [
+            "src/transformers/utils/hub.py:82 torch_cache_home = os.getenv(...)",
+            "src/transformers/integrations/integration_utils.py 28 sites (WANDB_*/COMET_*/MLFLOW_*)",
+            "covers 120 candidate rows"
+          ]
+        },
+        {
+          "id": "src-json-load",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "json",
+            "type": null,
+            "callable": "load",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/tokenization_utils_base.py",
+            "line": 1970
+          },
+          "rationale": "Decodes JSON documents that are frequently hub-downloaded model assets (tokenizer_config.json, config.json, preprocessor_config.json resolved via cached_path/hf_hub_download) — attacker-influenced whenever an untrusted repo id is passed to from_pretrained. Values populate configuration objects; no direct flow into command construction was observed, so the entry is kept as a recall-oriented source (classification candidate).",
+          "evidence": [
+            "src/transformers/tokenization_utils_base.py:1970 tokenizer_config = json.load(reader) on a hub-resolved file",
+            "src/transformers/configuration_utils.py:828 return json.loads(text) (downloaded config.json)",
+            "src/transformers/pipelines/base.py:614 self._entries = json.load(f) (pipeline input file)",
+            "add_new_model.py:87/99 loads packaged template files (fixed content) — lower-risk members of the family",
+            "covers 272 candidate rows"
+          ]
+        },
+        {
+          "id": "src-json-loads",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "json",
+            "type": null,
+            "callable": "loads",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/commands/lfs.py",
+            "line": 107
+          },
+          "rationale": "Family mix: most sites decode local or hub-fetched configuration text; 2 sites (commands/lfs.py:107/165) decode the external git-lfs stdin protocol and are true-positive boundaries. Kept as source for recall.",
+          "evidence": [
+            "src/transformers/commands/lfs.py:107/165 json.loads(sys.stdin.readline().strip())",
+            "src/transformers/generation/configuration_utils.py:796 json.loads(text)",
+            "src/transformers/sagemaker/training_args_sm.py:37/47/96 json.loads of SageMaker env values",
+            "covers 132 candidate rows"
+          ]
+        },
+        {
+          "id": "src-requests-get",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "requests",
+            "type": null,
+            "callable": "get",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/image_processing_utils.py",
+            "line": 539
+          },
+          "rationale": "HTTP response boundary: returns remote content (model-hosting URLs in dev conversion scripts, remote images/audio for pipelines, inference APIs). No observed response body flows into command construction; kept as a network boundary for recall.",
+          "evidence": [
+            "src/transformers/image_processing_utils.py:539 requests.get(image_url_or_urls, stream=True)",
+            "src/transformers/pipelines/video_classification.py:91 / zero_shot_audio_classification.py:102",
+            "dev convert_*.py scripts fetch checkpoints from fixed model URLs",
+            "covers 75 candidate rows"
+          ]
+        },
+        {
+          "id": "src-requests-post",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "requests",
+            "type": null,
+            "callable": "post",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/tools/agents.py",
+            "line": 643
+          },
+          "rationale": "HTTP response boundary for POST calls (agent inference endpoints, lfs upload completion). In commands/lfs.py:217 the target URL itself comes from the stdin protocol message (request-target influence, not command execution).",
+          "evidence": [
+            "src/transformers/tools/agents.py:643 requests.post(...) to a remote inference endpoint",
+            "src/transformers/commands/lfs.py:217 requests.post(completion_url, json=...) — completion_url from stdin JSON",
+            "covers 3 candidate rows"
+          ]
+        },
+        {
+          "id": "src-requests-put",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "requests",
+            "type": null,
+            "callable": "put",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/commands/lfs.py",
+            "line": 197
+          },
+          "rationale": "HTTP boundary: lfs.py:197 uploads file slices to presigned URLs taken from the stdin protocol message's action.header values (URL choice is externally influenced — an SSRF-shaped flow, recorded here for pass 2 as network boundary only).",
+          "evidence": [
+            "src/transformers/commands/lfs.py:197 requests.put(presigned_url, data=data)",
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "src-requests-head",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "requests",
+            "type": null,
+            "callable": "head",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/utils/hub.py",
+            "line": 612
+          },
+          "rationale": "HTTP boundary: hub availability probe; response metadata only.",
+          "evidence": [
+            "src/transformers/utils/hub.py requests.head hub endpoint probe",
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "src-hfhub-hf-hub-download",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": "huggingface_hub",
+            "module": null,
+            "type": null,
+            "callable": "hf_hub_download",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/tools/base.py",
+            "line": 59
+          },
+          "rationale": "Returns the local path of a hub-fetched file whose contents are attacker-influenced when an untrusted repo id is used; downstream consumption is usually covered by the json.load source family. Boundary kept for recall.",
+          "evidence": [
+            "src/transformers/tools/base.py:59/63 hf_hub_download(...) for tool assets",
+            "dev convert_*.py scripts fetch checkpoints/model metadata",
+            "covers 80 candidate rows"
+          ]
+        },
+        {
+          "id": "src-hfhub-cached-download",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "huggingface_hub",
+            "module": null,
+            "type": null,
+            "callable": "cached_download",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/models/detr/convert_detr_original_pytorch_checkpoint_to_pytorch.py",
+            "line": 199
+          },
+          "rationale": "Legacy huggingface_hub.cached_download return: same hub-content boundary as hf_hub_download.",
+          "evidence": [
+            "covers 9 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-BaseUserCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.user",
+            "type": "BaseUserCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/user.py",
+            "line": 97
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class BaseUserCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. args carry the parsed user-command flags (token, organization, name, yes); no exec input.",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: BaseUserCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/user.py:97 __init__ parameter(s) of BaseUserCommand",
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-AddNewModelCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.add_new_model",
+            "type": "AddNewModelCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/add_new_model.py",
+            "line": 52
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class AddNewModelCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. testing/testing_file/path flags select local template outputs.",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: AddNewModelCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/add_new_model.py:52 __init__ parameter(s) of AddNewModelCommand",
+            "covers 3 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-AddNewModelLikeCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.add_new_model_like",
+            "type": "AddNewModelLikeCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/add_new_model_like.py",
+            "line": 1516
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class AddNewModelLikeCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. config_file/path_to_repo point to local repo files.",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: AddNewModelLikeCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/add_new_model_like.py:1516 __init__ parameter(s) of AddNewModelLikeCommand",
+            "covers 2 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-ConvertCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.convert",
+            "type": "ConvertCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/convert.py",
+            "line": 69
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class ConvertCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. model_type / tf_checkpoint / pytorch_dump_output / config / finetuning_task_name — local file paths for TF checkpoint conversion.",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: ConvertCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/convert.py:69 __init__ parameter(s) of ConvertCommand",
+            "covers 5 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-DownloadCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.download",
+            "type": "DownloadCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/download.py",
+            "line": 42
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class DownloadCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. model / cache-dir CLI values (hub download target).",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: DownloadCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/download.py:42 __init__ parameter(s) of DownloadCommand",
+            "covers 4 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-EnvironmentCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.env",
+            "type": "EnvironmentCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/env.py",
+            "line": 53
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class EnvironmentCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. no argument content reaches execution.",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: EnvironmentCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/env.py:53 __init__ parameter(s) of EnvironmentCommand",
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-LfsEnableCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.lfs",
+            "type": "LfsEnableCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/lfs.py",
+            "line": 76
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class LfsEnableCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. self.args.path is used as the cwd of the fixed 'git config' subprocess calls — path semantics, not command text.",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: LfsEnableCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/lfs.py:76 __init__ parameter(s) of LfsEnableCommand",
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-LfsUploadCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.lfs",
+            "type": "LfsUploadCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/lfs.py",
+            "line": 158
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class LfsUploadCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. invoked by git-lfs (not by the user); the external data enters via stdin, not via these args.",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: LfsUploadCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/lfs.py:158 __init__ parameter(s) of LfsUploadCommand",
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-PTtoTFCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.pt_to_tf",
+            "type": "PTtoTFCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/pt_to_tf.py",
+            "line": 179
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class PTtoTFCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. 8 file-path parameters for checkpoint direction conversion.",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: PTtoTFCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/pt_to_tf.py:179 __init__ parameter(s) of PTtoTFCommand",
+            "covers 8 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-RunCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.run",
+            "type": "RunCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/run.py",
+            "line": 59
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class RunCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. training run arguments (fp16 etc.).",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: RunCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/run.py:59 __init__ parameter(s) of RunCommand",
+            "covers 2 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-ServeCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.serving",
+            "type": "ServeCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/serving.py",
+            "line": 124
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class ServeCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. task/model/port for pipeline serving.",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: ServeCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/serving.py:124 __init__ parameter(s) of ServeCommand",
+            "covers 4 candidate rows"
+          ]
+        },
+        {
+          "id": "src-cmd-TrainCommand",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.train",
+            "type": "TrainCommand",
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1
+          },
+          "location": {
+            "file": "src/transformers/commands/train.py",
+            "line": 93
+          },
+          "rationale": "Handler parameter boundary of the transformers-cli subcommand class TrainCommand: __init__ receives values parsed from CLI arguments (the argparse Namespace is unpacked by the parser.set_defaults(func=lambda args: XCommand(args)) factory in register_subcommand). Parameters of externally exposed CLI handlers are source candidates per references/python.md; this entry backs up the args.func(args) dynamic dispatch, which extraction cannot resolve. TrainingArguments fields parsed by HfArgumentParser.",
+          "evidence": [
+            "parser.set_defaults(func=lambda args: TrainCommand(args)) in the command's register_subcommand",
+            "src/transformers/commands/train.py:93 __init__ parameter(s) of TrainCommand",
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "src-onnx-export_with_optimum-param",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "transformers.onnx.__main__",
+            "type": null,
+            "callable": "export_with_optimum",
+            "flow_kind": "param",
+            "arg_index": 0
+          },
+          "location": {
+            "file": "src/transformers/onnx/__main__.py",
+            "line": 35
+          },
+          "rationale": "Receives the parsed transformers.onnx argparse Namespace; args.model / args.feature / args.framework / args.output are interpolated unquoted into the shell=True command at onnx/__main__.py:59 — the direct upstream of the strongest CWE-78 sink in the package.",
+          "evidence": [
+            "src/transformers/onnx/__main__.py:50-58 cmd_line = [sys.executable, '-m', 'optimum.exporters.onnx', f'--model {args.model}', ...]",
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "src-onnx-export_with_transformers-param",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.onnx.__main__",
+            "type": null,
+            "callable": "export_with_transformers",
+            "flow_kind": "param",
+            "arg_index": 0
+          },
+          "location": {
+            "file": "src/transformers/onnx/__main__.py",
+            "line": 69
+          },
+          "rationale": "Receives the parsed transformers.onnx Namespace; used by the in-process export path (no subprocess inside); kept as a boundary for completeness.",
+          "evidence": [
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "src-convert-main-convert_bert_pytorch_checkpoint_to_original_tf",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "transformers.models.bert.convert_bert_pytorch_checkpoint_to_original_tf",
+            "type": null,
+            "callable": "main",
+            "flow_kind": "param",
+            "arg_index": 0
+          },
+          "location": {
+            "file": "src/transformers/models/bert/convert_bert_pytorch_checkpoint_to_original_tf.py",
+            "line": 92
+          },
+          "rationale": "raw_args parameter of a conversion-script main(): developer-maintenance CLI boundary (argparse main inside the package, not a registered entry point); kept as candidate.",
+          "evidence": [
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "src-convert-main-convert_megatron_to_pytorch",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "transformers.models.gpt_sw3.convert_megatron_to_pytorch",
+            "type": null,
+            "callable": "main",
+            "flow_kind": "param",
+            "arg_index": 0
+          },
+          "location": {
+            "file": "src/transformers/models/gpt_sw3/convert_megatron_to_pytorch.py",
+            "line": 147
+          },
+          "rationale": "raw_args parameter of a conversion-script main(): developer-maintenance CLI boundary (argparse main inside the package, not a registered entry point); kept as candidate.",
+          "evidence": [
+            "covers 1 candidate rows"
+          ]
+        },
+        {
+          "id": "snk-subprocess-popen-arg0",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "Popen",
+            "flow_kind": "argument",
+            "arg_index": 0
+          },
+          "location": {
+            "file": "src/transformers/onnx/__main__.py",
+            "line": 59
+          },
+          "rationale": "subprocess.Popen argument 0 across the covered sites: onnx/__main__.py:59 (shell command string built from CLI args — see the dedicated shell=True entry), pipelines/audio_utils.py:34 and pipelines/audio_classification.py:54 (fixed ffmpeg argv lists, int-formatted sampling rate), audio_utils.py:221 _ffmpeg_stream (caller-built argv whose elements embed an input path/device string — argument-position injection shape only, no shell). Signature-level sink for pass-2 taint tracking; site-level exploitability differs (see labels_raw_pass2.json).",
+          "evidence": [
+            "src/transformers/onnx/__main__.py:59 subprocess.Popen(' '.join(cmd_line), shell=True)",
+            "src/transformers/pipelines/audio_utils.py:34 fixed ffmpeg argv (pipe:0 -> pipe:1)",
+            "src/transformers/pipelines/audio_utils.py:221 Popen(ffmpeg_command) with caller-built argv",
+            "covers 8 candidate rows"
+          ]
+        },
+        {
+          "id": "snk-subprocess-popen-shell-true",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "Popen",
+            "flow_kind": "unknown",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/onnx/__main__.py",
+            "line": 59
+          },
+          "rationale": "The only shell=True execution in src/transformers: onnx/__main__.py:59 joins cmd_line (sys.executable -m optimum.exporters.onnx --model {args.model} --task {args.feature} --framework {args.framework} {args.output}) into a single shell string with no quoting — no shlex.quote/pipes.quote exists anywhere in the package. Confirmed dangerous construction; whether it is exploitable depends on the trust boundary over the CLI arguments (local user vs wrapper service) — final judgment deferred to taint analysis.",
+          "evidence": [
+            "src/transformers/onnx/__main__.py:54-57 f-string command flags from args.*",
+            "src/transformers/onnx/__main__.py:59 '\" \".join(cmd_line)' with shell=True",
+            "grep: no shlex.quote/pipes.quote under src/transformers (only testing_utils.py:1596 shlex.split)"
+          ]
+        },
+        {
+          "id": "snk-subprocess-run-arg0",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "run",
+            "flow_kind": "argument",
+            "arg_index": 0
+          },
+          "location": {
+            "file": "src/transformers/commands/lfs.py",
+            "line": 87
+          },
+          "rationale": "subprocess.run argument 0 at commands/lfs.py:87/90 (constant 'git config' command strings; external influence limited to cwd=local_path, a path) and pipelines/audio_utils.py:238 (fixed ffmpeg device-listing argv). Signature-level sink; both covered sites are constant-command and would be FP-filtered in Phase 2.",
+          "evidence": [
+            "src/transformers/commands/lfs.py:87/90 subprocess.run('git config ...'.split(), cwd=local_path)",
+            "src/transformers/pipelines/audio_utils.py:238 subprocess.run(command) with fixed device-listing argv",
+            "covers 6 candidate rows"
+          ]
+        },
+        {
+          "id": "snk-subprocess-check-output-arg0",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "subprocess",
+            "type": null,
+            "callable": "check_output",
+            "flow_kind": "argument",
+            "arg_index": 0
+          },
+          "location": {
+            "file": "src/transformers/commands/user.py",
+            "line": 159
+          },
+          "rationale": "check_output argument 0: commands/user.py:159/165 (fixed git / git-lfs version probes), utils/import_utils.py:570 (constant 'ninja --version'), testing_utils.py:1991 run_command (caller-provided command list, argv form, test helper). Signature-level sink; the covered production sites are constant-command.",
+          "evidence": [
+            "src/transformers/commands/user.py:159 subprocess.check_output(['git', '--version'])",
+            "src/transformers/utils/import_utils.py:570 subprocess.check_output('ninja --version'.split())",
+            "src/transformers/testing_utils.py:1991 subprocess.check_output(command, ...) in run_command",
+            "covers 8 candidate rows"
+          ]
+        },
+        {
+          "id": "snk-asyncio-create-subprocess-exec-arg0",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "asyncio",
+            "type": null,
+            "callable": "create_subprocess_exec",
+            "flow_kind": "argument",
+            "arg_index": 0
+          },
+          "location": {
+            "file": "src/transformers/testing_utils.py",
+            "line": 1845
+          },
+          "rationale": "asyncio.create_subprocess_exec(cmd[0], *cmd[1:]) at testing_utils.py:1845 spreads a caller-provided command list as argv without a shell; test helper used by the test suite.",
+          "evidence": [
+            "src/transformers/testing_utils.py:1845-1852 create_subprocess_exec(cmd[0], *cmd[1:], ...)",
+            "covers 2 candidate rows"
+          ]
+        },
+        {
+          "id": "sum-cli-func-dispatch",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.transformers_cli",
+            "type": null,
+            "callable": "func",
+            "flow_kind": "argument",
+            "arg_index": 0
+          },
+          "location": {
+            "file": "src/transformers/commands/transformers_cli.py",
+            "line": 54
+          },
+          "rationale": "service = args.func(args): the command factory is attached dynamically via parser.set_defaults(func=lambda args: XCommand(args)) and cannot be resolved statically; an additional taint step (parsed args -> constructed command object) is required for realistic propagation into the command handlers.",
+          "evidence": [
+            "src/transformers/commands/transformers_cli.py:47-55 parse_args -> args.func(args) -> service.run()",
+            "src/transformers/commands/lfs.py:63/72 set_defaults(func=lambda args: LfsEnableCommand(args))"
+          ]
+        },
+        {
+          "id": "sum-cli-service-run",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.transformers_cli",
+            "type": null,
+            "callable": "run",
+            "flow_kind": "receiver",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/commands/transformers_cli.py",
+            "line": 55
+          },
+          "rationale": "service.run() enters the dynamically selected command handler; summary step so taint on the command object reaches the handler body (backs up the same dynamic-dispatch gap as sum-cli-func-dispatch).",
+          "evidence": [
+            "src/transformers/commands/transformers_cli.py:55 service.run()"
+          ]
+        },
+        {
+          "id": "sum-lfs-read-msg",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "transformers.commands.lfs",
+            "type": null,
+            "callable": "read_msg",
+            "flow_kind": "return",
+            "arg_index": null
+          },
+          "location": {
+            "file": "src/transformers/commands/lfs.py",
+            "line": 179
+          },
+          "rationale": "read_msg() returns the external git-lfs stdin protocol message; summary step (stdin -> call result) as a fallback in case the inner json.loads node is not matched as a source.",
+          "evidence": [
+            "src/transformers/commands/lfs.py:179 msg = read_msg() inside the upload loop"
+          ]
+        }
+      ]
+    },
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal (placeholder — not analyzed in this run; entry present only to satisfy labels_schema.json passes/contains)",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": []
+    }
+  ]
+}
