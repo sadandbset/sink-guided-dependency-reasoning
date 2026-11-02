@@ -1,0 +1,147 @@
+{
+  "project": "abilian-devtools",
+  "run_stage": "Phase 1 / Step 1 (explore and detect)",
+  "detected_language": "python",
+  "language_evidence": {
+    "database_metadata": "primaryLanguage: python (abilian-devtools-db/codeql-database.yml, cliVersion 2.25.1, baselineLinesOfCode: 40, sourceLocationPrefix: .../abilian-devtools_vuln)",
+    "file_extensions": "2 .py files under src/: abilian/devtools/__init__.py (license header only, no code) and abilian/devtools/main.py (73 lines, the entire application)",
+    "build_manifests": "pyproject.toml (poetry, package abilian-devtools 0.2.3, packages=[{include = 'abilian', from = 'src'}]), Makefile, README.md"
+  },
+  "toolchain": {
+    "codeql_cli": "2.25.1 (DB creation metadata; local pack search path E:\\codeql-codeql-cli-2.25.2)",
+    "python_pack": "codeql/python-all 7.0.4 (pinned in iris/qlpack.yml; QL interfaces verified against this pack's lib/semmle/python)"
+  },
+  "selected_passes": [2],
+  "selected_cwes": ["CWE-78"],
+  "application_entry_points": [
+    "pyproject.toml [tool.poetry.scripts]: adt = 'abilian.devtools.main:app' (console script entry point)",
+    "src/abilian/devtools/main.py:71-72: if __name__ == \"__main__\": app()",
+    "Makefile 'lint: adt all' confirms the CLI is the primary invocation mode"
+  ],
+  "framework_candidates": [
+    {
+      "name": "Typer CLI",
+      "kind": "cli",
+      "confidence": 0.95,
+      "score_breakdown": {
+        "import_evidence": 0.45,
+        "registration_evidence": 0.3,
+        "bootstrap_evidence": 0.2,
+        "layout_evidence": 0.0
+      },
+      "evidence": [
+        "src/abilian/devtools/main.py:10: import typer",
+        "src/abilian/devtools/main.py:12: app = typer.Typer()",
+        "src/abilian/devtools/main.py:23: @app.command() (check)",
+        "src/abilian/devtools/main.py:43: @app.command(\"security-check\") (security_check)",
+        "src/abilian/devtools/main.py:53: @app.command() (test)",
+        "src/abilian/devtools/main.py:59: @app.command() (all)",
+        "src/abilian/devtools/main.py:66: @app.callback() (main)",
+        "src/abilian/devtools/main.py:72: app() under __main__ guard",
+        "pyproject.toml [tool.poetry.scripts]: adt = 'abilian.devtools.main:app'"
+      ]
+    },
+    {
+      "name": "flask",
+      "confidence": 0.0,
+      "evidence": []
+    },
+    {
+      "name": "django",
+      "confidence": 0.0,
+      "evidence": []
+    },
+    {
+      "name": "fastapi",
+      "confidence": 0.0,
+      "evidence": []
+    }
+  ],
+  "primary_framework": "Typer CLI",
+  "libraries_of_interest": [
+    {"name": "typer", "role": "cli_framework", "evidence": ["src/abilian/devtools/main.py:10: import typer", "main.py:12: typer.Typer()", "main.py:16,29: typer.secho/typer.colors for output"]},
+    {"name": "subprocess", "role": "process_execution", "evidence": ["src/abilian/devtools/main.py:6: import subprocess", "main.py:18: subprocess.Popen(args)"]},
+    {"name": "shlex", "role": "command_tokenization", "evidence": ["src/abilian/devtools/main.py:5: import shlex", "main.py:17: shlex.split(cmd)"]},
+    {"name": "sys", "role": "exit_control", "evidence": ["src/abilian/devtools/main.py:7: import sys", "main.py:20: sys.exit()"]},
+    {"name": "pathlib (stdlib)", "role": "path_check", "evidence": ["src/abilian/devtools/main.py:8: from pathlib import Path", "main.py:28: Path(arg).exists()"]}
+  ],
+  "external_input_surfaces": [
+    {
+      "family": "cli_arguments",
+      "evidence": [
+        "src/abilian/devtools/main.py:24: def check(args: list[str]) - Typer command handler; positional CLI arguments are user-supplied file/directory names",
+        "main.py:27-31: each arg is only checked with Path(arg).exists() (existence, no content or name validation)",
+        "main.py:33: args_str = \" \".join(args2) then f-string interpolated into tool commands at main.py:35-40"
+      ],
+      "notes": "test(), security_check() and the main() callback take no parameters; check() is the only handler with an input parameter. No typer.Option/typer.Argument declarations and no typer.prompt/confirm interactive input are used."
+    },
+    {
+      "family": "stdin",
+      "evidence": [],
+      "notes": "not observed; no sys.stdin usage"
+    },
+    {
+      "family": "environment_variables",
+      "evidence": [],
+      "notes": "not observed; os is never imported"
+    },
+    {
+      "family": "file_input",
+      "evidence": [],
+      "notes": "no open()/read of external content observed; Path() is used only for existence checks"
+    },
+    {
+      "family": "http_input",
+      "evidence": [],
+      "notes": "no requests/httpx/urllib import; no HTTP surface"
+    }
+  ],
+  "command_execution_sinks": [
+    {
+      "api": "subprocess.Popen",
+      "evidence": ["src/abilian/devtools/main.py:18: p = subprocess.Popen(args) with args = shlex.split(cmd) (main.py:17)"],
+      "notes": "list-form invocation (no shell=True). The command string is caller-built: check() interpolates CLI arguments into it via f-strings (main.py:35-40)."
+    },
+    {
+      "api": "os.system / os.popen",
+      "evidence": [],
+      "notes": "not observed (os not imported); family included in sink query per Pass 2 coverage policy, will simply yield no rows"
+    },
+    {
+      "api": "asyncio.create_subprocess_exec / create_subprocess_shell",
+      "evidence": [],
+      "notes": "not observed (asyncio not imported); family included in sink query per Pass 2 coverage policy, will simply yield no rows"
+    }
+  ],
+  "project_internal_wrapper_functions": {
+    "sink_side": [
+      "src/abilian/devtools/main.py:15-20: run(cmd) - the single process-execution wrapper: echoes cmd via typer.secho, shlex.split(cmd), subprocess.Popen(args), sys.exit() on nonzero returncode. Called from check (main.py:35-40), security_check (46-47), test (56)."
+    ],
+    "source_side": [
+      "src/abilian/devtools/main.py:24: check(args) - Typer command handler, the external CLI-argument boundary; builds and passes command strings to run()."
+    ],
+    "transform_side": [
+      "src/abilian/devtools/main.py:17: shlex.split(cmd) - command tokenization producing the argv list for Popen; not a sink itself, relevant as a transformation/summary step during labeling (tokenization avoids shell parsing but performs no validation of the command or its arguments)"
+    ]
+  },
+  "noise_and_exclusions": [
+    "No tests/ directory exists in the database scope (baselineLinesOfCode 40 = main.py only); a defensive test-path filter is still kept in both queries.",
+    "__init__.py contains only license headers, no code.",
+    "typer.secho and Path(...).exists() are display/validation calls, not sinks or sources.",
+    "All quality tools (ruff, flake8, mypy, pyright, vulture, deptry, pip-audit, safety, pytest) are invoked as external commands, never imported; pyproject dependency entries are therefore not API candidates."
+  ],
+  "reference_files_loaded": [
+    "WORKFLOW.md",
+    "references/patterns.md",
+    "references/python.md"
+  ],
+  "framework_references_loaded": [],
+  "framework_reference_decision": "Typer (CLI) is the detected framework but Augur ships no typer/click reference. Per WORKFLOW.md 4.2.3, source/sink shapes were derived from repository code using the Python language reference only; assumptions recorded in this file.",
+  "assumptions": [
+    "This is a CLI developer tool: the attacker-relevant input boundary is the command line of 'adt check ...' (user-supplied file/directory names interpolated into tool commands), not HTTP request parameters.",
+    "Typer handler parameters (functions decorated with @<app>.command/@<app.callback> in a module that imports typer and creates a typer.Typer() app) are extracted as the source family; matching is syntactic, to be confirmed during LLM labeling.",
+    "No AutoGluon- or Bikeshed-specific functions, modules or frameworks are assumed; all candidate families come from the imports and calls actually present in this repository.",
+    "Standard process-API families (subprocess/os/asyncio) are kept in the sink query for Pass 2 coverage consistency with prior projects; only subprocess.Popen has import and call evidence here, the other families will yield no rows.",
+    "Extraction is purely candidate-based: rows are candidates for LLM labeling, not confirmed vulnerabilities; no known-vulnerability location information was used or consulted."
+  ]
+}

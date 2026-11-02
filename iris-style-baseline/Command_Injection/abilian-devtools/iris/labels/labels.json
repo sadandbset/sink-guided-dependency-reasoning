@@ -1,0 +1,116 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "abilian-devtools-iris-pass2-step3-20261014",
+    "generated_at": "2026-10-14T07:25:10+00:00",
+    "language": "python",
+    "framework": "Typer CLI",
+    "model": "glm-5.3",
+    "project": "abilian-devtools",
+    "notes": [
+      "Scope narrowed to CWE-78 only; Augur's default Pass 2 CWE set (077/078/088) was narrowed per experiment scope, consistent with the autogluon and bikeshed runs.",
+      "Pass 1 block is a schema-compatibility placeholder only (labels_schema.json 'contains' requires a pass with pass_id 1); no CWE-22 analysis was performed and its entries array is empty.",
+      "Labeling standard (identical to autogluon/bikeshed): role = semantic role for CWE-78; classification tp = role confirmed with concrete code evidence (NOT a confirmed vulnerability); fp = extracted candidacy refuted at this site; candidate = retained with insufficient evidence for recall; sink labels identify the dangerous argument position, never an asserted exploit.",
+      "Evidence source: the CodeQL DB creation-time source snapshot (abilian-devtools-db/src.zip). The on-disk src/ tree in the dataset directory DIVERGES from the DB snapshot (no os.system, different line numbering, shlex/subprocess list-form instead); the CSV candidates match the DB snapshot exactly, and Phase 2 taint queries run against the DB, so all labeling evidence was taken from the snapshot. The on-disk file was not used as labeling evidence, and no ground-truth/fix-report files (vulnerability review report, cmd_sinks*.csv, safe-db) were read.",
+      "sources.csv is empty (0 rows): sources.ql's isTyperHandler predicate binds getADecorator() to an Attribute, but every handler here is decorated with a Call expression (@app.command()/@app.command(\"security-check\")/@app.callback()), so no source candidate was extracted. Root cause and the compensating supplementary entry p2-supp-001 (check parameter, the sole external CLI boundary) are recorded in labels_raw_pass2.json and phase1_review.md.",
+      "No entry fell below the 0.55 confidence re-ask threshold (WORKFLOW.md 4.4.4); all confidences are >= 0.8. The supplementary entry is flagged for reviewer attention on provenance grounds, not confidence.",
+      "Same model (glm-5.3) and labeling configuration as the autogluon and bikeshed runs; the only recorded change is the evidence-source policy above (DB src.zip snapshot instead of the working tree)."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal (placeholder only - not analyzed in this run; schema requires a pass_id 1 entry)",
+      "cwes": [
+        "022"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 2,
+      "focus": "Command/Argument Injection (CWE-78 only; narrowed from Augur default 077/078/088)",
+      "cwes": [
+        "078"
+      ],
+      "entries": [
+        {
+          "id": "p2-sink-001",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "system",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "src/abilian/devtools/main.py",
+            "line": 16
+          },
+          "rationale": "os.system(cmd) passes the entire command string through the shell (/bin/sh -c): full shell metacharacter interpretation with no quoting, i.e. the CWE-78 dangerous argument position (arg 0). cmd is caller-built: check() joins CLI-supplied file/directory names (args_str = ' '.join(args2), line 31) and interpolates them unquoted into run(f\"ruff {args_str}\") and run(f\"flake8 {args_str}\") (lines 33-34); the only prior filter is Path(arg).exists() (lines 25-29), an existence check that performs no command sanitization - an existing attacker-named file (e.g. a name containing ';' or '$(...)') still passes and is shell-interpreted. Repository-wide grep of the DB snapshot confirms this is the only command-execution call in the database.",
+          "evidence": [
+            "src/abilian/devtools/main.py:16: result = os.system(cmd) (inside run(cmd), def at line 14)",
+            "src/abilian/devtools/main.py:31-34: args_str = ' '.join(args2); run(f\"ruff {args_str}\"); run(f\"flake8 {args_str}\")",
+            "src/abilian/devtools/main.py:25-29: for arg in args: if not Path(arg).exists() ... else args2.append(arg) (existence filter only)",
+            "src/abilian/devtools/main.py:35: run(\"mypy --show-error-codes {args_str}\") is a plain string (no f-prefix): args_str is NOT interpolated on this line",
+            "DB snapshot grep (subprocess|Popen|os.system|os.popen|pexpect|create_subprocess|shell=True|shlex|os.exec|pty.spawn): single hit, main.py:16 os.system"
+          ]
+        },
+        {
+          "id": "p2-sink-002",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "abilian",
+            "module": "devtools.main",
+            "type": null,
+            "callable": "run",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "src/abilian/devtools/main.py",
+            "line": 14
+          },
+          "rationale": "Project-internal process-execution wrapper: run(cmd) forwards its parameter 0 verbatim to os.system(cmd) at line 16 with no quoting, splitting or validation (typer.secho at line 15 is display only). Param-level wrapper sink for recall. Callers were all reviewed: check() passes f-strings interpolating CLI arguments (lines 33-34, tainted route); security_check (44-45), test (54) and the fixed commands in check (35-38) pass string literals; all() (line 60) calls check([\"src\", \"tests\"]) with literals. The CSV arg_index -1 (not applicable) is refined to 0: parameter 0 is the parameter that feeds the wrapped process call.",
+          "evidence": [
+            "src/abilian/devtools/main.py:14-18: def run(cmd): typer.secho(cmd, ...); result = os.system(cmd); if result: sys.exit()",
+            "src/abilian/devtools/main.py:33-34: tainted call sites run(f\"ruff {args_str}\") / run(f\"flake8 {args_str}\")",
+            "src/abilian/devtools/main.py:35-38,44-45,54,60: literal-command call sites (mypy/pyright/vulture/deptry/pip-audit/safety/pytest) and all() -> check([\"src\", \"tests\"])"
+          ]
+        },
+        {
+          "id": "p2-supp-001",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "abilian",
+            "module": "devtools.main",
+            "type": null,
+            "callable": "check",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "src/abilian/devtools/main.py",
+            "line": 22
+          },
+          "rationale": "SUPPLEMENTARY entry (extraction gap - not a CSV row; flagged for reviewer attention). check(args: list[str]) is the sole external input boundary of this Typer CLI: @app.command() (line 21) makes it the 'adt check <names>' handler, and Typer injects the CLI-provided file/directory names into the args parameter. Those values demonstrably reach the os.system command string via ' '.join(args2) (line 31) and the f-strings at lines 33-34 -> run() -> os.system (line 16). Added for Phase 2 recall; without it the pass has no source at all because sources.csv is empty (Call-shaped decorators never matched sources.ql's isTyperHandler). Threat model: the boundary is the local CLI user - attacker-relevant when adt is invoked on untrusted names (e.g. attacker-created filenames inside a checked-out repository that pass the Path.exists() filter while carrying shell metacharacters).",
+          "evidence": [
+            "src/abilian/devtools/main.py:21-22: @app.command() / def check(args: list[str])",
+            "src/abilian/devtools/main.py:25-31: existence-filtered args -> args2 -> args_str = ' '.join(args2)",
+            "src/abilian/devtools/main.py:33-34: run(f\"ruff {args_str}\"); run(f\"flake8 {args_str}\") -> run -> os.system (line 16)",
+            "src/abilian/devtools/main.py:57-61: all() -> check([\"src\", \"tests\"]) (literal values, untainted route)",
+            "pyproject.toml [tool.poetry.scripts]: adt = 'abilian.devtools.main:app' (console-script entry point); main.py:71-72: app() under __main__ guard",
+            "extraction/sources.csv: 0 rows - root cause: isTyperHandler requires getADecorator() to bind an Attribute, but @app.command()/@app.callback() decorators here are Call expressions"
+          ]
+        }
+      ]
+    }
+  ]
+}

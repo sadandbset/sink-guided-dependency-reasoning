@@ -1,0 +1,101 @@
+{
+  "pass_id": 2,
+  "cwes": [
+    "078"
+  ],
+  "run_id": "abilian-devtools-iris-pass2-step3-20261014",
+  "generated_at": "2026-10-14T07:25:10+00:00",
+  "model": "glm-5.3",
+  "project": "abilian-devtools",
+  "source_csv": "iris/extraction/sources.csv",
+  "sink_csv": "iris/extraction/sinks.csv",
+  "candidate_rows_total": 2,
+  "entries_total": 3,
+  "evidence_source": "CodeQL DB abilian-devtools-db creation-time source snapshot (src.zip inside the DB directory). The on-disk src/ tree in abilian-devtools_vuln diverges from this snapshot (it contains no os.system and uses shlex.split + subprocess.Popen list-form with different line numbering). The CSV rows (Function run @ main.py:14; os.system @ main.py:16) match the DB snapshot exactly, and Phase 2 taint queries will run against this DB, so the snapshot is the authoritative labeling evidence. The divergence was discovered from the DB's own src.zip plus CSV line-number mismatch - no ground-truth or fix-report files were read.",
+  "source_csv_empty_analysis": {
+    "rows": 0,
+    "root_cause": "sources.ql predicate isTyperHandler binds f.getADecorator() to an Attribute (attr.getName() in ['command','callback'] with a Name receiver). Every handler in this codebase is decorated with a Call expression (@app.command(), @app.command(\"security-check\"), @app.callback()), and getADecorator() returns that Call, so the Attribute binding never matches and zero source rows are emitted.",
+    "impact_on_phase2": "check's args parameter (the sole external CLI boundary) was never extracted. MySources.qll in Phase 2 must source the parameter(s) of functions decorated with @<app>.command()/@<app>.callback() (or at minimum devtools.main.check parameter 0), or the pass-2 query will have no source and produce zero paths.",
+    "compensation": "supplementary entry p2-supp-001 added from direct code evidence"
+  },
+  "discrepancy_note": "extraction/sinks.csv row 2 reports os.system at main.py:16 and row 1 reports Function run at main.py:14; the on-disk abilian-devtools_vuln/src/abilian/devtools/main.py instead has def run at line 15 and subprocess.Popen(shlex.split(cmd)) at line 18 with no os import. The extraction therefore ran against the DB snapshot (src.zip), not the current working tree. Labels follow the CSV/DB snapshot. Note that sinks.ql's own header comments (written during Step 2 from the on-disk file) describe subprocess.Popen and are stale relative to the actual extraction results.",
+  "dedup_rules": [
+    "DR-1: no exact duplicate (file, line, callable) rows exist in either CSV (2 distinct sink rows; sources.csv empty); nothing was dropped silently.",
+    "DR-2: per-site sink rows were kept separate (DR-4 in bikeshed): call-site context determines classification. Here each signature occurs at exactly one site, so no merge decision arose.",
+    "DR-3: no signature-level merging was applied anywhere; all 2 sink CSV rows map 1:1 to entries p2-sink-001/p2-sink-002.",
+    "DR-4: supplementary entries that are NOT CSV rows are ids p2-supp-*; provenance and reviewer flag are recorded per entry (audit rule inherited from the autogluon run).",
+    "DR-5: the source-side CSV family rows (typer.Argument/Option, sys.argv) yielded 0 rows and are therefore absent from labels - documented here rather than silently dropped; their absence is a query-result fact, not a deletion."
+  ],
+  "batches": [
+    {
+      "batch": "sinks-01",
+      "rows": 2,
+      "description": "Both sink candidate rows reviewed against the DB source snapshot: run() wrapper body (main.py:14-18), all run() call sites (check/security_check/test/all, lines 33-38, 44-45, 54, 60), the args -> args_str -> f-string construction chain (lines 25-34), and a repo-wide grep confirming os.system is the only command-execution API in the DB."
+    },
+    {
+      "batch": "sources-01",
+      "rows": 0,
+      "description": "sources.csv is empty. Root-cause analysis of the extraction gap (Call-shaped Typer decorators vs Attribute binding in isTyperHandler); boundary re-derived from code evidence and emitted as supplementary entry p2-supp-001 (check parameter 0)."
+    },
+    {
+      "batch": "recheck-01",
+      "rows": 0,
+      "description": "No entry below the 0.55 confidence re-ask threshold (WORKFLOW.md 4.4.4); minimum emitted confidence is 0.8."
+    }
+  ],
+  "sink_candidates": [
+    {
+      "row": 1,
+      "csv": "extraction/sinks.csv",
+      "node": "Function run",
+      "callable": "run",
+      "flow_kind": "param",
+      "arg_index_csv": -1,
+      "receiver_hint": "",
+      "module_hint": "devtools.main",
+      "file": "src/abilian/devtools/main.py",
+      "line": 14,
+      "entry_id": "p2-sink-002",
+      "role": "sink",
+      "classification": "tp",
+      "confidence": 0.85,
+      "arg_index_label": 0,
+      "arg_index_change_note": "CSV -1 (not applicable) refined to 0: parameter 0 (cmd) is the parameter that feeds the wrapped os.system call",
+      "dedup_or_dedup_note": "DR-2/DR-3: single call site, kept as its own entry"
+    },
+    {
+      "row": 2,
+      "csv": "extraction/sinks.csv",
+      "node": "Attribute()",
+      "callable": "system",
+      "flow_kind": "argument",
+      "arg_index_csv": 0,
+      "receiver_hint": "os",
+      "module_hint": "os",
+      "file": "src/abilian/devtools/main.py",
+      "line": 16,
+      "entry_id": "p2-sink-001",
+      "role": "sink",
+      "classification": "tp",
+      "confidence": 0.9,
+      "dedup_or_dedup_note": "DR-2/DR-3: single call site, kept as its own entry"
+    }
+  ],
+  "source_candidates": [],
+  "supplementary_entries": [
+    {
+      "entry_id": "p2-supp-001",
+      "origin": "not a CSV row - added during labeling from direct code evidence (extraction gap)",
+      "callable": "check",
+      "flow_kind": "param",
+      "arg_index": 0,
+      "file": "src/abilian/devtools/main.py",
+      "line": 22,
+      "role": "source",
+      "classification": "tp",
+      "confidence": 0.8,
+      "reviewer_attention": "supplementary provenance (not extracted): confirm keep-for-recall decision and the local-CLI threat model before Phase 2"
+    }
+  ],
+  "low_confidence_items": []
+}
