@@ -1,0 +1,290 @@
+{
+  "review": {
+    "reviewer": "independent LLM path re-review (glm-5.3)",
+    "date": "2026-10-19",
+    "task": "Augur/IRIS Pass 3 CWE-918 official alert triage, ruleId py/augur/calibre-web/pass3-ssrf",
+    "inputs": [
+      "iris/results/pass3.sarif",
+      "iris/report/iris_report.md",
+      "iris/labels/labels.json",
+      "iris/report/query_generation_notes.md",
+      "source: cps/editbooks.py, cps/helper.py, cps/search_metadata.py, cps/kobo.py, cps/kobo_auth.py, cps/metadata_provider/{amazon,comicvine,google,lubimyczytac}.py, cps/cli.py"
+    ],
+    "sarif_status": "CodeQL 分析成功(executionSuccessful=true)。SARIF 含 1 条规则 py/augur/calibre-web/pass3-ssrf 的 11 条正式 CWE-918 告警(非解析诊断;notifications 仅为 baseline/平台遥测,level=none)。诊断查询 WrapperChainDiagnostic.ql 结果不在本 SARIF 中,未计入。",
+    "constraints": [
+      "未修改原始 SARIF、LLM 标签(labels.json)与正式查询(Pass3_SSRF.ql / libraries/*.qll)",
+      "未读取 PyVul 真值、修复提交与 CVE 公告;ground_truth_check 一节仅依据用户在本次指令中提供的 commit 信息"
+    ]
+  },
+  "summary": {
+    "official_alerts": 11,
+    "likely_tp": 2,
+    "likely_fp": 9,
+    "uncertain": 0,
+    "note": "2 个 likely_tp(editbooks.py:808 与 helper.py:740)是同一底层漏洞(cover_url → save_cover_from_url → requests.get)在两个标签钉定 sink 节点上的双告警;9 个 likely_fp 中 3 个(kobo.py:114/330/1059)是同一 kobo 流的返回值污点建模副产物,与 kobo.py:96 共享同一底层流。独立去重后:真实污点流 6 条(封面 1、元数据搜索 4、kobo 代理 1、二阶 lubimyczytac 1,共 7 条含二阶),其中仅封面流构成可利用 SSRF。"
+  },
+  "results": [
+    {
+      "alert_index": 0,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/metadata_provider/amazon.py:111:17-112:50 (snk-002, label conf 0.55)",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "source": {
+        "locations": [
+          "cps/search_metadata.py:119 query = request.form.to_dict().get('query') (src-141/src-142, POST /metadata/search, @login_required)",
+          "cps/search_metadata.py:92 new_state = request.get_json() (src-139, POST /metadata/provider, @login_required), 经 search_metadata.py:109 new_state.get('query','') (src-140/E2) 分发"
+        ],
+        "untrusted": "真实:任何已登录用户的元数据搜索文本(攻击者可影响的 Web 请求字段;非运维边界)"
+      },
+      "sink": {
+        "location": "cps/metadata_provider/amazon.py:110-113 results = self.session.get(f\"https://www.amazon.com/s?k={query.replace(' ', '+')}&i=digital-text&sprefix=...\")",
+        "api": "requests.Session().get — 真实 HTTP 请求"
+      },
+      "taint_path": "request 形式/JSON 的 query → executor.submit(c.search, query, ...) (search_metadata.py:128, E3) / provider.search(new_state.get('query','')) (:109, E2) → amazon.py:48 search() 形参 query → :111 f-string 插值 → session.get URL 实参 0",
+      "attacker_control": "仅固定前缀后的查询字符串分量(query 以空格→+替换后原样嵌入);scheme/host/port 恒为 https://www.amazon.com,路径 /s 由前缀钉定。攻击者可注入 &/# 等字符改变查询参数,但无法改变目标主机或端口",
+      "conditions": "self.active(用户元数据源设置)+ 已登录;URL 主机由 f-string 前缀常量钉定",
+      "protections": "主机钉定(字符串前缀拼接,URL 权限段之后无法逃逸 host);quote 编码不适用(amazon 为原始嵌入)但只影响查询串内容",
+      "reasoning": "污点路径真实存在(数据传播关系有源码支持),sink 为真实网络请求,但攻击者不控制目标主机/端口/协议,只能向固定可信第三方(amazon.com)注入搜索查询参数,属于服务端代表用户执行搜索的正常功能形态,不构成 CWE-918 意义上的 SSRF。按判定标准 5/7 判 likely_fp。"
+    },
+    {
+      "alert_index": 1,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/metadata_provider/comicvine.py:50:17-71 (snk-003, label conf 0.6)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source": {
+        "locations": [
+          "cps/search_metadata.py:119 (src-141/src-142)",
+          "cps/search_metadata.py:92 → :109 (src-139/src-140)"
+        ],
+        "untrusted": "真实:已登录用户的元数据搜索文本"
+      },
+      "sink": {
+        "location": "cps/metadata_provider/comicvine.py:49-52 requests.get(f\"{ComicVine.BASE_URL}{query}{ComicVine.QUERY_PARAMS}\")",
+        "api": "requests.get — 真实 HTTP 请求"
+      },
+      "taint_path": "query → search_metadata.py:109/:128 分发 → comicvine.py:41 search() 形参 → :45 get_title_tokens → :47 quote(t.encode('utf-8')) 列表推导 → :48 '%20'.join → :50 f-string → requests.get 实参 0",
+      "attacker_control": "仅查询分量;每个 token 经 urllib.parse.quote 编码(默认 safe='/','/' 不改主机;? # : & 均被编码),拼接在常量 BASE_URL='https://comicvine.gamespot.com/api/search?api_key=...&query=' 之后",
+      "conditions": "self.active + title_tokens 非空;已登录",
+      "protections": "主机钉定 + quote() 百分号编码",
+      "reasoning": "数据流真实、sink 为真实网络请求,但 host/scheme 由常量前缀钉定且查询经 quote 编码,攻击者对目标主机/端口/协议零控制,无法触达内网或任意主机。属固定可信端点上的正常搜索功能。判 likely_fp。"
+    },
+    {
+      "alert_index": 2,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/editbooks.py:808:68-88 (snk-004, label conf 0.85)",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "source": {
+        "locations": [
+          "cps/editbooks.py:778 to_save = request.form.to_dict() (src-063)",
+          "cps/editbooks.py:801/805/808 to_save['cover_url'] (src-064/065/066)"
+        ],
+        "untrusted": "真实:POST /admin/book/<int:book_id> 表单字段 cover_url。入口装饰器 @login_required_if_no_ano + @edit_required(editbooks.py:749-751);cover_url 分支另需 current_user.role_upload()(editbooks.py:802-804)。即:任何具备编辑+上传角色的普通库用户(非运维管理员)在多用户部署下即攻击者,威胁模型成立"
+      },
+      "sink": {
+        "location": "cps/editbooks.py:808 result, error = helper.save_cover_from_url(to_save['cover_url'], book.path) — 包装器调用点(snk-004);其内部 sink 为 cps/helper.py:740 img = requests.get(url, timeout=(10,200))(snk-007,即告警 4)",
+        "api": "requests.get — 真实 HTTP 请求(包装器首段即执行网络请求,callee 在数据库内)"
+      },
+      "taint_path": "editbooks.py:778 request.form.to_dict() → to_save 字典 → :808 to_save['cover_url'] 下标读取 → save_cover_from_url 实参 0 → helper.py:732 形参 url → :740 requests.get 实参 0",
+      "attacker_control": "完整 URL:scheme(http/https;requests 不支持 file:/data: 但支持代理/任意主机)、host、port、path 全部由提交表单的已认证编辑+上传用户控制",
+      "conditions": "POST 到 /admin/book/<id>;book 存在且未被归档过滤;to_save['cover_url'] 非空且不以 /static/generic_cover.jpg 结尾(editbooks.py:801/805);current_user.role_upload() 为真",
+      "protections": "唯一防护是 helper.py:734-739 的 loopback 检查,且 (a) 受 cli.allow_localhost 开关旁路(cli.py:88,操作者传 -l 即整体关闭);(b) 只检查 getaddrinfo 的第一个结果,可被 DNS rebinding 绕过;(c) 只匹配 127./::1/::ffff:7f,不覆盖 10.x/172.16-31.x/192.168.x/169.254.x 等私网与链路本地段;(d) requests.get 未禁用 allow_redirects(默认 True),公共 URL 302 一次即可跳转到内网地址,完全绕过该检查。无 scheme 白名单、无私网段拦截、无重定向再校验。防护判定:不足",
+      "reasoning": "静态路径真实可达:路由、表单字段、角色条件、调用链(全库唯一 caller)逐点核实。攻击者可控整个请求 URL,sink 执行真实网络请求,防护可被多重手段绕过。这正是 save_cover_from_url 的 SSRF(与 0.6.16 之前的已知漏洞同一函数与同一污点链)。判 likely_tp。注:与告警 4(helper.py:740)是同一底层漏洞在标签钉定的两个 sink 节点(包装器调用点 + 内部 requests.get)上的双告警。"
+    },
+    {
+      "alert_index": 3,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/metadata_provider/google.py:48:36-61 (snk-006, label conf 0.6)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source": {
+        "locations": [
+          "cps/search_metadata.py:119 (src-141/src-142)",
+          "cps/search_metadata.py:92 → :109 (src-139/src-140)"
+        ],
+        "untrusted": "真实:已登录用户的元数据搜索文本"
+      },
+      "sink": {
+        "location": "cps/metadata_provider/google.py:48 results = requests.get(Google.SEARCH_URL + query)",
+        "api": "requests.get — 真实 HTTP 请求;SEARCH_URL = 'https://www.googleapis.com/books/v1/volumes?q=' (google.py:35)"
+      },
+      "taint_path": "query → search_metadata.py:109/:128 分发 → google.py:39 search() 形参 → :44 get_title_tokens → :46 quote(t.encode('utf-8')) → :47 '+'.join → :48 字符串拼接 → requests.get 实参 0",
+      "attacker_control": "仅查询分量;token 经 quote 编码后以 + 连接,追加在固定常量主机前缀之后",
+      "conditions": "self.active + title_tokens 非空;已登录",
+      "protections": "主机钉定(googleapis.com)+ quote() 编码",
+      "reasoning": "数据流真实、sink 真实,但目标主机/端口/协议由常量钉定,攻击者零主机控制,查询经百分号编码。固定可信端点正常功能,不构成 SSRF。判 likely_fp。"
+    },
+    {
+      "alert_index": 4,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/helper.py:740:28-31 (snk-007, label conf 0.85)",
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "source": {
+        "locations": [
+          "cps/editbooks.py:778 to_save = request.form.to_dict() (src-063)",
+          "cps/editbooks.py:808 to_save['cover_url'] (src-066) — codeFlow 显示完整过程间链:778 → 808 Subscript → helper.py:732 形参 url → helper.py:740"
+        ],
+        "untrusted": "真实:图书编辑表单 cover_url 字段(已认证 edit+upload 用户,见告警 2)"
+      },
+      "sink": {
+        "location": "cps/helper.py:740 img = requests.get(url, timeout=(10, 200)) — save_cover_from_url 函数体内",
+        "api": "requests.get — 真实 HTTP 出口,未禁用重定向"
+      },
+      "taint_path": "editbooks.py:778 request.form.to_dict() → to_save['cover_url'] (:808) → helper.save_cover_from_url 实参 0 → helper.py:732 形参 url → helper.py:740 requests.get 实参 0(标准过程间数据流,SARIF codeFlow[0] 五步完整呈现)",
+      "attacker_control": "整个 URL(scheme+host+port+path)",
+      "conditions": "同告警 2(POST /admin/book/<id> + role_upload + cover_url 非空非 generic)",
+      "protections": "helper.py:734-739 loopback 检查,缺陷同告警 2 详述:allow_localhost 旁路、单条 getaddrinfo(DNS rebinding)、仅 127./::1/::ffff:7f 段、不校验重定向目标。requests.get 默认跟随重定向。防护判定:不足,未建模为 barrier(与标签 sanitizer=0 一致)",
+      "reasoning": "本次正式分析的 11 条告警中唯一满足完整 SSRF 语义的路径:攻击者可控整个请求 URL,经真实网络出口发出,防护可绕过。该函数即 save_cover_from_url —— 用户给定 ground truth(commit 35f6f4c / calibre-web < 0.6.16 SSRF)所指的漏洞函数;数据库快照已含该 commit 的过渡性修复代码(getaddrinfo loopback 检查,即 ground truth 的 code_after),但私网段、DNS rebinding 与重定向绕过仍然成立,漏洞未闭合(后续 0.6.16 才补全)。判 likely_tp,置信度最高。"
+    },
+    {
+      "alert_index": 5,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/kobo.py:96:13-48 (snk-008, label conf 0.6)",
+      "verdict": "likely_fp",
+      "confidence": 0.7,
+      "source": {
+        "locations": ["cps/kobo.py:69 request.full_path 属性读取 (src-087)"],
+        "untrusted": "真实且部分未认证:blueprint /kobo/<auth_token>/(kobo.py:60)。@requires_kobo_auth 仅覆盖带装饰器路由;汇入 redirect_or_proxy_request 的 /v1/products/* 等路由(kobo.py:1000-1016,无装饰器,任意 auth_token 字符串即通过)未认证可达。代理行为另需管理员开启 config.config_kobo_proxy(kobo.py:108)"
+      },
+      "sink": {
+        "location": "cps/kobo.py:94-101 store_response = requests.request(method=request.method, url=get_store_url_for_current_request(), headers=..., data=request.get_data(), allow_redirects=False, timeout=(2,10))",
+        "api": "requests.request — 真实 HTTP 请求"
+      },
+      "taint_path": "kobo.py:69 request.full_path → rpartition('/kobo/') → rstrip('?') → partition('/') → :73 KOBO_STOREAPI_URL + '/' + request_path(字符串拼接,E1)→ :96 url= 实参(= 位置参数 1)",
+      "attacker_control": "固定主机后的路径/查询后缀 + 逐字转发的全部入站请求头(:89 Headers(request.headers),仅删 Host)与请求体(:98)。host/scheme 恒为 https://storeapi.kobo.com(kobo.py:55):URL 权限段已被代码插入的首个 '/' 终止,后缀中的 //、@、反斜杠等均无法把主机改写为其他目标;allow_redirects=False 阻断经 30x 换目标",
+      "conditions": "config.config_kobo_proxy 开启(管理员配置);到达 make_request_to_kobo_store 的路由中部分无鉴权(products/deals/affiliate 等未装饰路由,或 /v1/auth/device 经 401 之前的路径)",
+      "protections": "主机钉定(storeapi.kobo.com 常量拼接)+ allow_redirects=False + 管理员功能开关。无私网拦截需求(目标永远不是内网)",
+      "reasoning": "数据传播真实、sink 真实、部分入口未认证,但攻击者对目标主机/端口/协议零控制——出站请求永远是固定官方商店主机,不能触达内网/元数据服务/任意第三方,不满足 CWE-918 的核心可利用性(攻击者选择目标服务器)。本质是管理员显式开启的'Kobo 商店代理'既定功能,按判定标准 5(固定目的地上的有限参数)与 7(受信任固定目标的管理员配置功能)判 likely_fp。保留意见:逐字头转发可能把入站 Authorization/Cookie 泄露给固定外部主机(属凭据泄露类问题而非 CWE-918),且部分路由未鉴权;若采用'固定主机+路径伪造也算 SSRF'的宽口径,本条应降级为 uncertain。此保留意见不改变本判定。"
+    },
+    {
+      "alert_index": 6,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/kobo.py:114:30-58 (snk-009, label conf 0.55)",
+      "verdict": "likely_fp",
+      "confidence": 0.9,
+      "source": {
+        "locations": ["cps/kobo.py:69 request.full_path (src-087)"],
+        "untrusted": "同告警 5"
+      },
+      "sink": {
+        "location": "cps/kobo.py:114 store_response = make_request_to_kobo_store() — 包装器调用表达式(snk-009)",
+        "api": "包装器触发点;真实网络请求发生在其内部 kobo.py:94-101(已作为告警 5 单独浮现)"
+      },
+      "taint_path": "SARIF codeFlow:full_path(kobo.py:69)→ :96 get_store_url_for_current_request() 调用结果 → :94 store_response 赋值 → :104 return store_response(函数返回值)→ :114 make_request_to_kobo_store() 调用表达式节点",
+      "attacker_control": "与告警 5 相同(固定主机后的路径/查询/头/体);注意本条告警的污点实际是沿 make_request_to_kobo_store 的**返回值**(响应对象)流入调用点赋值节点,而非经 URL 实参进入调用",
+      "conditions": "同告警 5 + redirect_or_proxy_request 的非 GET 分支(kobo.py:111-114)",
+      "protections": "同告警 5",
+      "reasoning": "双重理由判 likely_fp:(1)底层流与告警 5 完全相同(host 钉定,不构成 SSRF,理由见告警 5);(2)本告警是 sink 建模在'包装器调用表达式'节点上的副产物——污点经返回值(store_response,requests 响应对象)触达该调用表达式节点,而非 URL 实参(kobo.py:114 的调用无实参)。真实网络请求点已由告警 5 承载,本条不新增独立污点到网络请求的路径,属同一流的重复计数。判定标准 9(错误计数)适用。"
+    },
+    {
+      "alert_index": 7,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/kobo.py:330:30-68 (snk-010, label conf 0.5)",
+      "verdict": "likely_fp",
+      "confidence": 0.9,
+      "source": {
+        "locations": ["cps/kobo.py:69 request.full_path (src-087)"],
+        "untrusted": "同告警 5;此处调用点位于 generate_sync_response(kobo.py:325-330),上游 HandleSyncRequest 带 @requires_kobo_auth(kobo 设备令牌认证)"
+      },
+      "sink": {
+        "location": "cps/kobo.py:330 store_response = make_request_to_kobo_store(sync_token) — 包装器调用表达式(snk-010)",
+        "api": "包装器触发点;真实网络请求在 kobo.py:94-101"
+      },
+      "taint_path": "同告警 6:full_path → :96 → :94 store_response → :104 return → :330 调用表达式(返回值污点,非 URL 实参;唯一实参 sync_token 非 Source)",
+      "attacker_control": "同告警 5(host 钉定)",
+      "conditions": "config_kobo_proxy 开启 + Kobo 同步路由(经 @requires_kobo_auth 认证的设备请求)",
+      "protections": "同告警 5",
+      "reasoning": "同告警 6:底层流 host 钉定不构成 SSRF,且本告警同样为返回值污点触达包装器调用表达式的建模副产物(此处调用只传 sync_token,URL 无实参通道),与告警 5 重复计数。判 likely_fp。"
+    },
+    {
+      "alert_index": 8,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/kobo.py:1059:30-58 (snk-011, label conf 0.55)",
+      "verdict": "likely_fp",
+      "confidence": 0.9,
+      "source": {
+        "locations": ["cps/kobo.py:69 request.full_path (src-087)"],
+        "untrusted": "同告警 5;此处调用点位于 HandleInitRequest(/v1/initialization,带 @requires_kobo_auth,kobo.py:1051-1059)"
+      },
+      "sink": {
+        "location": "cps/kobo.py:1059 store_response = make_request_to_kobo_store() — 包装器调用表达式(snk-011)",
+        "api": "包装器触发点;真实网络请求在 kobo.py:94-101"
+      },
+      "taint_path": "同告警 6:full_path → :96 → :94 → :104 → :1059 调用表达式(返回值污点,无实参)",
+      "attacker_control": "同告警 5(host 钉定)",
+      "conditions": "config_kobo_proxy 开启 + /v1/initialization(@requires_kobo_auth)",
+      "protections": "同告警 5",
+      "reasoning": "同告警 6:返回值污点副产物 + 底层流 host 钉定,与告警 5 重复计数。判 likely_fp。"
+    },
+    {
+      "alert_index": 9,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/metadata_provider/lubimyczytac.py:115:35-67 (snk-012, label conf 0.6)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source": {
+        "locations": [
+          "cps/search_metadata.py:119 (src-141/src-142)",
+          "cps/search_metadata.py:92 → :109 (src-139/src-140)"
+        ],
+        "untrusted": "真实:已登录用户的元数据搜索文本"
+      },
+      "sink": {
+        "location": "cps/metadata_provider/lubimyczytac.py:115 result = requests.get(self._prepare_query(title=query))",
+        "api": "requests.get — 真实 HTTP 请求"
+      },
+      "taint_path": "query → search_metadata.py:109/:128 分发 → lubimyczytac.py:112 search() 形参 query → :115 实参 → _prepare_query(:128-148):re.sub 去除 \\?()\\/ 字符 → title.replace → get_title_tokens → :144 quote(t.encode('utf-8')) → :145 '%20'.join → :148 f\"{LubimyCzytac.BASE_URL}/szukaj/ksiazki?phrase={query}\" → requests.get 实参 0",
+      "attacker_control": "仅 phrase 查询分量;BASE_URL = 'https://lubimyczytac.pl'(lubimyczytac.py:79)为 f-string 常量前缀;?()/\\ 字符在编码前即被正则剔除,token 再经 quote 百分号编码",
+      "conditions": "self.active + 查询经清洗后非空;已登录",
+      "protections": "主机钉定 + 字符集剔除 + quote() 编码(多重)",
+      "reasoning": "数据流真实、sink 真实,但主机/协议由常量 f-string 前缀钉定,查询字符先剔除 ?()/\\ 再百分号编码,攻击者对目标主机零控制。固定可信端点正常搜索功能。判 likely_fp。"
+    },
+    {
+      "alert_index": 10,
+      "rule_id": "py/augur/calibre-web/pass3-ssrf",
+      "primary_location": "cps/metadata_provider/lubimyczytac.py:203:33-42 (snk-013, label conf 0.6;与 src-102 为同一表达式锚点对)",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "source": {
+        "locations": ["cps/metadata_provider/lubimyczytac.py:203 match.url 属性读取 (src-102)"],
+        "untrusted": "二阶(非直接 Web 输入):match.url = LubimyCzytac.BASE_URL + book_url(lubimyczytac.py:190),book_url 来自对 lubimyczytac.pl 搜索响应 HTML 的 xpath @href 提取(:172-176)。请求目标只能被恶意/被攻破的上游服务操纵"
+      },
+      "sink": {
+        "location": "cps/metadata_provider/lubimyczytac.py:203 response = requests.get(match.url)",
+        "api": "requests.get — 真实 HTTP 请求"
+      },
+      "taint_path": "上游响应 HTML @href → book_url → :190 BASE_URL + book_url 字符串拼接 → match.url → :203 requests.get 实参 0",
+      "attacker_control": "即使上游被攻破,book_url 也只能追加在 BASE_URL='https://lubimyczytac.pl' 之后:注入绝对 URL(https://evil)或协议相对引用(//evil)经字符串拼接均无法逃逸已终止的权限段(拼接结果或为无效 URL,或 host 仍为 lubimyczytac.pl)。攻击者(最终用户)对目标主机零直接控制",
+      "conditions": "lubimyczytac 元数据源激活 + 搜索命中结果被逐本解析(:120-124 starmap parse_single_book)",
+      "protections": "BASE_URL 前缀拼接钉定主机;威胁本身要求上游服务已被攻破",
+      "reasoning": "二阶污点(响应衍生 URL)且主机由字符串拼接钉定:正常用户输入不影响该 URL,上游被攻破时也无法把请求指向 lubimyczytac.pl 之外的主机。按判定标准 1(无成立的直接不可信输入威胁模型)与 7 判 likely_fp。另注:src-102 与 snk-013 为标签审定的同节点 source-sink 锚点对,本条实为零长路径告警,亦属判定标准 9 关注的计数形态,如实记录。"
+    }
+  ],
+  "ground_truth_check": {
+    "question": "用户提供的真实漏洞(calibre-web commit 35f6f4c,save_cover_from_url SSRF,calibre-web < 0.6.16)是否被本轮 Augur 正式告警命中?",
+    "answer": "命中",
+    "hit_alerts": [
+      "result[4] cps/helper.py:740(主命中):sink = save_cover_from_url 内的 img = requests.get(url, timeout=(10,200)),污点链 POST /admin/book/<id> 表单 cover_url(editbooks.py:778/808)→ helper.save_cover_from_url 形参 url(helper.py:732)→ requests.get 实参 0 —— 与 ground truth 的 save_cover_from_url 函数及 code_before 中 requests.get(url) 调用点完全对应",
+      "result[2] cps/editbooks.py:808(同一漏洞的包装器调用点告警):helper.save_cover_from_url(to_save['cover_url'], book.path)"
+    ],
+    "details": "数据库快照(helper.py:732-751)已包含 ground truth 中 code_after 的过渡性修复(对 urlparse(url).hostname 做 getaddrinfo 并拒绝 127./::1/::ffff:7f,受 cli.allow_localhost 旁路)。但该修复不闭合漏洞:不覆盖私网/链路本地段(10/172.16-31/192.168/169.254)、只看首个 getaddrinfo 结果(DNS rebinding)、不校验重定向目标(requests.get 默认跟随 30x,公共 URL 一次重定向即绕过 loopback 检查)。攻击者为具备 edit+upload 角色的已认证库用户,可控完整 URL(scheme/host/port/path)。因此该函数对应的 SSRF 仍可利用,本轮 Pass 3 正式查询以 likely_tp(告警 2/4)准确命中,判定与 ground truth 一致。",
+    "caveats": [
+      "本轮独立复核未读取 PyVul 真值文件、修复提交与 CVE 公告;本节结论仅基于用户在指令中提供的 commit 信息与数据库内源码本身",
+      "按实验约束,诊断查询与可选原生 CodeQL SSRF 基线结果均未计入本次命中判定;命中完全来自 ruleId py/augur/calibre-web/pass3-ssrf 的正式告警"
+    ]
+  },
+  "per_criterion_crosscheck": {
+    "criterion_1_source_untrusted": "封面流(告警 2/4):成立(已认证 edit+upload 用户表单字段,多用户部署威胁模型成立,路由真实可达)。元数据搜索流(0/1/3/9):成立(已登录用户搜索文本)。Kobo 流(5-8):成立且部分路由未鉴权,但见 host 钉定。二阶流(10):不成立(非直接输入)",
+    "criterion_2_dataflow_real": "全部 11 条告警的 codeFlows 与源码逐点核对,数据传播关系均真实成立(无虚构传播)",
+    "criterion_3_urljoin_baseurl": "全部流为字符串拼接/f-string 前缀,无 urljoin;拼接形态均不改写目标主机(封面流无任何拼接——URL 整体即攻击者输入)",
+    "criterion_4_real_network_sink": "全部 sink 均为真实网络请求(requests.get / requests.Session().get / requests.request),无纯 Request 对象构造、无纯 URL 解析、无本地文件读取混入(Phase 1 已核实 urllib/urlopen/urlretrieve 未使用;gdriveutils.py:626 与 amazon.py:53 均未告警)",
+    "criterion_5_control_scope": "完整 URL 控制:告警 2/4(可利用)。固定主机+路径/查询(+头/体转发):告警 5-8(不可选择目标,不可触达内网)。固定主机+编码查询:告警 0/1/3/9。二阶+主机钉定:告警 10",
+    "criterion_6_protections": "全库无 scheme 白名单、无私网段拦截、无解析后 IP 限制、无重定向目标再校验。唯一防护 helper.py:734-739(条件性 loopback 检查)判定不足;Kobo 代理 allow_redirects=False 是唯一有效的重定向阻断",
+    "criterion_7_trusted_fixed": "元数据搜索(0/1/3/9)、Kobo 商店代理(5-8)、二阶 lubimyczytac(10)均属固定可信目标上的既定功能/管理员配置功能",
+    "criterion_8_static_reachability": "逐条核实了 Flask 路由、装饰器权限(@login_required/@edit_required/role_upload/@requires_kobo_auth/未装饰路由)、表单/JSON 字段来源与业务流程(图书编辑保存、元数据搜索分发、Kobo 代理);封面流路径真实可达",
+    "criterion_9_false_counts": "无 file: 本地读取、无纯 URL 解析、无测试代码(告警全部位于 cps/ 业务模块)、无 diagnostics 查询结果混入。存在 3 条同流重复计数(告警 6/7/8,返回值污点触达包装器调用表达式)与 1 条零长路径锚点对(告警 10),已在逐条判定中说明并按 likely_fp 处理"
+  }
+}

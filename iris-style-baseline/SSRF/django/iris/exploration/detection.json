@@ -1,0 +1,190 @@
+{
+  "step": "Step 1 - Explore and detect",
+  "target": "django (framework source, version 3.1.12 alpha)",
+  "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\django_vuln\\django-db",
+  "source_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\django_vuln",
+  "timestamp": "2026-10-19",
+  "language": "python",
+  "language_evidence": [
+    "django-db/codeql-database.yml: primaryLanguage: python, creationMetadata.cliVersion: 2.25.1, baselineLinesOfCode: 281954, sourceLocationPrefix = django_vuln repo root (relative paths therefore look like django/http/request.py, tests/..., setup.py)",
+    "repository layout: single framework package django/ (~hundreds of .py modules) plus setup.py, extras/, scripts/, tests/ at repo root; no third-party vendored code inside django/",
+    "django/__init__.py:1-5 `VERSION = (3, 1, 12, 'alpha', 0)` - Django 3.1.12 alpha source tree"
+  ],
+  "codeql_environment": {
+    "cli_version": "2.25.1 (verified via `codeql version`, unpacked at E:\\codeql)",
+    "python_query_library": "codeql/python-all 7.1.2 cached under C:\\Users\\lzh\\.codeql\\packages; workspace qlpack.yml declares codeql/python-all: \"*\"",
+    "api_surface_note": "Extraction queries use only `import python` AST APIs verified against the locally cached python-all 7.1.2 library: AstNode.getLocation()/getScope()/toString(), Location.getFile()/getStartLine(), File.getRelativePath(), Call.getFunc()/getArg(int)/getAKeyword(), Attribute.getName()/getObject(), Name.getId(), Subscript.getObject()/getIndex(), StringLiteral.getText(), Function.getName()/getArg(int)/getADecorator(), Parameter (Name-or-Tuple node; names read via asName().getId()). No AstNode.getFile(), no API::Node vs DataFlow::Node mixing, no QL classes are defined in the extraction queries, no @kind is declared (plain multi-column select for `codeql query run` + `bqrs decode`).",
+    "dbscheme": "semmlecode.python.dbscheme"
+  },
+  "scope": {
+    "passes": [3],
+    "cwes": ["918", "099", "610"],
+    "focus": "Server-Side Request Forgery (CWE-918 primary, per user instruction)"
+  },
+  "framework_candidates": [
+    {
+      "framework": "django",
+      "kind": "web-framework",
+      "confidence": 1.0,
+      "classification": "primary",
+      "evidence": {
+        "import_evidence": {
+          "score": 0.45,
+          "snippets": [
+            "the analyzed source tree IS the Django framework package: django/__init__.py, django/http/, django/urls/, django/core/, django/contrib/, django/middleware/, django/views/, django/forms/, django/template/",
+            "django/__init__.py:1-5 `VERSION = (3, 1, 12, 'alpha', 0); __version__ = get_version(VERSION)`"
+          ]
+        },
+        "route_evidence": {
+          "score": 0.30,
+          "snippets": [
+            "django/urls/resolvers.py URLResolver/URLPattern dispatch machinery; django/conf/urls/ include() handlers",
+            "class-based views: django/views/generic/base.py View.dispatch (line 94 dispatches on request.method); function views in django/views/{i18n,static,defaults,debug}.py and django/contrib/{auth,admin,sitemaps,syndication,gis}/views.py",
+            "urlconf entry points: WSGIHandler/ASGIHandler -> BaseHandler.get_response (django/core/handlers/base.py) -> URLResolver"
+          ]
+        },
+        "runtime_bootstrap_evidence": {
+          "score": 0.20,
+          "snippets": [
+            "django/__init__.py:13 `def setup(set_prefix=True)`",
+            "django/core/handlers/wsgi.py:122 `class WSGIHandler(base.BaseHandler)` with `__call__(self, environ, start_response)` at line 129",
+            "django/core/handlers/asgi.py:126 `class ASGIHandler(base.BaseHandler)` with `async def __call__(self, scope, receive, send)` at line 136"
+          ]
+        },
+        "layout_evidence": {
+          "score": 0.05,
+          "snippets": [
+            "standard Django source layout: django/{apps,conf,contrib,core,db,dispatch,forms,http,middleware,shortcuts,template,templatetags,test,urls,utils,views}"
+          ]
+        }
+      }
+    },
+    {
+      "framework": "urllib.request (stdlib http client)",
+      "kind": "http-client-library",
+      "confidence": 0.75,
+      "classification": "secondary (the only real outbound-HTTP fetch surface for CWE-918 in this source tree)",
+      "evidence": [
+        "django/contrib/sitemaps/__init__.py:2 `from urllib.request import urlopen`; call site line 27 `urlopen('%s?%s' % (ping_url, params))` inside ping_google()",
+        "django/core/management/templates.py:9 `from urllib.request import urlretrieve`; call site line 265 `the_path, info = urlretrieve(url, os.path.join(tempdir, filename))` inside TemplateCommand.download()",
+        "django/contrib/staticfiles/handlers.py:2 and django/test/testcases.py:18 import only url2pathname (path conversion, no network I/O)"
+      ]
+    },
+    {
+      "framework": "smtplib (stdlib, non-HTTP network)",
+      "kind": "mail-client-library",
+      "confidence": 0.6,
+      "classification": "secondary (outbound SMTP network connection; recorded separately because it is not an HTTP(S) request)",
+      "evidence": [
+        "django/core/mail/backends/smtp.py:2 `import smtplib`; lines 38-39 connection_class property returns smtplib.SMTP_SSL or smtplib.SMTP",
+        "django/core/mail/backends/smtp.py:62 `self.connection = self.connection_class(self.host, self.port, **connection_params)`; host/port default to settings.EMAIL_HOST / settings.EMAIL_PORT (lines 22-23)"
+      ]
+    },
+    {
+      "framework": "wsgiref / socketserver dev server",
+      "kind": "server-backend",
+      "confidence": 0.5,
+      "classification": "informational-below-secondary-threshold (server-side accept loop; not an outbound-fetch sink)",
+      "evidence": [
+        "django/core/servers/basehttp.py:11-12 `import socket; import socketserver` - WSGIRequestHandler serves inbound connections; no outbound URL fetch",
+        "django/core/management/commands/runserver.py:4 `import socket` - bind address resolution only"
+      ]
+    }
+  ],
+  "primary_framework": "django",
+  "framework_notes": [
+    "Django is the primary framework (score 1.00 >= 0.75 threshold); references/django.md was loaded in addition to references/python.md and references/patterns.md.",
+    "IMPORTANT scope fact: this CodeQL database contains ONLY the Django framework source (django/ package, its internal tests, and repo-root dev tooling). There is no user/application business code (no project-level settings module, no app views). Any Django-shaped SSRF usually lives in application views; those are absent here, so source extraction must anchor on the framework's own request boundaries instead of application route handlers.",
+    "The framework's genuine server-side HTTP fetches are exactly two: contrib/sitemaps ping_google() -> urlopen() and core/management/templates.py TemplateCommand.download() -> urlretrieve(). Neither is reachable from an inbound HTTP request inside this source tree: ping_google is driven by the `ping_google` management command (django/contrib/sitemaps/management/commands/ping_google.py reads options['sitemap_url']), and the template download is driven by the `startproject/startapp --template` CLI option. The LLM labeling step must treat these as CLI-originated fetches.",
+    "HttpRequest parsing internals (django/http/request.py get_host/build_absolute_uri, django/core/handlers/{wsgi,asgi}.py) derive URL components (scheme/host/path) from client-supplied headers (Host, X-Forwarded-Host via USE_X_FORWARDED_HOST, request line). These are extracted as source candidates (host-derived URL construction), not sinks.",
+    "HttpResponseRedirect / shortcuts.redirect / django.contrib.redirects produce HTTP redirect RESPONSES (client-side navigation), not server-side network requests; per the task contract they are NOT recorded as CWE-918 sinks (they belong to Pass 9 / CWE-601)."
+  ],
+  "references_loaded": [
+    "WORKFLOW.md",
+    "references/patterns.md",
+    "references/python.md",
+    "references/django.md",
+    "assets/extraction/README.md",
+    "assets/extraction/extract_sources.ql.tmpl",
+    "assets/extraction/extract_sinks.ql.tmpl",
+    "assets/extraction/python_sources.ql.tmpl",
+    "assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "repo_survey": {
+    "http_entry_points": [
+      "WSGI: django/core/handlers/wsgi.py:129 WSGIHandler.__call__(environ, start_response) -> WSGIRequest(environ) (wsgi.py:65-98: path/META/GET/COOKIES/body all materialized from the environ dict - the earliest untrusted boundary)",
+      "ASGI: django/core/handlers/asgi.py:136 ASGIHandler.__call__(scope, receive, send) -> create_request (asgi.py:188) -> ASGIRequest.__init__(scope, body_file) (asgi.py:31-94: path/method/query_string/headers/body from the ASGI scope dict)",
+      "dispatch: django/core/handlers/base.py BaseHandler.get_response(request) -> django/urls/resolvers.py URLResolver -> framework-provided views in django/views/ and django/contrib/*/views.py"
+    ],
+    "request_input_surfaces": [
+      "request.<field> reads in non-test framework code: 197 occurrences of request.(GET|POST|META|COOKIES|FILES|body|headers|path|path_info|method|scheme) plus 22 self.request.<field> reads (grep counts over django/ excluding test modules)",
+      "query/form data: django/views/i18n.py:34 `next_url = request.POST.get('next', request.GET.get('next'))`, :54 `lang_code = request.POST.get(LANGUAGE_QUERY_PARAMETER)`; django/views/generic/dates.py:39,88,140,186 request.GET['year'/'month'/'day'/'week']; django/views/generic/list.py:60 `self.request.GET.get(page_kwarg)`",
+      "headers via META: django/middleware/common.py:41 `request.META.get('HTTP_USER_AGENT')`, :125 `request.META.get('HTTP_REFERER')`; django/middleware/gzip.py:26 HTTP_ACCEPT_ENCODING; django/middleware/csrf.py:240 HTTP_REFERER, :309 settings.CSRF_HEADER_NAME; django/utils/translation/trans_real.py:539 HTTP_ACCEPT_LANGUAGE; django/views/static.py:45 HTTP_IF_MODIFIED_SINCE; django/contrib/auth/middleware.py:56 `request.META[self.header]` (REMOTE_USER-style header)",
+      "cookies: django/middleware/csrf.py:170 `request.COOKIES[settings.CSRF_COOKIE_NAME]`; django/utils/translation/trans_real.py:530 `request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)`",
+      "auth POST: django/contrib/auth/views.py:71 `self.request.POST.get(self.redirect_field_name)` and :139, django/contrib/admin/sites.py:399-400 REDIRECT_FIELD_NAME in GET/POST; django/contrib/admin/views/autocomplete.py:26 `request.GET.get('term', '')`",
+      "host/scheme-derived URL values: django/http/request.py:100-117 _get_raw_host (HTTP_X_FORWARDED_HOST / HTTP_HOST / SERVER_NAME), :119-137 get_host (validated against ALLOWED_HOSTS), :185-194 get_raw_uri, :196-231 build_absolute_uri, :233-234 _current_scheme_host = scheme + get_host()",
+      "framework request headers object: django/http/request.py:74-76 cached_property headers -> HttpHeaders(self.META)",
+      "CLI/env boundaries: django/core/management/__init__.py:175-176 `def __init__(self, argv=None): self.argv = argv or sys.argv[:]` and :398 `def execute_from_command_line(argv=None)`; django/conf/__init__.py:60 `os.environ.get(ENVIRONMENT_VARIABLE)` (DJANGO_SETTINGS_MODULE); os.environ.get/os.getenv reads also in django/utils/autoreload.py:404,615, django/core/management/{__init__.py:226, utils.py:54, color.py:72}, django/contrib/auth/management/commands/createsuperuser.py:167-183"
+    ],
+    "outbound_network_surfaces": [
+      "django/contrib/sitemaps/__init__.py:27 `urlopen('%s?%s' % (ping_url, params))` - ping_google(sitemap_url=None, ping_url=PING_URL, sitemap_uses_https=True) (line 18); ping_url defaults to the hardcoded PING_URL constant 'https://www.google.com/webmasters/tools/ping' (line 11); params = urlencode({'sitemap': sitemap_full_url}); sitemap_full_url built by _get_sitemap_full_url (lines 30-51) as scheme://Site.domain + sitemap_url where Site.domain is a DB value and sitemap_url is reverse()-ed or caller-supplied. Sole in-tree caller: django/contrib/sitemaps/management/commands/ping_google.py:13-16 passes options['sitemap_url'] (CLI positional arg) - CLI-originated fetch, host fixed to the ping_url argument",
+      "django/core/management/templates.py:265 `the_path, info = urlretrieve(url, os.path.join(tempdir, filename))` - TemplateCommand.download(url) (line 244) called from handle_template(template, subdir) (line 185-203) when is_url(template) (line 325 `':' in template` heuristic); the template value comes from handle() options['template'] (line 116), i.e. the `django-admin startproject/startapp --template` CLI option - CLI-originated fetch",
+      "django/core/mail/backends/smtp.py:62 `self.connection = self.connection_class(self.host, self.port, **connection_params)` - smtplib.SMTP / SMTP_SSL connection (lines 38-39); host/port from EmailBackend.__init__ args or settings.EMAIL_HOST/EMAIL_PORT (lines 22-23) - operator-configured endpoints, non-HTTP network I/O, recorded separately"
+    ],
+    "url_construction_surfaces": [
+      "django/http/request.py:196-231 build_absolute_uri(location) - urljoin/_current_scheme_host based URL construction from client-supplied Host header; request._current_scheme_host (lines 233-234)",
+      "request.get_host() call sites feeding further URL construction: django/views/i18n.py:39,48 (allowed_hosts for set_language redirect); django/middleware/security.py:28 `host = self.redirect_host or request.get_host()` (SECURE_SSL_REDIRECT target); django/middleware/common.py:48,94,123 (APPEND_SLASH redirect URL and broken-link email); django/utils/cache.py:331,339 `hashlib.md5(iri_to_uri(request.build_absolute_uri())...)` (cache keys); django/contrib/sites/requests.py:10 `self.domain = self.name = request.get_host()` (RequestSite); django/contrib/sites/models.py:35 `get_current_site`; django/contrib/auth/views.py:37 `self.request.get_host()` (success_url allowed hosts); django/contrib/auth/decorators.py:22 `request.build_absolute_uri()` (login redirect)",
+      "django/contrib/sitemaps/__init__.py:30-51 _get_sitemap_full_url - '%s://%s%s' % (scheme, current_site.domain, sitemap_url); Sitemap._urls (lines 116-139) builds loc strings - feed-generation, not network fetch",
+      "urljoin/urlparse usage (parsing/construction only, NOT sinks by themselves): django/http/request.py:229, django/templatetags/static.py:120, django/core/files/storage.py:342, django/contrib/auth/views.py:180, django/middleware/csrf.py:244, django/middleware/common.py:170, django/core/validators.py:117, django/utils/html.py:211, django/forms/fields.py:686"
+    ],
+    "excluded_from_extraction": [
+      "django-db/ nested CodeQL database directory inside the source root (excluded from all source scanning and evidence gathering; the extraction scope filter path.matches(\"django/%\") cannot match django-db/ paths, and no tool in this phase reads anything under django-db/)",
+      "root-level files SSRF_AUDIT_REPORT.md, SSRF_DEEP_TRACE_REPORT.md, ssrf_sinks.csv, enhanced_ssrf_sinks.csv, ssrf_sinks.json found in the source root were NOT read: they look like pre-existing vulnerability-analysis artifacts, and this phase forbids consulting vulnerability ground truth or pre-located findings",
+      "django/test/ package, tests/ tree, and any */tests.py module (e.g. django/contrib/admin/tests.py, django/contrib/auth/tests.py) - framework unit tests, FP per global heuristics",
+      "django/conf/locale/** (translation catalogs and format modules - data only), docs/, js_tests/, extras/, scripts/ (dev tooling, outside django/ scope filter)",
+      "settings.* attribute reads (django.conf.LazySettings) - operator configuration; per the SSRF FP heuristics, admin-configured URLs/endpoints (e.g. settings.EMAIL_HOST, ALLOWED_HOSTS) are treated as FP material, so settings reads are not extracted as sources",
+      "HttpResponseRedirect / HttpResponseRedirectBase / shortcuts.redirect / django.contrib.redirects.views redirect flows (django/http/response.py:466, django/contrib/redirects) - HTTP redirect responses, Pass 9 (CWE-601) material, not server-side fetches",
+      "django/core/servers/basehttp.py + runserver socket usage - server-side accept/bind, not outbound requests",
+      "django/contrib/gis/geoip2 loading of .mmdb files and open() calls elsewhere - local file reads (Pass 1 territory), not CWE-918 network I/O",
+      "Database and cache client construction: django/db/backends/{mysql,postgresql,oracle}/base.py Database.connect(**conn_params), django/core/cache/backends/{memcached,redis}.py - endpoints come from settings (operator-configured) and the actual network I/O lives in third-party client libraries that are NOT part of this source tree (see coverage_gaps)"
+    ]
+  },
+  "extraction_plan": {
+    "pass_key": "ssrf",
+    "source_families": [
+      "WSGIRequest.__init__ / WSGIHandler.__call__ parameter named `environ` (django/core/handlers/wsgi.py) - earliest untrusted boundary for every WSGI request (flow kind param)",
+      "ASGIRequest.__init__ parameters `scope` and `body_file`, ASGIHandler.__call__ parameter `scope` (django/core/handlers/asgi.py) - ASGI untrusted boundary (flow kind param)",
+      "request.<field> attribute reads for client-controlled fields GET/POST/COOKIES/META/FILES/body/headers/path/path_info/method/scheme on a `request` name (flow kind field)",
+      "self.request.<field> reads (class-based views / auth views) for the same field set (flow kind field)",
+      "request.get_host() / request.build_absolute_uri() / request.get_raw_uri() calls (client-supplied Host header derived URL values; flow kind return), plus the self.request variants",
+      "ping_google(sitemap_url, ping_url, ...) and _get_sitemap_full_url(sitemap_url, ...) parameters in django/contrib/sitemaps/__init__.py - caller-controlled URL inputs that reach urlopen (flow kind param)",
+      "TemplateCommand.handle_template(template) / download(url) parameters in django/core/management/templates.py - CLI URL input that reaches urlretrieve (flow kind param)",
+      "argv parameters of management entry points in django/core/management/__init__.py (CLI boundary; flow kind param)",
+      "os.environ.get(...) / os.getenv(...) calls within django/ non-test scope (environment boundary; flow kind return) - no direct env -> URL fetch propagation was observed in this source; family kept for labeling recall"
+    ],
+    "sink_families": [
+      "urlopen(<url>, ...) calls - urllib.request.urlopen, URL at positional argument 0 (django/contrib/sitemaps/__init__.py:27)",
+      "urlretrieve(<url>, ...) calls - urllib.request.urlretrieve, URL at positional argument 0 (django/core/management/templates.py:265)",
+      "self.connection_class(<host>, <port>, ...) calls in django/core/mail/backends/smtp.py - smtplib.SMTP/SMTP_SSL connection construction, host at positional argument 0; non-HTTP network I/O recorded separately"
+    ],
+    "extraction_output_columns": [
+      "n (AST node)",
+      "candidate type literal (source_candidate / sink_candidate)",
+      "callableName",
+      "flowKind (param | return | field | argument)",
+      "receiverHint",
+      "moduleHint (dotted module path; variable named moduleHint because `module` is a QL keyword)",
+      "argIndex (-1 when not applicable)",
+      "line (n.getLocation().getStartLine())",
+      "location (file:line)",
+      "expression text (n.toString())"
+    ]
+  },
+  "coverage_gaps": [
+    "requests / httpx / aiohttp / httplib2 are NOT imported anywhere in this source tree - no candidate families are emitted for them, and none should be fabricated",
+    "Third-party network clients (psycopg2, mysqlclient, sqlite3, python-memcached/pymemcache, redis, django-redis, geoip2) are external dependencies; their connect() calls happen inside library code that is not part of this database, so settings-driven DB/cache network endpoints are invisible to extraction here",
+    "The database contains framework code only - no application views/settings exist, so application-level URL preview/proxy/import endpoints (the usual Django SSRF shape) cannot be extracted; coverage is necessarily limited to the framework's own fetch sites (sitemaps ping, management template download, SMTP backend)",
+    "URL parsing helpers (urlparse/urlsplit/urljoin/validators.URLValidator) are recorded as URL-construction surfaces in repo_survey but intentionally not extracted as sinks; they only become interesting if flow analysis ties them to the two real fetch sites",
+    "HttpRequest internals that consume self.META / self.environ inside django/http/request.py and django/core/handlers/*.py are covered via the environ/scope constructor-parameter source families rather than per-field internal reads"
+  ]
+}

@@ -1,0 +1,246 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-19",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SSRF\\CairoSVG\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (exploration + candidate extraction query generation) against the CairoSVG_vuln source tree. The CodeQL database CairoSVG-db was created from the same tree (sourceLocationPrefix matches, creation sha 58be378), so file/line evidence below is verified against the database snapshot. Query generation only; no CodeQL execution and no LLM labeling in this step."
+  },
+  "target": {
+    "project": "CairoSVG",
+    "projectDescription": "SVG-to-PNG/PDF/PS/EPS/SVG converter library built on cairocffi. Pure library, not a web service: the attack surface is the SVG document content handed to the public conversion API (svg2png/svg2pdf/svg2svg/svg2ps/svg2eps, Surface.convert) or to the CLI (cairosvg __main__.main). External resources referenced by the input SVG (image href, external SVG, CSS @import) are fetched during rendering, which is the SSRF-relevant behavior.",
+    "pass": 3,
+    "cwes": ["CWE-918", "CWE-918 primary; pass set also nominally covers CWE-099/610 but this run targets CWE-918"],
+    "focus": "Server-Side Request Forgery (SSRF)",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\CairoSVG_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (CairoSVG-db/codeql-database.yml)",
+      "19 .py files in the tree excluding the nested CairoSVG-db database directory and ground-truth/report files (cairosvg/ 15 + setup.py + test_non_regression/ 3)",
+      "setup.py with setuptools packaging; cairosvg package layout (parser.py, surface.py, url.py, image.py, css.py, ...)"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\CairoSVG_vuln\\CairoSVG-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\CairoSVG_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "58be3780c245815ea11e8c05230515ce15c6c992",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-29T00:57:26.741367100Z"
+    },
+    "baselineLinesOfCode": 3180,
+    "finalised": true
+  },
+  "toolchain": {
+    "qlpack": "iris/cairosvg-cwe918 (iris/qlpack.yml already present, dependencies: codeql/python-all: \"*\")",
+    "packResolutionExpected": "codeql/python-all resolved from the local user pack cache (7.1.1/7.1.2 present under ~/.codeql/packages)",
+    "codeqlCli": "2.25.1 (E:\\codeql)",
+    "compatibilityNotes": "Extraction queries use only long-stable python AST APIs verified against the local python-all 7.1.2 pack: Call.getArg(int)/getAPositionalArg()/getANamedArg(), Keyword.getArg()/getValue(), StringLiteral.getText(), Function.getArgByName() (covers keyword-only parameters), Attribute.getName()/getObject(), Name.getId(), AstNode.getLocation().getFile().getAbsolutePath()/getStartLine(), API::moduleImport(...).getMember(...).getACall(). No deprecated StrConst, no Decorator class, no AstNode.getFile()."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] },
+        { "name": "django", "confidence": 0.0, "evidence": [] },
+        { "name": "flask", "confidence": 0.0, "evidence": [] }
+      ]
+    },
+    "selected": "none (pure conversion library, no web framework)",
+    "notes": "CairoSVG is a library, not a Flask/Django/FastAPI service. All framework scores are 0.0 (no web-framework imports anywhere in cairosvg/), so no framework reference is loaded and source/sink shapes are derived from repository evidence per references/python.md and references/patterns.md (language reference path). The real-world SSRF threat model for this library is a host application that converts attacker-supplied SVG documents: the untrusted boundary is the SVG content itself (bytestring/file_obj/url entry parameters) and every external-resource reference the renderer then fetches (image href, external SVG, CSS @import). The host application, not CairoSVG, owns the HTTP surface.",
+    "libraryBoundaryEvidence": [
+      "cairosvg/__init__.py:38/51/63/75/87 'def svg2svg/svg2png/svg2pdf/svg2ps/svg2eps(bytestring=None, *, file_obj=None, url=None, ...)' - public conversion API entry points",
+      "cairosvg/surface.py:97 'def convert(cls, bytestring=None, *, file_obj=None, url=None, unsafe=False, ...)' - single dispatch into Tree(...)",
+      "cairosvg/__main__.py:13 'def main(argv=None, stdout=None, stdin=None)' - CLI entry point; :18 add_argument('input', help='input filename or URL')",
+      "cairosvg/parser.py:343 'def __init__(self, **kwargs)' - Tree constructor taking bytestring/file_obj/url/url_fetcher through a kwargs dict",
+      "cairosvg/parser.py:354 'self.url_fetcher = kwargs.get('url_fetcher', fetch)' - pluggable fetcher, default is the unrestricted stdlib fetch"
+    ]
+  },
+  "inputBoundaryInventory": {
+    "summary": "Untrusted input reaches CairoSVG as (1) the SVG document itself, via the public conversion API (svg2* bytestring/file_obj/url parameters, Surface.convert) or the CLI (argparse options.input, sys.stdin when input is '-'); (2) references embedded in that document, resolved during rendering: <image> href/xlink:href and xml:base (image.py), tref xlink:href (parser.py text_children), <use> href (defs.py, bounding_box.py), nested/external SVG via Tree(url=...), and CSS @import URLs parsed by tinycss2 (css.py); (3) the caller-supplied url_fetcher callable that replaces the default network fetcher. The only network egress in the entire codebase is urllib.request.urlopen inside url.py fetch(); read_url dispatches to url_fetcher (default fetch) and rewrites schemeless URLs to file://. URL joining/composition (parse_url, urljoin, os.path.join on the base directory) propagates attacker-chosen paths but is not itself network I/O.",
+    "sourceFamilies": [
+      {
+        "family": "library_entry_params",
+        "evidence": [
+          "cairosvg/__init__.py:38 svg2svg / :51 svg2png / :63 svg2pdf / :75 svg2ps / :87 svg2eps - bytestring (positional 0), file_obj and url (keyword-only) are the document-content and document-location inputs",
+          "cairosvg/surface.py:97 Surface.convert(cls, bytestring=None, *, file_obj=None, url=None, unsafe=False, ...) - the classmethod every svg2* entry delegates to",
+          "cairosvg/surface.py:128-130 'tree = Tree(bytestring=bytestring, file_obj=file_obj, url=url, unsafe=unsafe, **kwargs)'"
+        ]
+      },
+      {
+        "family": "cli_input",
+        "evidence": [
+          "cairosvg/__main__.py:13 'def main(argv=None, stdout=None, stdin=None)' - argv positional 0, stdin positional 1",
+          "cairosvg/__main__.py:56 'options = parser.parse_args(argv)' - argparse Namespace",
+          "cairosvg/__main__.py:65 'stdin = stdin or sys.stdin' and :70 'kwargs['file_obj'] = stdin.buffer' - piped SVG content",
+          "cairosvg/__main__.py:72 'kwargs['url'] = options.input' - the positional CLI argument documented as 'input filename or URL' (:18)"
+        ]
+      },
+      {
+        "family": "document_parse_boundary",
+        "evidence": [
+          "cairosvg/parser.py:359 'bytestring = file_obj.read()' - file-object content read",
+          "cairosvg/parser.py:390-392 'tree = ElementTree.fromstring(bytestring, forbid_entities=not unsafe, forbid_external=not unsafe)' - defusedxml parse of the input document (all element attributes/text below this point are input-derived)",
+          "cairosvg/parser.py:190 'self.update(self.xml_tree.attrib)' - every XML attribute of the input document is copied into the Node dict"
+        ]
+      },
+      {
+        "family": "svg_derived_references",
+        "evidence": [
+          "cairosvg/parser.py:312-313 'def get_href(self): return self.get('{http://www.w3.org/1999/xlink}href', self.get('href'))' - the generic href reader used by image/use/textPath consumers",
+          "cairosvg/image.py:24 'node.get('{http://www.w3.org/XML/1998/namespace}base')' - xml:base attribute from the input document",
+          "cairosvg/image.py:27 'url = parse_url(node.get_href(), base_url)' - <image> href combined with the base URL",
+          "cairosvg/parser.py:262-264 'href = child.get('{http://www.w3.org/1999/xlink}href', child.get('href'))' + :264 'url = parse_url(href).geturl()' - tref reference inside text content",
+          "cairosvg/defs.py:348 'href = parse_url(node.get_href()).geturl()' - <use> external reference; same shape at cairosvg/bounding_box.py:344",
+          "cairosvg/text.py:71 'parse_url(node.get_href() or node.parent.get_href() or '')' - textPath reference (fragment use)",
+          "cairosvg/parser.py:193 'style_attr = node.get('style')' - inline style attribute content"
+        ]
+      },
+      {
+        "family": "css_derived_references",
+        "evidence": [
+          "cairosvg/css.py:24-25 'tinycss2.parse_stylesheet(element.text, skip_comments=True, skip_whitespace=True)' - <style> element content from the input document",
+          "cairosvg/css.py:34 'url_token = tinycss2.parse_one_component_value(rule.prelude)' and :37 'css_url = parse_url(url_token.value, url)' - @import URL token",
+          "cairosvg/css.py:39 'tree.fetch_url(css_url, 'text/css')' - CSS resource fetch driven by the @import value",
+          "cairosvg/css.py:54/96 'tinycss2.parse_declaration_list(...)' and cairosvg/parser.py:195 'css.parse_declarations(style_attr)' - declaration parsing that preserves url(...) values (url is case-sensitive and kept as-is, parser.py:104-128 normalize_url_style_declaration)"
+        ]
+      },
+      {
+        "family": "url_composition",
+        "evidence": [
+          "cairosvg/url.py:87-129 parse_url(): url() unwrapping (URL regex :16), relative-URL joining via urljoin (:127) or os.path.join against the base directory (:110-118), fragment handling",
+          "parse_url call sites that turn input-derived references into resource URLs: cairosvg/parser.py:264/321/365/386, cairosvg/image.py:27, cairosvg/css.py:37, cairosvg/defs.py:35/348, cairosvg/bounding_box.py:344, cairosvg/helpers.py:47 (paint url() fragment), cairosvg/text.py:71",
+          "cairosvg/url.py:19-55 normalize_url() and :58-74 nt_compatible_path() - Windows path forms; data: URLs are passed through untouched (:33)"
+        ]
+      },
+      {
+        "family": "fetcher_extension_point",
+        "evidence": [
+          "cairosvg/parser.py:354 'self.url_fetcher = kwargs.get('url_fetcher', fetch)' - caller-controlled replacement of the network fetcher",
+          "cairosvg/parser.py:157 'def __init__(self, element, style, url_fetcher, parent=None, ...)' - url_fetcher propagated into every Node"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "urllib_request_urlopen",
+        "evidence": [
+          "cairosvg/url.py:10 'from urllib.request import Request, urlopen'",
+          "cairosvg/url.py:84 'return urlopen(Request(url, headers=HTTP_HEADERS)).read()' - the only network I/O call in the codebase, inside fetch(url, resource_type)"
+        ]
+      },
+      {
+        "family": "urllib_request_request_ctor",
+        "evidence": [
+          "cairosvg/url.py:84 'Request(url, headers=HTTP_HEADERS)' - Request object construction whose positional argument 0 is the fetched URL (recorded as a candidate row; the object construction itself is not final network I/O, the enclosing urlopen call is)"
+        ]
+      },
+      {
+        "family": "other_network_apis_absent",
+        "evidence": "No requests/httpx/socket/urllib.request.urlretrieve call exists anywhere in cairosvg/ (grep over the tree); the extraction keeps urlretrieve in the resolved API family only as the standard CWE-918 baseline set and it is expected to produce zero rows (same exhaustive-baseline policy as previous projects)"
+      },
+      {
+        "family": "fetcher_wrapper_chain",
+        "evidence": [
+          "cairosvg/parser.py:242-243 'def fetch_url(self, url, resource_type): return read_url(url, self.url_fetcher, resource_type)' - Node method wrapper (self at index 0, url at index 1)",
+          "cairosvg/url.py:132-143 read_url(): schemeless URLs rewritten to 'file://{}'.format(os.path.abspath(...)) at :140, then ':143 return url_fetcher(url, resource_type)' - dynamic dispatch to the fetcher callable (default fetch; not statically resolvable)",
+          "cairosvg/url.py:77-84 fetch(url, resource_type): default fetcher, directly calls urlopen"
+        ]
+      },
+      {
+        "family": "resource_load_sites",
+        "evidence": [
+          "cairosvg/image.py:28 'image_bytes = node.fetch_url(url, 'image/*')' - image element fetch driven by href/base",
+          "cairosvg/parser.py:386-387 'bytestring = self.fetch_url(parse_url(self.url), 'image/svg+xml')' - external SVG document fetch inside Tree.__init__",
+          "cairosvg/css.py:39 'tree.fetch_url(css_url, 'text/css')' - CSS @import fetch"
+        ]
+      },
+      {
+        "family": "tree_url_kwarg",
+        "evidence": [
+          "cairosvg/surface.py:128-130 Tree(bytestring=..., file_obj=..., url=url, unsafe=unsafe, **kwargs) - top-level entry",
+          "cairosvg/parser.py:265-267 Tree(url=url, url_fetcher=..., parent=...) - tref reference",
+          "cairosvg/defs.py:350-352 Tree(url=href, url_fetcher=node.url_fetcher, parent=node, ...) - <use> reference",
+          "cairosvg/bounding_box.py:345-346 Tree(url=href, ...) - bounding-box pass over <use>",
+          "cairosvg/image.py:45-48 Tree(url=url.geturl(), url_fetcher=..., bytestring=image_bytes, ...) - nested SVG image"
+        ]
+      },
+      {
+        "family": "non_http_schemes",
+        "evidence": [
+          "cairosvg/url.py:140 \"url = 'file://{}'.format(os.path.abspath(url.geturl()))\" - schemeless references become local file:// loads; recorded separately (file scheme loading, not CWE-918 network SSRF by itself)",
+          "cairosvg/url.py:33 'not url.startswith('data:')' - data: URLs are exempted from file normalization in normalize_url; whatever scheme survives parse_url reaches the fetcher as-is"
+        ]
+      }
+    ],
+    "sanitizerObservations": [
+      "No URL scheme allowlist, host allowlist, private-IP/loopback blocking, or redirect policy exists anywhere in cairosvg/; read_url's own docstring states the default fetcher has 'no limitations' (cairosvg/url.py:133-135)",
+      "defusedxml is used for the XML parse with forbid_entities/forbid_external defaulting to True unless unsafe=True is passed (cairosvg/parser.py:390-392) - that is XXE containment, not an SSRF sanitizer, and the unsafe flag is caller-controlled",
+      "The only structural mitigation available to integrators is injecting a restrictive url_fetcher (cairosvg/parser.py:354); the library itself performs no validation on fetched URLs",
+      "parse_url's file-branch (cairosvg/url.py:101-124) only resolves relative references against the document base; it neither restricts nor validates the resulting scheme/host"
+    ],
+    "nonVulnerabilityNote": "Tree(url='#...') fragment references and helpers.py:47 / text.py:71 parse_url(...).fragment reads stay inside the current document (fragment-only) and do not trigger a fetch by themselves; the extract_url/parse_url rows covering those sites are candidates for Step 3 labeling, not presumed vulnerabilities. Similarly, kwargs['url'] = options.input in the CLI passes a locally-typed filename/URL argument chosen by the operator running the converter."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one query at a time) followed by codeql bqrs decode --format=csv; NOT database analyze / SARIF. No CodeQL execution in this step - queries are generated only.",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output is decoded directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); only genuine resolved calls into external modules (urllib.request.urlopen / Request / urlretrieve)",
+      "ast": "pure AST shape match (callee name text, receiver name, string-literal keyword/argument values); used for all internal cairosvg wrappers and content-derived reads, because defusedxml/tinycss2/cssselect2/PIL/cairocffi sources are not part of the database and their members cannot be resolved through API graphs"
+    },
+    "flowKinds": {
+      "sources": ["param", "cli", "svg_attribute", "svg_href", "url_derived", "css_parse", "css_import_url", "xml_parse", "file"],
+      "sinks": ["arg", "kwarg", "wrapper_param", "fetcher_dispatch", "file_scheme"]
+    },
+    "exclusions": [
+      "test files excluded by the isTestPath filter: cairosvg/test_api.py and test_non_regression/ (matches '%test%')",
+      "the nested CairoSVG-db CodeQL database directory inside the source tree is excluded from source scanning; it contains no .py files so it cannot contribute AST rows",
+      "setup.py is packaging metadata only; no candidate shapes occur in it",
+      "ground-truth files shipped in the tree (CVE-Report-CairoSVG-SSRF.md, ssrf_sinks.csv, ssrf_sinks.json, ssrf_vulnerability_report.md) were neither opened nor scanned"
+    ]
+  },
+  "uncoveredCases": [
+    "Tree(**kwargs) (cairosvg/parser.py:343): bytestring/file_obj/url enter through a kwargs dict, so no individual Parameter AST nodes exist for them; mitigated by the entry-function parameter rows (svg2*/convert) and the Tree(url=...) keyword rows on the sink side",
+    "Node dict attribute flow: cairosvg/parser.py:190 self.update(self.xml_tree.attrib) copies input XML attributes into a dict subclass and parser.py:312-313/cairosvg/image.py:24 read them back via dict.get; dict update/get taint transfer is not tracked by extraction-level data flow, so the .get('href')-family rows are syntax-level evidence at the read sites",
+    "cairosvg/url.py:143 'return url_fetcher(url, resource_type)' - the fetcher is a callable stored in a local/attribute; the dispatch target (default fetch) is not statically resolvable. The call is captured as an ast row, and fetch/read_url/Node.fetch_url definitions are captured as wrapper_param rows",
+    "cairosvg/__main__.py:72 'kwargs['url'] = options.input' - propagation into the kwargs dict literal is not dataflow-tracked at extraction level; the options.input attribute read and the Surface.convert/Tree url parameters are captured on both sides of the boundary instead",
+    "third-party members unreachable by API graphs: ElementTree.fromstring (defusedxml), tinycss2.parse_* , Image.open (PIL), cssselect2 wrappers - matched at ast level only (callee name + receiver name)",
+    "cairosvg/css.py:21 TODO 'pass href for relative URLs' - <style> element content is parsed without an element-specific base URL; relative @import resolution uses the document-level url argument passed into parse_stylesheets (cairosvg/parser.py:395)",
+    "keyword-only parameters have no positional index; rows for them use arg_index = -1 with the parameter name in the callable/notes context (Function.getArgByName covers both positional and keyword-only parameters)"
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: CVE-Report-CairoSVG-SSRF.md, ssrf_sinks.csv, ssrf_sinks.json and ssrf_vulnerability_report.md inside the source tree were NOT opened during this step; candidate families are derived from repository evidence and the loaded language/pattern references only. Project source, the CodeQL database, and the Augur installation were not modified. Only files under iris_manual/SSRF/CairoSVG/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). CodeQL execution and LLM labeling are deferred to later steps."
+  }
+}

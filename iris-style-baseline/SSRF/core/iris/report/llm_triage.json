@@ -1,0 +1,176 @@
+{
+  "triage": {
+    "reviewer": "independent LLM path re-review (Augur IRIS Pass 3, CWE-918 SSRF)",
+    "date": "2026-10-19",
+    "project": "core (Home Assistant core, git e2dd7f2, 2023-08-29)",
+    "sarif": "results/pass3.sarif",
+    "ruleId": "py/augur/core/pass3-ssrf",
+    "formal_alert_count": 3,
+    "diagnostics_only": false,
+    "sarif_contains_formal_taint_paths": true,
+    "note_on_codeflows": "All 3 results carry codeFlows (SARIF threadFlow.locations). Steps carry only ControlFlowNode labels (no per-step source snippets), so each path was independently re-verified against the real Python source at the reported file:line before verdicts were assigned. No diagnostics-query or native-CodeQL-baseline results are present in the SARIF; all 3 results come from queries/Pass3_SSRF.ql only.",
+    "verdict_summary": {
+      "likely_tp": 2,
+      "likely_fp": 1,
+      "uncertain": 0
+    }
+  },
+  "findings": [
+    {
+      "id": "pass3-1",
+      "ruleId": "py/augur/core/pass3-ssrf",
+      "location": "homeassistant/components/rest_command/__init__.py:122",
+      "verdict": "likely_tp",
+      "confidence": 0.7,
+      "source": {
+        "location": "homeassistant/components/rest_command/__init__.py:104 (codeFlow step [0], 'ControlFlowNode for Attribute' = service.data)",
+        "kind": "service_data (authenticated service-call data)",
+        "analysis": "`request_url = template_url.async_render(variables=service.data, parse_result=False)` (lines 103-105). The service is registered via `hass.services.async_register(DOMAIN, name, async_service_handler)` (line 154) with NO schema, so any authenticated HA user (non-admin included, via REST POST /api/services or WebSocket) can call rest_command.<name> with an arbitrary data dict; its keys/values become template variables. Source is genuinely attacker-influenced and the entry is reachable. The templateRenderStep summary (argument of .async_render -> render result) matches the real semantics of Template.async_render(variables=...)."
+      },
+      "sink": {
+        "location": "homeassistant/components/rest_command/__init__.py:121-122",
+        "api": "getattr(websession, method)(request_url, data=..., auth=..., headers=..., timeout=...)",
+        "analysis": "websession is an aiohttp ClientSession (async_get_clientsession, line 64); method is restricted to get/patch/post/put/delete (SUPPORT_REST_METHODS, line 33, enforced by vol.In in COMMAND_SCHEMA line 40-42). This is a real network request execution, not mere Request-object construction or URL parsing."
+      },
+      "taint_path": "service.data (line 104, attribute read) --templateRenderStep--> async_render result (line 103) -> request_url (line 103) -> request_url at fetch (line 122). Path is source-supported end to end; the codeFlow in the SARIF matches the real statements."
+      ,
+      "attacker_control": {
+        "scope": "conditional: bounded by the admin-written YAML URL template",
+        "detail": "The URL template itself (command_config[CONF_URL], cv.template in COMMAND_SCHEMA line 39) is administrator configuration, not attacker input. The attacker controls only the *values* substituted for template variables. If the template interpolates a variable into scheme/host position (e.g. '{{ url }}' or '{{ scheme }}://{{ host }}/...'), the attacker gets full host/port/path control (true SSRF); if variables appear only in path/query, control is path-only on a fixed host. Both shapes are legal rest_command configurations, so exploitability is config-dependent.",
+        "entry": "any authenticated HA user; REST APIDomainServicesView / WebSocket service call; no admin gate, no service schema."
+      },
+      "url_transforms": "None. No urljoin / base-URL / yarl.URL normalization is applied to the rendered URL before the fetch; the rendered string is passed verbatim.",
+      "guards": {
+        "scheme_validation": false,
+        "host_allowlist": false,
+        "private_ip_check": false,
+        "redirect_recheck": false,
+        "note": "No sanitizer on this path. cv.template validates only that config values are templates; there is no cv.url, no is_allowed_external_url, no scheme allow-list. Template variables from service.data are unrestricted (no service schema)."
+      },
+      "trusted_fixed_url_check": "The URL *template* is admin config, but the rendered URL embeds attacker-controlled variable values, so this is not a fixed-destination fetch.",
+      "static_reachability": "Real: async_setup -> async_register_rest_command (line 156-157, iterates YAML config) -> service registration (line 154) -> async_service_handler on every service call. Precondition: the rest_command integration is configured in configuration.yaml (setup-only condition, not a permission barrier).",
+      "file_or_test_check": "Not file:/local read, not URL-parsing-only, not test code, not a diagnostics result. Runtime component code.",
+      "rationale": "Source (authenticated service-call data, no schema), propagation (template render with variables=service.data), and sink (aiohttp session request) are all real and unmitigated. The only caveat is that host-level control requires the admin template to place a variable in scheme/host position, which is a configuration-dependent exploitability condition rather than a data-flow error. Under the reviewed threat model (service_data family is a labeled tp source family: 'reachable by any authenticated HA user'), this is a likely true positive."
+    },
+    {
+      "id": "pass3-2",
+      "ruleId": "py/augur/core/pass3-ssrf",
+      "location": "homeassistant/components/downloader/__init__.py:81",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "source": {
+        "location": "homeassistant/components/downloader/__init__.py:67 (codeFlow step [0], 'ControlFlowNode for Attribute' = service.data)",
+        "kind": "service_data (authenticated service-call data)",
+        "analysis": "`url = service.data[ATTR_URL]` inside download_file service handler (line 61). Service `downloader.download_file` is registered at lines 169-174 with SERVICE_DOWNLOAD_FILE_SCHEMA: vol.Required('url'): cv.url. cv.url is a URL-shape check only (voluptuous URL validation) - it does not restrict scheme to http/https, does not restrict host, and is documented in the labels as non-sanitizing. Entry: any authenticated HA user via REST/WebSocket service call; no admin gate."
+      },
+      "sink": {
+        "location": "homeassistant/components/downloader/__init__.py:81",
+        "api": "requests.get(url, stream=True, timeout=10)",
+        "analysis": "Synchronous requests.get - a real server-side HTTP fetch, executed in a worker thread (threading.Thread(target=do_download), line 167). The response body is written to the local filesystem (lines 136-138). This is a full outbound request + response capture, not Request-object creation or URL parsing."
+      },
+      "taint_path": "service.data (line 67, attribute read) -> url (line 67) -> url at requests.get (line 81). Direct assignment, no intermediate transforms; both codeFlows in the SARIF are identical copies of this single real path.",
+      "attacker_control": {
+        "scope": "full URL (host, port, path, query) - strongest form",
+        "detail": "The attacker supplies the entire url string. requests only performs http/https (file:// etc. raise InvalidSchema), and requests follows redirects by default, so even a 'safe-looking' external URL can bounce to internal hosts. Port and path fully controlled. Response content is persisted to disk with an attacker-influenced filename (guarded by raise_if_invalid_filename, line 108) - the SSRF primitive itself (internal network reachability, internal GET/redirect-chain) is unmitigated."
+      },
+      "url_transforms": "None. The url string is passed verbatim to requests.get; no urljoin, no base URL, no yarl normalization.",
+      "guards": {
+        "scheme_validation": "partial - cv.url requires a URL *shape* (scheme present), but permits any scheme string; effective scheme restriction comes only from requests' internal http/https-only handling, which does not restrict host.",
+        "host_allowlist": false,
+        "private_ip_check": false,
+        "redirect_recheck": false,
+        "note": "is_allowed_external_url is NOT applied on this path (the sanitizer is modeled only at color_extractor/discord/slack/signal_messenger sites). raise_if_invalid_path / raise_if_invalid_filename (lines 77, 108) guard the *output file path*, not the request URL."
+      },
+      "trusted_fixed_url_check": "No. Destination is fully attacker-chosen per call; this is not a config-fixed endpoint.",
+      "static_reachability": "Real: setup (line 46) requires the downloader integration to be configured with an existing download_dir (YAML precondition); once set up, the service is callable by any authenticated user and the handler runs on each call.",
+      "file_or_test_check": "Not file: read, not URL-parse-only, not test code, not diagnostics. Runtime component code. (The component does also write the response to a local file, but the flagged data flow is the network fetch itself, which is genuine.)",
+      "rationale": "Textbook authenticated-user SSRF: unvalidated full-URL service field -> server-side requests.get -> response saved to disk. Source, propagation and sink all verified in source. The only preconditions are integration setup and an authenticated (non-admin) account, consistent with the reviewed service_data threat model."
+    },
+    {
+      "id": "pass3-3",
+      "ruleId": "py/augur/core/pass3-ssrf",
+      "location": "homeassistant/components/hassio/ingress.py:135",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "source": {
+        "location": "homeassistant/components/hassio/ingress.py:131:28 (codeFlow step [0], 'ControlFlowNode for Attribute' = request.query_string)",
+        "kind": "request_field (HTTP request metadata)",
+        "analysis": "In _handle_websocket: `url = self._create_url(token, path)` (line 126) then `if request.query_string: url = f\"{url}?{request.query_string}\"` (line 131). The flagged source is request.query_string - a genuine attacker-supplied request attribute. The view HassIOIngress (url '/api/hassio_ingress/{token}/{path:.*}', line 61) has requires_auth=False, so the HTTP entry itself is unauthenticated; the effective access control is the ingress token, a long random supervisor-issued secret."
+      },
+      "sink": {
+        "location": "homeassistant/components/hassio/ingress.py:134-135",
+        "api": "self._websession.ws_connect(url, headers=..., protocols=..., ...)",
+        "analysis": "Real aiohttp websocket connection. The sink is a genuine network request, so the question is purely about destination control."
+      },
+      "taint_path": "request.query_string (line 131:28) -> url (line 131:13) -> url at ws_connect (line 135:13). The path is real as data flow; the question is whether it constitutes SSRF."
+      ,
+      "attacker_control": {
+        "scope": "query string (and, via the route, the {path:.*} segment) only; host/port/scheme are fixed",
+        "detail": "The destination is always `http://{self._host}/ingress/{token}/{quote(path)}` (_create_url, lines 70-81): fixed supervisor host (self._host set at async_setup_ingress, line 49), fixed http scheme, fixed port. The attacker cannot change the target host, port, or protocol - only the path below /ingress/{token}/ and the query string. This is the designed ingress reverse-proxy behavior (forwarding a browser's request to the add-on's ingress endpoint), not a forged destination."
+      },
+      "url_transforms": "The URL is constructed by f-string with quote(path); _create_url additionally re-parses with yarl and enforces `URL(url).path.startswith(base_path)` where base_path = f\"/ingress/{token}/\" (lines 75-79), rejecting paths whose normalized form escapes the ingress prefix (dot-segment traversal). The query_string is appended verbatim, but only as a query component - it cannot alter host."
+      ,
+      "guards": {
+        "scheme_validation": "implicit - scheme is the literal 'http' in the f-string, not attacker-influenced",
+        "host_allowlist": "fixed host by construction (supervisor address from the hassio setup)",
+        "path_restriction": "URL(url).path.startswith('/ingress/{token}/') check in _create_url",
+        "redirect_recheck": "allow_redirects=False on the plain-HTTP sibling path (_handle_request, line 164); the flagged ws_connect path does not follow redirects",
+        "access_control": "requires_auth=False but a valid supervisor-issued ingress token (bearer-style random secret) is required to hit a meaningful target"
+      },
+      "trusted_fixed_url_check": "Yes in the sense that matters: the destination host is the local supervisor, and proxying arbitrary paths/queries to the add-on behind the presented token is the component's documented function. It is not an admin-config address but a fixed internal service endpoint.",
+      "static_reachability": "Real (view registered at line 54; get/post/put/delete/patch/options all route to _handle, lines 100-105; websocket upgrade detection at line 89). Reachability is not in dispute; the dispute is classification.",
+      "file_or_test_check": "Not file:, not parse-only, not test code, not diagnostics. Runtime component code.",
+      "rationale": "Although the data flow request.query_string -> ws_connect(url) is technically real, the attacker controls neither scheme, host, nor port - the request always targets the fixed local supervisor ingress endpoint for the token already presented by the same requester, with a path-prefix normalization guard and (on the HTTP variant) redirects disabled. This is the intended ingress proxy feature, not SSRF: there is no capability the attacker gains beyond what the ingress token already authorizes. The alert's own scope string concedes 'fixed supervisor host; attacker controls only path/query'. Marked likely_fp under criterion 5/7 (fixed destination, limited attacker-controlled parameters, by-design resource loading)."
+    }
+  ],
+  "ground_truth_cross_check": {
+    "question": "Was the real vulnerability (commit e0eb63c58816818530ccda4e9bf0069bba58ed5c, 'Validate slug in addon services', CWE-918, function send_command) localized by this analysis?",
+    "verdict": "NOT_DETECTED",
+    "confidence": 0.95,
+    "real_vulnerability": {
+      "commit": "https://github.com/home-assistant/core/commit/e0eb63c58816818530ccda4e9bf0069bba58ed5c",
+      "function": "HassIO.send_command, homeassistant/components/hassio/handler.py",
+      "vulnerable_code_present_in_snapshot": true,
+      "vulnerable_call_chain": [
+        "homeassistant/components/hassio/__init__.py:154 & 514-518 - hass.services.async_register(DOMAIN, 'addon_stdin', async_service_handler, schema=SCHEMA_ADDON_STDIN)",
+        "homeassistant/components/hassio/__init__.py:490 - data = service.data.copy() (attacker data, any authenticated user)",
+        "homeassistant/components/hassio/__init__.py:491 - addon = data.pop(ATTR_ADDON, None) -- SCHEMA_ADDON (line 154) validates addon only as cv.string: NO slug validation (the fix adds it)",
+        "homeassistant/components/hassio/__init__.py:210-212 - MAP_SERVICE_API: SERVICE_ADDON_STDIN -> '/addons/{addon}/stdin'",
+        "homeassistant/components/hassio/__init__.py:508-513 - hassio.send_command(api_endpoint.command.format(addon=addon, slug=slug), payload=data[ATTR_INPUT], ...) -- attacker controls both the {addon} path segment and the JSON payload",
+        "homeassistant/components/hassio/handler.py:533-537 - self.websession.request(method, f\"http://{self._ip}{command}\", json=payload, ...) -- path injection into the supervisor REST URL (fixed host) with attacker-controlled POST body"
+      ],
+      "snapshot_vs_fix": "DB snapshot git e2dd7f2 (2023-08-29) predates fix commit e0eb63c (#99232, 'Validate slug in addon services'): SCHEMA_ADDON still uses cv.string and send_command has no `url != str(URL(url))` normalization check, i.e. the pre-fix vulnerable code is exactly what the database was built from.",
+      "impact": "An authenticated attacker calling hassio.addon_stdin with a crafted addon value (e.g. containing '../' segments) can invoke arbitrary Supervisor REST endpoints via POST with a fully attacker-controlled data dictionary."
+    },
+    "detection_outcome": {
+      "formal_alerts_on_this_path": 0,
+      "detail": "The 3 formal py/augur/core/pass3-ssrf alerts are rest_command:122, downloader:81, and hassio/ingress.py:135. None is located in homeassistant/components/hassio/__init__.py or hassio/handler.py; no alert covers the addon_stdin -> send_command path.",
+      "root_cause_of_miss": [
+        "Sink excluded at labeling: label p3-snk-3724 (role none, classification fp, confidence 0.75) pinned handler.py:534 'websession.request' with rationale 'supervisor API funnel: f-string http://{self._ip}{command} with FIXED supervisor host and internal command strings.' The 'internal command strings' assumption is wrong for the addon/slug services: command is a template '/addons/{addon}/stdin' formatted with attacker-supplied service data (line 512-513), so the command path IS attacker-influenced. This is exactly the fixed-host/path-injection pattern the real CVE exploits.",
+        "Wrapper excluded: label p3-snk-3894 (role none, fp, 0.7) treats send_command as a fetch wrapper ('the wrapper itself issues no request'), relying on inter-procedural flow to the inner sink - but the inner sink was itself excluded by p3-snk-3724, so the chain terminates.",
+        "Source side was correctly captured: label p3-src-1674 (source, tp, 0.8) at hassio/__init__.py:490 for the service.data read. The miss is entirely on the sink side, plus the unmodeled `command.format(addon=addon, slug=slug)` string-format step which would additionally impede flow even with the sink present."
+      ],
+      "consistency_note": "The pass-3 model *did* report the structurally analogous fixed-host/path-only pattern at hassio/ingress.py:135 (as a candidate), while the identical-shape but genuinely vulnerable fixed-host path-injection at hassio/handler.py:534 was explicitly filtered as fp at label time. The real CVE lives in the excluded site, not in the reported one."
+    },
+    "conclusion": "The formal Augur Pass 3 results did NOT localize the ground-truth CWE-918 vulnerability (hassio.addon_stdin -> HassIO.send_command). The miss was caused by a Phase 1 labeling decision (p3-snk-3724 / p3-snk-3894, 'fixed supervisor host and internal command strings'), not by a query-execution or path-resolution failure; the source label for the same path (p3-src-1674) was correct. Detection would have required (a) keeping handler.py:534 as a host-fixed/path-tainted sink and (b) a taint step for str.format with keyword/positional arguments."
+  },
+  "provenance": {
+    "read_files": [
+      "iris/results/pass3.sarif",
+      "iris/report/iris_report.md",
+      "iris/report/query_generation_notes.md",
+      "iris/labels/labels.json",
+      "iris/queries/Pass3_SSRF.ql",
+      "source: homeassistant/components/rest_command/__init__.py",
+      "source: homeassistant/components/downloader/__init__.py",
+      "source: homeassistant/components/hassio/ingress.py",
+      "source: homeassistant/components/hassio/__init__.py",
+      "source: homeassistant/components/hassio/handler.py"
+    ],
+    "constraints_respected": [
+      "Original SARIF, LLM labels, and formal queries were not modified",
+      "PyVul ground truth, fix commits, and CVE advisories were not read as analysis inputs; the ground-truth function for the cross-check was supplied by the operator in the task prompt itself",
+      "Diagnostics queries and any native CodeQL SSRF baseline were not counted toward Augur formal TP (the SARIF contains none)"
+    ]
+  }
+}

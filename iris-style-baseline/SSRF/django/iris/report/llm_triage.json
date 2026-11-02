@@ -1,0 +1,92 @@
+{
+  "metadata": {
+    "run": "django-iris-pass3-independent-triage-20261020",
+    "generated": "2026-10-20",
+    "model": "glm-5.3 (Z.ai GLM), triaged in-session via Claude Code CLI; 1 batch; temperature unset (harness default)",
+    "task": "Augur 独立复核：对 Step 5 正式 SARIF 结果做 LLM 逐路径 triage（WORKFLOW.md §7.2 contextual path triage 契约）",
+    "inputs": [
+      "iris/results/pass3.sarif (只读，未修改)",
+      "iris/labels/labels.json (只读，未修改)",
+      "iris/queries/Pass3_SSRF.ql (只读，未修改)"
+    ],
+    "constraints_honored": [
+      "原始 SARIF、LLM 标签、正式查询均未修改",
+      "未读取 PyVul 真值、修复提交、CVE 公告",
+      "未读取源根目录下的预置漏洞产物（SSRF_AUDIT_REPORT.md、SSRF_DEEP_TRACE_REPORT.md、ssrf_sinks.csv/json、enhanced_ssrf_sinks.csv）",
+      "诊断查询结果不计入正式 TP；本轮未运行原生 CodeQL SSRF 基线，亦无基线结果计入"
+    ]
+  },
+  "formal_query_reproduction": {
+    "query": "iris/queries/Pass3_SSRF.ql (rule py/augur/django/pass3-ssrf, @kind path-problem)",
+    "database": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/django_vuln/django-db",
+    "codeql_cli": "2.25.1 (E:/codeql)",
+    "reproduced": true,
+    "method": "独立重跑正式查询至工作区外临时目录（%TEMP%/augur_review_django/pass3_verify.sarif），与原始 iris/results/pass3.sarif 逐条比对",
+    "comparison": "ruleId、告警位置（django/contrib/sitemaps/__init__.py:27）、code flow 数（2）完全一致，1 条结果可复现（CLI 报告 No need to rerun，命中 Step 5 查询缓存后重新解释结果）",
+    "diagnostics_run": {
+      "query": "iris/diagnostics/Pass3_SSRF_model_bindings.ql",
+      "result": "全部模型绑定按文档解析：source 绑定 sitemap_url / ping_url / argv x2；sink 绑定 urlopen BinaryExpr / connection_class Attribute / urlretrieve url；summary 边端点 template/url/_get_sitemap_full_url 均存在",
+      "status": "仅诊断用途，不产生 CWE-918 告警，不计入本次正式 TP"
+    }
+  },
+  "summary": {
+    "codeql_analysis_succeeded": true,
+    "formal_alert_count": 1,
+    "formal_code_flow_count": 2,
+    "formal_taint_path_hit": true,
+    "formal_tp_count": 0,
+    "statement": "CodeQL 分析成功，正式查询本轮命中 1 条 SSRF 污点路径告警（django/contrib/sitemaps/__init__.py:27，含 2 条 code flow，可独立复现）。经逐路径 LLM 独立复核，该唯一告警判定为 likely_fp（源均不在不可信 Web 请求边界），故本轮 Augur 正式 TP 为 0。此结论如实记录，不虚构任何未命中的结果；诊断查询输出与本轮（未运行的）原生基线均未计入上述任何计数。"
+  },
+  "triage": [
+    {
+      "alert_id": "pass3-1",
+      "rule_id": "py/augur/django/pass3-ssrf",
+      "location": "django/contrib/sitemaps/__init__.py:27",
+      "message": "Untrusted URL input reaches a server-side request URL argument (CWE-918, Augur pass 3).",
+      "sink_snippet": "urlopen('%s?%s' % (ping_url, params))  # sitemaps/__init__.py:27, inside ping_google()",
+      "paths": [
+        {
+          "path_id": "pass3-1-flow-a",
+          "source": "ping_google.sitemap_url 参数 (sitemaps/__init__.py:18, label src-001, candidate 0.55)",
+          "intermediates": [
+            "_get_sitemap_full_url(sitemap_url) 调用 (line 25)",
+            "'%s://%s%s' % (scheme, current_site.domain, sitemap_url) 返回值 (line 51, summary 边 src-003)",
+            "urlencode({'sitemap': sitemap_full_url}) -> params (line 26)"
+          ],
+          "sink": "urlopen arg 0 BinaryExpr (line 27, label snk-001, tp 0.90)",
+          "verdict": "likely_fp",
+          "source_is_false_positive": true,
+          "sink_is_false_positive": false,
+          "confidence": 0.85,
+          "reason": "数据流真实存在且与 Phase 1 标签及 query_generation_notes §7 预期的可达路径一致，但源不可信性不成立：sitemap_url 仅控制出站请求的 sitemap 查询串值，目标 host 由固定常量 PING_URL（默认）或调用方 ping_url 决定，本流不控制 scheme/host/port；树内唯一调用方是 management command（django/contrib/sitemaps/management/commands/ping_google.py:13，CLI 操作员输入 options['sitemap_url']），全库 208 个 request.*/environ 候选在 Phase 1 已逐行核实无一汇入出站请求 URL，不存在任何 Web 攻击者边界。符合 Step 6 SSRF FP 启发式（admin-configured/操作员配置 URL）。"
+        },
+        {
+          "path_id": "pass3-1-flow-b",
+          "source": "ping_google.ping_url 参数 (sitemaps/__init__.py:18, label src-002, candidate 0.55)",
+          "intermediates": [
+            "'%s?%s' % (ping_url, params) 前缀拼接 (line 27)"
+          ],
+          "sink": "urlopen arg 0 BinaryExpr (line 27, label snk-001, tp 0.90)",
+          "verdict": "likely_fp",
+          "source_is_false_positive": true,
+          "sink_is_false_positive": false,
+          "confidence": 0.75,
+          "reason": "ping_url 对出站 URL 的 scheme/host/port/path 拥有完全控制（'%s?%s' 前缀），是比 flow-a 更强的源，但默认值为固定常量 PING_URL（line 11），树内零调用方传入该参数（唯一 management command 调用只传 sitemap_url 与 sitemap_uses_https）。污点仅在第三方应用以 request 派生值调用 ping_google(ping_url=...) 的库误用场景下才成立，该场景在本数据库中不存在，故对本库判 likely_fp，但保留为库 API 误用告警（Phase 1 标签 classification=candidate 的原意）。"
+        }
+      ],
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": false,
+      "confidence": 0.8,
+      "reason": "两条流的 sink（urlopen 请求 URL 参数）均为真实 SSRF 能力 sink（snk-001, tp 0.90），数据流可复现；但两个源（ping_google 的 sitemap_url/ping_url 形参）均非不可信 Web 边界——树内唯一触发点是 CLI 管理命令（操作员信任域），无任何 HTTP 请求输入汇入。按 Augur Step 6 SSRF 启发式（admin-configured URLs -> FP）与 Phase 1 标签（两源均 candidate 0.55），判定 likely_fp。若第三方代码以用户输入调用该公开 API，flow-b 可升级为真实 SSRF，此为库 API 面向的风险陈述，不改变本库内的 FP 判定。"
+    }
+  ],
+  "cross_check_against_phase1": {
+    "consistent": true,
+    "notes": [
+      "唯一告警与 query_generation_notes §7 预期的唯一可达正式路径完全一致（ping_google 参数 -> urlopen）；smtp sink (snk-002) 与 urlretrieve sink (snk-003) 如预期未产生告警（无源可达）",
+      "argv -> argparse -> options 的断链如 §7 预测：CLI 根源的流未被正式查询连接（argparse 机制无模型边）",
+      "告警是 Step 6 候选级（iris_report.md：1 raw / 0 TP / 1 candidate / 0 FP），本次独立复核将其从 candidate 定为 likely_fp，理由见上"
+    ]
+  }
+}

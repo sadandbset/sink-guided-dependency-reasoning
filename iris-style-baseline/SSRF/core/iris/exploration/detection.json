@@ -1,0 +1,276 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-19",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SSRF\\core\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (exploration + candidate extraction query generation) against the core_vuln source tree (Home Assistant core, git HEAD e2dd7f2, 2023-08-29). The CodeQL database core-db was created from the same tree (sourceLocationPrefix is the repo root itself, creation sha e2dd7f2 matches git HEAD exactly), so file/line evidence below is verified against the source snapshot. The nested core-db/ directory inside the source root is excluded from all exploration, scanning and evidence (it did not exist at DB creation time; DB creation 2026-05-29 02:49 UTC precedes it). Per operator instruction, this step only generates exploration/detection.json and extraction/sources.ql + extraction/sinks.ql; codeql query run / bqrs decode, LLM labeling and all Phase 2 stages are deferred."
+  },
+  "target": {
+    "project": "core (Home Assistant core)",
+    "projectDescription": "Open-source home-automation server: an asyncio application (homeassistant/) that exposes an HTTP REST API + WebSocket API + webhooks on a self-built aiohttp application stack (components/http, HomeAssistantView), runs 1178 component integrations (device connectors, cameras, media players, cloud assistants, notifier services), dispatches user-defined automations/scripts/services, and pulls data from hundreds of remote vendor APIs. Attacker-relevant input surfaces: unauthenticated webhook HTTP requests (/api/webhook/{webhook_id}), authenticated REST/WebSocket API requests and service calls (service data can carry URLs, e.g. downloader download_file), config-flow UI input, MQTT/device message payloads, YAML configuration, templates, environment variables. Outbound network access is issued through a shared aiohttp ClientSession funnel (helpers/aiohttp_client.py), a shared httpx AsyncClient funnel (helpers/httpx_client.py), direct requests/httpx/aiohttp calls in components.",
+    "pass": 3,
+    "cwes": ["CWE-918"],
+    "focus": "Server-Side Request Forgery (SSRF)",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\core_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (core-db/codeql-database.yml)",
+      "homeassistant/ package (~1.47M baseline lines total in DB): components/ (1178 integration dirs), helpers/, util/, auth/, core.py, bootstrap.py",
+      "top-level pyproject.toml with runtime deps aiohttp==3.8.5, httpx==0.24.1, requests==2.31.0, PyYAML, voluptuous, yarl (transitive)"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\core_vuln\\core-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\core_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "e2dd7f20697b40e752d3a3277858fcde0c1b854d",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-29T02:49:05.263953500Z"
+    },
+    "baselineLinesOfCode": 1468298,
+    "finalised": true,
+    "scopeNotes": "The DB covers the whole repository including the top-level tests/ tree (checked out before DB creation). The nested core-db/ directory and the pre-existing SSRF analysis artifacts (ssrf_sinks.csv, ssrf_sinks.json, ssrf_vulnerability_report.md, ssrf_cost_estimation.md, ast_matcher_failure_analysis.md) are NOT part of the DB and were not opened. Row generation filters tests/, test_*.py, conftest.py and core-db paths."
+  },
+  "toolchain": {
+    "qlpack": "iris/core-cwe918 (dependencies: codeql/python-all: \"*\")",
+    "packResolutionExpected": "codeql/python-all resolved from the local pack cache at C:\\Users\\lzh\\.codeql\\packages (7.1.1 and 7.1.2 present; the API surface used by both queries was verified against 7.1.2)",
+    "codeqlCli": "2.25.1"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] },
+        { "name": "django", "confidence": 0.0, "evidence": [] },
+        { "name": "flask", "confidence": 0.0, "evidence": [] },
+        {
+          "name": "aiohttp (custom Home Assistant http component; no augur reference exists)",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package: aiohttp imported throughout (pyproject aiohttp==3.8.5; components/http/__init__.py 'from aiohttp import web')",
+            "route: homeassistant/components/http/view.py:37 'class HomeAssistantView' with url/name/requires_auth class attributes; components/http/__init__.py:386 'view.register(self.hass, self.app, self.app.router)'; 196 HomeAssistantView references and 322 files with view url patterns under components/",
+            "runtime/bootstrap: homeassistant/components/http/__init__.py builds the aiohttp web.Application (register_view/register_redirect/register_resource; web_runner.py AppRunner)",
+            "layout: homeassistant/components/http/ + homeassistant/components/api/ + homeassistant/components/websocket_api/"
+          ]
+        }
+      ]
+    },
+    "selected": "aiohttp-based custom stack (homeassistant/components/http); no augur framework reference matches",
+    "notes": "No fastapi/django/flask evidence exists (scores 0.0, below the 0.50 threshold). The web layer is a first-party aiohttp application: views subclass HomeAssistantView (components/http/view.py:37, requires_auth default True at :41, enforced at :135), views are registered via hass.http.register_view (components/http/__init__.py:386, e.g. components/api/__init__.py:58+), authentication is handled by components/http/auth.py (token/signed-path), throttling by components/http/ban.py, and the WebSocket API lives in components/websocket_api. references/aiohttp.md does not exist in Augur 0.3.0, so source/sink shapes below are derived from repository evidence per references/python.md and references/patterns.md (language reference path).",
+    "customBoundaryEvidence": [
+      "homeassistant/components/http/view.py:37 'class HomeAssistantView' - base class of every HTTP endpoint; requires_auth=True default (:41), auth gate in register() (:135)",
+      "homeassistant/components/webhook/__init__.py:199 'class WebhookView(HomeAssistantView)' - url '/api/webhook/{webhook_id}' (:32), requires_auth=False (:204), cors_allowed=True; dispatch 'await webhook[\"handler\"](hass, webhook_id, request)' (:182) - the unauthenticated input boundary",
+      "homeassistant/helpers/aiohttp_client.py:77 'async_get_clientsession(hass)' - the shared aiohttp.ClientSession funnel imported by 493 component files; :136 constructs aiohttp.ClientSession; :163/:196 async_aiohttp_proxy_web/async_aiohttp_proxy_stream stream remote responses to clients",
+      "homeassistant/helpers/httpx_client.py:44 'get_async_client(hass)' / :58 'create_async_httpx_client' - the shared httpx.AsyncClient funnel (28 user files); :82 HassHttpXAsyncClient(httpx.AsyncClient)",
+      "homeassistant/components/hassio/ingress.py:159 'async with self._websession.request(request.method, url, ..., params=request.query, data=request.content)' - supervisor proxy that forwards incoming request method/query/body to an outgoing network request"
+    ]
+  },
+  "inputBoundaryInventory": {
+    "summary": "Attackers face (1) unauthenticated HTTP: webhook endpoints /api/webhook/{webhook_id} (WebhookView requires_auth=False; local_only webhooks additionally reject remote senders via network.is_local); (2) authenticated HTTP/REST views (~196 HomeAssistantView references, 104 handler methods of the form 'async def get/post/... (self, request)'); (3) the WebSocket API (513 @websocket_api.websocket_command-decorated handlers + 299 async_register_command sites; message dict msg[...]); (4) service calls through REST/WebSocket/scripts/automations (hass.services.async_register, 265+ registrations; handler reads call.data/service.data, 443 sites; service data can carry URLs, e.g. downloader 'url'); (5) config flows (285 async_step_*(self, user_input) functions; UI form input; e.g. generic camera / octoprint URL fields); (6) device/message buses (MQTT subscription callbacks msg.payload, ~122 sites; doorbell/kodi/etc. events); (7) YAML configuration files and blueprints (load_yaml/yaml.safe_load/parse_yaml); (8) templates (93 .async_render/.render sites; rest_command renders the request URL from service.data variables); (9) environment variables (9 os.environ/os.getenv sites, e.g. SUPERVISOR_TOKEN). Outbound requests go through the shared aiohttp/httpx client funnels, requests.* calls, and direct session method calls (session.get/post/request/ws_connect).",
+    "sourceFamilies": [
+      {
+        "family": "http_view_request_param",
+        "evidence": [
+          "homeassistant/components/http/view.py:37 HomeAssistantView base; handler convention 'async def get/post/put/delete/patch/head/options(self, request)' - 104 such methods under components/ plus WebhookView._handle (webhook/__init__.py:207 'async def _handle(self, request, webhook_id)')",
+          "views registered via hass.http.register_view (components/http/__init__.py:386): components/api/__init__.py:58-76 (20 API views), components/webhook/__init__.py:210, components/alexa/intent.py:43, components/alexa/smart_home.py:125, components/google_assistant/http.py, components/emulated_hue/hue_api.py, components/hassio/ingress.py, components/auth/indieauth.py, components/auth/authorize.py, ...",
+          "auth: view.py:135 requires_auth gate + components/http/auth.py token auth; WebhookView overrides requires_auth=False (webhook/__init__.py:204)"
+        ]
+      },
+      {
+        "family": "request_body_and_field_reads",
+        "evidence": [
+          "52 'await request.json()' / 'await request.post()' call sites under components/ (alexa/intent.py, alexa/smart_home.py, api/__init__.py, dialogflow, foursquare, google_assistant/helpers.py+http.py, hassio/discovery.py+handler.py, html5/notify.py, ios/__init__.py, konnected, meraki/device_tracker.py, mobile_app/webhook.py, motioneye, netatmo/webhook.py, nuki, owntracks, plaato, point, rachio/webhooks.py, shopping_list, smartthings/smartapp.py, telegram_bot/webhooks.py, toon/coordinator.py, tts/__init__.py, ...)",
+          "request field attribute reads: request.query / request.match_info / request.headers / request.content / request.remote / request.query_string / request.path (~260 attribute reads incl. routing context)",
+          "hassio/ingress.py:159-163 forwards request.method, request.query, request.content into an outgoing websession.request; :128 f'{url}?{request.query_string}' appends the caller's query string to the proxied URL"
+        ]
+      },
+      {
+        "family": "webhook_handlers",
+        "evidence": [
+          "components/webhook/__init__.py:52 'async_register(hass, domain, name, webhook_id, handler)' - handler signature (hass, webhook_id, request); dispatch at :182",
+          "37 functions with a webhook_id parameter under components/ (mobile_app/webhook.py, owntracks, rachio/webhooks.py, netatmo/webhook.py, point, plaato, smartthings/smartapp.py, meraki, konnected, geofency,ifttt, telegram_bot/webhooks.py, ...)",
+          "WebhookView (webhook/__init__.py:199) is requires_auth=False and cors_allowed=True; local_only webhooks additionally reject non-local senders (network.is_local, :146-166, with a 2023.11 deprecation path for unset local_only)"
+        ]
+      },
+      {
+        "family": "service_call_data",
+        "evidence": [
+          "265+ hass.services.async_register sites; handlers read call.data / service.data (443 attribute-read sites under components/)",
+          "components/downloader/__init__.py:67 'url = service.data[ATTR_URL]' (schema :33 vol.Required(ATTR_URL): cv.url) -> :81 'req = requests.get(url, stream=True, timeout=10)' - a service-call URL reaching a sync HTTP fetch",
+          "components/rest_command/__init__.py:103 'request_url = template_url.async_render(variables=service.data, parse_result=False)' -> :121 'async with getattr(websession, method)(request_url, data=payload, ...)' - service data rendered into the request URL",
+          "components/adguard/__init__.py:68-84 add_url/remove_url/enable_url/disable_url service handlers forward call.data[CONF_URL] to the AdGuard API"
+        ]
+      },
+      {
+        "family": "websocket_api_messages",
+        "evidence": [
+          "components/websocket_api: 513 @websocket_api.websocket_command-decorated functions + 299 async_register_command call sites; handler signature (hass, connection, msg)",
+          "694 msg[...] subscript reads (454 of them the routing keys msg[\"type\"]/msg[\"id\"]) + 96 msg.get(...) reads; non-routing keys carry the payload (e.g. components/blueprint/websocket_api.py:76 'importer.fetch_blueprint_from_url(hass, msg[\"url\"])' with cv.url-validated schema at :65)",
+          "auth: websocket_api connection requires an authenticated session before commands execute (components/websocket_api/__init__.py auth phase)"
+        ]
+      },
+      {
+        "family": "config_flow_user_input",
+        "evidence": [
+          "285 'def async_step_*(self, user_input)' functions under components/ (config flows / options flows), e.g. components/generic/config_flow.py (still_image_url URL field, :175 fetches the URL to validate it via async_client.get(url)), components/octoprint/config_flow.py (URL field, :269 creates aiohttp.ClientSession to verify the host)",
+          "validate_input helpers consuming user_input are included by name"
+        ]
+      },
+      {
+        "family": "mqtt_and_device_messages",
+        "evidence": [
+          "~122 msg.payload / message.payload attribute reads under components/ (mqtt subscription callbacks and mqtt device_tracker/sensor platforms; signature 'async def async_message_received(msg)')",
+          "other device/message buses (doorbird, konnected webhook-ish events, smartthings smartapp) flow through the request/webhook families above"
+        ]
+      },
+      {
+        "family": "template_render",
+        "evidence": [
+          "93 .async_render( / .render( / .async_render_complex( call sites under components/ and helpers/",
+          "rest_command/__init__.py:97-103 renders payload and request URL templates with variables=service.data; generic camera still_image_url and many notifier URLs are templates over entity state"
+        ]
+      },
+      {
+        "family": "env_and_config_file",
+        "evidence": [
+          "9 os.environ[...] / os.environ.get(...) / os.getenv(...) sites (e.g. components/hassio/handler.py:539 SUPERVISOR_TOKEN); sys.argv does not occur in the homeassistant/ tree",
+          "YAML loads: yaml.safe_load (3), yaml.parse_yaml (5, incl. blueprint remote YAML at components/blueprint/importer.py:180), yaml.load (1), yaml.load_yaml (1), bare load_yaml (12, homeassistant.util.yaml loader), load_yaml_config_file (configuration.yaml bootstrap in homeassistant/config.py)"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "shared_client_funnels",
+        "evidence": [
+          "helpers/aiohttp_client.py:77 async_get_clientsession / :98 async_create_clientsession (493 importing component files); :136 'clientsession = aiohttp.ClientSession(' inside _async_create_clientsession; :163 async_aiohttp_proxy_web / :196 async_aiohttp_proxy_stream take a caller-built web_coro/stream and relay it to the HTTP response (camera proxies)",
+          "helpers/httpx_client.py:44 get_async_client / :58 create_async_httpx_client (28 user files); :82 'client = HassHttpXAsyncClient('"
+        ]
+      },
+      {
+        "family": "session_method_calls",
+        "evidence": [
+          "~76 call sites on session-named receivers: .get (49), .post (20), .request (5), .ws_connect (1) plus put/head/delete variants; e.g. components/blueprint/importer.py:155/168/192/237 'resp = await session.get(import_url, raise_for_status=True)', components/buienradar/util.py:97, components/doorbird/camera.py:106, components/duckdns/__init__.py:99",
+          "components/hassio/handler.py:534 'request = await self.websession.request(method, f\"http://{self._ip}{command}\", ...)' - the supervisor API funnel; components/hassio/ingress.py:159 _websession.request(...) proxying incoming request fields; :135 _websession.ws_connect(url) for ingress websockets",
+          "components/rest/data.py:102 'response = await self._async_client.request(method, self._resource, ...)' (httpx); components/mjpeg/camera.py:174/179 'await client.get(self._still_image_url...)' / 'async with client.stream(\"get\", self._mjpeg_url...)' with client = get_async_client (mjpeg/camera.py:163)"
+        ]
+      },
+      {
+        "family": "sync_requests_api",
+        "evidence": [
+          "89 requests.get/post/put/head/request/Session call sites: components/downloader/__init__.py:81 requests.get(url) (service-call URL), components/google_wifi/sensor.py:188 requests.Session(), components/powerwall/__init__.py:124 http_session = requests.Session(), components/tomato/device_tracker.py:102-106 requests.Session().send(self.req), plus from-imports 'from requests import Session' (flume, plex/server.py:14, powerwall/models.py:7, schluter)"
+        ]
+      },
+      {
+        "family": "direct_client_constructions",
+        "evidence": [
+          "aiohttp.ClientSession constructed directly at components/auth/indieauth.py:95 ('async with aiohttp.ClientSession() as session, session.get(...)'), components/octoprint/config_flow.py:269 and components/octoprint/__init__.py:171 (connector=...)",
+          "httpx: helpers/httpx_client.py:82 HassHttpXAsyncClient(...); components use get_async_client; httpx.DigestAuth/BasicAuth at components/generic/camera.py:122 and mjpeg/camera.py:158"
+        ]
+      },
+      {
+        "family": "dynamic_dispatch_fetches",
+        "evidence": [
+          "components/rest_command/__init__.py:121 'async with getattr(websession, method)(request_url, data=payload, auth=auth, ...)' - the HTTP verb is chosen dynamically; components/rest/switch.py:206 'await getattr(websession, self._method)(...)'"
+        ]
+      },
+      {
+        "family": "url_construction",
+        "evidence": [
+          "39 yarl URL( / yarl.URL( sites and 9 URL.build( sites under components/ (blueprint/importer.py:166/187, frontend, generic/camera, alexa, cast, ecowitt/config_flow...); 8 urljoin( sites (from urllib.parse import urljoin)",
+          "hassio/handler.py:534 f-string 'http://{self._ip}{command}'; hassio/ingress.py:128 f'{url}?{request.query_string}' - composed request URLs (f-strings are not extracted as rows; documented as gap)"
+        ]
+      },
+      {
+        "family": "internal_fetch_wrappers",
+        "evidence": [
+          "components/blueprint/importer.py:144 fetch_blueprint_from_community_post / :154 fetch_blueprint_from_github_url / :176 fetch_blueprint_from_github_gist_url (URL from websocket msg[\"url\"], host-restricted by startswith checks at :151/:176/:187)",
+          "components/hassio/handler.py:520 HassioAPI.api_command (all supervisor calls); components/hassio/ingress.py:145 _handle_request; components/rest_command/__init__.py:60 async_handle_rest_command; components/rest/data.py:88 _async_update; components/mjpeg/camera.py:151 _async_camera_image / :160 _async_digest_camera_image; components/generic/camera.py:195 _async_still_image; components/image/__init__.py:160s image fetching (self._client.get at :172)",
+          "wrapper rows are emitted for every function whose body directly contains a fetch call site (families above)"
+        ]
+      },
+      {
+        "family": "absent_apis",
+        "evidence": "urllib.request.urlopen / urllib.request.urlretrieve / httpx.get-style module-level calls: zero occurrences in the homeassistant/ tree (grep over all .py). Per operator rule only APIs proven present are emitted; urllib is recorded here as a coverage gap note, not as a query family."
+      }
+    ],
+    "sanitizerObservations": [
+      "webhook local_only + network.is_local check (components/webhook/__init__.py:144-166): local_only webhooks reject non-local senders outright; webhooks without an explicit local_only value log a deprecation warning and still accept remote senders (flag day 2023.11 per the comment) - a network-origin restriction on the webhook source, not a URL/host restriction on outbound requests",
+      "HTTP view authentication (view.py:135 requires_auth gate; components/http/auth.py token validation; ban.py rate limiting) and WebSocket auth phase bound the authenticated source families",
+      "voluptuous cv.url validation on URL-typed service/flow/websocket fields (downloader/__init__.py:33, blueprint/websocket_api.py:65, rest/schema.py:53, adguard/__init__.py:35) - URL-shape validation only, no scheme/host allow-listing, so it does not neutralize SSRF to arbitrary hosts",
+      "blueprint importer host restrictions: _get_community_post_import_url / _get_github_import_url / gist startswith('https://...') checks (blueprint/importer.py:151/:176/:187) confine fetch targets to the community forum / GitHub api hosts",
+      "rest_command/rest/generic-camera/mjpeg URLs come from YAML configuration or config flows (admin-supplied); fixed vendor endpoints (buienradar, duckdns, tado, citybikes, bluesound...) are constants"
+    ],
+    "nonVulnerabilityNote": "Most fetched URLs are either admin-supplied configuration (rest sensor/command, generic camera, feedreader), fixed vendor API endpoints, or OAuth/refresh flows. The webhook surface is unauthenticated but webhook handlers mostly parse payloads rather than fetch URLs; REST/WebSocket/service boundaries require an authenticated user. These are recorded as candidates only; the extraction deliberately does not presume exploitability of any site (admin-configured URLs are the documented SSRF FP class in WORKFLOW.md 5.3.2 and are expected to be filtered at labeling/report time, not here)."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query compile / codeql query run followed by codeql bqrs decode --format=csv, run sequentially one at a time against core-db; NOT database analyze / SARIF. Per operator instruction, execution is deferred to a later step - this step generates the queries only.",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output is decoded directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API; AstNode.getLocation().getFile().getAbsolutePath())",
+      "line (1-based start line via Location API; AstNode.getLocation().getStartLine())",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); alias-aware for import/from-import idioms of requests/aiohttp/httpx/yarl and the homeassistant.helpers client funnels. Note: moduleImport() forbids dotted names, so the internal funnels are addressed as API::moduleImport(\"homeassistant\").getMember(\"helpers\").getMember(\"aiohttp_client\"|\"httpx_client\").getMember(...)",
+      "ast": "pure AST shape match (attribute/name text, receiver naming, in-file provenance); catches session variables obtained from the internal funnels, getattr dynamic dispatch and shapes API graphs miss; subject to name-collision noise (e.g. sqlalchemy sessions named 'session' with .get())"
+    },
+    "flowKinds": {
+      "sources": ["http_handler_param", "request_json", "request_post", "request_attr", "webhook_handler", "service_data", "websocket_msg", "config_flow", "mqtt_payload", "template_render", "env", "config_file"],
+      "sinks": ["arg", "session_ctor", "session_arg", "internal_client_getter", "internal_fetch_wrapper", "url_build", "getattr_dispatch"]
+    },
+    "pathFilter": "rows are excluded when the node's absolute file path is under tests/ (forward or backslash separators), the file base name matches test_% or conftest.py, or the path contains core-db (the nested CodeQL database directory)",
+    "exclusions": [
+      "tests/ tree (present in the DB; identified by path filter at query time)",
+      "core-db/ nested database directory and non-python analysis artifacts are neither scanned nor part of the DB",
+      "config-entry data reads (entry.data, 3391 sites) are NOT extracted: config-entry values originate from admin config flows (persisted user input) and are the documented admin-configured-URL FP class; they are modeled, if needed, in Phase 2 as a MySummaries step rather than as extraction rows",
+      "entity-state reads (hass.states) and generic hass.data lookups are not extracted (over-broad, weak attacker control)",
+      "msg[\"type\"] / msg[\"id\"] websocket routing-key subscripts are filtered out (dispatch metadata, not payload)",
+      "network response reads (resp.json()/resp.text()/resp.read()) are not extracted on the source side (response bodies are outputs of SSRF, not its input)"
+    ]
+  },
+  "uncoveredCases": [
+    "Hassio ingress URL composition is f-string based (ingress.py:127-128 url = self._create_url(token, path) + '?' + request.query_string; _create_url interpolates the incoming path): f-strings are not extracted as rows; the outgoing request is captured by the session_arg row at ingress.py:159 and the wrapper row for _handle_request",
+    "rest_command/rest switch dynamic dispatch 'getattr(websession, method)(...)' (rest_command/__init__.py:121, rest/switch.py:206) is captured by a dedicated getattr_dispatch family, but only when the getattr first argument is a session-named expression or a client-getter call; other dynamically-dispatched fetches would be missed",
+    "Session variables whose assignment provenance crosses files (self._websession assigned in __init__ of the same file is covered by the name-substring rule since the terminal name contains 'session'; cross-file assignment chains are not tracked)",
+    "sqlalchemy DB sessions named 'session' collide with the session_arg family (session.get(Entity, pk) in recorder-persisting components); these appear as ast rows and are left for LLM labeling to discard",
+    "template-rendered URLs: the template_render source family captures render call sites (e.g. rest_command __init__.py:103) but the variable flow (entity state -> rendered URL) is a Phase 2 MySummaries modeling concern",
+    "'from requests import Session' constructor sites are resolved only through API graphs (bare Session() ast matching was intentionally skipped to avoid collisions with locally-defined Session/Client classes)",
+    "urllib.request.urlopen / urlretrieve have zero call sites in the tree and are not emitted as query families (operator rule: only APIs proven present); if a future/hidden dynamic urllib use exists it is a coverage gap",
+    "msg/msg.get keys that are non-literal (variables) are not extracted; websocket payload reads through destructuring are not covered",
+    "Nested-function closure reads are handled through the scope-chain parameter check, but comprehension scopes are not Functions; reads inside comprehensions of outer call/msg parameters may be missed",
+    "WebhookView handler aliasing ('get = _handle' class attributes, webhook/__init__.py:212-215) relies on '_handle' being in the handler verb set; views using other custom method names bound to route verbs would need the class-level url/name evidence (not extracted)",
+    "The aiohttp web framework is not covered by an augur framework reference (none exists); source/sink shapes are derived from repo evidence only",
+    "No rows are filtered beyond the test/core-db path filter; FP-prone families (sqlalchemy sessions, generic .render calls) are retained for labeling with their receiver/module hints"
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: ssrf_sinks.csv, ssrf_sinks.json, ssrf_vulnerability_report.md, ssrf_cost_estimation.md and ast_matcher_failure_analysis.md (all present in the core_vuln tree as untracked analysis artifacts) were NOT opened during this step; only directory listings and git HEAD metadata were inspected to confirm the DB snapshot. Candidate families are derived from repository evidence and the loaded language/pattern references only. Project source, database, and Augur installation files were not modified. Only the three files under iris_manual/SSRF/core/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). No CodeQL query was executed and no LLM labeling was performed, per operator instruction. Historical compile pitfalls honored: no 'module' variable name (moduleHint used), no AstNode.getFile() (Location API used), no unbound this / parentless QL classes, no API::Node <-> DataFlow::Node assignment, binding-safe constant-first predicate bodies, no {{...}} placeholders left, queries target the local CLI 2.25.1 + codeql/python-all 7.x API surface verified in the pack cache."
+  }
+}

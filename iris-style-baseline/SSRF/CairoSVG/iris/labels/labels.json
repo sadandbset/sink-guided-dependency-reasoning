@@ -1,0 +1,1910 @@
+{
+ "version": "1.0.0",
+ "metadata": {
+  "run_id": "cairosvg-pass3-cwe918-labeling-20261019",
+  "generated_at": "2026-10-19T09:59:57Z",
+  "language": "python",
+  "framework": null,
+  "model": "glm-5.3 (Claude Code CLI agent, deterministic labeling, no sampling)",
+  "project": "CairoSVG",
+  "notes": [
+   "Single-pass run: only Pass 3 (CWE-918 SSRF) was labeled, per experiment scope (exploration/detection.json target.pass = 3).",
+   "pass_id 1 block is an EMPTY placeholder included solely to satisfy labels_schema.json 'passes contains pass_id 1' constraint; no Pass 1 labeling was performed.",
+   "Source root: C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/CairoSVG_vuln/ ; entry location.file values are relative to this root.",
+   "All 79 CSV candidates (62 source + 17 sink) were processed across 6 batches; none dropped; dedup decisions recorded per entry (e.g. K-008 wrapper-chain edge) and to be applied at Step 4 library generation.",
+   "Keyword-argument call sites (Tree(url=...)) use flow_kind 'argument' with arg_index 0 as a documented convention: the keyword name is recorded in evidence; CodeQL matching should use the named-argument accessor.",
+   "No sanitizer labels: the repository contains no URL scheme allowlist, host allowlist, private-IP/loopback blocking, or redirect policy (grep over cairosvg/); defusedxml forbid_entities/forbid_external (parser.py:390-392) is XXE containment only and is disabled by caller-controlled unsafe=True; the only structural mitigation is a caller-injected restrictive url_fetcher (parser.py:354).",
+   "Library trust boundary: CairoSVG is a pure library; source labels on public API parameters (svg2*/convert/CLI) are classification 'candidate' because untrusted-ness depends on the host application, not on the library itself.",
+   "file:// and data: schemes are not treated as network SSRF (url.py:140/K-016 cross-CWE note: arbitrary local file read via urlopen; data: pass-through at url.py:33).",
+   "urlopen at cairosvg/url.py:84 is the only network egress in the codebase (grep-verified: no requests/httpx/socket/urlretrieve, no fixed-host URLs).",
+   "LLM labeling: glm-5.3 via Claude Code CLI agent; 6 batches; deterministic (no sampling temperature); low-confidence entries (<0.65) are flagged for human review in label_stats.md / phase1_review.md."
+  ]
+ },
+ "passes": [
+  {
+   "pass_id": 1,
+   "focus": "Path Traversal (out of scope placeholder - see metadata notes)",
+   "cwes": [
+    "022",
+    "023",
+    "036",
+    "073"
+   ],
+   "entries": []
+  },
+  {
+   "pass_id": 3,
+   "focus": "Server-Side Request Forgery (SSRF)",
+   "cwes": [
+    "918"
+   ],
+   "entries": [
+    {
+     "id": "P3-S-001",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2svg",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 38
+     },
+     "rationale": "公共转换 API 的文档内容入口参数:bytestring 是待渲染的 SVG 文档字节。CairoSVG 是纯库(用户提示第 1/9 条):参数不天然等于远程攻击者可控,是否不可信取决于宿主应用(典型场景:转换用户上传/提交的 SVG)。威胁模型成立时,文档内的 <image> href、CSS @import、tref/<use> 外部引用都会在渲染期间触发网络取回(cairosvg/surface.py:128-130 -> Tree -> cairosvg/parser.py:386 fetch_url -> urlopen)。",
+     "evidence": [
+      "CSV row: param bytestring of svg2svg @ cairosvg/__init__.py:38 (param, argIndex=0)",
+      "parameter: bytestring",
+      "cairosvg/__init__.py: delegate to surface.SVGSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-002",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2svg",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 38
+     },
+     "rationale": "公共转换 API 的文档内容入口参数 file_obj(仅关键字传递):内容经 cairosvg/parser.py:359 file_obj.read() 读入并解析,后续引用取回行为同 bytestring 路径。库边界注意事项同 bytestring(宿主决定可信性)。",
+     "evidence": [
+      "CSV row: param file_obj of svg2svg @ cairosvg/__init__.py:38 (param, argIndex=-1)",
+      "parameter: file_obj (keyword-only)",
+      "cairosvg/__init__.py: delegate to surface.SVGSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-003",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2svg",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 38
+     },
+     "rationale": "公共转换 API 的文档位置参数 url(仅关键字传递):Tree.__init__ 中 parse_url(url, parent_url) 得到 self.url,无 bytestring 时由 cairosvg/parser.py:386 直接 fetch_url 取回该 URL —— 传入的 url 本身就是取回目标;文档内容中的引用继续二次取回。宿主传入攻击者可控 URL 时构成对取回目标的直接控制。",
+     "evidence": [
+      "CSV row: param url of svg2svg @ cairosvg/__init__.py:38 (param, argIndex=-1)",
+      "parameter: url (keyword-only)",
+      "cairosvg/__init__.py: delegate to surface.SVGSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-004",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2png",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 51
+     },
+     "rationale": "公共转换 API 的文档内容入口参数:bytestring 是待渲染的 SVG 文档字节。CairoSVG 是纯库(用户提示第 1/9 条):参数不天然等于远程攻击者可控,是否不可信取决于宿主应用(典型场景:转换用户上传/提交的 SVG)。威胁模型成立时,文档内的 <image> href、CSS @import、tref/<use> 外部引用都会在渲染期间触发网络取回(cairosvg/surface.py:128-130 -> Tree -> cairosvg/parser.py:386 fetch_url -> urlopen)。",
+     "evidence": [
+      "CSV row: param bytestring of svg2png @ cairosvg/__init__.py:51 (param, argIndex=0)",
+      "parameter: bytestring",
+      "cairosvg/__init__.py: delegate to surface.PNGSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-005",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2png",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 51
+     },
+     "rationale": "公共转换 API 的文档内容入口参数 file_obj(仅关键字传递):内容经 cairosvg/parser.py:359 file_obj.read() 读入并解析,后续引用取回行为同 bytestring 路径。库边界注意事项同 bytestring(宿主决定可信性)。",
+     "evidence": [
+      "CSV row: param file_obj of svg2png @ cairosvg/__init__.py:51 (param, argIndex=-1)",
+      "parameter: file_obj (keyword-only)",
+      "cairosvg/__init__.py: delegate to surface.PNGSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-006",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2png",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 51
+     },
+     "rationale": "公共转换 API 的文档位置参数 url(仅关键字传递):Tree.__init__ 中 parse_url(url, parent_url) 得到 self.url,无 bytestring 时由 cairosvg/parser.py:386 直接 fetch_url 取回该 URL —— 传入的 url 本身就是取回目标;文档内容中的引用继续二次取回。宿主传入攻击者可控 URL 时构成对取回目标的直接控制。",
+     "evidence": [
+      "CSV row: param url of svg2png @ cairosvg/__init__.py:51 (param, argIndex=-1)",
+      "parameter: url (keyword-only)",
+      "cairosvg/__init__.py: delegate to surface.PNGSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-007",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2pdf",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 63
+     },
+     "rationale": "公共转换 API 的文档内容入口参数:bytestring 是待渲染的 SVG 文档字节。CairoSVG 是纯库(用户提示第 1/9 条):参数不天然等于远程攻击者可控,是否不可信取决于宿主应用(典型场景:转换用户上传/提交的 SVG)。威胁模型成立时,文档内的 <image> href、CSS @import、tref/<use> 外部引用都会在渲染期间触发网络取回(cairosvg/surface.py:128-130 -> Tree -> cairosvg/parser.py:386 fetch_url -> urlopen)。",
+     "evidence": [
+      "CSV row: param bytestring of svg2pdf @ cairosvg/__init__.py:63 (param, argIndex=0)",
+      "parameter: bytestring",
+      "cairosvg/__init__.py: delegate to surface.PDFSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-008",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2pdf",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 63
+     },
+     "rationale": "公共转换 API 的文档内容入口参数 file_obj(仅关键字传递):内容经 cairosvg/parser.py:359 file_obj.read() 读入并解析,后续引用取回行为同 bytestring 路径。库边界注意事项同 bytestring(宿主决定可信性)。",
+     "evidence": [
+      "CSV row: param file_obj of svg2pdf @ cairosvg/__init__.py:63 (param, argIndex=-1)",
+      "parameter: file_obj (keyword-only)",
+      "cairosvg/__init__.py: delegate to surface.PDFSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-009",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2pdf",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 63
+     },
+     "rationale": "公共转换 API 的文档位置参数 url(仅关键字传递):Tree.__init__ 中 parse_url(url, parent_url) 得到 self.url,无 bytestring 时由 cairosvg/parser.py:386 直接 fetch_url 取回该 URL —— 传入的 url 本身就是取回目标;文档内容中的引用继续二次取回。宿主传入攻击者可控 URL 时构成对取回目标的直接控制。",
+     "evidence": [
+      "CSV row: param url of svg2pdf @ cairosvg/__init__.py:63 (param, argIndex=-1)",
+      "parameter: url (keyword-only)",
+      "cairosvg/__init__.py: delegate to surface.PDFSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-010",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2ps",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 75
+     },
+     "rationale": "公共转换 API 的文档内容入口参数:bytestring 是待渲染的 SVG 文档字节。CairoSVG 是纯库(用户提示第 1/9 条):参数不天然等于远程攻击者可控,是否不可信取决于宿主应用(典型场景:转换用户上传/提交的 SVG)。威胁模型成立时,文档内的 <image> href、CSS @import、tref/<use> 外部引用都会在渲染期间触发网络取回(cairosvg/surface.py:128-130 -> Tree -> cairosvg/parser.py:386 fetch_url -> urlopen)。",
+     "evidence": [
+      "CSV row: param bytestring of svg2ps @ cairosvg/__init__.py:75 (param, argIndex=0)",
+      "parameter: bytestring",
+      "cairosvg/__init__.py: delegate to surface.PSSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-011",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2ps",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 75
+     },
+     "rationale": "公共转换 API 的文档内容入口参数 file_obj(仅关键字传递):内容经 cairosvg/parser.py:359 file_obj.read() 读入并解析,后续引用取回行为同 bytestring 路径。库边界注意事项同 bytestring(宿主决定可信性)。",
+     "evidence": [
+      "CSV row: param file_obj of svg2ps @ cairosvg/__init__.py:75 (param, argIndex=-1)",
+      "parameter: file_obj (keyword-only)",
+      "cairosvg/__init__.py: delegate to surface.PSSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-012",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2ps",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 75
+     },
+     "rationale": "公共转换 API 的文档位置参数 url(仅关键字传递):Tree.__init__ 中 parse_url(url, parent_url) 得到 self.url,无 bytestring 时由 cairosvg/parser.py:386 直接 fetch_url 取回该 URL —— 传入的 url 本身就是取回目标;文档内容中的引用继续二次取回。宿主传入攻击者可控 URL 时构成对取回目标的直接控制。",
+     "evidence": [
+      "CSV row: param url of svg2ps @ cairosvg/__init__.py:75 (param, argIndex=-1)",
+      "parameter: url (keyword-only)",
+      "cairosvg/__init__.py: delegate to surface.PSSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-013",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2eps",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 87
+     },
+     "rationale": "公共转换 API 的文档内容入口参数:bytestring 是待渲染的 SVG 文档字节。CairoSVG 是纯库(用户提示第 1/9 条):参数不天然等于远程攻击者可控,是否不可信取决于宿主应用(典型场景:转换用户上传/提交的 SVG)。威胁模型成立时,文档内的 <image> href、CSS @import、tref/<use> 外部引用都会在渲染期间触发网络取回(cairosvg/surface.py:128-130 -> Tree -> cairosvg/parser.py:386 fetch_url -> urlopen)。",
+     "evidence": [
+      "CSV row: param bytestring of svg2eps @ cairosvg/__init__.py:87 (param, argIndex=0)",
+      "parameter: bytestring",
+      "cairosvg/__init__.py: delegate to surface.EPSSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-014",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2eps",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 87
+     },
+     "rationale": "公共转换 API 的文档内容入口参数 file_obj(仅关键字传递):内容经 cairosvg/parser.py:359 file_obj.read() 读入并解析,后续引用取回行为同 bytestring 路径。库边界注意事项同 bytestring(宿主决定可信性)。",
+     "evidence": [
+      "CSV row: param file_obj of svg2eps @ cairosvg/__init__.py:87 (param, argIndex=-1)",
+      "parameter: file_obj (keyword-only)",
+      "cairosvg/__init__.py: delegate to surface.EPSSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-015",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__init__",
+      "type": null,
+      "callable": "svg2eps",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__init__.py",
+      "line": 87
+     },
+     "rationale": "公共转换 API 的文档位置参数 url(仅关键字传递):Tree.__init__ 中 parse_url(url, parent_url) 得到 self.url,无 bytestring 时由 cairosvg/parser.py:386 直接 fetch_url 取回该 URL —— 传入的 url 本身就是取回目标;文档内容中的引用继续二次取回。宿主传入攻击者可控 URL 时构成对取回目标的直接控制。",
+     "evidence": [
+      "CSV row: param url of svg2eps @ cairosvg/__init__.py:87 (param, argIndex=-1)",
+      "parameter: url (keyword-only)",
+      "cairosvg/__init__.py: delegate to surface.EPSSurface.convert",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., file_obj=..., url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-016",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__main__",
+      "type": null,
+      "callable": "main",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__main__.py",
+      "line": 13
+     },
+     "rationale": "CLI 参数由本地操作者键入(cairosvg/__main__.py:18 'input filename or URL');cairosvg CLI 是本地转换工具而非服务模式进程,argv 不构成 CWE-918 意义上的远程不可信边界(用户提示第 7 条)。options.input 的下游读取已单独评估(S-020/S-022)。",
+     "evidence": [
+      "CSV row: param argv of main @ cairosvg/__main__.py:13 (param, argIndex=0)",
+      "cairosvg/__main__.py:18 add_argument('input', help='input filename or URL')",
+      "cairosvg/__main__.py:56 options = parser.parse_args(argv)"
+     ]
+    },
+    {
+     "id": "P3-S-017",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__main__",
+      "type": null,
+      "callable": "main",
+      "arg_index": 2,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/__main__.py",
+      "line": 13
+     },
+     "rationale": "stdin(位置参数 2)承载管道输入的 SVG 文档内容(__main__.py:69-70:options.input=='-' 时 kwargs['file_obj']=stdin.buffer)。仅当宿主以非交互方式调用 CLI 并管道注入攻击者文档时为不可信来源;本地交互使用时为操作者输入。保守召回保留,需人工确认部署场景(用户提示第 7/9 条)。",
+     "evidence": [
+      "CSV row: param stdin of main @ cairosvg/__main__.py:13 (param, argIndex=2)",
+      "cairosvg/__main__.py:69-70 kwargs['file_obj'] = stdin.buffer",
+      "cairosvg/parser.py:359 bytestring = file_obj.read()"
+     ]
+    },
+    {
+     "id": "P3-S-018",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__main__",
+      "type": "argparse.ArgumentParser",
+      "callable": "parse_args",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/__main__.py",
+      "line": 56
+     },
+     "rationale": "options = parser.parse_args(argv)(__main__.py:56)返回的 Namespace 全部派生自本地操作者 argv,非远程输入边界;其属性读取(options.input)在 S-020/S-022 单独评估。",
+     "evidence": [
+      "CSV row: cli parse_args @ cairosvg/__main__.py:56 (cli, argIndex=-1)",
+      "cairosvg/__main__.py:56 options = parser.parse_args(argv)"
+     ]
+    },
+    {
+     "id": "P3-S-019",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__main__",
+      "type": null,
+      "callable": "sys.stdin",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/__main__.py",
+      "line": 65
+     },
+     "rationale": "stdin = stdin or sys.stdin(__main__.py:65):sys.stdin 是外部输入流(管道字节),宿主以管道喂入不可信文档时是文档内容来源;本地直接使用时受操作者控制。保守保留为 candidate。",
+     "evidence": [
+      "CSV row: cli stdin(sys) @ cairosvg/__main__.py:65 (cli, argIndex=-1)",
+      "cairosvg/__main__.py:65 stdin = stdin or sys.stdin"
+     ]
+    },
+    {
+     "id": "P3-S-020",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__main__",
+      "type": "argparse.Namespace",
+      "callable": "options.input",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/__main__.py",
+      "line": 69
+     },
+     "rationale": "if options.input == '-'(__main__.py:69)仅做字符串比较;options.input 派生自操作者 CLI 参数,非远程边界,亦无取回语义。",
+     "evidence": [
+      "CSV row: cli options.input @ cairosvg/__main__.py:69 (cli, argIndex=-1)",
+      "cairosvg/__main__.py:69 if options.input == '-':"
+     ]
+    },
+    {
+     "id": "P3-S-021",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__main__",
+      "type": null,
+      "callable": "stdin.buffer",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/__main__.py",
+      "line": 70
+     },
+     "rationale": "kwargs['file_obj'] = stdin.buffer(__main__.py:70):管道输入的文档内容字节进入 Tree -> ElementTree.fromstring;作为文档内容来源,可信性条件同 S-019。",
+     "evidence": [
+      "CSV row: cli stdin.buffer @ cairosvg/__main__.py:70 (cli, argIndex=-1)",
+      "cairosvg/__main__.py:70 kwargs['file_obj'] = stdin.buffer",
+      "cairosvg/parser.py:390-392 ElementTree.fromstring(bytestring, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-022",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.65,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.__main__",
+      "type": "argparse.Namespace",
+      "callable": "options.input",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/__main__.py",
+      "line": 72
+     },
+     "rationale": "kwargs['url'] = options.input(__main__.py:72):input 是操作者在本地命令行键入的文件名/URL(__main__.py:18),操作者受信任(用户提示第 7 条)。文档内容可能不可信,但取回目标 URL 由操作者选择,不作为正式 Source;若存在宿主以非交互方式调用 CLI 并转发攻击者 input 的部署,需人工重估。",
+     "evidence": [
+      "CSV row: cli options.input @ cairosvg/__main__.py:72 (cli, argIndex=-1)",
+      "cairosvg/__main__.py:72 kwargs['url'] = options.input"
+     ]
+    },
+    {
+     "id": "P3-S-023",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.bounding_box",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/bounding_box.py",
+      "line": 344
+     },
+     "rationale": "href = parse_url(node.get_href()).geturl()(bounding_box.py:344):<use> 引用经纯 URL 处理(cairosvg/url.py:87-129 parse_url:去 url() 包装、相对拼接 urljoin/os.path.join、规范化)后传给 Tree(url=href);绝对 URL 时触发外部取回。parse_url/urljoin 属纯处理 API,按用户提示第 4 条不作为 Sink,标注为传播 summary。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/bounding_box.py:344 (argIndex=-1)",
+      "cairosvg/bounding_box.py:344-347 href -> Tree(url=href, ...)",
+      "cairosvg/url.py:87-129 def parse_url(url, base=None)"
+     ]
+    },
+    {
+     "id": "P3-S-024",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.bounding_box",
+      "type": "Node",
+      "callable": "get_href",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/bounding_box.py",
+      "line": 344
+     },
+     "rationale": "node.get_href()(bounding_box.py:344,通用读取器见 parser.py:312-313)取回 <use> 元素的 xlink:href/href;属性值直接来自输入文档(parser.py:190 self.update(self.xml_tree.attrib))。威胁模型成立时该值可为任意 scheme/host 的绝对 URL,驱动 bounding_box.py:345-347 Tree(url=...) 的外部取回。",
+     "evidence": [
+      "CSV row: svg_href get_href(node) @ cairosvg/bounding_box.py:344 (argIndex=-1)",
+      "cairosvg/parser.py:312-313 def get_href(self)",
+      "cairosvg/parser.py:190 self.update(self.xml_tree.attrib)"
+     ]
+    },
+    {
+     "id": "P3-S-025",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.css",
+      "type": "tinycss2",
+      "callable": "parse_stylesheet",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/css.py",
+      "line": 24
+     },
+     "rationale": "tinycss2.parse_stylesheet(element.text, ...)(css.py:24):解析输入文档 <style> 元素的文本内容;@import URL 派生自该内容(css.py:32-39)。作为文档内容的 CSS 变体来源(tinycss2 成员在 CodeQL DB 中不可经 API 图解析,AST 级匹配)。",
+     "evidence": [
+      "CSV row: css_parse parse_stylesheet(tinycss2) @ cairosvg/css.py:24 (argIndex=0)",
+      "cairosvg/css.py:24-25 parse_stylesheet(element.text, ...)",
+      "cairosvg/css.py:34-39 @import -> css_url -> tree.fetch_url"
+     ]
+    },
+    {
+     "id": "P3-S-026",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.6,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.css",
+      "type": "tinycss2",
+      "callable": "parse_one_component_value",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/css.py",
+      "line": 34
+     },
+     "rationale": "url_token = tinycss2.parse_one_component_value(rule.prelude)(css.py:34):@import 规则 prelude -> URL token;传播步骤,取回发生在 css.py:39 tree.fetch_url(css_url, 'text/css')。",
+     "evidence": [
+      "CSV row: css_parse parse_one_component_value(tinycss2) @ cairosvg/css.py:34 (argIndex=0)",
+      "cairosvg/css.py:34-37 url_token.value -> parse_url -> css_url"
+     ]
+    },
+    {
+     "id": "P3-S-027",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.css",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/css.py",
+      "line": 37
+     },
+     "rationale": "css_url = parse_url(url_token.value, url)(css.py:37):@import URL 与文档基 URL 拼接(parse_url 内部 urljoin/路径拼接);输出直接送 css.py:39 tree.fetch_url(css_url,'text/css') 触发取回。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/css.py:37 (argIndex=-1)",
+      "cairosvg/css.py:37-39 css_url -> tree.fetch_url(css_url, 'text/css')"
+     ]
+    },
+    {
+     "id": "P3-S-028",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.8,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.css",
+      "type": null,
+      "callable": "url_token.value",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/css.py",
+      "line": 37
+     },
+     "rationale": "url_token.value(css.py:37)是输入 CSS 中 @import 的 URL 字符串 —— 攻击者在文档内可直接控制的取回目标(绝对 http(s) URL 时)。SVG CSS @import 确实影响实际网络请求 URL 的直接证据(用户提示第 2 条)。",
+     "evidence": [
+      "CSV row: css_import_url url_token.value @ cairosvg/css.py:37 (argIndex=-1)",
+      "cairosvg/css.py:34-37 url_token = parse_one_component_value(rule.prelude)",
+      "cairosvg/css.py:39 tree.fetch_url(css_url, 'text/css')"
+     ]
+    },
+    {
+     "id": "P3-S-029",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.6,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.css",
+      "type": "tinycss2",
+      "callable": "parse_stylesheet",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/css.py",
+      "line": 38
+     },
+     "rationale": "tinycss2.parse_stylesheet(tree.fetch_url(...).decode())(css.py:38):对已取回 CSS 的解析,支撑链式 @import(取回的 CSS 再引用外部 URL,递归 find_stylesheets_rules css.py:40-42);传播步骤。",
+     "evidence": [
+      "CSV row: css_parse parse_stylesheet(tinycss2) @ cairosvg/css.py:38 (argIndex=0)",
+      "cairosvg/css.py:38-42 parse fetched css, recursive @import"
+     ]
+    },
+    {
+     "id": "P3-S-030",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.6,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.css",
+      "type": "tinycss2",
+      "callable": "parse_declaration_list",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/css.py",
+      "line": 54
+     },
+     "rationale": "tinycss2.parse_declaration_list(...)(css.py:54/96 与 parser.py:195 parse_declarations)解析样式声明;声明中的 url(...) 值虽被保留原样(parser.py:104-128 normalize_url_style_declaration),但下游消费均为 fragment 查找(helpers.py:47 paint、surface.py:317/318/372 mask/filter/clip-path),未发现到达网络取回的路径,不构成 Pass 3 候选。",
+     "evidence": [
+      "CSV row: css_parse parse_declaration_list(tinycss2) @ cairosvg/css.py:54 (argIndex=0)",
+      "cairosvg/helpers.py:47 paint() fragment-only url() consumption",
+      "cairosvg/surface.py:317/318/372 fragment-only mask/filter/clip-path"
+     ]
+    },
+    {
+     "id": "P3-S-031",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.6,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.css",
+      "type": "tinycss2",
+      "callable": "parse_declaration_list",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/css.py",
+      "line": 96
+     },
+     "rationale": "tinycss2.parse_declaration_list(...)(css.py:54/96 与 parser.py:195 parse_declarations)解析样式声明;声明中的 url(...) 值虽被保留原样(parser.py:104-128 normalize_url_style_declaration),但下游消费均为 fragment 查找(helpers.py:47 paint、surface.py:317/318/372 mask/filter/clip-path),未发现到达网络取回的路径,不构成 Pass 3 候选。",
+     "evidence": [
+      "CSV row: css_parse parse_declaration_list(tinycss2) @ cairosvg/css.py:96 (argIndex=0)",
+      "cairosvg/helpers.py:47 paint() fragment-only url() consumption",
+      "cairosvg/surface.py:317/318/372 fragment-only mask/filter/clip-path"
+     ]
+    },
+    {
+     "id": "P3-S-032",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.defs",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/defs.py",
+      "line": 35
+     },
+     "rationale": "href = parse_url(def_node.get_href()).fragment(defs.py:35):仅取 fragment;引用在文档内解析,update_def_href 构造的 Tree(url='#'+def_name)(defs.py:39-40)按 parser.py:376-383 self_is_parent 逻辑复用父树,不触发任何取回(已核实 parser.py:363-383)。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/defs.py:35 (argIndex=-1)",
+      "cairosvg/defs.py:35 href = parse_url(def_node.get_href()).fragment",
+      "cairosvg/parser.py:376-383 self_is_parent -> parent xml_tree (no fetch)"
+     ]
+    },
+    {
+     "id": "P3-S-033",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.65,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.defs",
+      "type": "Node",
+      "callable": "get_href",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/defs.py",
+      "line": 35
+     },
+     "rationale": "def_node.get_href()(defs.py:35)的取值仅以 .fragment 形式消费(同 S-032),不驱动网络请求。",
+     "evidence": [
+      "CSV row: svg_href get_href(def_node) @ cairosvg/defs.py:35 (argIndex=-1)",
+      "cairosvg/defs.py:35 fragment-only consumption"
+     ]
+    },
+    {
+     "id": "P3-S-034",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.defs",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/defs.py",
+      "line": 348
+     },
+     "rationale": "href = parse_url(node.get_href()).geturl()(defs.py:348):<use> 引用完整 URL;绝对/外部 URL 时经 defs.py:350-352 Tree(url=href) 触发 parser.py:386 外部 SVG 取回('#id' 时走父树不取回)。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/defs.py:348 (argIndex=-1)",
+      "cairosvg/defs.py:348-352 href -> Tree(url=href, ...)",
+      "cairosvg/parser.py:385-387 bytestring = self.fetch_url(parse_url(self.url), ...)"
+     ]
+    },
+    {
+     "id": "P3-S-035",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.defs",
+      "type": "Node",
+      "callable": "get_href",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/defs.py",
+      "line": 348
+     },
+     "rationale": "node.get_href()(defs.py:348)取 <use> 的 xlink:href/href(输入文档属性);值为绝对 URL 时即为外部取回目标。",
+     "evidence": [
+      "CSV row: svg_href get_href(node) @ cairosvg/defs.py:348 (argIndex=-1)",
+      "cairosvg/parser.py:312-313 def get_href(self)"
+     ]
+    },
+    {
+     "id": "P3-S-036",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.helpers",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/helpers.py",
+      "line": 47
+     },
+     "rationale": "source = parse_url(match.group(1)).fragment(helpers.py:47):paint() 仅提取 fill/stroke 等声明 url(...) 的 fragment,用于文档内查找(surface.paths 等);不触发网络取回。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/helpers.py:47 (argIndex=-1)",
+      "cairosvg/helpers.py:45-53 paint(): fragment-only"
+     ]
+    },
+    {
+     "id": "P3-S-037",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.image",
+      "type": null,
+      "callable": "{http://www.w3.org/XML/1998/namespace}base",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/image.py",
+      "line": 24
+     },
+     "rationale": "node.get('{http://www.w3.org/XML/1998/namespace}base')(image.py:24):输入文档的 xml:base 属性作为 <image> href 解析的基 URL —— 攻击者可用其改变相对引用解析出的最终 scheme/host(parse_url 的 urljoin 分支)。真实影响最终请求 URL 的输入(用户提示第 2 条)。",
+     "evidence": [
+      "CSV row: svg_attribute xml:base(node) @ cairosvg/image.py:24 (argIndex=-1)",
+      "cairosvg/image.py:24-27 base_url -> parse_url(node.get_href(), base_url)"
+     ]
+    },
+    {
+     "id": "P3-S-038",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.image",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/image.py",
+      "line": 27
+     },
+     "rationale": "url = parse_url(node.get_href(), base_url)(image.py:27):href 与 xml:base/文档基 URL 拼接、规范化后的图片 URL,直接送 image.py:28 node.fetch_url(url, 'image/*')。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/image.py:27 (argIndex=-1)",
+      "cairosvg/image.py:27-28 url -> node.fetch_url(url, 'image/*')"
+     ]
+    },
+    {
+     "id": "P3-S-039",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.8,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.image",
+      "type": "Node",
+      "callable": "get_href",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/image.py",
+      "line": 27
+     },
+     "rationale": "node.get_href()(image.py:27):<image> 的 xlink:href/href,输入文档属性;SVG 外部图片引用驱动实际网络请求 URL 的主要证据(用户提示第 2 条;image.py:28 立即取回)。",
+     "evidence": [
+      "CSV row: svg_href get_href(node) @ cairosvg/image.py:27 (argIndex=-1)",
+      "cairosvg/image.py:27-28 get_href() -> fetch_url(url, 'image/*')"
+     ]
+    },
+    {
+     "id": "P3-S-040",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.6,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": null,
+      "callable": "style",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 193
+     },
+     "rationale": "style_attr = node.get('style')(parser.py:193):内联 style 声明内容;其 url() 值仅被 fragment 消费(见 S-030 证据),无网络路径。",
+     "evidence": [
+      "CSV row: svg_attribute style(node) @ cairosvg/parser.py:193 (argIndex=-1)",
+      "cairosvg/parser.py:193-195 style_attr -> css.parse_declarations"
+     ]
+    },
+    {
+     "id": "P3-S-041",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.6,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": "cairosvg.css",
+      "callable": "parse_declarations",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 195
+     },
+     "rationale": "css.parse_declarations(style_attr)(parser.py:195):声明解析,同 S-030/S-031 的 fragment-only 消费结论。",
+     "evidence": [
+      "CSV row: css_parse parse_declarations(css) @ cairosvg/parser.py:195 (argIndex=0)",
+      "cairosvg/helpers.py:47 fragment-only url() consumption"
+     ]
+    },
+    {
+     "id": "P3-S-042",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": null,
+      "callable": "{http://www.w3.org/1999/xlink}href",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 262
+     },
+     "rationale": "child.get('{http://www.w3.org/1999/xlink}href', child.get('href'))(parser.py:262-263):<tref> 的引用属性(输入文档);经 parse_url().geturl() 后 Tree(url=url)(parser.py:264-267),绝对 URL 时触发外部取回。",
+     "evidence": [
+      "CSV row: svg_attribute {http://www.w3.org/1999/xlink}href(child) @ cairosvg/parser.py:262 (argIndex=-1)",
+      "cairosvg/parser.py:262-267 tref href -> Tree(url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-043",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": null,
+      "callable": "href",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 263
+     },
+     "rationale": "child.get('href', child.get('href'))(parser.py:262-263):<tref> 的引用属性(输入文档);经 parse_url().geturl() 后 Tree(url=url)(parser.py:264-267),绝对 URL 时触发外部取回。",
+     "evidence": [
+      "CSV row: svg_attribute href(child) @ cairosvg/parser.py:263 (argIndex=-1)",
+      "cairosvg/parser.py:262-267 tref href -> Tree(url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-044",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 264
+     },
+     "rationale": "url = parse_url(href).geturl()(parser.py:264):tref 引用 URL(无基 URL 拼接);绝对 URL 原样传给 Tree(url=...)。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/parser.py:264 (argIndex=-1)",
+      "cairosvg/parser.py:264-266 url -> Tree(url=url, ...)"
+     ]
+    },
+    {
+     "id": "P3-S-045",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.65,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": "Node",
+      "callable": "{http://www.w3.org/1999/xlink}href",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 313
+     },
+     "rationale": "parser.py:312-313 get_href 定义体内的 self.get('{http://www.w3.org/1999/xlink}href', self.get('href')):通用 href 读取器;image.py:27 / defs.py:348 / bounding_box.py:344 / text.py:71 各消费方已单独标注,该读取位置本身是文档属性来源(dict get 传播不被提取级数据流跟踪,故在读取点标注)。",
+     "evidence": [
+      "CSV row: svg_attribute {http://www.w3.org/1999/xlink}href(self) @ cairosvg/parser.py:313 (argIndex=-1)",
+      "cairosvg/parser.py:312-313 def get_href(self)"
+     ]
+    },
+    {
+     "id": "P3-S-046",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.65,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": "Node",
+      "callable": "href",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 313
+     },
+     "rationale": "parser.py:312-313 get_href 定义体内的 self.get('href', self.get('href')):通用 href 读取器;image.py:27 / defs.py:348 / bounding_box.py:344 / text.py:71 各消费方已单独标注,该读取位置本身是文档属性来源(dict get 传播不被提取级数据流跟踪,故在读取点标注)。",
+     "evidence": [
+      "CSV row: svg_attribute href(self) @ cairosvg/parser.py:313 (argIndex=-1)",
+      "cairosvg/parser.py:312-313 def get_href(self)"
+     ]
+    },
+    {
+     "id": "P3-S-047",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 321
+     },
+     "rationale": "Tree.__new__ 中 parsed_url = parse_url(kwargs['url'])(parser.py:321)用于 tree_cache 键与 fragment 提取;本身不取回,仅传播输入 url;保留为低置信传播候选供人工复核。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/parser.py:321 (argIndex=-1)",
+      "cairosvg/parser.py:318-341 Tree.__new__ cache-key logic"
+     ]
+    },
+    {
+     "id": "P3-S-048",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 359
+     },
+     "rationale": "bytestring = file_obj.read()(parser.py:359):file_obj 内容 -> 文档字节 -> ElementTree.fromstring;文件对象内容进入解析边界的传播步骤(来源角色由入口参数行承担,此处不重复作 Source,用户提示第 9 条)。",
+     "evidence": [
+      "CSV row: file read(file_obj) @ cairosvg/parser.py:359 (argIndex=-1)",
+      "cairosvg/parser.py:359-360 bytestring = file_obj.read()"
+     ]
+    },
+    {
+     "id": "P3-S-049",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 365
+     },
+     "rationale": "parsed_url = parse_url(url, parent_url)(parser.py:365):Tree.__init__ 的权威 URL 组合点(入口/引用 url 与父基拼接、fragment 剥离);结果 self.url 在无 bytestring 时由 parser.py:386 fetch_url 取回。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/parser.py:365 (argIndex=-1)",
+      "cairosvg/parser.py:363-372 parse_url(url, parent_url) -> self.url",
+      "cairosvg/parser.py:385-387 fetch of self.url"
+     ]
+    },
+    {
+     "id": "P3-S-050",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 387
+     },
+     "rationale": "self.fetch_url(parse_url(self.url), 'image/svg+xml')(parser.py:386-387):外部 SVG/顶层文档取回调用中的 URL 组装;self.url 可为攻击者选择(入口 url 参数)或攻击者影响(父文档引用拼接)。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/parser.py:387 (argIndex=-1)",
+      "cairosvg/parser.py:386-387 self.fetch_url(parse_url(self.url), ...)"
+     ]
+    },
+    {
+     "id": "P3-S-051",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": "defusedxml.ElementTree",
+      "callable": "fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 390
+     },
+     "rationale": "ElementTree.fromstring(bytestring, forbid_entities=not unsafe, forbid_external=not unsafe)(parser.py:390-392):defusedxml 解析输入文档,此后所有元素属性/文本均为输入派生(parser.py:190)。注意:forbid_entities/forbid_external 是 XXE 防护且 unsafe=True 可关闭,对外部资源取回路径(SSRF)无拦截作用 —— 不是 CWE-918 的有效 Sanitizer(用户提示第 6 条)。",
+     "evidence": [
+      "CSV row: xml_parse fromstring(ElementTree) @ cairosvg/parser.py:390 (argIndex=0)",
+      "cairosvg/parser.py:390-392 defusedxml parse with forbid_entities/forbid_external",
+      "cairosvg/parser.py:190 self.update(self.xml_tree.attrib)"
+     ]
+    },
+    {
+     "id": "P3-S-052",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.path",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/path.py",
+      "line": 21
+     },
+     "rationale": "parse_url(node.get('marker'...)).fragment(path.py:21/25):marker/marker-start|mid|end 引用仅取 fragment,文档内查找,不取回。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/path.py:21 (argIndex=-1)",
+      "cairosvg/path.py:21-27 fragment-only marker references"
+     ]
+    },
+    {
+     "id": "P3-S-053",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.path",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/path.py",
+      "line": 25
+     },
+     "rationale": "parse_url(node.get('marker'...)).fragment(path.py:21/25):marker/marker-start|mid|end 引用仅取 fragment,文档内查找,不取回。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/path.py:25 (argIndex=-1)",
+      "cairosvg/path.py:21-27 fragment-only marker references"
+     ]
+    },
+    {
+     "id": "P3-S-054",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.surface",
+      "type": "Surface",
+      "callable": "convert",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/surface.py",
+      "line": 97
+     },
+     "rationale": "Surface.convert 是所有 svg2* 入口的单一分发点(cairosvg/surface.py:128-130 直接构造 Tree);边界语义与对应 svg2* 参数一致,库边界注意事项同 S-001。 bytestring 为 cls 之后的位置参数 1。",
+     "evidence": [
+      "CSV row: param bytestring of convert @ cairosvg/surface.py:97 (param, argIndex=1)",
+      "cairosvg/surface.py:128-130 tree = Tree(bytestring=..., ...)"
+     ]
+    },
+    {
+     "id": "P3-S-055",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.surface",
+      "type": "Surface",
+      "callable": "convert",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/surface.py",
+      "line": 97
+     },
+     "rationale": "Surface.convert 是所有 svg2* 入口的单一分发点(cairosvg/surface.py:128-130 直接构造 Tree);边界语义与对应 svg2* 参数一致,库边界注意事项同 S-001。 file_obj 为仅关键字参数。",
+     "evidence": [
+      "CSV row: param file_obj of convert @ cairosvg/surface.py:97 (param, argIndex=-1)",
+      "parameter: file_obj (keyword-only)"
+     ]
+    },
+    {
+     "id": "P3-S-056",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.surface",
+      "type": "Surface",
+      "callable": "convert",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/surface.py",
+      "line": 97
+     },
+     "rationale": "Surface.convert 是所有 svg2* 入口的单一分发点(cairosvg/surface.py:128-130 直接构造 Tree);边界语义与对应 svg2* 参数一致,库边界注意事项同 S-001。 url 为仅关键字参数;经 Tree.__init__ 直接成为取回目标(parser.py:365/386)。",
+     "evidence": [
+      "CSV row: param url of convert @ cairosvg/surface.py:97 (param, argIndex=-1)",
+      "parameter: url (keyword-only)"
+     ]
+    },
+    {
+     "id": "P3-S-057",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.surface",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/surface.py",
+      "line": 317
+     },
+     "rationale": "parse_url(node.get('mask')).fragment(surface.py:317):仅取 fragment,文档内 defs 查找(surface.masks/filters/paths),不触发网络取回。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/surface.py:317 (argIndex=-1)",
+      "cairosvg/surface.py:317 fragment-only mask lookup"
+     ]
+    },
+    {
+     "id": "P3-S-058",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.surface",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/surface.py",
+      "line": 318
+     },
+     "rationale": "parse_url(node.get('filter')).fragment(surface.py:318):仅取 fragment,文档内 defs 查找(surface.masks/filters/paths),不触发网络取回。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/surface.py:318 (argIndex=-1)",
+      "cairosvg/surface.py:318 fragment-only filter lookup"
+     ]
+    },
+    {
+     "id": "P3-S-059",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.surface",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/surface.py",
+      "line": 372
+     },
+     "rationale": "parse_url(node.get('clip-path')).fragment(surface.py:372):仅取 fragment,文档内 defs 查找(surface.masks/filters/paths),不触发网络取回。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/surface.py:372 (argIndex=-1)",
+      "cairosvg/surface.py:372 fragment-only clip-path lookup"
+     ]
+    },
+    {
+     "id": "P3-S-060",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.65,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.text",
+      "type": null,
+      "callable": "parse_url",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/text.py",
+      "line": 71
+     },
+     "rationale": "text_path_href = parse_url(node.get_href() or node.parent.get_href() or '')(text.py:71):textPath 引用,仅 .fragment 用于 surface.paths 文档内查找;不触发取回。",
+     "evidence": [
+      "CSV row: url_derived parse_url @ cairosvg/text.py:71 (argIndex=-1)",
+      "cairosvg/text.py:71-75 fragment-only textPath lookup"
+     ]
+    },
+    {
+     "id": "P3-S-061",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.6,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.text",
+      "type": "Node",
+      "callable": "get_href",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/text.py",
+      "line": 71
+     },
+     "rationale": "text.py:71 node.get_href() 的取值仅被 fragment 消费(同 S-060),不驱动网络请求。",
+     "evidence": [
+      "CSV row: svg_href get_href(node) @ cairosvg/text.py:71 (argIndex=-1)"
+     ]
+    },
+    {
+     "id": "P3-S-062",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.6,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.text",
+      "type": "Node",
+      "callable": "get_href",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "cairosvg/text.py",
+      "line": 71
+     },
+     "rationale": "text.py:71 parent.get_href() 的取值仅被 fragment 消费(同 S-060),不驱动网络请求。",
+     "evidence": [
+      "CSV row: svg_href get_href(parent) @ cairosvg/text.py:71 (argIndex=-1)"
+     ]
+    },
+    {
+     "id": "P3-K-001",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.bounding_box",
+      "type": null,
+      "callable": "Tree",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/bounding_box.py",
+      "line": 346
+     },
+     "rationale": "Tree(url=href, url_fetcher=node.url_fetcher, parent=node, ...)(bounding_box.py:345-347):<use> 包围盒计算的外部引用构造;url 为 '#id' 时走 self_is_parent 不取回,为绝对 URL 时在 Tree.__init__ 内取回(parser.py:385-387)。关键字参数 url 按约定记为 argument 位置 0(见 metadata notes)。",
+     "evidence": [
+      "CSV row: kwarg Tree(url=...) @ cairosvg/bounding_box.py:346 (kwarg, argIndex=-1)",
+      "keyword argument: url",
+      "cairosvg/parser.py:385-387 fetch when external URL"
+     ]
+    },
+    {
+     "id": "P3-K-002",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.css",
+      "type": "Node",
+      "callable": "fetch_url",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/css.py",
+      "line": 39
+     },
+     "rationale": "tree.fetch_url(css_url, 'text/css')(css.py:39):@import CSS 取回调用点,css_url 完全由输入文档 @import 值(拼接基 URL)决定;链路 fetch_url(parser.py:242) -> read_url(url.py:132) -> url_fetcher 动态分发(url.py:143,默认 fetch) -> urlopen(url.py:84)。",
+     "evidence": [
+      "CSV row: arg fetch_url(tree) @ cairosvg/css.py:39 (arg, argIndex=0)",
+      "cairosvg/css.py:37-39 css_url -> tree.fetch_url(css_url, 'text/css')"
+     ]
+    },
+    {
+     "id": "P3-K-003",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.defs",
+      "type": null,
+      "callable": "Tree",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/defs.py",
+      "line": 40
+     },
+     "rationale": "Tree(url='#{}'.format(def_name), ...)(defs.py:39-40):纯 fragment URL('#id');parser.py:376-383 self_is_parent 逻辑复用父树,不发生任何取回 —— 已核实为非取回路径。",
+     "evidence": [
+      "CSV row: kwarg Tree(url='#...') @ cairosvg/defs.py:40 (kwarg, argIndex=-1)",
+      "keyword argument: url (value '#'+def_name, fragment-only)",
+      "cairosvg/parser.py:376-383 self_is_parent -> parent xml_tree (no fetch)"
+     ]
+    },
+    {
+     "id": "P3-K-004",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.75,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.defs",
+      "type": null,
+      "callable": "Tree",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/defs.py",
+      "line": 351
+     },
+     "rationale": "<use> 渲染的 Tree(url=href, url_fetcher=..., parent=node, ...)(defs.py:350-352):绝对 URL 时触发外部 SVG 取回(parser.py:385-387)。关键字参数 url 按约定记为 argument 位置 0。",
+     "evidence": [
+      "CSV row: kwarg Tree(url=href) @ cairosvg/defs.py:351 (kwarg, argIndex=-1)",
+      "keyword argument: url"
+     ]
+    },
+    {
+     "id": "P3-K-005",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.image",
+      "type": "Node",
+      "callable": "fetch_url",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/image.py",
+      "line": 28
+     },
+     "rationale": "image_bytes = node.fetch_url(url, 'image/*')(image.py:28):<image> 外部图片取回调用点,url = parse_url(node.get_href(), base_url)(image.py:24-27),由输入文档完全决定;经 fetch_url -> read_url -> url_fetcher -> fetch -> urlopen 完成实际请求,无任何校验。",
+     "evidence": [
+      "CSV row: arg fetch_url(node) @ cairosvg/image.py:28 (arg, argIndex=0)",
+      "cairosvg/image.py:24-28 href+base -> fetch_url(url, 'image/*')"
+     ]
+    },
+    {
+     "id": "P3-K-006",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.65,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.image",
+      "type": null,
+      "callable": "Tree",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/image.py",
+      "line": 46
+     },
+     "rationale": "Tree(url=url.geturl(), bytestring=image_bytes, ...)(image.py:45-48):嵌套 SVG 图像;bytestring 已提供(image.py:28 已完成取回),该处不再对 url 取回(parser.py:356-357 bytestring 分支),仅记录 URL 传播。关键字参数 url 按约定记为 argument 位置 0。",
+     "evidence": [
+      "CSV row: kwarg Tree(url=..., bytestring=...) @ cairosvg/image.py:46 (kwarg, argIndex=-1)",
+      "keyword argument: url (no fetch here: bytestring present)",
+      "cairosvg/parser.py:356-357 bytestring branch skips fetch"
+     ]
+    },
+    {
+     "id": "P3-K-007",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": "Node",
+      "callable": "fetch_url",
+      "arg_index": 1,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 242
+     },
+     "rationale": "def fetch_url(self, url, resource_type): return read_url(url, self.url_fetcher, resource_type)(parser.py:242-243):Node 包装方法,url 位于参数 1(self 为 0);内部包装函数形参,按用户提示第 9 条不作 Source,标注为传播 summary。",
+     "evidence": [
+      "CSV row: wrapper_param fetch_url(Node) @ cairosvg/parser.py:242 (argIndex=1)",
+      "cairosvg/parser.py:242-243 fetch_url -> read_url"
+     ]
+    },
+    {
+     "id": "P3-K-008",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": null,
+      "callable": "read_url",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 243
+     },
+     "rationale": "read_url(url, self.url_fetcher, resource_type)(parser.py:243):fetch_url -> read_url 调用边;与 K-007/K-015 构成同一条包装链,Step 4 库生成时将去重。",
+     "evidence": [
+      "CSV row: arg read_url @ cairosvg/parser.py:243 (arg, argIndex=0)"
+     ]
+    },
+    {
+     "id": "P3-K-009",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": null,
+      "callable": "Tree",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 266
+     },
+     "rationale": "Tree(url=url, url_fetcher=self.url_fetcher, parent=self, ...)(parser.py:265-267):tref 引用;fragment 时文档内,绝对 URL 时取回。关键字参数 url 按约定记为 argument 位置 0。",
+     "evidence": [
+      "CSV row: kwarg Tree(url=url) @ cairosvg/parser.py:266 (kwarg, argIndex=-1)",
+      "keyword argument: url"
+     ]
+    },
+    {
+     "id": "P3-K-010",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.parser",
+      "type": "Node",
+      "callable": "fetch_url",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/parser.py",
+      "line": 386
+     },
+     "rationale": "bytestring = self.fetch_url(parse_url(self.url), 'image/svg+xml')(parser.py:386-387):顶层文档 URL / 外部 SVG 的取回调用点;入口 url 参数(宿主传入)与父文档引用(攻击者影响)都汇聚于此。",
+     "evidence": [
+      "CSV row: arg fetch_url(self) @ cairosvg/parser.py:386 (arg, argIndex=0)",
+      "cairosvg/parser.py:385-387 external SVG fetch"
+     ]
+    },
+    {
+     "id": "P3-K-011",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.8,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.surface",
+      "type": null,
+      "callable": "Tree",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/surface.py",
+      "line": 129
+     },
+     "rationale": "tree = Tree(bytestring=..., file_obj=..., url=url, unsafe=..., **kwargs)(surface.py:128-130):convert 入口到 Tree 的传递;三个边界参数经此进入解析与取回流程。关键字参数按约定记为 argument 位置 0。bytestring 与 url 二选一:仅 bytestring 时不取回文档本身,仅 url 时立即取回(parser.py:356-387)。",
+     "evidence": [
+      "CSV row: kwarg Tree(bytestring/file_obj/url) @ cairosvg/surface.py:129 (kwarg, argIndex=-1)",
+      "keyword arguments: bytestring, file_obj, url"
+     ]
+    },
+    {
+     "id": "P3-K-012",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.9,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.url",
+      "type": null,
+      "callable": "fetch",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/url.py",
+      "line": 77
+     },
+     "rationale": "def fetch(url, resource_type): return urlopen(Request(url, headers=HTTP_HEADERS)).read()(url.py:77-84):默认取回器,参数 0 直接成为 urlopen 的请求 URL;read_url 文档字符串自述默认取回器'no limitations'(url.py:133-135)。包装函数形参,不作 Source(用户提示第 9 条)。",
+     "evidence": [
+      "CSV row: wrapper_param fetch @ cairosvg/url.py:77 (argIndex=0)",
+      "cairosvg/url.py:84 urlopen(Request(url, ...))",
+      "cairosvg/parser.py:354 self.url_fetcher = kwargs.get('url_fetcher', fetch)"
+     ]
+    },
+    {
+     "id": "P3-K-013",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.95,
+     "signature": {
+      "package": "urllib.request",
+      "module": "urllib.request",
+      "type": null,
+      "callable": "urlopen",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/url.py",
+      "line": 84
+     },
+     "rationale": "urlopen(Request(url, headers=HTTP_HEADERS))(url.py:84):全代码库唯一网络出口(已 grep 核实 cairosvg/ 内无 requests/httpx/socket/urlretrieve,无固定主机 URL)。urlopen 位置参数 0 是承载目标 URL 的 Request 对象 —— 危险参数位置 0 准确(用户提示第 4 条):Request 的 URL 即 fetch 的参数 0,到达前无任何 scheme/host 校验;HTTP 重定向由 urllib 默认跟随。",
+     "evidence": [
+      "CSV row: api urlopen(urllib.request) @ cairosvg/url.py:84 (arg, argIndex=0, match=api)",
+      "cairosvg/url.py:84 return urlopen(Request(url, headers=HTTP_HEADERS)).read()",
+      "grep: urlopen 仅出现于 cairosvg/url.py:10(import) 与 :84(调用)"
+     ]
+    },
+    {
+     "id": "P3-K-014",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": "urllib.request",
+      "module": "urllib.request",
+      "type": null,
+      "callable": "Request",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/url.py",
+      "line": 84
+     },
+     "rationale": "Request(url, headers=HTTP_HEADERS)(url.py:84):URL 字符串进入 Request 对象再交给 urlopen;为本地数据流提供 URL -> Request 的传播(summary),最终网络语义由 K-013(urlopen)承担 —— Request 构造本身不是网络 I/O,不单独作为 Sink(用户提示第 4 条)。",
+     "evidence": [
+      "CSV row: api Request(urllib.request) @ cairosvg/url.py:84 (arg, argIndex=0, match=api)",
+      "cairosvg/url.py:84 Request(url, headers=HTTP_HEADERS)"
+     ]
+    },
+    {
+     "id": "P3-K-015",
+     "role": "summary",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.url",
+      "type": null,
+      "callable": "read_url",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "cairosvg/url.py",
+      "line": 132
+     },
+     "rationale": "def read_url(url, url_fetcher, resource_type)(url.py:132-143):取回分发包装;有 scheme -> 原样 geturl() 交 url_fetcher(url.py:137-138),无 scheme -> 补 file:// 本地路径(url.py:139-141)。参数 0 传播至动态分发;包装函数形参,不作 Source(用户提示第 9 条)。",
+     "evidence": [
+      "CSV row: wrapper_param read_url @ cairosvg/url.py:132 (argIndex=0)",
+      "cairosvg/url.py:137-143 scheme handling + url_fetcher dispatch"
+     ]
+    },
+    {
+     "id": "P3-K-016",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.url",
+      "type": null,
+      "callable": "format",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "cairosvg/url.py",
+      "line": 140
+     },
+     "rationale": "'file://{}'.format(os.path.abspath(url.geturl()))(url.py:140):无 scheme 引用改写为 file:// 本地路径 —— 本地文件读取而非服务端网络请求(用户提示第 8 条)。file:// 最终也经同一 urlopen,构成任意本地文件读取路径,记为跨 CWE 备注(CWE-22 本地文件读取/泄露),不作为 Pass 3 网络 SSRF 的 Sink;data: URL 在 normalize_url 中直接放行(url.py:33),同样不构成服务端请求。",
+     "evidence": [
+      "CSV row: file_scheme format @ cairosvg/url.py:140 (file_scheme, argIndex=-1)",
+      "cairosvg/url.py:139-141 schemeless -> file:// rewrite",
+      "cross-CWE note: local file read via urlopen(file://...)"
+     ]
+    },
+    {
+     "id": "P3-K-017",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.8,
+     "signature": {
+      "package": "cairosvg",
+      "module": "cairosvg.url",
+      "type": null,
+      "callable": "url_fetcher",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "cairosvg/url.py",
+      "line": 143
+     },
+     "rationale": "return url_fetcher(url, resource_type)(url.py:143):动态分发调用(目标为 self.url_fetcher,默认 fetch,parser.py:354;CodeQL 无法静态解析)。到达此处的 URL 已完成全部攻击者可控组装且零校验。标为 candidate 级 Sink 以保证 Phase 2 在此动态分发边界产生告警;最终网络语义取决于默认 fetcher(urlopen)—— 若宿主注入受限 url_fetcher 则该路径被阻断,故 classification 为 candidate 而非 tp。",
+     "evidence": [
+      "CSV row: fetcher_dispatch url_fetcher @ cairosvg/url.py:143 (argIndex=0)",
+      "cairosvg/url.py:143 return url_fetcher(url, resource_type)",
+      "cairosvg/parser.py:354 url_fetcher defaults to fetch",
+      "cairosvg/url.py:133-135 docstring: default fetcher has no limitations"
+     ]
+    }
+   ]
+  }
+ ]
+}

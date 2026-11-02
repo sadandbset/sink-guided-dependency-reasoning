@@ -1,0 +1,237 @@
+{
+  "step": "Step 1 - Explore and detect",
+  "target": "calibre-web",
+  "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\calibre-web_vuln\\calibre-web-db",
+  "source_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\calibre-web_vuln",
+  "timestamp": "2026-10-19",
+  "language": "python",
+  "language_evidence": [
+    "calibre-web-db/codeql-database.yml: primaryLanguage: python, creationMetadata.cliVersion: 2.25.1, baselineLinesOfCode: 23118",
+    "repository layout: single application package cps/ plus entry point cps.py (62 .py files, ~27k LOC total)",
+    "requirements.txt / optional-requirements.txt / setup.py present at repo root"
+  ],
+  "codeql_environment": {
+    "cli_version": "2.25.1 (verified via `codeql version`, unpacked at E:\\codeql)",
+    "python_query_library": "codeql/python-all 7.1.x (7.1.1 and 7.1.2 cached under C:\\Users\\lzh\\.codeql\\packages; workspace qlpack.yml declares codeql/python-all: \"*\")",
+    "api_surface_note": "Extraction queries use only `import python` AST APIs verified against the locally cached python-all 7.1.2 library: AstNode.getLocation()/getScope()/toString(), Location.getFile()/getStartLine(), File.getRelativePath(), Call.getFunc()/getArg(int)/getAKeyword()/getAPositionalArg(), Keyword.getArg()/getValue(), Attribute.getName()/getObject(), Name.getId(), Subscript.getObject()/getIndex(), StringLiteral.getText(), Assign.getATarget(), Function.getName()/getArg(int)/getADecorator() (returns the decorator func Expr, e.g. `web.route`), Class.getName(). No AstNode.getFile(), no API::Node vs DataFlow::Node mixing, no QL classes are defined in the extraction queries, no @kind is declared (plain multi-column select for `codeql query run` + `bqrs decode`).",
+    "dbscheme": "semmlecode.python.dbscheme"
+  },
+  "scope": {
+    "passes": [3],
+    "cwes": ["918", "099", "610"],
+    "focus": "Server-Side Request Forgery (CWE-918 primary, per user instruction)"
+  },
+  "framework_candidates": [
+    {
+      "framework": "flask",
+      "kind": "web-framework",
+      "confidence": 1.0,
+      "classification": "primary",
+      "evidence": {
+        "import_evidence": {
+          "score": 0.45,
+          "snippets": [
+            "cps/__init__.py:31 `from flask import Flask, request, g`",
+            "cps/web.py:39-40 `from flask import Blueprint, ...` (blueprint 'web')",
+            "cps/admin.py:33 `from flask import Blueprint, flash, redirect, url_for, abort, request, make_response, send_from_directory, g, Response`",
+            "cps/editbooks.py:36, cps/opds.py, cps/shelf.py, cps/kobo.py:28, cps/gdrive.py:31, cps/oauth_bb.py:26-27, cps/search_metadata.py:28, cps/remotelogin.py, cps/kobo_auth.py:67, cps/about.py:29, cps/jinjia.py:30 (blueprint imports across all route modules)"
+          ]
+        },
+        "route_evidence": {
+          "score": 0.30,
+          "snippets": [
+            "212 `@<blueprint>.route(...)` decorators across 12 blueprints: @web.route (46), @admi.route (46), @opds.route (41), @kobo.route (37), @editbook.route (12), @shelf.route (11), @gdrive.route (5), @oauth.route (4), @meta.route (4), @remotelogin.route (3), @kobo_auth.route (2), @about.route (1)",
+            "cps/kobo.py:60 `kobo = Blueprint(\"kobo\", __name__, url_prefix=\"/kobo/<auth_token>\")` - URL path segment doubles as auth material"
+          ]
+        },
+        "runtime_bootstrap_evidence": {
+          "score": 0.20,
+          "snippets": [
+            "cps/__init__.py:74 `app = Flask(__name__)`",
+            "cps/__init__.py:114 `def create_app():`",
+            "cps/__init__.py:137 `app.wsgi_app = ReverseProxied(app.wsgi_app)`"
+          ]
+        },
+        "layout_evidence": {
+          "score": 0.05,
+          "snippets": [
+            "cps/ package with web.py (index/feed), admin.py (config UI), editbooks.py (upload/metadata edit), opds.py (OPDS feed), kobo.py (Kobo sync/proxy), search_metadata.py (metadata search), helper.py (shared services)"
+          ]
+        }
+      }
+    },
+    {
+      "framework": "flask-login",
+      "kind": "auth-library",
+      "confidence": 0.75,
+      "classification": "secondary (authentication glue around Flask routes; constrains source reachability, not a routing framework)",
+      "evidence": [
+        "cps/admin.py:34, cps/editbooks.py:38, cps/gdrive.py:33, cps/kobo_auth.py:68, cps/search_metadata.py:29 `from flask_login import login_required, current_user, ...`",
+        "131 occurrences of login_required-style decorators (login_required, @admin_required, @edit_required, @download_required, @upload_required, requires_kobo_auth)"
+      ]
+    },
+    {
+      "framework": "sqlalchemy",
+      "kind": "orm-library",
+      "confidence": 0.45,
+      "classification": "informational-below-secondary-threshold (data layer; not an SSRF sink surface)",
+      "evidence": [
+        "cps/ub.py, cps/config_sql.py, cps/db.py: sqlalchemy session/model usage for app and calibre databases"
+      ]
+    },
+    {
+      "framework": "gevent/tornado-wsgi",
+      "kind": "server-backend",
+      "confidence": 0.65,
+      "classification": "informational (WSGI serving layer in cps/server.py; affects runtime concurrency only, not source/sink shapes)",
+      "evidence": [
+        "cps/server.py:27-31 optional gevent WSGIServer import",
+        "cps/server.py:35-38 optional tornado WSGIContainer/HTTPServer/IOLoop fallback"
+      ]
+    },
+    {
+      "framework": "requests",
+      "kind": "http-client-library",
+      "confidence": 0.75,
+      "classification": "secondary (primary outbound-HTTP sink surface for CWE-918)",
+      "evidence": [
+        "`import requests` in cps/helper.py:30, cps/kobo.py:44, cps/updater.py:30, cps/metadata_provider/{amazon,comicvine,google,lubimyczytac}.py",
+        "call sites verified in source: requests.get (cps/helper.py:740, cps/metadata_provider/google.py:48, comicvine.py:49, lubimyczytac.py:115 and 203, cps/updater.py:76, 352, 378, 613), requests.request (cps/kobo.py:94), requests.Session().get (cps/metadata_provider/amazon.py:53 and 110)"
+      ]
+    },
+    {
+      "framework": "pydrive/httplib2 (Google Drive)",
+      "kind": "http-client-library",
+      "confidence": 0.45,
+      "classification": "informational-below-secondary-threshold (single wrapped download call)",
+      "evidence": [
+        "cps/gdriveutils.py:626 `df.auth.Get_Http_Object().request(download_url, headers=headers)` - httplib2 request via pydrive auth object"
+      ]
+    },
+    {
+      "framework": "scholarly",
+      "kind": "http-client-library",
+      "confidence": 0.45,
+      "classification": "informational-below-secondary-threshold (external library performs its own HTTP fetches)",
+      "evidence": [
+        "cps/metadata_provider/scholar.py:47 `scholarly.search_pubs(query)` - network I/O happens inside the scholarly package, not in this codebase"
+      ]
+    }
+  ],
+  "primary_framework": "flask",
+  "framework_notes": [
+    "Flask is the primary web framework (score 1.00 >= 0.75 threshold); references/flask.md was loaded in addition to references/python.md and references/patterns.md.",
+    "Routes are registered via blueprint decorators `@<bp>.route(...)` on module-level functions (no handler classes), so source extraction keys on decorator-detected handler functions and their parameters, plus `request.*` accessor shapes from references/flask.md section 6.",
+    "The Kobo blueprint mounts at /kobo/<auth_token>, so part of the URL path is both an auth token and request-derived input; kobo_auth.register_url_value_preprocessor (cps/kobo.py:62) preprocesses it.",
+    "Flask-Login wraps most user-facing routes with @login_required variants; admin routes add @admin_required; upload-dependent branches check current_user.role_upload() at runtime (cps/editbooks.py:802)."
+  ],
+  "references_loaded": [
+    "WORKFLOW.md",
+    "references/patterns.md",
+    "references/python.md",
+    "references/flask.md",
+    "assets/extraction/README.md",
+    "assets/extraction/extract_sources.ql.tmpl",
+    "assets/extraction/extract_sinks.ql.tmpl",
+    "assets/extraction/python_sources.ql.tmpl",
+    "assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "repo_survey": {
+    "http_routes": [
+      "212 route decorators across 12 Flask blueprints (web, admi, opds, kobo, editbook, shelf, gdrive, oauth, meta, remotelogin, kobo_auth, about); representative SSRF-relevant routes:",
+      "cps/editbooks.py:749 `@editbook.route(\"/admin/book/<int:book_id>\", methods=['GET','POST'])` edit_book - POST form field cover_url feeds helper.save_cover_from_url (line 808), gated by @login_required_if_no_ano + @edit_required and current_user.role_upload()",
+      "cps/search_metadata.py:116 `@meta.route(\"/metadata/search\", methods=['POST'])` metadata_search - form field 'query' dispatched to metadata provider .search() (login required)",
+      "cps/search_metadata.py:88-89 `@meta.route(\"/metadata/provider\", methods=['POST'])` metadata_change_active_provider - JSON body 'query' forwarded to provider.search() (login required)",
+      "cps/kobo.py blueprint url_prefix \"/kobo/<auth_token>\" with 37 routes; unimplemented/misc requests funnel through redirect_or_proxy_request() (cps/kobo.py:107) which proxies to the Kobo store when config.config_kobo_proxy is enabled",
+      "cps/admin.py 46 routes (config UI); cps/web.py 46 routes (catalog/feed); cps/opds.py 41 routes (OPDS feed, HTTP-basic auth)"
+    ],
+    "request_input_surfaces": [
+      "query args: request.args.get (55 sites), request.args.getlist (2), request.args.items (1) - cps/web.py, cps/admin.py, cps/opds.py",
+      "form data: request.form.to_dict (24 sites across admin/editbooks/shelf/web), request.form.get (2), request.form.getlist (1), request.form[...] subscript (cps/web.py:138 bookmark), request.form.to_dict()['domainname'] (cps/admin.py:634,649)",
+      "JSON body: request.get_json (7 sites), request.get_json().get(...) chains (cps/admin.py:133, cps/editbooks.py:1261,1277,1314), request.json plain reads (cps/kobo.py:517,561,602,632,784), json.loads(request.data) (cps/admin.py:509, cps/web.py:864, cps/gdrive.py:134)",
+      "files: request.files[...] / request.files.getlist (cps/editbooks.py:620,682,1050)",
+      "headers: request.headers.get (15 sites); whole-header forwarding cps/kobo.py:89 `Headers(request.headers)` into the outbound store request",
+      "raw request URL: cps/kobo.py:69 `request.full_path.rpartition(\"/kobo/\")` -> get_store_url_for_current_request() concatenates KOBO_STOREAPI_URL + user-controlled path suffix (cps/kobo.py:73)",
+      "request body bytes: cps/kobo.py:98 `data=request.get_data()` forwarded to the outbound store request",
+      "misc: request.referrer (cps/oauth_bb.py:183, cps/redirect.py:43), request.values.get('next') (cps/redirect.py:43)",
+      "CLI/environment boundaries: cps/cli.py args.* (argparse flags incl. args.l allow_localhost, line 88); os.environ.get/os.getenv in cps/constants.py:42,44,128, cps/logger.py:126,207, cps/server.py:117, cps/__init__.py:139,145"
+    ],
+    "book_metadata_url_surfaces": [
+      "cover URL form field: cps/editbooks.py:800-808 to_save[\"cover_url\"] -> helper.save_cover_from_url(to_save[\"cover_url\"], book.path) - fully attacker-supplied URL string, subject to role_upload check and a localhost guard (see auth_boundaries)",
+      "metadata provider search results: MetaRecord fields .url/.cover parsed from remote responses (cps/metadata_provider/google.py:_parse_cover thumbnail, comicvine.py site_detail_url/image.original_url, lubimyczytac.py:189 url=BASE_URL+book_url and match.url re-fetch at line 203, scholar.py pub_url/image original_url)",
+      "metadata provider queries embed user search text into request URLs: cps/metadata_provider/google.py:48 SEARCH_URL + quoted query, comicvine.py:49 f-string BASE_URL+query, lubimyczytac.py:115 _prepare_query(title=query), amazon.py:53/110 f-string search URLs"
+    ],
+    "outbound_network_surfaces": [
+      "cps/helper.py:740 requests.get(url, timeout=(10,200)) inside save_cover_from_url(url, book_path) - called from cps/editbooks.py:808 with the cover_url form value; partial SSRF mitigation at cps/helper.py:734-739 (localhost block via socket.getaddrinfo first result, only when cli.allow_localhost is falsy)",
+      "cps/kobo.py:94 requests.request(method=request.method, url=get_store_url_for_current_request(), headers=..., data=request.get_data(), allow_redirects=False, timeout=(2,10)) inside make_request_to_kobo_store - host fixed to KOBO_STOREAPI_URL (\"https://storeapi.kobo.com\", cps/kobo.py:55), path suffix derived from request.full_path; invoked at cps/kobo.py:114, 330, 1059; enabled only when config.config_kobo_proxy",
+      "cps/updater.py requests.get at lines 76 (_get_request_path -> _REPOSITORY_API_URL + '/zipball/master'), 352 (parent_commit['url'] from GitHub API JSON), 378 (repository_url + '/git/commits/' + sha), 613 (repository_url) - repository_url derives from the hardcoded constant _REPOSITORY_API_URL (cps/updater.py:38) or values echoed from earlier GitHub API responses",
+      "cps/metadata_provider/google.py:48, comicvine.py:49, lubimyczytac.py:115/203, amazon.py:53/110 (requests.Session) - metadata fetches with fixed hosts and user-influenced query/path components",
+      "cps/metadata_provider/scholar.py:47 scholarly.search_pubs(query) - HTTP fetches performed inside the scholarly library",
+      "cps/gdriveutils.py:626 df.auth.Get_Http_Object().request(download_url, headers=headers) - httplib2 chunked download; download_url comes from Google Drive file metadata (admin-configured gdrive account), not directly from web input"
+    ],
+    "url_construction_surfaces": [
+      "cps/kobo.py:67-73 get_store_url_for_current_request(): request.full_path rpartition + string concatenation with KOBO_STOREAPI_URL - URL construction from request-derived path (source-side propagation, not a sink by itself)",
+      "cps/metadata_provider/lubimyczytac.py:126-151 _prepare_query(): regex cleanup + quote() + f-string into BASE_URL search URL",
+      "cps/metadata_provider/google.py:47, comicvine.py:47: quote()-encoded tokens concatenated onto fixed search URLs",
+      "cps/redirect.py:43 request.values.get('next')/request.referrer - open-redirect-shaped input (CWE-601 territory, out of Pass 3 sink scope)",
+      "cps/kobo.py:110 redirect(get_store_url_for_current_request(), 307) - fixed-host redirect; recorded here, not extracted as a CWE-918 sink"
+    ],
+    "auth_boundaries": [
+      "cps/editbooks.py:750-751 @login_required_if_no_ano + @edit_required on edit_book; cover_url branch additionally requires current_user.role_upload() (cps/editbooks.py:802-804) - untrusted-but-authenticated upload users can reach save_cover_from_url",
+      "cps/search_metadata.py:87,90,117 @login_required on metadata provider/search routes - any logged-in user can drive provider searches",
+      "cps/kobo.py:37 routes carry @requires_kobo_auth (cps/kobo_auth.py) - Kobo device sync auth; proxy behavior additionally gated on the admin-set config.config_kobo_proxy flag",
+      "cps/admin.py routes require @admin_required; admin form values (config UI) are operator-controlled, not anonymous-user input",
+      "cps/helper.py:734-739 localhost guard in save_cover_from_url is conditional on cli allow_localhost flag (cps/cli.py:88, -l/--allow-localhost) and inspects only the first getaddrinfo result - recorded as evidence for later labeling, not judged here"
+    ],
+    "excluded_from_extraction": [
+      "calibre-web-db/ nested CodeQL database directory inside the source root (excluded from all source scanning and evidence gathering; extraction scope is restricted to relative paths under cps/ plus cps.py)",
+      "test/ directory (browser test harness: HTML/CSS/JS only, no Python files)",
+      "cps/translations/ (no Python files), cps/iso_language_names.py (generated data table, no route/call candidates)",
+      "request.environ / request.authorization / request.method / request.host / request.base_url / request.host_url / request.scheme / request.remote_addr / request.endpoint reads - server- or framework-derived values, not direct user payload for URL construction (documented here rather than extracted)",
+      "root-level files ssrf_sinks.csv, ssrf_sinks.json, ssrf_vulnerability_report.md found in the source root were NOT read: they look like pre-existing vulnerability-analysis artifacts, and this phase forbids consulting vulnerability ground truth or pre-located findings"
+    ]
+  },
+  "extraction_plan": {
+    "pass_key": "ssrf",
+    "source_families": [
+      "parameters (index >= 0) of functions decorated with @<bp>.route(...) - Flask path-variable and defaulted query parameters",
+      "request.<container>.<accessor>() calls: containers args/form/values/files/headers, accessors get/getlist/items/to_dict (flow kind return)",
+      "request.get_json()/request.get_data() calls (return)",
+      "chained .get() on request.get_json() results and on request.<container>.to_dict() results (return)",
+      "request.<container>[...] subscripts, including subscripts on request.<container>.to_dict() results (field)",
+      "plain request field reads not consumed as object/func/subscript-base: json, data, headers, referrer, full_path, path, args, form, values, files (field)",
+      "chained non-container request field reads used as the base of a further attribute access/method call: data, referrer, full_path, path (field; covers request.full_path.rpartition('/kobo/') at cps/kobo.py:69)",
+      "environment reads: os.environ.get / os.getenv (return)",
+      "CLI argparse reads args.<flag> restricted to cps/cli.py (field)",
+      "cover_url dict-key subscripts to_save[\"cover_url\"] (field) - earliest project-internal materialization of the attacker-supplied cover URL",
+      "MetaRecord .url/.cover attribute reads restricted to cps/metadata_provider/** (field) - book/cover/metadata URL data",
+      "internal propagation calls: get_store_url_for_current_request() (return), Metadata provider .search() calls in cps/search_metadata.py (argument, index 0), and the c.search attribute reference dispatched as the first argument of executor.submit() in the same file (argument, index 0)"
+    ],
+    "sink_families": [
+      "requests.get(...) with URL at positional argument 0 (cps/helper.py:740, metadata providers, cps/updater.py)",
+      "requests.request(...) with URL at the url= keyword (node = keyword value, arg index -1; cps/kobo.py:94)",
+      "requests.Session().get(...) / session.get(...) with URL at positional argument 0, restricted to cps/metadata_provider/** (amazon.py:53,110)",
+      "pydrive Get_Http_Object().request(download_url, ...) with URL at positional argument 0 (cps/gdriveutils.py:626, httplib2 transport)",
+      "scholarly.search_pubs(query) with query at positional argument 0 (cps/metadata_provider/scholar.py:47)",
+      "internal wrapper helper.save_cover_from_url(url, ...) with URL at positional argument 0 (cps/editbooks.py:808; wrapper forwards to requests.get)",
+      "internal wrapper invocation make_request_to_kobo_store() (cps/kobo.py:114,330,1059; flow kind 'call' - the wrapper issues requests.request internally with a request.full_path-derived URL)"
+    ],
+    "notes": [
+      "Extraction rules were derived only from repository evidence and the CWE-918 pass focus; no vulnerability ground truth, CVE descriptions, fix diffs, or pre-located vulnerable lines were consulted.",
+      "Both extraction queries are plain multi-column select queries (no @kind metadata) for use with `codeql query run` + `codeql bqrs decode`; they are not intended for `codeql database analyze` SARIF output.",
+      "CSV column order matches the prior-project convention: node, candidate_type, callable, flow_kind, receiver, moduleHint, arg_index, line, file:line, expression. arg_index is -1 when not applicable.",
+      "flow_kind vocabulary: param/return/field/argument as in prior projects, plus 'call' for wrapper-invocation sink candidates whose URL is constructed inside the wrapper (documented in sinks.ql comments).",
+      "AST-literal matching (e.g. requests.get by object Name 'requests') is used because CodeQL resolved-API modeling is not guaranteed for the optional dependencies of this project; import resolution must be validated during LLM labeling (all matched call sites were individually confirmed against the source).",
+      "urllib.request.urlopen / urlretrieve / httpx are NOT used anywhere in this source tree (verified by grep) - no candidates and no coverage gap for those APIs.",
+      "file:/data: schemes and other non-HTTP(S) loaders: no code path in this project constructs such URLs for network loading; nothing extracted."
+    ]
+  },
+  "coverage_gaps": [
+    "cps/services/gmail.py: google-api-client network calls (setup_gmail lines ~52/57, get_user_info ~71, send_messsage ~85-94: creds.refresh(Request()), build(serviceName=...), service.users().messages().send(...).execute()) issue real HTTP to fixed Google endpoints with admin-configured credentials; no user-controllable URL argument is provable from this source, so they are not extracted as sink candidates. If labeling later treats OAuth token refresh as in-scope, these must be added manually.",
+    "cps/services/goodreads_support.py: GoodreadsClient(key, secret) wrapper - network I/O happens inside the goodreads/betterreads library with admin-configured API keys; not extracted.",
+    "cps/oauth_bb.py + flask_dance OAuth blueprints (GitHub/Google, cps/oauth_bb.py:249): provider endpoints fixed by blueprint configuration; token exchange happens inside flask_dance; not extracted.",
+    "cps/metadata_provider/scholar.py: the actual HTTP requests for scholarly.search_pubs happen inside the scholarly package, which is not part of this CodeQL database; only the wrapper call site is extracted, so intra-library flows are invisible to taint tracking.",
+    "cps/updater.py parent_commit['url'] (line 352): URL values echoed from earlier GitHub API JSON responses are second-order network-derived input; extracted as a requests.get sink, but the response-to-URL propagation would need a summary step in Phase 2 if labeling considers it in-scope.",
+    "CPS helpers that only parse URLs (urlparse in cps/helper.py:736, urljoin not used) are intentionally not sinks; only actual network I/O call sites are extracted."
+  ]
+}

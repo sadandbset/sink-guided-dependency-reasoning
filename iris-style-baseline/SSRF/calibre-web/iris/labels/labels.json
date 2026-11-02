@@ -1,0 +1,4538 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "calibre-web-iris-pass3-step3-20261019",
+    "generated_at": "2026-10-19T10:16:23Z",
+    "language": "python",
+    "framework": "flask",
+    "model": "glm-5.3 (Z.ai GLM), labeled in-session via Claude Code CLI; single-pass batches; temperature unset (harness default); see labels_raw_pass3.json model block and deviations",
+    "project": "calibre-web",
+    "notes": [
+      "Scope: Pass 3 only (CWE-918/099/610, CWE-918 primary); Pass 1 block is an empty placeholder required by the schema 'contains pass_id 1' constraint.",
+      "All 181 sources.csv rows and 18 sinks.csv rows are labeled (199 entries); role 'none' entries carry auditable exclusion rationales. Two exact duplicate CSV rows (sources.csv rows 45/47 and 46/48, args.k/args.c at cps/cli.py:77) are kept for row parity with identical labels.",
+      "classification 'tp' asserts that the labeled role is genuinely played by the API for pass 3 (e.g. requests.get at cps/helper.py:740 really fetches the attacker-supplied cover_url); it never denotes a confirmed vulnerability. No end-to-end SSRF verdict is claimed at this stage.",
+      "Primary CWE-918-shaped flow: edit_book POST form cover_url -> to_save['cover_url'] -> helper.save_cover_from_url -> requests.get (cps/editbooks.py:808 -> cps/helper.py:740), guarded only by a conditional, first-getaddrinfo-result localhost check with default redirect following.",
+      "Kobo proxy flow labeled candidate: outbound host pinned to KOBO_STOREAPI_URL, path suffix request-derived, all inbound headers/body forwarded; reachable via routes without @requires_kobo_auth but only when the admin enables config.config_kobo_proxy.",
+      "No sanitizer candidates were present in the extraction CSVs; no sanitizer entries were invented. Sanitizer-shaped code found during review and documented as advisory only: cps/helper.py:734-739 (partial localhost guard) and cps/redirect.py:36-39 (is_safe_url same-origin check).",
+      "Schema normalizations recorded in labels_raw_pass3.json deviations: kobo.py:96 requests.request arg_index -1 -> 1 (url= keyword); make_request_to_kobo_store flow_kind 'call' -> 'unknown'.",
+      "Vulnerability ground truth in the source tree (ssrf_sinks.csv, ssrf_sinks.json, ssrf_vulnerability_report.md at the source root) was not read."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 3,
+      "focus": "Server-Side Request Forgery (SSRF)",
+      "cwes": [
+        "918",
+        "099",
+        "610"
+      ],
+      "entries": [
+        {
+          "id": "src-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "python-stdlib",
+            "module": "cps.__init__",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/__init__.py",
+            "line": 139
+          },
+          "rationale": "FLASK_DEBUG is operator-controlled deployment configuration read from the process environment at startup (gates cache_buster.init_cache_busting); it never crosses a web-request boundary and never reaches an outbound request URL - none of the 18 extracted outbound-fetch sites in cps/ read this variable.",
+          "evidence": [
+            "cps/__init__.py:139 environment read (gates cache_buster.init_cache_busting)",
+            "outbound fetch sites verified: cps/helper.py:740, cps/kobo.py:94, cps/metadata_provider/*, cps/updater.py:76/352/378/613, cps/gdriveutils.py:626"
+          ]
+        },
+        {
+          "id": "src-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "python-stdlib",
+            "module": "cps.__init__",
+            "type": "os",
+            "callable": "os.getenv",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/__init__.py",
+            "line": 145
+          },
+          "rationale": "SECRET_KEY is operator-controlled deployment configuration read from the process environment at startup (app.secret_key fallback); it never crosses a web-request boundary and never reaches an outbound request URL - none of the 18 extracted outbound-fetch sites in cps/ read this variable.",
+          "evidence": [
+            "cps/__init__.py:145 environment read (app.secret_key fallback)",
+            "outbound fetch sites verified: cps/helper.py:740, cps/kobo.py:94, cps/metadata_provider/*, cps/updater.py:76/352/378/613, cps/gdriveutils.py:626"
+          ]
+        },
+        {
+          "id": "src-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 101
+          },
+          "rationale": "Admin-only route input (request.path read in the @admi.before_app_request hook, used only for string-membership control flow ('opds' not in request.path)) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:101 route input (request.path read in the @admi.before_app_request hook, used only for string-membership control flow ('opds' not in request.path))",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 112
+          },
+          "rationale": "Admin-only route input (request.path read in the before-request hook, used only for '/static/' not in request.path gating of the db-configuration redirect) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:112 route input (request.path read in the before-request hook, used only for '/static/' not in request.path gating of the db-configuration redirect)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-005",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.get_json().get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 133
+          },
+          "rationale": "Admin-only route input (shutdown() JSON body: task parameter 0/1 selects restart vs shutdown; never used in URL construction) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:133 route input (shutdown() JSON body: task parameter 0/1 selects restart vs shutdown; never used in URL construction)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))",
+            "cps/admin.py:129-146 `task = request.get_json().get('parameter', -1)` -> web_server.stop(task == 0)"
+          ]
+        },
+        {
+          "id": "src-006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.get_json",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 133
+          },
+          "rationale": "Admin-only route input (shutdown() JSON body: task parameter 0/1 selects restart vs shutdown; never used in URL construction) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:133 route input (shutdown() JSON body: task parameter 0/1 selects restart vs shutdown; never used in URL construction)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))",
+            "cps/admin.py:129-146 `task = request.get_json().get('parameter', -1)` -> web_server.stop(task == 0)"
+          ]
+        },
+        {
+          "id": "src-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 297
+          },
+          "rationale": "Admin-only route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users()) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:297-322 route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users())",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 298
+          },
+          "rationale": "Admin-only route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users()) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:297-322 route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users())",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-009",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 299
+          },
+          "rationale": "Admin-only route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users()) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:297-322 route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users())",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 300
+          },
+          "rationale": "Admin-only route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users()) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:297-322 route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users())",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-011",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 301
+          },
+          "rationale": "Admin-only route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users()) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:297-322 route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users())",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-012",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 304
+          },
+          "rationale": "Admin-only route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users()) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:297-322 route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users())",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-013",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 322
+          },
+          "rationale": "Admin-only route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users()) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:297-322 route input (user-table listing parameters (offset/limit/search/sort/order/state) feeding the local ub.User query in list_users())",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-014",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 345
+          },
+          "rationale": "Admin-only route input (delete_user() form body: userid list for local user deletion) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:345 route input (delete_user() form body: userid list for local user deletion)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 404
+          },
+          "rationale": "Admin-only route input (edit_list_user() form body: inline user-attribute edits (pk/name/value)) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:404 route input (edit_list_user() form body: inline user-attribute edits (pk/name/value))",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.data",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 509
+          },
+          "rationale": "Admin-only route input (update_table_settings() raw body: view-settings JSON stored on current_user) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:509 route input (update_table_settings() raw body: view-settings JSON stored on current_user)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 542
+          },
+          "rationale": "Admin-only route input (update_view_configuration() form: admin view-config fields) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:542 route input (update_view_configuration() form: admin view-config fields)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 624
+          },
+          "rationale": "Admin-only route input (edit_domain() form: registration-domain allowlist row edit (pk/value) stored in ub.Registration) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:624 route input (edit_domain() form: registration-domain allowlist row edit (pk/value) stored in ub.Registration)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict()[]",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 634
+          },
+          "rationale": "Admin-only route input (add_domain()/edit body: 'domainname' stored as registration-domain allowlist pattern) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:634 route input (add_domain()/edit body: 'domainname' stored as registration-domain allowlist pattern)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-020",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 634
+          },
+          "rationale": "Admin-only route input (add_domain()/edit body: 'domainname' stored as registration-domain allowlist pattern) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:634 route input (add_domain()/edit body: 'domainname' stored as registration-domain allowlist pattern)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict()[]",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 649
+          },
+          "rationale": "Admin-only route input (delete_domain() form: 'domainid' for local allowlist row deletion) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:649 route input (delete_domain() form: 'domainid' for local allowlist row deletion)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 649
+          },
+          "rationale": "Admin-only route input (delete_domain() form: 'domainid' for local allowlist row deletion) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:649 route input (delete_domain() form: 'domainid' for local allowlist row deletion)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-023",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 679
+          },
+          "rationale": "Admin-only route input (edit_restriction() form: restricted tags/custom-column lists for a user) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:679 route input (edit_restriction() form: restricted tags/custom-column lists for a user)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-024",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 788
+          },
+          "rationale": "Admin-only route input (add_user_0_restriction()/add_restriction() form: whitelist/blacklist element addition) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:788 route input (add_user_0_restriction()/add_restriction() form: whitelist/blacklist element addition)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-025",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 841
+          },
+          "rationale": "Admin-only route input (delete_restriction() form: restriction element deletion) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:841 route input (delete_restriction() form: restriction element deletion)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 947
+          },
+          "rationale": "Admin-only route input (pathchooser() query args (folder/filter/path) driving a LOCAL filesystem browse (os.path/isfile/listdir) - path-traversal family (Pass 1), not CWE-918; no URL fetch) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:947-949 route input (pathchooser() query args (folder/filter/path) driving a LOCAL filesystem browse (os.path/isfile/listdir) - path-traversal family (Pass 1), not CWE-918; no URL fetch)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))",
+            "cps/admin.py:945-981 `path = os.path.normpath(request.args.get('path', ''))` -> os.listdir"
+          ]
+        },
+        {
+          "id": "src-027",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 948
+          },
+          "rationale": "Admin-only route input (pathchooser() query args (folder/filter/path) driving a LOCAL filesystem browse (os.path/isfile/listdir) - path-traversal family (Pass 1), not CWE-918; no URL fetch) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:947-949 route input (pathchooser() query args (folder/filter/path) driving a LOCAL filesystem browse (os.path/isfile/listdir) - path-traversal family (Pass 1), not CWE-918; no URL fetch)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))",
+            "cps/admin.py:945-981 `path = os.path.normpath(request.args.get('path', ''))` -> os.listdir"
+          ]
+        },
+        {
+          "id": "src-028",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 949
+          },
+          "rationale": "Admin-only route input (pathchooser() query args (folder/filter/path) driving a LOCAL filesystem browse (os.path/isfile/listdir) - path-traversal family (Pass 1), not CWE-918; no URL fetch) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:947-949 route input (pathchooser() query args (folder/filter/path) driving a LOCAL filesystem browse (os.path/isfile/listdir) - path-traversal family (Pass 1), not CWE-918; no URL fetch)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))",
+            "cps/admin.py:945-981 `path = os.path.normpath(request.args.get('path', ''))` -> os.listdir"
+          ]
+        },
+        {
+          "id": "src-029",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 1189
+          },
+          "rationale": "Admin-only route input (simulatedbchange() form: calibre-dir simulation fields) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:1189 route input (simulatedbchange() form: calibre-dir simulation fields)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-030",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 1204
+          },
+          "rationale": "Admin-only route input (_db_configuration_update_helper() form: database location/config fields) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:1204 route input (_db_configuration_update_helper() form: database location/config fields)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-031",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 1256
+          },
+          "rationale": "Admin-only route input (_configuration_update_helper() form: app configuration fields persisted via _config_* helpers) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:1256 route input (_configuration_update_helper() form: app configuration fields persisted via _config_* helpers)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-032",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 1563
+          },
+          "rationale": "Admin-only route input (new_user() form: user-creation attributes (name/email/roles)) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:1563 route input (new_user() form: user-creation attributes (name/email/roles))",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-033",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 1589
+          },
+          "rationale": "Admin-only route input (update_mailsettings() form: SMTP/Gmail server settings stored as config (mail sending uses smtplib/google-api with these operator-set values; no extracted sink consumes them)) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:1589 route input (update_mailsettings() form: SMTP/Gmail server settings stored as config (mail sending uses smtplib/google-api with these operator-set values; no extracted sink consumes them))",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))",
+            "cps/admin.py:1589-1599 `to_save = request.form.to_dict()` -> _config_int(to_save, 'mail_server_type')"
+          ]
+        },
+        {
+          "id": "src-034",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 1650
+          },
+          "rationale": "Admin-only route input (edit_user() form: user-profile attribute edits) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:1650 route input (edit_user() form: user-profile attribute edits)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))"
+          ]
+        },
+        {
+          "id": "src-035",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.admin",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/admin.py",
+            "line": 1755
+          },
+          "rationale": "Admin-only route input (get_updater_status() form: 'start' flag resumes the updater thread; update URLs are constant-derived (cps/updater.py:38 _REPOSITORY_API_URL), not form-derived) on a @admin_required configuration handler; values are operator-controlled settings or table parameters persisted to the settings DB / used for local queries. Verified against the source: no path from these values into any of the 18 extracted outbound-request URLs.",
+          "evidence": [
+            "cps/admin.py:1755 route input (get_updater_status() form: 'start' flag resumes the updater thread; update URLs are constant-derived (cps/updater.py:38 _REPOSITORY_API_URL), not form-derived)",
+            "cps/admin.py:82-93 `admin_required` (current_user.role_admin() else abort(403))",
+            "cps/admin.py:1755-1774 `commit = request.form.to_dict()`; only 'start'=='True' is inspected",
+            "cps/updater.py:595-596 `_get_request_path` returns constant or GitHub-API 'zipball_url'"
+          ]
+        },
+        {
+          "id": "src-036",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.p",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 54
+          },
+          "rationale": "args.p is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for settings db path); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:54 `args.p` (settings db path)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-037",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.g",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 55
+          },
+          "rationale": "args.g is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for gdrive db path); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:55 `args.g` (gdrive db path)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-038",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.c",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 60
+          },
+          "rationale": "args.c is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for SSL certfile path); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:60 `args.c` (SSL certfile path)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-039",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.c",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 61
+          },
+          "rationale": "args.c is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for SSL certfile path); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:61 `args.c` (SSL certfile path)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-040",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.c",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 62
+          },
+          "rationale": "args.c is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for SSL certfile path); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:62 `args.c` (SSL certfile path)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-041",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.c",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 67
+          },
+          "rationale": "args.c is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for SSL certfile path); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:67 `args.c` (SSL certfile path)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-042",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.k",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 70
+          },
+          "rationale": "args.k is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for SSL keyfile path); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:70 `args.k` (SSL keyfile path)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-043",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.k",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 71
+          },
+          "rationale": "args.k is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for SSL keyfile path); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:71 `args.k` (SSL keyfile path)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-044",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.k",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 72
+          },
+          "rationale": "args.k is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for SSL keyfile path); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:72 `args.k` (SSL keyfile path)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-045",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.k",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 77
+          },
+          "rationale": "args.k is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for cert/key pairing check); web request handlers never read it, so no HTTP client can influence it. Rows 45/47 are exact duplicate CSV rows (args.k at cli.py:77) kept for row parity with identical labels.",
+          "evidence": [
+            "cps/cli.py:77 `args.k` (cert/key pairing check)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-046",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.c",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 77
+          },
+          "rationale": "args.c is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for cert/key pairing check); web request handlers never read it, so no HTTP client can influence it. Rows 46/48 are exact duplicate CSV rows (args.c at cli.py:77) kept for row parity with identical labels.",
+          "evidence": [
+            "cps/cli.py:77 `args.c` (cert/key pairing check)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-047",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.k",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 77
+          },
+          "rationale": "args.k is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for cert/key pairing check (exact CSV duplicate of row 45)); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:77 `args.k` (cert/key pairing check (exact CSV duplicate of row 45))",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-048",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.c",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 77
+          },
+          "rationale": "args.c is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for cert/key pairing check (exact CSV duplicate of row 46)); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:77 `args.c` (cert/key pairing check (exact CSV duplicate of row 46))",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-049",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.k",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 81
+          },
+          "rationale": "args.k is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for empty keyfile check); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:81 `args.k` (empty keyfile check)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-050",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.d",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 86
+          },
+          "rationale": "args.d is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for updater dry-run flag); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:86 `args.d` (updater dry-run flag)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-051",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.l",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 88
+          },
+          "rationale": "args.l is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for allow_localhost flag); web request handlers never read it, so no HTTP client can influence it. The SSRF-relevant nuance: this flag sets cli.allow_localhost which DISABLES the localhost guard in helper.save_cover_from_url (cps/helper.py:734-739) - a sanitizer-relevant operator switch, not attacker-controlled data.",
+          "evidence": [
+            "cps/cli.py:88 `args.l` (allow_localhost flag)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-052",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.i",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 90
+          },
+          "rationale": "args.i is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for listen IP address); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:90 `args.i` (listen IP address)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-053",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.s",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 108
+          },
+          "rationale": "args.s is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for admin password reset credential); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:108 `args.s` (admin password reset credential)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-054",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "python-stdlib (argparse)",
+            "module": "cps.cli",
+            "type": "argparse.Namespace",
+            "callable": "args.f",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/cli.py",
+            "line": 113
+          },
+          "rationale": "args.f is an operator-supplied process argument parsed by argparse at startup (cps/cli.py:35-52, used for deprecated flag); web request handlers never read it, so no HTTP client can influence it.",
+          "evidence": [
+            "cps/cli.py:113 `args.f` (deprecated flag)",
+            "cps/cli.py:52 `args = parser.parse_args()` at module import time"
+          ]
+        },
+        {
+          "id": "src-055",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "python-stdlib",
+            "module": "cps.config_sql",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/config_sql.py",
+            "line": 312
+          },
+          "rationale": "FLASK_DEBUG is operator-controlled deployment configuration read from the process environment at startup (log-to-stdout selection); it never crosses a web-request boundary and never reaches an outbound request URL - none of the 18 extracted outbound-fetch sites in cps/ read this variable.",
+          "evidence": [
+            "cps/config_sql.py:312 environment read (log-to-stdout selection)",
+            "outbound fetch sites verified: cps/helper.py:740, cps/kobo.py:94, cps/metadata_provider/*, cps/updater.py:76/352/378/613, cps/gdriveutils.py:626"
+          ]
+        },
+        {
+          "id": "src-056",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "python-stdlib",
+            "module": "cps.constants",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/constants.py",
+            "line": 42
+          },
+          "rationale": "CALIBRE_DBPATH is operator-controlled deployment configuration read from the process environment at startup (CONFIG_DIR under home dir); it never crosses a web-request boundary and never reaches an outbound request URL - none of the 18 extracted outbound-fetch sites in cps/ read this variable.",
+          "evidence": [
+            "cps/constants.py:42 environment read (CONFIG_DIR under home dir)",
+            "outbound fetch sites verified: cps/helper.py:740, cps/kobo.py:94, cps/metadata_provider/*, cps/updater.py:76/352/378/613, cps/gdriveutils.py:626"
+          ]
+        },
+        {
+          "id": "src-057",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "python-stdlib",
+            "module": "cps.constants",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/constants.py",
+            "line": 44
+          },
+          "rationale": "CALIBRE_DBPATH is operator-controlled deployment configuration read from the process environment at startup (CONFIG_DIR fallback to BASE_DIR); it never crosses a web-request boundary and never reaches an outbound request URL - none of the 18 extracted outbound-fetch sites in cps/ read this variable.",
+          "evidence": [
+            "cps/constants.py:44 environment read (CONFIG_DIR fallback to BASE_DIR)",
+            "outbound fetch sites verified: cps/helper.py:740, cps/kobo.py:94, cps/metadata_provider/*, cps/updater.py:76/352/378/613, cps/gdriveutils.py:626"
+          ]
+        },
+        {
+          "id": "src-058",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "python-stdlib",
+            "module": "cps.constants",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/constants.py",
+            "line": 128
+          },
+          "rationale": "CALIBRE_PORT is operator-controlled deployment configuration read from the process environment at startup (default listen port); it never crosses a web-request boundary and never reaches an outbound request URL - none of the 18 extracted outbound-fetch sites in cps/ read this variable.",
+          "evidence": [
+            "cps/constants.py:128 environment read (default listen port)",
+            "outbound fetch sites verified: cps/helper.py:740, cps/kobo.py:94, cps/metadata_provider/*, cps/updater.py:76/352/378/613, cps/gdriveutils.py:626"
+          ]
+        },
+        {
+          "id": "src-059",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.files",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 619
+          },
+          "rationale": "Uploaded file content (request.files ('btn-upload-format' ebook file)) in upload_single_file(); the file is saved to the calibre library directory. Binary upload data, not a URL; no propagation to any outbound request. (Filesystem handling is Pass 1 territory, not CWE-918.)",
+          "evidence": [
+            "cps/editbooks.py:619 uploaded file handling -> requested_file.save(saved_filename)",
+            "cps/editbooks.py:749-751 `@editbook.route('/admin/book/<int:book_id>', ...)` + @edit_required"
+          ]
+        },
+        {
+          "id": "src-060",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.files[]",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 620
+          },
+          "rationale": "Uploaded file content (request.files['btn-upload-format'] uploaded file object) in upload_single_file(); the file is saved to the calibre library directory. Binary upload data, not a URL; no propagation to any outbound request. (Filesystem handling is Pass 1 territory, not CWE-918.)",
+          "evidence": [
+            "cps/editbooks.py:620 uploaded file handling -> requested_file.save(saved_filename)",
+            "cps/editbooks.py:749-751 `@editbook.route('/admin/book/<int:book_id>', ...)` + @edit_required"
+          ]
+        },
+        {
+          "id": "src-061",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.files",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 681
+          },
+          "rationale": "Uploaded cover image ('btn-upload-cover') in upload_cover(); the image bytes are stored locally via helper.save_cover. Not a URL; never reaches a network fetch.",
+          "evidence": [
+            "cps/editbooks.py:681 request.files cover upload -> helper.save_cover(requested_file, book.path)"
+          ]
+        },
+        {
+          "id": "src-062",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.files[]",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 682
+          },
+          "rationale": "Uploaded cover image ('btn-upload-cover') in upload_cover(); the image bytes are stored locally via helper.save_cover. Not a URL; never reaches a network fetch.",
+          "evidence": [
+            "cps/editbooks.py:682 request.files cover upload -> helper.save_cover(requested_file, book.path)"
+          ]
+        },
+        {
+          "id": "src-063",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 778
+          },
+          "rationale": "POST form dictionary of edit_book() on /admin/book/<int:book_id>; to_save contains the 'cover_url' key whose value is passed verbatim to helper.save_cover_from_url (line 808) - the SSRF-relevant attacker-supplied URL. Route requires an authenticated user with edit rights (login_required_if_no_ano + @edit_required); the cover_url branch further requires role_upload(), i.e. an untrusted-but-authenticated library user, not an operator.",
+          "evidence": [
+            "cps/editbooks.py:778 `to_save = request.form.to_dict()`",
+            "cps/editbooks.py:800-808 `if 'cover_url' in to_save: ... helper.save_cover_from_url(to_save['cover_url'], book.path)`",
+            "cps/editbooks.py:749-751 route decorators; cps/editbooks.py:802-804 role_upload() gate"
+          ]
+        },
+        {
+          "id": "src-064",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "request_form_dict",
+            "module": "cps.editbooks",
+            "type": "request_form_dict",
+            "callable": "cover_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 801
+          },
+          "rationale": "Earliest explicit materialization of the attacker-supplied cover URL: the to_save['cover_url'] form value (truthiness check `if to_save['cover_url']`). The value flows unchanged into helper.save_cover_from_url -> requests.get (cps/helper.py:740), so the request target (scheme/host/port/path) is fully chosen by the submitting user subject only to the conditional localhost guard.",
+          "evidence": [
+            "cps/editbooks.py:801 `to_save[\"cover_url\"]` (truthiness check `if to_save['cover_url']`)",
+            "cps/helper.py:732-742 save_cover_from_url: guard then `requests.get(url, timeout=(10, 200))`"
+          ]
+        },
+        {
+          "id": "src-065",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "request_form_dict",
+            "module": "cps.editbooks",
+            "type": "request_form_dict",
+            "callable": "cover_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 805
+          },
+          "rationale": "Earliest explicit materialization of the attacker-supplied cover URL: the to_save['cover_url'] form value (generic-cover suffix check endswith('/static/generic_cover.jpg')). The value flows unchanged into helper.save_cover_from_url -> requests.get (cps/helper.py:740), so the request target (scheme/host/port/path) is fully chosen by the submitting user subject only to the conditional localhost guard.",
+          "evidence": [
+            "cps/editbooks.py:805 `to_save[\"cover_url\"]` (generic-cover suffix check endswith('/static/generic_cover.jpg'))",
+            "cps/helper.py:732-742 save_cover_from_url: guard then `requests.get(url, timeout=(10, 200))`"
+          ]
+        },
+        {
+          "id": "src-066",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "request_form_dict",
+            "module": "cps.editbooks",
+            "type": "request_form_dict",
+            "callable": "cover_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 808
+          },
+          "rationale": "Earliest explicit materialization of the attacker-supplied cover URL: the to_save['cover_url'] form value (argument 0 of helper.save_cover_from_url(to_save['cover_url'], book.path)). The value flows unchanged into helper.save_cover_from_url -> requests.get (cps/helper.py:740), so the request target (scheme/host/port/path) is fully chosen by the submitting user subject only to the conditional localhost guard.",
+          "evidence": [
+            "cps/editbooks.py:808 `to_save[\"cover_url\"]` (argument 0 of helper.save_cover_from_url(to_save['cover_url'], book.path))",
+            "cps/helper.py:732-742 save_cover_from_url: guard then `requests.get(url, timeout=(10, 200))`"
+          ]
+        },
+        {
+          "id": "src-067",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.files",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1049
+          },
+          "rationale": "Uploaded ebook files (request.files ('btn-upload' presence check)) on the /upload route; files are processed locally (file_handling_on_upload / create_book_on_upload). Binary upload data, not a URL.",
+          "evidence": [
+            "cps/editbooks.py:1049 upload handling",
+            "cps/editbooks.py:1043-1046 @upload_required route"
+          ]
+        },
+        {
+          "id": "src-068",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.files.getlist",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1050
+          },
+          "rationale": "Uploaded ebook files (request.files.getlist('btn-upload') upload list) on the /upload route; files are processed locally (file_handling_on_upload / create_book_on_upload). Binary upload data, not a URL.",
+          "evidence": [
+            "cps/editbooks.py:1050 upload handling",
+            "cps/editbooks.py:1043-1046 @upload_required route"
+          ]
+        },
+        {
+          "id": "src-069",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.files.getlist",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1097
+          },
+          "rationale": "Uploaded ebook files (request.files.getlist count for JSON response shaping) on the /upload route; files are processed locally (file_handling_on_upload / create_book_on_upload). Binary upload data, not a URL.",
+          "evidence": [
+            "cps/editbooks.py:1097 upload handling",
+            "cps/editbooks.py:1043-1046 @upload_required route"
+          ]
+        },
+        {
+          "id": "src-070",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.form.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1116
+          },
+          "rationale": "convert_bookformat() form fields book_format_from/book_format_to: format names for the local conversion worker; no URL semantics.",
+          "evidence": [
+            "cps/editbooks.py:1116 `request.form.get('book_format_from/to', None)` -> helper.convert_book_format"
+          ]
+        },
+        {
+          "id": "src-071",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.form.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1117
+          },
+          "rationale": "convert_bookformat() form fields book_format_from/book_format_to: format names for the local conversion worker; no URL semantics.",
+          "evidence": [
+            "cps/editbooks.py:1117 `request.form.get('book_format_from/to', None)` -> helper.convert_book_format"
+          ]
+        },
+        {
+          "id": "src-072",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1152
+          },
+          "rationale": "edit_list_book() form dictionary (pk/value) for inline book-field editing; values are written to the calibre DB, never to a request URL.",
+          "evidence": [
+            "cps/editbooks.py:1152 `vals = request.form.to_dict()`"
+          ]
+        },
+        {
+          "id": "src-073",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.get_json().get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1261
+          },
+          "rationale": "JSON body of simulate_merge_list_book(): book-id list ('Merge_books'/'xchange') driving local DB merge / file-copy operations. Numeric book identifiers, not URLs.",
+          "evidence": [
+            "cps/editbooks.py:1261 `vals = request.get_json().get(...)` book-id list"
+          ]
+        },
+        {
+          "id": "src-074",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.get_json",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1261
+          },
+          "rationale": "JSON body of simulate_merge_list_book(): book-id list ('Merge_books'/'xchange') driving local DB merge / file-copy operations. Numeric book identifiers, not URLs.",
+          "evidence": [
+            "cps/editbooks.py:1261 `vals = request.get_json().get(...)` book-id list"
+          ]
+        },
+        {
+          "id": "src-075",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.get_json().get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1277
+          },
+          "rationale": "JSON body of merge_list_book(): book-id list ('Merge_books'/'xchange') driving local DB merge / file-copy operations. Numeric book identifiers, not URLs.",
+          "evidence": [
+            "cps/editbooks.py:1277 `vals = request.get_json().get(...)` book-id list"
+          ]
+        },
+        {
+          "id": "src-076",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.get_json",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1277
+          },
+          "rationale": "JSON body of merge_list_book(): book-id list ('Merge_books'/'xchange') driving local DB merge / file-copy operations. Numeric book identifiers, not URLs.",
+          "evidence": [
+            "cps/editbooks.py:1277 `vals = request.get_json().get(...)` book-id list"
+          ]
+        },
+        {
+          "id": "src-077",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.get_json().get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1314
+          },
+          "rationale": "JSON body of table_xchange_author_title(): book-id list ('Merge_books'/'xchange') driving local DB merge / file-copy operations. Numeric book identifiers, not URLs.",
+          "evidence": [
+            "cps/editbooks.py:1314 `vals = request.get_json().get(...)` book-id list"
+          ]
+        },
+        {
+          "id": "src-078",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.editbooks",
+            "type": "flask.request",
+            "callable": "request.get_json",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 1314
+          },
+          "rationale": "JSON body of table_xchange_author_title(): book-id list ('Merge_books'/'xchange') driving local DB merge / file-copy operations. Numeric book identifiers, not URLs.",
+          "evidence": [
+            "cps/editbooks.py:1314 `vals = request.get_json().get(...)` book-id list"
+          ]
+        },
+        {
+          "id": "src-079",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.gdrive",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/gdrive.py",
+            "line": 66
+          },
+          "rationale": "google_drive_callback() reads the OAuth 'code' query argument; the code is exchanged inside the Google OAuth flow (fixed Google endpoints) during the admin one-time Google Drive setup. No attacker-controlled URL reaches a fetch.",
+          "evidence": [
+            "cps/gdrive.py:64-70 `auth_code = request.args.get('code')` -> flow.step2_exchange(auth_code)"
+          ]
+        },
+        {
+          "id": "src-080",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.gdrive",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/gdrive.py",
+            "line": 124
+          },
+          "rationale": "Google Drive watch-callback header X-Goog-Channel-Token compared against the server-side gdrive_watch_callback_token / literal 'change'; a verification check, not data flowing into any request URL.",
+          "evidence": [
+            "cps/gdrive.py:124 webhook token verification (`!= gdrive_watch_callback_token` aborts)"
+          ]
+        },
+        {
+          "id": "src-081",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.gdrive",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/gdrive.py",
+            "line": 125
+          },
+          "rationale": "Google Drive watch-callback header X-Goog-Resource-State compared against the server-side gdrive_watch_callback_token / literal 'change'; a verification check, not data flowing into any request URL.",
+          "evidence": [
+            "cps/gdrive.py:125 webhook token verification (`!= gdrive_watch_callback_token` aborts)"
+          ]
+        },
+        {
+          "id": "src-082",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.gdrive",
+            "type": "flask.request",
+            "callable": "request.data",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/gdrive.py",
+            "line": 126
+          },
+          "rationale": "Google Drive change-notification webhook (request.data truthiness gate); the token-gated payload supplies only a change id for gdriveutils.getChangeById, whose network endpoints are chosen by the pydrive/Google API library, not by this input.",
+          "evidence": [
+            "cps/gdrive.py:126 watch-callback payload handling",
+            "cps/gdrive.py:136 `gdriveutils.getChangeById(...Gdrive.Instance().drive, j['id'])`"
+          ]
+        },
+        {
+          "id": "src-083",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.gdrive",
+            "type": "flask.request",
+            "callable": "request.headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/gdrive.py",
+            "line": 129
+          },
+          "rationale": "Google Drive change-notification webhook (request.headers debug log); the token-gated payload supplies only a change id for gdriveutils.getChangeById, whose network endpoints are chosen by the pydrive/Google API library, not by this input.",
+          "evidence": [
+            "cps/gdrive.py:129 watch-callback payload handling",
+            "cps/gdrive.py:136 `gdriveutils.getChangeById(...Gdrive.Instance().drive, j['id'])`"
+          ]
+        },
+        {
+          "id": "src-084",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.gdrive",
+            "type": "flask.request",
+            "callable": "request.data",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/gdrive.py",
+            "line": 130
+          },
+          "rationale": "Google Drive change-notification webhook (request.data debug log); the token-gated payload supplies only a change id for gdriveutils.getChangeById, whose network endpoints are chosen by the pydrive/Google API library, not by this input.",
+          "evidence": [
+            "cps/gdrive.py:130 watch-callback payload handling",
+            "cps/gdrive.py:136 `gdriveutils.getChangeById(...Gdrive.Instance().drive, j['id'])`"
+          ]
+        },
+        {
+          "id": "src-085",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.gdrive",
+            "type": "flask.request",
+            "callable": "request.data",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/gdrive.py",
+            "line": 134
+          },
+          "rationale": "Google Drive change-notification webhook (json.loads(request.data)); the token-gated payload supplies only a change id for gdriveutils.getChangeById, whose network endpoints are chosen by the pydrive/Google API library, not by this input.",
+          "evidence": [
+            "cps/gdrive.py:134 watch-callback payload handling",
+            "cps/gdrive.py:136 `gdriveutils.getChangeById(...Gdrive.Instance().drive, j['id'])`"
+          ]
+        },
+        {
+          "id": "src-086",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "flask",
+            "module": "cps.jinjia",
+            "type": "flask.request",
+            "callable": "request.args.items",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/jinjia.py",
+            "line": 46
+          },
+          "rationale": "Template filter url_for_other_page() copies request.args into url_for() for LOCAL pagination links of the same endpoint; renders links, issues no network request.",
+          "evidence": [
+            "cps/jinjia.py:42-48 `for get, val in request.args.items(): args[get] = val; return url_for(request.endpoint, **args)`"
+          ]
+        },
+        {
+          "id": "src-087",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.full_path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 69
+          },
+          "rationale": "Raw request path (request.full_path) of the Kobo blueprint (/kobo/<auth_token>/...): rpartition strips the /kobo/ prefix and the auth-token segment, and the remaining path is concatenated onto the fixed store host inside get_store_url_for_current_request() and used as the outbound proxy URL path (kobo.py:96) / 307 redirect target (kobo.py:110). The attacker fully controls the path/query suffix of the server-side request; the host is pinned to KOBO_STOREAPI_URL.",
+          "evidence": [
+            "cps/kobo.py:69 `request.full_path.rpartition('/kobo/')` inside get_store_url_for_current_request()",
+            "cps/kobo.py:73 `return KOBO_STOREAPI_URL + '/' + request_path`",
+            "cps/kobo.py:55 `KOBO_STOREAPI_URL = 'https://storeapi.kobo.com'"
+          ]
+        },
+        {
+          "id": "src-088",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 89
+          },
+          "rationale": "All inbound request headers (minus Host) are copied into the outbound store request via Headers(request.headers) in make_request_to_kobo_store(). The attacker controls the outbound request's header set (header-injection shape, CWE-113-adjacent) but not its URL; kept as a candidate for recall and human review.",
+          "evidence": [
+            "cps/kobo.py:89-92 `outgoing_headers = Headers(request.headers); outgoing_headers.remove('Host')`",
+            "cps/kobo.py:94-101 headers forwarded into requests.request(...)"
+          ]
+        },
+        {
+          "id": "src-089",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.75,
+          "signature": {
+            "package": "internal",
+            "module": "cps.kobo",
+            "type": null,
+            "callable": "get_store_url_for_current_request",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 96
+          },
+          "rationale": "Internal wrapper return value at the requests.request call site: get_store_url_for_current_request() = fixed host + request-derived path. Modeling this return as a taint step is what makes request.full_path (kobo.py:69) reach the outbound URL argument (kobo.py:96) in Phase 2 taint tracking.",
+          "evidence": [
+            "cps/kobo.py:67-73 wrapper body (request.full_path -> KOBO_STOREAPI_URL + request_path)",
+            "cps/kobo.py:94-96 `requests.request(method=request.method, url=get_store_url_for_current_request(), ...)`"
+          ]
+        },
+        {
+          "id": "src-090",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.get_data",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 98
+          },
+          "rationale": "Raw request body (request.get_data()) is forwarded verbatim as the outbound store request body (data=request.get_data()). Attacker controls the proxied body, not the request target; kept as candidate for recall.",
+          "evidence": [
+            "cps/kobo.py:98 `data=request.get_data()` inside make_request_to_kobo_store()"
+          ]
+        },
+        {
+          "id": "src-091",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.75,
+          "signature": {
+            "package": "internal",
+            "module": "cps.kobo",
+            "type": null,
+            "callable": "get_store_url_for_current_request",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 110
+          },
+          "rationale": "Second materialization of the get_store_url_for_current_request() return, consumed by the 307 redirect on GET requests when config_kobo_proxy is enabled. Same taint-step semantics as the kobo.py:96 occurrence (request.full_path -> fixed-host store URL).",
+          "evidence": [
+            "cps/kobo.py:110 `return redirect(get_store_url_for_current_request(), 307` in redirect_or_proxy_request()"
+          ]
+        },
+        {
+          "id": "src-092",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.65,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 139
+          },
+          "rationale": "Sync-state headers parsed by SyncToken.from_headers (x-kobo-* bookmark timestamps). Values drive sync bookkeeping and are echoed back as sync headers; they never influence the outbound request target.",
+          "evidence": [
+            "cps/kobo.py:139 `sync_token = SyncToken.SyncToken.from_headers(request.headers)`"
+          ]
+        },
+        {
+          "id": "src-093",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 517
+          },
+          "rationale": "Kobo device sync JSON payload (HandleTagCreate shelf 'Name'/'Items') written to the app database (shelves, reading states). Payload data, not URLs; no propagation to any outbound request.",
+          "evidence": [
+            "cps/kobo.py:517 `request.json` sync payload"
+          ]
+        },
+        {
+          "id": "src-094",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 561
+          },
+          "rationale": "Kobo device sync JSON payload (HandleTagUpdate shelf rename 'Name') written to the app database (shelves, reading states). Payload data, not URLs; no propagation to any outbound request.",
+          "evidence": [
+            "cps/kobo.py:561 `request.json` sync payload"
+          ]
+        },
+        {
+          "id": "src-095",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 602
+          },
+          "rationale": "Kobo device sync JSON payload (HandleTagAddItem 'Items') written to the app database (shelves, reading states). Payload data, not URLs; no propagation to any outbound request.",
+          "evidence": [
+            "cps/kobo.py:602 `request.json` sync payload"
+          ]
+        },
+        {
+          "id": "src-096",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 632
+          },
+          "rationale": "Kobo device sync JSON payload (HandleTagRemoveItem 'Items') written to the app database (shelves, reading states). Payload data, not URLs; no propagation to any outbound request.",
+          "evidence": [
+            "cps/kobo.py:632 `request.json` sync payload"
+          ]
+        },
+        {
+          "id": "src-097",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 784
+          },
+          "rationale": "Kobo device sync JSON payload (HandleReadingState bookmark/statistics payload) written to the app database (shelves, reading states). Payload data, not URLs; no propagation to any outbound request.",
+          "evidence": [
+            "cps/kobo.py:784 `request.json` sync payload"
+          ]
+        },
+        {
+          "id": "src-098",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 994
+          },
+          "rationale": "handle_getests() echoes the X-Kobo-userkey header back inside a JSON response; display-only reflection, no URL use.",
+          "evidence": [
+            "cps/kobo.py:994 `testkey = request.headers.get('X-Kobo-userkey','')` -> jsonify response"
+          ]
+        },
+        {
+          "id": "src-099",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.kobo",
+            "type": "flask.request",
+            "callable": "request.get_json",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 1022
+          },
+          "rationale": "make_calibre_web_auth_response() reads request.get_json() only to echo content 'UserKey' into the auth response JSON; no URL use.",
+          "evidence": [
+            "cps/kobo.py:1022 `content = request.get_json()` -> response 'UserKey' echo"
+          ]
+        },
+        {
+          "id": "src-100",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "python-stdlib",
+            "module": "cps.logger",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/logger.py",
+            "line": 126
+          },
+          "rationale": "FLASK_DEBUG is operator-controlled deployment configuration read from the process environment at startup (root log level selection); it never crosses a web-request boundary and never reaches an outbound request URL - none of the 18 extracted outbound-fetch sites in cps/ read this variable.",
+          "evidence": [
+            "cps/logger.py:126 environment read (root log level selection)",
+            "outbound fetch sites verified: cps/helper.py:740, cps/kobo.py:94, cps/metadata_provider/*, cps/updater.py:76/352/378/613, cps/gdriveutils.py:626"
+          ]
+        },
+        {
+          "id": "src-101",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "python-stdlib",
+            "module": "cps.logger",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/logger.py",
+            "line": 207
+          },
+          "rationale": "FLASK_DEBUG is operator-controlled deployment configuration read from the process environment at startup (initial log level); it never crosses a web-request boundary and never reaches an outbound request URL - none of the 18 extracted outbound-fetch sites in cps/ read this variable.",
+          "evidence": [
+            "cps/logger.py:207 environment read (initial log level)",
+            "outbound fetch sites verified: cps/helper.py:740, cps/kobo.py:94, cps/metadata_provider/*, cps/updater.py:76/352/378/613, cps/gdriveutils.py:626"
+          ]
+        },
+        {
+          "id": "src-102",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "internal",
+            "module": "cps.metadata_provider.lubimyczytac",
+            "type": "MetaRecord",
+            "callable": "MetaRecord.url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/metadata_provider/lubimyczytac.py",
+            "line": 203
+          },
+          "rationale": "Second-order network-derived URL: MetaRecord.url is built as LubimyCzytac.BASE_URL + book_url where book_url is an @href extracted from the lubimyczytac.pl search response HTML (line 190). It is re-fetched at line 203 (requests.get(match.url)). No direct web-request input controls it; a compromised/malicious remote response could steer the path (host stays the concat base). Kept as candidate for second-order propagation and human review.",
+          "evidence": [
+            "cps/metadata_provider/lubimyczytac.py:190 `url=LubimyCzytac.BASE_URL + book_url` (book_url from response xpath @href)",
+            "cps/metadata_provider/lubimyczytac.py:203 `response = requests.get(match.url)`"
+          ]
+        },
+        {
+          "id": "src-103",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.oauth_bb",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/oauth_bb.py",
+            "line": 55
+          },
+          "rationale": "oauth_required() checks X-Requested-With to choose a JSON 404 vs abort; control-flow only, value never stored or forwarded to a URL.",
+          "evidence": [
+            "cps/oauth_bb.py:55 `if request.headers.get('X-Requested-With') == 'XMLHttpRequest':`"
+          ]
+        },
+        {
+          "id": "src-104",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "cps.oauth_bb",
+            "type": "flask.request",
+            "callable": "request.referrer",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/oauth_bb.py",
+            "line": 183
+          },
+          "rationale": "unlink_oauth() compares request.referrer against request.host_url + 'me', but the comparison result is discarded (`if ... != ...: pass`) and the referrer is never used as a fetch target. Open-redirect family would be CWE-601 (Pass 9) anyway; out of CWE-918 scope.",
+          "evidence": [
+            "cps/oauth_bb.py:183 `if request.host_url + 'me' != request.referrer: pass` (no-op guard)"
+          ]
+        },
+        {
+          "id": "src-105",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 96
+          },
+          "rationale": "OPDS search term ('query') for feed_normal_search(); the term feeds the local calibre DB search (calibre_db.get_search_results) and the feed template. No outbound fetch, no metadata-provider dispatch (that is /metadata/search in search_metadata.py).",
+          "evidence": [
+            "cps/opds.py:93-96 `feed_search(request.args.get('query', '').strip())`",
+            "cps/opds.py:520-526 feed_search -> calibre_db.get_search_results(term)"
+          ]
+        },
+        {
+          "id": "src-106",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 103
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:103 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-107",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 127
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:127 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-108",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 140
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:140 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-109",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 158
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:158 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-110",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 168
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:168 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-111",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 191
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:191 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-112",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 216
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:216 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-113",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 231
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:231 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-114",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 242
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:242 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-115",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 257
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:257 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-116",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 269
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:269 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-117",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 292
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:292 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-118",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 309
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:309 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-119",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 321
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:321 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-120",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 343
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:343 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-121",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 360
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:360 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-122",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 371
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:371 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-123",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 391
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:391 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-124",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 402
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:402 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-125",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 419
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:419 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-126",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 431
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:431 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-127",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 446
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:446 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-128",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 457
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:457 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-129",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 468
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:468 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-130",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 499
+          },
+          "rationale": "opds_download_link() reads User-Agent only to set the 'kobo' client flag for get_download_link; not used in any URL.",
+          "evidence": [
+            "cps/opds.py:499 `if 'Kobo' in request.headers.get('User-Agent'):`"
+          ]
+        },
+        {
+          "id": "src-131",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 541
+          },
+          "rationale": "check_auth() reads X-Forwarded-For solely to log failed OPDS logins; log-only use.",
+          "evidence": [
+            "cps/opds.py:541 `ip_Address = request.headers.get('X-Forwarded-For', request.remote_addr)` -> log.warning"
+          ]
+        },
+        {
+          "id": "src-132",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 574
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:574 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-133",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.opds",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/opds.py",
+            "line": 582
+          },
+          "rationale": "OPDS feed pagination parameter ('offset') on a @requires_basic_auth_if_no_ano handler; cast to int and used only as a DB query offset/limit for local feed rendering. Never reaches a request URL.",
+          "evidence": [
+            "cps/opds.py:582 `off = request.args.get('offset') or 0` -> calibre_db.fill_indexpage / query offset"
+          ]
+        },
+        {
+          "id": "src-134",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "cps.redirect",
+            "type": "flask.request",
+            "callable": "request.values.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/redirect.py",
+            "line": 43
+          },
+          "rationale": "Redirect-target candidate (request.values.get('next')) consumed only as a Flask redirect() target after is_safe_url() same-origin validation (scheme http/https and netloc equal to request.host_url). This is the open-redirect family (CWE-601, Pass 9), not a server-side request forgery path; the same-origin check is the effective guard there and is recorded as a sanitizer-shaped advisory.",
+          "evidence": [
+            "cps/redirect.py:43 redirect target read",
+            "cps/redirect.py:36-39 `is_safe_url`: urlparse/urljoin netloc comparison against request.host_url"
+          ]
+        },
+        {
+          "id": "src-135",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "cps.redirect",
+            "type": "flask.request",
+            "callable": "request.referrer",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/redirect.py",
+            "line": 43
+          },
+          "rationale": "Redirect-target candidate (request.referrer) consumed only as a Flask redirect() target after is_safe_url() same-origin validation (scheme http/https and netloc equal to request.host_url). This is the open-redirect family (CWE-601, Pass 9), not a server-side request forgery path; the same-origin check is the effective guard there and is recorded as a sanitizer-shaped advisory.",
+          "evidence": [
+            "cps/redirect.py:43 redirect target read",
+            "cps/redirect.py:36-39 `is_safe_url`: urlparse/urljoin netloc comparison against request.host_url"
+          ]
+        },
+        {
+          "id": "src-136",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "cps.redirect",
+            "type": "flask.request",
+            "callable": "request.form[]",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/redirect.py",
+            "line": 51
+          },
+          "rationale": "Redirect-target candidate (request.form['next']) consumed only as a Flask redirect() target after is_safe_url() same-origin validation (scheme http/https and netloc equal to request.host_url). This is the open-redirect family (CWE-601, Pass 9), not a server-side request forgery path; the same-origin check is the effective guard there and is recorded as a sanitizer-shaped advisory.",
+          "evidence": [
+            "cps/redirect.py:51 redirect target read",
+            "cps/redirect.py:36-39 `is_safe_url`: urlparse/urljoin netloc comparison against request.host_url"
+          ]
+        },
+        {
+          "id": "src-137",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.remotelogin",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/remotelogin.py",
+            "line": 48
+          },
+          "rationale": "remote_login_required() checks X-Requested-With for a JSON 403 vs abort; control-flow only.",
+          "evidence": [
+            "cps/remotelogin.py:48 `if request.headers.get('X-Requested-With') == 'XMLHttpRequest':`"
+          ]
+        },
+        {
+          "id": "src-138",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.remotelogin",
+            "type": "flask.request",
+            "callable": "request.form[]",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/remotelogin.py",
+            "line": 103
+          },
+          "rationale": "token_verified() reads the remote-login token from the form and looks it up in the RemoteAuthToken table; DB lookup, no URL semantics.",
+          "evidence": [
+            "cps/remotelogin.py:103 `token = request.form['token']` -> ub.RemoteAuthToken query"
+          ]
+        },
+        {
+          "id": "src-139",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.search_metadata",
+            "type": "flask.request",
+            "callable": "request.get_json",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/search_metadata.py",
+            "line": 92
+          },
+          "rationale": "JSON body of POST /metadata/provider (metadata_change_active_provider, @login_required): new_state.get('query') is forwarded to provider.search() (line 109) whose implementations embed the query into outbound metadata-provider URLs. Any authenticated user reaches this boundary - a genuine untrusted input boundary, not an internal wrapper parameter.",
+          "evidence": [
+            "cps/search_metadata.py:88-92 route + `new_state = request.get_json()`",
+            "cps/search_metadata.py:109 `data = provider.search(new_state.get('query', ''))`"
+          ]
+        },
+        {
+          "id": "src-140",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "package": "internal",
+            "module": "cps.search_metadata",
+            "type": "cps.services.Metadata",
+            "callable": "Metadata.search",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/search_metadata.py",
+            "line": 109
+          },
+          "rationale": "Call-site dispatch of the user query into the provider .search() implementations (argument 0). Not a formal source (internal wrapper argument per the pass rubric); modeled as a taint step so request-derived query text propagates into the provider-side URL constructions for Phase 2.",
+          "evidence": [
+            "cps/search_metadata.py:109 `provider.search(new_state.get('query', ''))`",
+            "providers: cps/metadata_provider/{google,comicvine,lubimyczytac,amazon,scholar}.py search()"
+          ]
+        },
+        {
+          "id": "src-141",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.search_metadata",
+            "type": "flask.request",
+            "callable": "request.form.to_dict().get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/search_metadata.py",
+            "line": 119
+          },
+          "rationale": "POST /metadata/search (metadata_search, @login_required) form field 'query': the metadata-search boundary. The value is dispatched to all active provider .search() calls via the thread pool (line 128), reaching the provider URL constructions.",
+          "evidence": [
+            "cps/search_metadata.py:119 `query = request.form.to_dict().get('query')`",
+            "cps/search_metadata.py:126-131 `executor.submit(c.search, query, static_cover, locale)`"
+          ]
+        },
+        {
+          "id": "src-142",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.search_metadata",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/search_metadata.py",
+            "line": 119
+          },
+          "rationale": "Form dictionary read underlying the 'query' field of /metadata/search (same boundary as the chained .get at line 119); retained because the CSV records the to_dict() return itself.",
+          "evidence": [
+            "cps/search_metadata.py:119 `request.form.to_dict()` -> `.get('query')`"
+          ]
+        },
+        {
+          "id": "src-143",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "package": "internal",
+            "module": "cps.search_metadata",
+            "type": "cps.services.Metadata",
+            "callable": "Metadata.search",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/search_metadata.py",
+            "line": 128
+          },
+          "rationale": "Thread-pool dispatch of the user query as argument 0 of each provider's c.search (executor.submit(c.search, query, ...)). Taint-step modeling of query propagation into provider search implementations; internal wrapper argument, not a source.",
+          "evidence": [
+            "cps/search_metadata.py:128 `executor.submit(c.search, query, static_cover, locale)`"
+          ]
+        },
+        {
+          "id": "src-144",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "python-stdlib",
+            "module": "cps.server",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/server.py",
+            "line": 117
+          },
+          "rationale": "CALIBRE_UNIX_SOCKET is operator-controlled deployment configuration read from the process environment at startup (gevent unix socket path); it never crosses a web-request boundary and never reaches an outbound request URL - none of the 18 extracted outbound-fetch sites in cps/ read this variable.",
+          "evidence": [
+            "cps/server.py:117 environment read (gevent unix socket path)",
+            "outbound fetch sites verified: cps/helper.py:740, cps/kobo.py:94, cps/metadata_provider/*, cps/updater.py:76/352/378/613, cps/gdriveutils.py:626"
+          ]
+        },
+        {
+          "id": "src-145",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.shelf",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/shelf.py",
+            "line": 62
+          },
+          "rationale": "X-Requested-With check selecting an AJAX (JSON) vs HTML error response for add_to_shelf/remove_from_shelf; control-flow only.",
+          "evidence": [
+            "cps/shelf.py:62 `xhr = request.headers.get('X-Requested-With') == 'XMLHttpRequest'`"
+          ]
+        },
+        {
+          "id": "src-146",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.shelf",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/shelf.py",
+            "line": 170
+          },
+          "rationale": "X-Requested-With check selecting an AJAX (JSON) vs HTML error response for add_to_shelf/remove_from_shelf; control-flow only.",
+          "evidence": [
+            "cps/shelf.py:170 `xhr = request.headers.get('X-Requested-With') == 'XMLHttpRequest'`"
+          ]
+        },
+        {
+          "id": "src-147",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.shelf",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/shelf.py",
+            "line": 246
+          },
+          "rationale": "Shelf management form (create_edit_shelf form: shelf title/visibility/kobo_sync flags) written to the app DB; no URL semantics, no outbound propagation.",
+          "evidence": [
+            "cps/shelf.py:246 `to_save = request.form.to_dict()`"
+          ]
+        },
+        {
+          "id": "src-148",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.shelf",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/shelf.py",
+            "line": 367
+          },
+          "rationale": "Shelf management form (order_shelf form: book order values) written to the app DB; no URL semantics, no outbound propagation.",
+          "evidence": [
+            "cps/shelf.py:367 `to_save = request.form.to_dict()`"
+          ]
+        },
+        {
+          "id": "src-149",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.usermanagement",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/usermanagement.py",
+            "line": 57
+          },
+          "rationale": "Authentication header (reverse-proxy login header (config-gated auth)) consumed by load_user_from_request to log a user in; credential material, never a fetch target.",
+          "evidence": [
+            "cps/usermanagement.py:57 `request.headers.get(...)` in the flask-login request loader"
+          ]
+        },
+        {
+          "id": "src-150",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.usermanagement",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/usermanagement.py",
+            "line": 64
+          },
+          "rationale": "Authentication header (Authorization header parsed for basic/bearer login) consumed by load_user_from_request to log a user in; credential material, never a fetch target.",
+          "evidence": [
+            "cps/usermanagement.py:64 `request.headers.get(...)` in the flask-login request loader"
+          ]
+        },
+        {
+          "id": "src-151",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.form[]",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 138
+          },
+          "rationale": "bookmark() form field 'bookmark' (reading position key) stored on ub.Bookmark; DB value, not a URL.",
+          "evidence": [
+            "cps/web.py:138 `bookmark_key = request.form['bookmark']` -> ub.Bookmark merge"
+          ]
+        },
+        {
+          "id": "src-152",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.get_json",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 177
+          },
+          "rationale": "update_view() JSON body: per-user view settings persisted via current_user.set_view_property; display configuration, not URL data.",
+          "evidence": [
+            "cps/web.py:177 `to_save = request.get_json()`"
+          ]
+        },
+        {
+          "id": "src-153",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 242
+          },
+          "rationale": "Catalog typeahead/search parameter (typeahead 'q' author filter) used in local calibre DB LIKE/ID filters; never reaches a request URL.",
+          "evidence": [
+            "cps/web.py:242 local DB filter parameter"
+          ]
+        },
+        {
+          "id": "src-154",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 248
+          },
+          "rationale": "Catalog typeahead/search parameter (typeahead 'q' publisher filter) used in local calibre DB LIKE/ID filters; never reaches a request URL.",
+          "evidence": [
+            "cps/web.py:248 local DB filter parameter"
+          ]
+        },
+        {
+          "id": "src-155",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 254
+          },
+          "rationale": "Catalog typeahead/search parameter (typeahead 'q' tag filter) used in local calibre DB LIKE/ID filters; never reaches a request URL.",
+          "evidence": [
+            "cps/web.py:254 local DB filter parameter"
+          ]
+        },
+        {
+          "id": "src-156",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 260
+          },
+          "rationale": "Catalog typeahead/search parameter (typeahead 'q' series filter) used in local calibre DB LIKE/ID filters; never reaches a request URL.",
+          "evidence": [
+            "cps/web.py:260 local DB filter parameter"
+          ]
+        },
+        {
+          "id": "src-157",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 266
+          },
+          "rationale": "Catalog typeahead/search parameter (language typeahead 'q') used in local calibre DB LIKE/ID filters; never reaches a request URL.",
+          "evidence": [
+            "cps/web.py:266 local DB filter parameter"
+          ]
+        },
+        {
+          "id": "src-158",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 283
+          },
+          "rationale": "Catalog typeahead/search parameter (get_matching_tags 'author_name') used in local calibre DB LIKE/ID filters; never reaches a request URL.",
+          "evidence": [
+            "cps/web.py:283 local DB filter parameter"
+          ]
+        },
+        {
+          "id": "src-159",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 284
+          },
+          "rationale": "Catalog typeahead/search parameter (get_matching_tags 'book_title') used in local calibre DB LIKE/ID filters; never reaches a request URL.",
+          "evidence": [
+            "cps/web.py:284 local DB filter parameter"
+          ]
+        },
+        {
+          "id": "src-160",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.getlist",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 285
+          },
+          "rationale": "Catalog typeahead/search parameter (get_matching_tags 'include_tag' list) used in local calibre DB LIKE/ID filters; never reaches a request URL.",
+          "evidence": [
+            "cps/web.py:285 local DB filter parameter"
+          ]
+        },
+        {
+          "id": "src-161",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.getlist",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 286
+          },
+          "rationale": "Catalog typeahead/search parameter (get_matching_tags 'exclude_tag' list) used in local calibre DB LIKE/ID filters; never reaches a request URL.",
+          "evidence": [
+            "cps/web.py:286 local DB filter parameter"
+          ]
+        },
+        {
+          "id": "src-162",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 369
+          },
+          "rationale": "Local catalog search term ('query') rendered through render_search_results against the local DB. Distinct from the metadata-provider search in search_metadata.py; no outbound fetch here.",
+          "evidence": [
+            "cps/web.py:369 `term = (request.args.get('query') or '')` -> render_search_results"
+          ]
+        },
+        {
+          "id": "src-163",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 743
+          },
+          "rationale": "Book-table AJAX parameter (index 'sort') for the local book listing; DB query shaping only, no URL propagation.",
+          "evidence": [
+            "cps/web.py:743 list_books() table parameter"
+          ]
+        },
+        {
+          "id": "src-164",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 767
+          },
+          "rationale": "Book-table AJAX parameter (list_books 'offset') for the local book listing; DB query shaping only, no URL propagation.",
+          "evidence": [
+            "cps/web.py:767 list_books() table parameter"
+          ]
+        },
+        {
+          "id": "src-165",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 768
+          },
+          "rationale": "Book-table AJAX parameter (list_books 'limit') for the local book listing; DB query shaping only, no URL propagation.",
+          "evidence": [
+            "cps/web.py:768 list_books() table parameter"
+          ]
+        },
+        {
+          "id": "src-166",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 769
+          },
+          "rationale": "Book-table AJAX parameter (list_books 'search') for the local book listing; DB query shaping only, no URL propagation.",
+          "evidence": [
+            "cps/web.py:769 list_books() table parameter"
+          ]
+        },
+        {
+          "id": "src-167",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 770
+          },
+          "rationale": "Book-table AJAX parameter (list_books 'sort') for the local book listing; DB query shaping only, no URL propagation.",
+          "evidence": [
+            "cps/web.py:770 list_books() table parameter"
+          ]
+        },
+        {
+          "id": "src-168",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 771
+          },
+          "rationale": "Book-table AJAX parameter (list_books 'order') for the local book listing; DB query shaping only, no URL propagation.",
+          "evidence": [
+            "cps/web.py:771 list_books() table parameter"
+          ]
+        },
+        {
+          "id": "src-169",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 776
+          },
+          "rationale": "Book-table AJAX parameter (list_books 'state' JSON) for the local book listing; DB query shaping only, no URL propagation.",
+          "evidence": [
+            "cps/web.py:776 list_books() table parameter"
+          ]
+        },
+        {
+          "id": "src-170",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.data",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 864
+          },
+          "rationale": "update_table_settings() raw body: table view-settings JSON stored on current_user.",
+          "evidence": [
+            "cps/web.py:864 `current_user.view_settings['table'] = json.loads(request.data)`"
+          ]
+        },
+        {
+          "id": "src-171",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1079
+          },
+          "rationale": "search() reads 'query' only to redirect to the local books_list search view; local navigation, not a fetch.",
+          "evidence": [
+            "cps/web.py:1079-1081 `term = request.args.get('query')` -> redirect(url_for('web.books_list', ...))"
+          ]
+        },
+        {
+          "id": "src-172",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.form",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1093
+          },
+          "rationale": "advanced_search() form values serialized into flask_session['query'] for the local advanced search; DB filter data.",
+          "evidence": [
+            "cps/web.py:1093-1098 `values = dict(request.form)` -> flask_session['query']"
+          ]
+        },
+        {
+          "id": "src-173",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.form.getlist",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1097
+          },
+          "rationale": "advanced_search() include/exclude tag/series/shelf lists appended to the session query; same local-search usage.",
+          "evidence": [
+            "cps/web.py:1097 `values[param] = list(request.form.getlist(param))`"
+          ]
+        },
+        {
+          "id": "src-174",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1461
+          },
+          "rationale": "download_link() reads User-Agent to set the 'kobo' client flag for get_download_link; not URL data.",
+          "evidence": [
+            "cps/web.py:1461 `client = 'kobo' if 'Kobo' in request.headers.get('User-Agent') else ''`"
+          ]
+        },
+        {
+          "id": "src-175",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1502
+          },
+          "rationale": "register() form: new-account nickname/email/password fields validated and stored in the user DB; no URL semantics.",
+          "evidence": [
+            "cps/web.py:1502 `to_save = request.form.to_dict()` -> check_username/check_email"
+          ]
+        },
+        {
+          "id": "src-176",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1552
+          },
+          "rationale": "login() form: username/password/remember_me used for local or LDAP authentication; credential data, not fetch targets.",
+          "evidence": [
+            "cps/web.py:1552 `form = request.form.to_dict()` -> check_password_hash / ldap.bind_user"
+          ]
+        },
+        {
+          "id": "src-177",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1577
+          },
+          "rationale": "X-Forwarded-For read only to log failed login attempts; log-only use.",
+          "evidence": [
+            "cps/web.py:1577 `ip_Address = request.headers.get('X-Forwarded-For', request.remote_addr)` -> log.warning"
+          ]
+        },
+        {
+          "id": "src-178",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1581
+          },
+          "rationale": "X-Forwarded-For read only to log failed login attempts; log-only use.",
+          "evidence": [
+            "cps/web.py:1581 `ip_Address = request.headers.get('X-Forwarded-For', request.remote_addr)` -> log.warning"
+          ]
+        },
+        {
+          "id": "src-179",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1606
+          },
+          "rationale": "'next' argument rendered into the login template for post-login navigation; open-redirect family (CWE-601, Pass 9), not a server-side fetch. Out of CWE-918 scope for this pass.",
+          "evidence": [
+            "cps/web.py:1606 `next_url = request.args.get('next', default=url_for('web.index'), type=str)`"
+          ]
+        },
+        {
+          "id": "src-180",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.form.to_dict",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1631
+          },
+          "rationale": "Profile form (change_profile): password/email/kindle_mail/locale fields validated and stored on current_user; no URL semantics.",
+          "evidence": [
+            "cps/web.py:1631 `to_save = request.form.to_dict()`"
+          ]
+        },
+        {
+          "id": "src-181",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "cps.web",
+            "type": "flask.request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "cps/web.py",
+            "line": 1808
+          },
+          "rationale": "show_book() reads X-Requested-With to set the is_xhr template flag; display logic only.",
+          "evidence": [
+            "cps/web.py:1808 `is_xhr=request.headers.get('X-Requested-With')=='XMLHttpRequest'`"
+          ]
+        },
+        {
+          "id": "snk-001",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "cps.metadata_provider.amazon",
+            "type": "requests.Session",
+            "callable": "requests.Session.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/metadata_provider/amazon.py",
+            "line": 53
+          },
+          "rationale": "Amazon provider detail fetch: session.get(f'https://www.amazon.com/{link}') where link is an <a href> scraped from the Amazon search-response HTML (second-order network-derived path, not URL-encoded). Host pinned to www.amazon.com by the f-string prefix, so scheme/host are not attacker-controlled; a malicious remote response could steer path/query. Kept as candidate for recall; contextual review should treat host-pinned second-order paths as likely FP.",
+          "evidence": [
+            "cps/metadata_provider/amazon.py:53 `r = session.get(f'https://www.amazon.com/{link}')`",
+            "cps/metadata_provider/amazon.py:116-119 link extracted from search response soup hrefs"
+          ]
+        },
+        {
+          "id": "snk-002",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "cps.metadata_provider.amazon",
+            "type": "requests.Session",
+            "callable": "requests.Session.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/metadata_provider/amazon.py",
+            "line": 110
+          },
+          "rationale": "Amazon provider search fetch: session.get(f'https://www.amazon.com/s?k={query...}') embeds the raw user search text (only spaces replaced by '+') into the query string of a fixed-host URL. Users can inject additional query parameters ('&', '=') but not change scheme/host/port. Reached from /metadata/search by any authenticated user.",
+          "evidence": [
+            "cps/metadata_provider/amazon.py:110-113 f-string search URL with unencoded query",
+            "cps/search_metadata.py:119,128 query dispatch into provider.search()"
+          ]
+        },
+        {
+          "id": "snk-003",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "requests",
+            "module": "cps.metadata_provider.comicvine",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/metadata_provider/comicvine.py",
+            "line": 49
+          },
+          "rationale": "ComicVine provider search fetch: fixed BASE_URL (comicvine.gamespot.com/api/search) with the query tokenized and quote()-percent-encoded, joined by '%20'. Host and scheme are pinned by constants; encoding prevents path/query breakout. Retained as candidate sink for recall; expected FP at contextual triage (host-pinned, encoded).",
+          "evidence": [
+            "cps/metadata_provider/comicvine.py:47-50 quote()-encoded tokens into f-string URL",
+            "cps/metadata_provider/comicvine.py:33-36 fixed BASE_URL constant"
+          ]
+        },
+        {
+          "id": "snk-004",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "internal",
+            "module": "cps.editbooks",
+            "type": "cps.helper",
+            "callable": "helper.save_cover_from_url",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/editbooks.py",
+            "line": 808
+          },
+          "rationale": "Wrapper call site of the cover-URL fetch: helper.save_cover_from_url(to_save[\"cover_url\"], book.path) with argument 0 being the fully attacker-supplied 'cover_url' POST-form value. Reachable by an authenticated user with edit+upload role (@login_required_if_no_ano + @edit_required + current_user.role_upload()); the value reaches requests.get (cps/helper.py:740) subject only to the conditional localhost guard. This is the primary CWE-918-shaped flow of the project.",
+          "evidence": [
+            "cps/editbooks.py:808 `result, error = helper.save_cover_from_url(to_save['cover_url'], book.path)`",
+            "cps/editbooks.py:749-751,802-804 route + role gates",
+            "cps/helper.py:732-742 wrapper: conditional localhost check then requests.get(url)"
+          ]
+        },
+        {
+          "id": "snk-005",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "httplib2",
+            "module": "cps.gdriveutils",
+            "type": "httplib2.Http",
+            "callable": "Get_Http_Object.request",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/gdriveutils.py",
+            "line": 626
+          },
+          "rationale": "Google Drive chunked download via pydrive's httplib2 transport: download_url comes from df.metadata (Google Drive API file metadata for the admin-configured Drive account), a second-order network-derived value with no web-request input influence. Fixed Google endpoints expected. Lowest-confidence sink; flagged for human review.",
+          "evidence": [
+            "cps/gdriveutils.py:620 `download_url = df.metadata.get('downloadUrl')`",
+            "cps/gdriveutils.py:626 `df.auth.Get_Http_Object().request(download_url, headers=headers)`"
+          ]
+        },
+        {
+          "id": "snk-006",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "requests",
+            "module": "cps.metadata_provider.google",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/metadata_provider/google.py",
+            "line": 48
+          },
+          "rationale": "Google Books provider search fetch: fixed SEARCH_URL host (www.googleapis.com/books/v1) with quote()-encoded, '+'-joined query tokens. Host/scheme pinned; encoding prevents breakout. Candidate sink for recall; expected FP at contextual triage.",
+          "evidence": [
+            "cps/metadata_provider/google.py:46-48 `results = requests.get(Google.SEARCH_URL + query)`",
+            "cps/metadata_provider/google.py:35 SEARCH_URL constant"
+          ]
+        },
+        {
+          "id": "snk-007",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "requests",
+            "module": "cps.helper",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/helper.py",
+            "line": 740
+          },
+          "rationale": "The concrete outbound fetch of save_cover_from_url: requests.get(url, timeout=(10, 200)) with url = the attacker-supplied cover_url form value. The guard in cps/helper.py:734-739 is partial: (a) skipped entirely when cli.allow_localhost is set, (b) inspects only the FIRST socket.getaddrinfo result (DNS-rebinding bypass), (c) requests follows redirects by default (allow_redirects not disabled), so a public URL redirecting to an internal target bypasses it. Sink role is genuine: request target fully attacker-chosen.",
+          "evidence": [
+            "cps/helper.py:740 `img = requests.get(url, timeout=(10, 200))`",
+            "cps/helper.py:734-739 conditional first-getaddrinfo-result localhost check",
+            "cps/editbooks.py:808 sole caller with to_save['cover_url']"
+          ]
+        },
+        {
+          "id": "snk-008",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "requests",
+            "module": "cps.kobo",
+            "type": "requests",
+            "callable": "requests.request",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 96
+          },
+          "rationale": "Kobo store proxy fetch: requests.request(method=request.method, url=get_store_url_for_current_request(), headers=..., data=request.get_data(), allow_redirects=False, timeout=(2,10)). Host pinned to KOBO_STOREAPI_URL; the path suffix is derived from request.full_path, and ALL inbound headers (minus Host) plus body are forwarded. Partial CWE-918 shape (path/control on fixed host + verbatim header forwarding). CSV recorded the url= keyword with arg_index -1; normalized to arg_index 1 (requests.request(method, url, ...) positional index of url). Reachable - several routes funneling here (e.g. /v1/products/*, kobo.py:1014) carry no @requires_kobo_auth, though the proxy is enabled only by the admin config_kobo_proxy flag.",
+          "evidence": [
+            "cps/kobo.py:94-101 `requests.request(method=request.method, url=get_store_url_for_current_request(), ...)`",
+            "cps/kobo.py:55,73 fixed host KOBO_STOREAPI_URL + request-derived path",
+            "cps/kobo.py:1014-1016 HandleProductsRequest -> redirect_or_proxy_request() without @requires_kobo_auth"
+          ]
+        },
+        {
+          "id": "snk-009",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "internal",
+            "module": "cps.kobo",
+            "type": "cps.kobo",
+            "callable": "make_request_to_kobo_store",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 114
+          },
+          "rationale": "Wrapper-invocation sink: redirect_or_proxy_request() calls make_request_to_kobo_store() for non-GET methods when config.config_kobo_proxy is enabled; the network I/O happens inside the wrapper at kobo.py:94 with the request.full_path-derived URL and forwarded headers/body. CSV flow_kind 'call' normalized to 'unknown' (not in the schema enum). Same host-pinned/path-controlled shape as snk-008.",
+          "evidence": [
+            "cps/kobo.py:114 `store_response = make_request_to_kobo_store()`",
+            "cps/kobo.py:107-124 redirect_or_proxy_request() gating on config.config_kobo_proxy"
+          ]
+        },
+        {
+          "id": "snk-010",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "internal",
+            "module": "cps.kobo",
+            "type": "cps.kobo",
+            "callable": "make_request_to_kobo_store",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 330
+          },
+          "rationale": "Wrapper-invocation sink from generate_sync_response() during Kobo library sync: merges official-store sync results when config_kobo_proxy is enabled. Requires @requires_kobo_auth + @download_required (HandleSyncRequest), so only an authenticated Kobo device reaches it; host pinned. Candidate for recall.",
+          "evidence": [
+            "cps/kobo.py:330 `store_response = make_request_to_kobo_store(sync_token)`",
+            "cps/kobo.py:135-138 HandleSyncRequest auth decorators"
+          ]
+        },
+        {
+          "id": "snk-011",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "internal",
+            "module": "cps.kobo",
+            "type": "cps.kobo",
+            "callable": "make_request_to_kobo_store",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "cps/kobo.py",
+            "line": 1059
+          },
+          "rationale": "Wrapper-invocation sink from HandleInitRequest (/v1/initialization, @requires_kobo_auth): fetches store resources when config_kobo_proxy is enabled. Same fixed-host, request-path-derived URL as snk-008.",
+          "evidence": [
+            "cps/kobo.py:1059 `store_response = make_request_to_kobo_store()`",
+            "cps/kobo.py:1051-1053 route + auth decorators"
+          ]
+        },
+        {
+          "id": "snk-012",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "requests",
+            "module": "cps.metadata_provider.lubimyczytac",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/metadata_provider/lubimyczytac.py",
+            "line": 115
+          },
+          "rationale": "LubimyCzytac provider search fetch: _prepare_query() strips ?()/\\ characters, quote()-percent-encodes tokens and concatenates onto the fixed BASE_URL (https://lubimyczytac.pl/szukaj/ksiazki?phrase=...). Host pinned; encoding prevents breakout. Candidate sink for recall; expected FP at contextual triage.",
+          "evidence": [
+            "cps/metadata_provider/lubimyczytac.py:115 `result = requests.get(self._prepare_query(title=query))`",
+            "cps/metadata_provider/lubimyczytac.py:128-148 regex cleanup + quote() + fixed BASE_URL"
+          ]
+        },
+        {
+          "id": "snk-013",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "requests",
+            "module": "cps.metadata_provider.lubimyczytac",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/metadata_provider/lubimyczytac.py",
+            "line": 203
+          },
+          "rationale": "LubimyCzytac detail fetch of a second-order URL: requests.get(match.url) where match.url = BASE_URL + book_url scraped from the search-response HTML. Host is pinned by string concatenation, but the path comes from the remote response - the classic second-order SSRF shape (needs a malicious/compromised remote). Paired with source candidate src-102 (MetaRecord.url at the same line).",
+          "evidence": [
+            "cps/metadata_provider/lubimyczytac.py:203 `response = requests.get(match.url)`",
+            "cps/metadata_provider/lubimyczytac.py:190 `url=LubimyCzytac.BASE_URL + book_url` (response xpath)"
+          ]
+        },
+        {
+          "id": "snk-014",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {
+            "package": "scholarly",
+            "module": "cps.metadata_provider.scholar",
+            "type": "scholarly",
+            "callable": "scholarly.search_pubs",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/metadata_provider/scholar.py",
+            "line": 47
+          },
+          "rationale": "scholarly.search_pubs(query) takes a search phrase, not a URL: the query is tokenized and quote()-encoded (scholar.py:45-46) and the actual HTTP requests are issued inside the external scholarly package to scholar.google.com endpoints chosen by the library. No attacker-controllable URL argument position exists, so this is not a CWE-918 sink; retained in the audit trail because the CSV extracted it.",
+          "evidence": [
+            "cps/metadata_provider/scholar.py:47 `scholarly.search_pubs(query)` with quote()-encoded tokens",
+            "network I/O inside the scholarly package (not in this CodeQL database)"
+          ]
+        },
+        {
+          "id": "snk-015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "requests",
+            "module": "cps.updater",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/updater.py",
+            "line": 76
+          },
+          "rationale": "Updater package download: _get_request_path() returns the constant _REPOSITORY_API_URL + '/zipball/master' or self.updateFile, which is set only from 'zipball_url' values echoed out of earlier GitHub API responses for the calibre-web repository (updater.py:483-517). Operator-triggered background thread (admin UI 'start' flag); no web-user input reaches the URL.",
+          "evidence": [
+            "cps/updater.py:595-596 `_get_request_path` -> _REPOSITORY_API_URL + '/zipball/master' or self.updateFile",
+            "cps/updater.py:38 constant; cps/updater.py:483-517 updateFile = commit[i]['zipball_url'] (GitHub API JSON)"
+          ]
+        },
+        {
+          "id": "snk-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "requests",
+            "module": "cps.updater",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/updater.py",
+            "line": 352
+          },
+          "rationale": "Updater parent-commit walk: requests.get(parent_commit['url']) where the URL is echoed from earlier GitHub API responses of the pinned calibre-web repository - second-order, origin-pinned (api.github.com), with no web-user influence on the value.",
+          "evidence": [
+            "cps/updater.py:352 `r = requests.get(parent_commit['url'], ...)` (parent_commit from update_data['parents'][0])"
+          ]
+        },
+        {
+          "id": "snk-017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "requests",
+            "module": "cps.updater",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/updater.py",
+            "line": 378
+          },
+          "rationale": "Updater commit fetch: repository_url is the _REPOSITORY_API_URL constant (assigned at updater.py:420/525) and the sha comes from the GitHub API response; fixed host api.github.com, no web-user input.",
+          "evidence": [
+            "cps/updater.py:378 `requests.get(repository_url + '/git/commits/' + commit['object']['sha'], ...)`",
+            "cps/updater.py:420,525 `repository_url = _REPOSITORY_API_URL[ + '/releases...']`"
+          ]
+        },
+        {
+          "id": "snk-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "requests",
+            "module": "cps.updater",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "cps/updater.py",
+            "line": 613
+          },
+          "rationale": "Updater remote-data load: requests.get(repository_url) with repository_url = constant + '/git/refs/heads/master' (line 421) or '/releases?per_page=100' (line 526). Fully constant-derived target.",
+          "evidence": [
+            "cps/updater.py:613 `r = requests.get(repository_url, headers=headers, timeout=10)`",
+            "cps/updater.py:421,526 constant-derived repository_url"
+          ]
+        }
+      ]
+    }
+  ]
+}

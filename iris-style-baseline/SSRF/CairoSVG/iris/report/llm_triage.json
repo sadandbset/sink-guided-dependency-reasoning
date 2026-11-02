@@ -1,0 +1,163 @@
+{
+  "triage_metadata": {
+    "task": "Augur IRIS Pass 3 CWE-918 正式结果独立 LLM 路径复核 + 真实漏洞未命中原因分析",
+    "date": "2026-10-19",
+    "reviewer_model": "glm-5.3 (independent LLM path re-review, Claude Code CLI agent)",
+    "target_rule_id": "py/augur/cairosvg/pass3-ssrf",
+    "inputs_reviewed": [
+      "results/pass3.sarif",
+      "report/iris_report.md",
+      "labels/labels.json",
+      "report/query_generation_notes.md",
+      "queries/Pass3_SSRF.ql",
+      "libraries/MySources.qll",
+      "libraries/MySinks.qll",
+      "libraries/MySanitizers.qll",
+      "libraries/MySummaries.qll",
+      "extraction/sinks.ql + extraction/sinks.csv",
+      "数据库源码快照 58be378(漏洞版本,含 12d31c6 修复前代码): cairosvg/url.py, image.py, parser.py, defs.py, css.py, bounding_box.py, surface.py, __init__.py, __main__.py"
+    ],
+    "constraints_respected": [
+      "未修改 results/pass3.sarif、labels/labels.json、queries/Pass3_SSRF.ql 及 libraries/*.qll(全部只读)",
+      "未读取 PyVul 真值:数据库父目录中的 CVE-Report-CairoSVG-SSRF.md、ssrf_vulnerability_report.md、ssrf_sinks.csv/json 均未打开;本分析使用的修复提交信息(12d31c6)来自操作者提示内嵌文本",
+      "所有复核性查询与输出写入独立目录 llm_triage_scratch/(诊断性质,不计入正式结果)",
+      "诊断查询(WrapperChainDiagnostic.ql)结果不计入正式 TP;本轮亦未引入任何可选原生 CodeQL SSRF 基线查询结果"
+    ]
+  },
+
+  "formal_alerts_review": {
+    "sarif_run_status": "invocations[0].executionSuccessful = true(CodeQL 分析成功执行)",
+    "sarif_result_count": 0,
+    "sarif_notifications": "仅含遥测类通知(py/baseline/expected-extracted-files、js/baseline/expected-extracted-files、cli/file-coverage-baseline、cli/platform),全部 level=none;不存在任何解析诊断类告警结果,更无正式 CWE-918 告警",
+    "mandatory_statement": "CodeQL 分析成功，但本轮没有命中正式 SSRF 污点路径。",
+    "alert_level_triage": [],
+    "alert_level_triage_note": "ruleId = py/augur/cairosvg/pass3-ssrf 的正式告警数为 0,无 codeFlows 可逐条复核,因此无 likely_tp / likely_fp / uncertain 评级条目。iris_report.md 的空 Finding Counts 表与 SARIF 一致,未发现计数污染(无 file: 本地读取、XXE、测试代码或诊断查询结果混入——因为本轮没有任何结果)。",
+    "independent_reproduction": {
+      "method": "在同一数据库上重跑 codeql database analyze queries/Pass3_SSRF.ql --format=sarifv2.1.0,输出至 llm_triage_scratch/repro.sarif(未覆盖原始 SARIF)",
+      "result": "0 条 results,与原始 pass3.sarif 完全一致,零告警可复现,非偶发"
+    }
+  },
+
+  "question_answers_no_alerts": [
+    {
+      "question": "1. Source 是否真正来自攻击者可影响的输入边界?是否存在可成立的不可信输入威胁模型?",
+      "answer": "无正式告警,不适用逐条判定。就底层设施而言:全部 32 条 source 标签在数据库中均真实绑定(实测 21 个绑定位置,见 miss_analysis.evidence),威胁模型成立——CairoSVG 为纯库,宿主应用(或 CLI)转换攻击者提供的 SVG 文档/URL 时,<image> href、<use>/<tref> href、xml:base、CSS @import 及入口 url 参数均为攻击者可控。该威胁模型与 12d31c6 修复(默认禁止外部取回)所针对的真实漏洞完全一致。"
+    },
+    {
+      "question": "2. 输入解析成资源 URL 时是否存在真实数据传播?",
+      "answer": "存在且已被静态验证到中段:实测污点可从 9 类源(svg2* 入口 url、Surface.convert url、image.py:27 href、image.py:24 xml:base、css.py:37 @import)流经 parse_url(标准过程间,parse_url 对污点完全透明)与 E1 边,到达 read_url 形参 url(url.py:132)及 Node.fetch_url 形参(parser.py:242)。数据传播关系真实。"
+    },
+    {
+      "question": "3. URL 是否经过 base/urljoin 处理,是否改变目标主机/端口/协议/路径?",
+      "answer": "parse_url/normalize_url 为纯字符串处理,不构成 sanitizer;相对 href 在 file 基下走 os.path.join 分支,在 http 基下走 urljoin——攻击者可直接给出绝对 URL 或 scheme-relative(//host/)形式完全绕过基址限制,也可经 xml:base 改写基址的 scheme/host。库内不存在任何把可控范围限制在固定主机路径上的强制。"
+    },
+    {
+      "question": "4. Sink 是否确实执行网络请求?",
+      "answer": "是(就真实代码而言):url.py:84 fetch() 内 urlopen(Request(url, ...)).read() 是全库唯一网络出口,grep 核实无 requests/httpx/socket/urlretrieve。url_fetcher 分发(url.py:143)默认目标是 fetch,亦为真实网络边界。但本轮正式查询中 K-013 sink 谓词绑定的节点数为 0(见 miss_analysis.RC1),即网络 sink 匹配器本身为空。"
+    },
+    {
+      "question": "5. 攻击者可控的是整个 URL 还是固定目的地上的参数?",
+      "answer": "整个 URL(scheme+host+port+path)均可控:href/@import 值本身即完整 URL;入口 url 参数直接作为取回目标;无固定主机、无白名单。"
+    },
+    {
+      "question": "6. 是否存在有效防护(白名单/scheme 校验/IP 限制/重定向再校验/网络隔离)?",
+      "answer": "本快照(漏洞版本)内不存在:scheme 无限制(含 ftp:,file:;data: 由 DataHandler 处理不发网络请求)、无私网/回环拦截、urllib 默认跟随重定向且无重定向校验、read_url 文档字符串自述默认取回器 'no limitations'。defusedxml forbid_external 是 XXE 防护且可被 unsafe=True 关闭,不拦截外部取回。唯一结构性缓解是宿主注入受限 url_fetcher(部署级,非库内)。12d31c6 的修复正是引入默认拒绝(非 unsafe 时把 url_fetcher 替换为返回空 SVG 的 lambda),佐证此前无任何防护。"
+    },
+    {
+      "question": "7. 是否只是可信固定 URL 或正常资源加载功能?",
+      "answer": "否。所有取回 URL 均为调用方传入或文档派生,库内不存在固定主机/管理员配置 URL(经复核报告与源码 grep 交叉验证)。但注意:作为本地 CLI 工具使用时,取回的是用户自己文档引用的资源,不构成 SSRF;构成 SSRF 需要服务端/多租户转换场景(见第 8 条)。"
+    },
+    {
+      "question": "8. 静态路径是否真实可达?是否需要服务端调用场景?",
+      "answer": "代码路径真实可达且默认执行(漏洞版本转换任何含外部引用的 SVG 即触发取回)。CairoSVG 仅作为库被调用,SSRF 威胁的成立条件是宿主把攻击者可控内容当输入(服务端 SVG 转换、接受上传的渲染服务)。这正是全部 32 条 source 标签 classification=candidate 的原因,标签层处理正确。CLI 路径(argv/options.input)按标签判 none 不渲染,亦正确。"
+    },
+    {
+      "question": "9. 是否混入 file: 读取、XXE、测试代码或诊断查询造成错误计数?",
+      "answer": "没有。本轮正式结果为 0 条,不存在任何计数;SARIF 中无诊断结果;WrapperChainDiagnostic.ql 的 1 行结果(见 miss_analysis)留在诊断目录且未计入。file:// 构造(url.py:140)按标签 role=none 未渲染为 sink,处理正确。"
+    }
+  ],
+
+  "miss_analysis": {
+    "task": "为什么本轮正式分析没有命中该项目真实存在的漏洞(commit 12d31c6, CWE-918: SVG 外部引用默认被无限制取回,修复为非显式要求时禁止外部取回)",
+    "headline": "标签层(威胁模型、source/sink 选择、无 sanitizer 的判定)与真实漏洞完全一致且基本正确;漏报发生在标签之下的 CodeQL 建模层,由两个相互独立、任一即足以导致零告警的缺陷造成:(RC1) 唯一真实网络 sink K-013 及其配套 E4 边使用了一条在该数据库中绑定空集的 API 图匹配;(RC2) read_url 体内 url.geturl() 的接收者→结果污点传递未被建模,污点在到达分发/网络调用前断链。",
+    "root_causes": [
+      {
+        "id": "RC1",
+        "title": "K-013 sink 与 E4 边的 API 图匹配套为空(致命,sink 侧)",
+        "detail": "MySinks.qll 的 UrlopenRequestUrlSink 与 MySummaries.qll 的 requestUrlStep 均使用 API::moduleImport(\"urllib.request\").getMember(\"urlopen\"/\"Request\").getACall().asExpr()。直接对该表达式求值(独立查询 llm_triage_scratch/CheckApiGraph.ql)返回 0 行:该数据库中此 API 图路径解析不到 url.py:10 的 from-import 绑定。后果:正式查询唯一的网络 I/O sink 谓词绑定 0 个节点(vacuous),且 Request 实参→urlopen 实参的 E4 传播边同样为空。即使污点已抵达 Request(url) 实参(实测可达),也无法落到任何被绑定的 sink 节点上。",
+        "evidence": [
+          "llm_triage_scratch/CheckApiGraph.ql 对 Request/urlopen 两个成员的 getACall() 求值结果均为空",
+          "extraction/sinks.csv 全部 20 行 matchKind 均为 \"ast\",\"api\" 行数为 0——提取阶段 API 图家族(family 1)当时就没有产出任何行,url.py:84 的 urlopen 行来自语法级 fallback(family 2,bareNetCall 按 Name 匹配)",
+          "由此同时确认 query_generation_notes.md §2/§4 中『API 图解析……已验证可解析』的记载与提取产物自相矛盾(见 verification_error)"
+        ]
+      },
+      {
+        "id": "RC2",
+        "title": "read_url 体内 url.geturl() 传输未建模(致命,中段)",
+        "detail": "url.py:137-143: 分发调用 url_fetcher(url, resource_type) 的实参不是形参 url 本身,而是重赋值后的 url = url.geturl()(有 scheme 分支)或 'file://{}'.format(os.path.abspath(url.geturl())) 经 normalize_url(无 scheme 分支)。geturl() 是 stdlib ParseResult 的方法,形参无类型注解、接收者不可解析,标准污点跟踪不传播『接收者污点→方法调用结果』,而 MySummaries 的 4 条自定义边(E1-E4)没有一条覆盖 param→geturl() 结果或 param→分发实参。实测:污点从 9 类源顺利到达 read_url 形参 url(url.py:132),但在 url.py:138/143/84 全部断链——因此即便绑定正确的 K-017 分发 sink 也从未收到污点。",
+        "evidence": [
+          "llm_triage_scratch/DebugWithLocations.ql:source 到达的 sink 段仅 url.py:132(read_url 形参)、parser.py:242(fetch_url 形参)、image.py:27/28;url.py:138、143、84 均未到达",
+          "llm_triage_scratch/WhoReachesDispatch.ql(与 WrapperChainDiagnostic 同源集):唯一能到达 url.py:143 分发实参的形参是 normalize_url 自己的 url 形参(url.py:19,经函数返回值与 141 行重赋值),read_url 形参(url.py:132)不在其中——断裂点被反向独立证实",
+          "假设性验证 llm_triage_scratch/ValidateGeturlBridge.ql:仅增加一条『read_url 形参→分发实参』桥边(等价于补上 geturl 传递)后,K-017 sink 立即从全部 9 类源命中;再增加一条语法级 Request 桥边后,urlopen 实参节点(url.py:84)亦命中 9 类源"
+        ]
+      },
+      {
+        "id": "RC3",
+        "title": "调用点 .geturl() 同样阻断 <use>/<tref> 源路径(部分)",
+        "detail": "defs.py:348 与 bounding_box.py:344 的 href = parse_url(node.get_href()).geturl()、parser.py:264 的 url = parse_url(href).geturl(),污点均断在 .geturl() 调用,无法进入 Tree(url=...) 的 E2 边。即使 RC1/RC2 修复,这三条源还需要调用点 geturl 桥边(或 E2 改为从 parse_url(...) 调用节点取值)才能告警。image href / xml:base / CSS @import / 入口 url 四族源不受此影响(其取回调用直接以 parse_url 结果对象为实参,read_url 内部才转字符串)。"
+      }
+    ],
+    "verification_error": "query_generation_notes.md §4 称 sink 匹配『与提取查询同一解析路径,url.py:10 的 from-import 已验证可解析』——该论断与提取产物不符:sinks.ql 同时实现了 API 家族(标 matchKind=api)与语法家族(标 matchKind=ast),而 sinks.csv 中 api 行数为 0,url.py:84 的 urlopen 标签锚点实际来自语法家族行。渲染 QL 时选择了从未匹配的 API 图形式,而标签位置却来自语法 fallback 行——锚点与匹配器来源错配,是 RC1 的直接过程性成因。编译验证(query compile)无法暴露此类『谓词为空』的语义性缺陷,只有运行期计数能暴露。",
+    "what_actually_worked": [
+      "全部 32 条 source 标签绑定正常(实测绑定位置:__init__.py:38/51/63/75/87、surface.py:97、__main__.py:13/65/70、image.py:24/27、css.py:20/25/37、defs.py:348、bounding_box.py:344、parser.py:262/263/313/391)",
+      "E1(fetch_url 调用实参→read_url 形参)工作正常:image.py:28 / css.py:39 / parser.py:386 的污点均到达 read_url 形参",
+      "E3(分发实参→fetch 形参)工作正常(桥接验证中 url.py:77 全部 9 源命中)",
+      "K-017 分发 sink 的语法匹配绑定正常(url.py:143)",
+      "标准数据流超出预期:kwargs 字典分发可用(入口 url 形参经 Tree(**kwargs)→kwargs.get('url')→self.url→parse_url(self.url) 直达 read_url 形参,E2 在该族路径上并非必需);parse_url 函数体(含 urlparse/urljoin/normalize_url)对污点完全透明",
+      "无 sanitizer 判定正确:漏洞版本确实不存在任何 scheme/host/私网/重定向防护,与 12d31c6 引入默认拒绝互为印证"
+    ],
+    "counterfactual_expected_alerts": {
+      "disclaimer": "以下为修复假设下的预期告警,非本轮正式结果,不计入 Augur TP。验证依据:llm_triage_scratch/ValidateGeturlBridge.ql(仅增加两条假设边)。",
+      "patched_copy_full_validation": {
+        "artifact": "llm_triage_scratch/PatchedPass3_SSRF.ql(正式查询的修复版副本:Fix1 sink 语法匹配、Fix2 read_url geturl 边、Fix3 语法级 Request 边、Fix4 调用点 geturl 边;source/sanitizer/K-017/E1/E2/E3 与正式查询逐字相同,全部为增量并集)",
+        "method": "在同一数据库上 codeql query run 完整执行",
+        "result": "13 个源位置 × 2 个 sink = 26 条完整污点路径,全部命中:K-017(url.py:143)与 K-013(url.py:84)均从下列 13 个源位置可达——__init__.py:38/51/63/75/87(5 个 svg2* 入口 url)、surface.py:97(Surface.convert url)、image.py:27(<image> href)、image.py:24(xml:base)、css.py:37(CSS @import)、defs.py:348 与 bounding_box.py:344(<use> href)、parser.py:262/263(<tref> href)",
+        "conclusion": "修复后正式查询必然命中真实漏洞:上述路径正是 12d31c6 所修复的行为(SVG 文档外部引用与入口 URL 被无限制取回直至 urlopen)。修复版对正式查询是严格超集(仅增加匹配器与边,未删除任何原有匹配),故正式查询的零告警完全由 RC1/RC2/RC3 造成,与标签层无关。"
+      },
+      "with_both_fixes_expected": [
+        "5× svg2* 入口 url 形参(__init__.py:38/51/63/75/87,P3-S-003/006/009/012/015)→ K-017/K-013",
+        "1× Surface.convert url(surface.py:97,P3-S-056)→ K-017/K-013",
+        "1× <image> href(image.py:27,P3-S-039)→ K-017/K-013",
+        "1× xml:base(image.py:24,P3-S-037)→ K-017/K-013",
+        "1× CSS @import url_token.value(css.py:37,P3-S-028)→ K-017/K-013",
+        "另需 RC3 调用点 geturl 桥边才可达:2× <use> href(defs.py:348、bounding_box.py:344)与 2× <tref> href(parser.py:262/263)→ Tree(url=…) → E2 → K-017/K-013(已由 patched_copy_full_validation 实测确认全部可达)"
+      ],
+      "would_be_triage": "在『宿主转换攻击者可控 SVG』威胁模型下,上述路径逐条复核均为真实取回链(全 URL 可控、无防护、sink 为真实 urlopen),评级将为 likely_tp;其中 <image>/<use>/<tref>/xml:base/@import 五族文档引用源与 12d31c6 修复的攻击面(CVE 描述:精心构造的 SVG 加载外部资源 URL)直接对应,属最强 likely_tp;入口 url 参数族成立与否取决于宿主是否把攻击者可控值当 url 传入。若宿主仅转换自有文档则为部署性 FP/非安全问题(标签 classification=candidate 正是此意)。CLI stdin/argv 族源因 kwargs→file_obj 字典流未覆盖,修复后亦无路径,与 notes §7.3 一致(实测确认:26 条路径中无 __main__.py 源)。"
+    },
+    "fix_recommendations_next_round": [
+      "K-013 sink 与 E4 边改用与提取 family 2 相同的语法匹配(url.py 内 Name 调用 urlopen/Request,argIndex 0),或同时保留两种匹配取并集;匹配器选择必须以提取 CSV 的 matchKind 实测产出为准",
+      "增加传播边:read_url 形参 url → url.geturl() 调用结果(url.py:138),或直接 → url_fetcher 分发实参(url.py:143);同理为 defs.py:348 / bounding_box.py:344 / parser.py:264 的调用点 .geturl() 增加边",
+      "重新执行 database analyze 并对 0 结果做哨兵检查:任何正式 sink/source 谓词绑定数为 0 即视为建模失败报警(本轮 K-013 绑定数为 0 的事件本可由此提前发现)",
+      "均属下轮迭代事项,本轮未改动任何正式文件"
+    ]
+  },
+
+  "evidence_artifacts": {
+    "scratch_dir": "llm_triage_scratch/(全部为诊断性质,独立于正式结果)",
+    "files": [
+      "repro.sarif — 正式查询重跑复现(0 结果)",
+      "DebugSegments.ql / DebugWithLocations.ql — 分段可达性:污点止步于 read_url 形参",
+      "CheckApiGraph.ql — API 图对 urllib.request 成员解析为空集的直接证明",
+      "ValidateGeturlBridge.ql — 两条假设桥边使 K-017/K-013 从 9 类源全部命中的反事实验证",
+      "PatchedPass3_SSRF.ql — 正式查询的修复版副本(4 处修复全打),完整执行后 13 源位置 × 2 sink = 26 条路径全部命中,证明修复后必然命中真实漏洞",
+      "WhoReachesDispatch.ql — 反向证明 read_url 形参不达分发实参",
+      "CountSources.ql — 全部 source 标签绑定位置清单"
+    ]
+  },
+
+  "conclusion": [
+    "正式结论(必须显式陈述):CodeQL 分析成功，但本轮没有命中正式 SSRF 污点路径。ruleId py/augur/cairosvg/pass3-ssrf 告警数 0,无逐条评级条目;SARIF 中亦无解析诊断告警,不存在诊断/基线/file:// 混入计数。",
+    "漏报根因:标签与威胁模型正确编码了 12d31c6 所修复的真实漏洞,但渲染出的正式查询存在两个各自独立即致命的建模缺陷——(1) 唯一网络 sink K-013 及 E4 边的 API 图匹配在本数据库绑定空集(提取 CSV 自证 matchKind 全为 ast);(2) read_url 内 url.geturl() 的污点传递未建模,污点断在形参。两者叠加导致 0 告警;单修复任一即可分别使 K-017 或(配合语法匹配)K-013 产生 9 条路径告警。",
+    "本轮独立复核未修改任何正式产物,全部验证材料隔离于 llm_triage_scratch/。"
+  ]
+}
