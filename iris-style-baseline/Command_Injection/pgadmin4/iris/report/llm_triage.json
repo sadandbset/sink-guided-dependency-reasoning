@@ -1,0 +1,130 @@
+{
+  "triage": {
+    "task": "Independent LLM path re-review of Augur/IRIS Pass 2 (CWE-78) formal SARIF results for pgadmin4",
+    "run": "pgadmin4-iris-pass2-20261016",
+    "triaged_at": "2026-10-16",
+    "reviewer": "independent LLM review (Claude/GLM), source-level path verification",
+    "sarif": "results/pass2.sarif",
+    "source_tree": "dataset/codeql_databases/pgadmin4_vuln (sha 61fa8b1, same state as the CodeQL database)",
+    "inputs_read": [
+      "results/pass2.sarif",
+      "report/iris_report.md",
+      "labels/labels.json (label entries p2-e-0306, p2-e-1551, p2-e-1677, p2-e-1698 and the misc/executor source rows)",
+      "report/query_generation_notes.md",
+      "web/pgadmin/misc/__init__.py (validate_binary_path, 239-291)",
+      "web/pgadmin/utils/__init__.py (set_binary_path / replace_binary_path, 354-422)",
+      "web/pgadmin/misc/bgprocess/process_executor.py (unescape_dquotes_process_arg 56-69, execute 291-348, __main__ 411-455, 525-541)",
+      "web/pgadmin/misc/bgprocess/processes.py (BatchProcess state/args 225-248, start 281-348)",
+      "web/pgadmin/misc/bgprocess/__init__.py (escape_dquotes_process_arg 157-169)",
+      "web/pgadmin/tools/backup/__init__.py (create_backup_job 390-463)"
+    ],
+    "not_read": [
+      "PyVul ground-truth files, fix commits and CVE advisories (per task directive). The known-vulnerability comparison below uses only the vulnerability record supplied verbatim in the task prompt."
+    ],
+    "ground_rules": [
+      "Diagnostic-query findings are not formal TPs and were not counted.",
+      "No SARIF, label or query files were modified.",
+      "CodeQL analysis ran successfully (invocation executionSuccessful=true; all 1387 toolExecutionNotifications are level=none file-coverage baseline notes, 0 errors/warnings), so the parse-diagnostics-only clause does not apply: this round DID produce 2 formal CWE-78 path alerts."
+    ]
+  },
+  "summary": {
+    "sarif_run": {
+      "tool": "CodeQL",
+      "rule": "py/augur/pgadmin4/pass2-command-injection (formal Pass-2 query, severity error)",
+      "formal_results": 2,
+      "codeflows_reviewed": 8 (4 per alert)
+    },
+    "verdict_counts": {
+      "likely_tp": 2,
+      "likely_fp": 0,
+      "uncertain": 0
+    },
+    "known_vulnerability_hit": {
+      "verdict": "HIT",
+      "detail": "Alert 0 (chain A, web/pgadmin/misc/__init__.py:274) is exactly the known validate_binary_path command injection (commit 35f05e49b3632a0a674b9b36535a7fe2d93dd0c2, #6763); see known_vulnerability_check below."
+    }
+  },
+  "alerts": [
+    {
+      "alert_index": 0,
+      "rule_id": "py/augur/pgadmin4/pass2-command-injection",
+      "sink_location": "web/pgadmin/misc/__init__.py:274",
+      "sink_code": "subprocess.getoutput(r'\"{0}\" --version'.format(full_path.replace('\"', '\"\"')))  # inside validate_binary_path()",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "codeflows_reviewed": 4,
+      "path_summary": "POST /misc/validate_binary_path (@blueprint.route, methods=['POST'], @login_required, misc/__init__.py:239-242) -> request.data (misc:250) [codeflows 0/1 source: Flask request-proxy state] or json.loads(request.data) (misc:253) [codeflows 2/3 source: pinned json decode] -> data['utility_path'] subscript (misc:258) -> replace_binary_path() (call misc:258 -> param utils/__init__.py:404; only \"$DIR\" substring substitution, returns argument otherwise, :410-422) -> binary_path -> os.path.join + os.path.abspath (misc:261-264) -> full_path -> full_path.replace('\"','\"\"') -> str.format into '\"{0}\" --version' -> subprocess.getoutput sink (misc:274).",
+      "checklist_answers": {
+        "1_source_is_attacker_influenced_boundary": "Yes. request.data is the raw HTTP POST body read directly inside the route handler; the client that passes @login_required fully controls the JSON body including utility_path. All 4 codeFlows start at genuine request-boundary nodes (request.data attribute at :250 or the json.loads result at :253).",
+        "2_propagation_has_real_code_evidence": "Yes. Every codeFlow step was verified against the source tree line by line: :250 decode, :253 json.loads, :258 data['utility_path'] subscript and replace_binary_path call, utils/__init__.py:404-422 replace_binary_path body (pure pass-through unless \"$DIR\" is present, then plain substring replacement - no shell escaping), :261-264 os.path.join/os.path.abspath (both preserve path content), :274-275 .format into the shell command string. No step is a modeling artifact; even the summary step p2-e-0306 is redundant over native call-to-parameter propagation.",
+        "3_sink_actually_executes_commands": "Yes. subprocess.getoutput always executes through the shell (shell=True semantics on both POSIX and Windows), so the '\"{0}\" --version' string is interpreted by /bin/sh or cmd.exe.",
+        "4_command_content_influenced_by_source": "Yes. full_path (the {0} slot) is os.path.abspath(os.path.join(data['utility_path'], utility+'.exe')) - fully derived from the attacker-supplied utility_path value.",
+        "5_protections": "Partial only, not effective: (a) full_path.replace('\"','\"\"') doubles double quotes, which blocks the quote-breakout vector but not other shell metacharacters on Windows cmd.exe; (b) os.path.exists(binary_path) (misc:268) only checks path existence - per the known vulnerability the attacker passes the commands as filenames that do exist; (c) no whitelist on utility_path and no shlex-style quoting anywhere in the snapshot. The 'escape double quotes to avoid command injection' comment at :271 is the developers' own acknowledgement that this is a command-injection-sensitive construction.",
+        "6_predefined_command_feature": "No. The intent is a '--version' probe of a fixed UTILITIES_ARRAY entry, but the binary path is a per-request user value, not a predefined/whitelisted command; the fix for the known vulnerability removed this construction entirely.",
+        "7_path_genuinely_reachable": "Yes - a single-function, single-request path with no cross-process leap, no dynamic dispatch, no over-approximated source or sink. The 4 codeFlows are 2x2 source variants (request.data vs json.loads) x replace_binary_path inlining variants; all end at the same verified sink."
+      },
+      "rationale": "Short, fully verified, single-request taint path from the raw HTTP body to a shell-interpreted command string, with only partial mitigations. This is a textbook CWE-78 chain and independently matches the known pgadmin4 validate_binary_path vulnerability.",
+      "weak_points": [
+        "Requires an authenticated session (login_required) - within the reviewed threat model (authenticated web client) this is still attacker-controlled.",
+        "The double-quote doubling and existence check raise exploitation effort but do not neutralize the Windows filename-metacharacter vector that the upstream fix addressed."
+      ]
+    },
+    {
+      "alert_index": 1,
+      "rule_id": "py/augur/pgadmin4/pass2-command-injection",
+      "sink_location": "web/pgadmin/misc/bgprocess/process_executor.py:331 (Popen spans :330-332)",
+      "sink_code": "process = Popen(command, stdout=PIPE, stderr=PIPE, stdin=None, **kwargs)  # inside execute(); kwargs['shell'] = True if _IS_WIN else False (:324)",
+      "verdict": "likely_tp",
+      "confidence": 0.6,
+      "codeflows_reviewed": 4,
+      "path_summary": "sys.argv read (process_executor.py:414, source p2-e-1551) -> list comprehension [unescape_dquotes_process_arg(arg) for arg in sys.argv] (:413-415, flows through the helper body :56-69 which only strips #DQ# markers) -> argv -> execute(argv) call sites (:455 Windows foreground child, :538 POSIX fork child) -> execute parameter (:291) -> command = argv[1:] (:298) -> Popen(command, ..., **kwargs) with shell=True on Windows (:324, :330-331).",
+      "checklist_answers": {
+        "1_source_is_attacker_influenced_boundary": "Indirectly yes - this is the documented fork-boundary modeling. sys.argv of process_executor.py is the inter-process command transport: the parent web process builds cmd = [interpreter, executor, self.cmd] + self.args (processes.py:290-291) and spawns it via Popen (processes.py:330/:345), where self.args comes from BatchProcess construction sites whose args lists are built from request JSON (verified in web/pgadmin/tools/backup/__init__.py:401 json.loads(request.data), :444-449 escaped_args, :456-462 BatchProcess(args=escaped_args) - args include request values such as data['file']-derived backup filename and data['database']). So the attacker influence is real, but it is demonstrated by the parent-side chain, not inside the reported codeFlows. The SARIF path's source node is a pinned label (p2-e-1551, tp 0.7), not a network boundary.",
+        "2_propagation_has_real_code_evidence": "Yes within process_executor.py: every codeFlow step (:414 list-comp source, :56-69 unescape body, :413 argv binding, :455/:538 execute call sites, :291 parameter, :298 slice, :330-331 Popen) is real, line-verified code with no modeling steps. The web-side half (request -> BatchProcess -> spawn) is real code too (backup:401-462, processes.py:290-348) but is outside the codeFlows because CodeQL cannot cross the fork - consistent with query_generation_notes.md limitation #1.",
+        "3_sink_actually_executes_commands": "Yes. Popen(command, ...) with kwargs['shell']=True when _IS_WIN (process_executor.py:322-324) - on Windows the command list is joined and interpreted by cmd.exe. On POSIX shell is False and the list is executed as an argv list without shell metacharacter interpretation.",
+        "4_command_content_influenced_by_source": "Yes. command = argv[1:] (:298) is exactly the transported [self.cmd] + self.args tail; the tainted elements are the request-derived utility arguments (filenames, database names) transported through sys.argv.",
+        "5_protections": "Partial only: escape_dquotes_process_arg (bgprocess/__init__.py:157-169) wraps args that already start AND end with a double quote in #DQ# markers, which are stripped back in the child (:56-69) before Popen - it protects embedded quotes only, not shell metacharacters such as & | ^ % in unquoted/no-space arguments. No whitelist or metacharacter filtering exists on the path.",
+        "6_predefined_command_feature": "Partially. Running pg_dump/pg_restore-style utilities with user parameters is the intentional batch-job feature, and the leading list elements (interpreter, executor path, utility) are fixed. However, with shell=True on Windows and request-derived argument elements, metacharacter injection remains possible - this is the same defect class the project later fixed by dropping shell execution; as modeled in this snapshot it is not a safe predefined-command path.",
+        "7_path_genuinely_reachable": "Reachable, but with an acknowledged over-approximation at the source: the formal path alone proves sys.argv -> Popen(shell=True on Windows) inside the executor process; the attacker-control premise rests on the verified-but-external web-side chain (backup/restore/maintenance/import_export/cloud BatchProcess constructions) and on the human-reviewed p2-e-1551 label that pins the fork boundary. No over-approximation exists in the sink model (Popen arg 0, shell=True is real)."
+      },
+      "rationale": "The sink is a genuine command-execution site and the transported command elements are genuinely request-derived (verified on the web side). The path inside the SARIF is real code with no invented steps. Verdict likely_tp rather than fully confirmed because (a) the source is a modeled fork-boundary pin, not a network boundary visible in the codeFlows, (b) shell interpretation only occurs on Windows (POSIX runs argv-list mode, downgrading this to argument-injection at most), and (c) the fixed head of the command list means exploitation depends on a metacharacter-bearing argument element. If judged strictly on the SARIF codeFlows alone, this alert would be uncertain; the independently verified web-side transport lifts it to likely_tp at medium confidence.",
+      "weak_points": [
+        "Windows-only shell interpretation (process_executor.py:324); on POSIX the sink is an argv-list Popen without a shell.",
+        "The request->sys.argv transport is proven by cross-file code reading, not by the reported path.",
+        "Exploitation requires a request-derived argument element containing cmd.exe metacharacters that survives escape_dquotes_process_arg (which only guards quoted args)."
+      ]
+    }
+  ],
+  "known_vulnerability_check": {
+    "task": "Does the formal Pass-2 alert set hit the real pgadmin4 vulnerability supplied in the task prompt?",
+    "supplied_record": {
+      "commit": "https://github.com/pgadmin-org/pgadmin4/commit/35f05e49b3632a0a674b9b36535a7fe2d93dd0c2",
+      "cwe": "CWE-78",
+      "commit_message": "Fix the security issue of validate bin path to consider and fix more scenarios. #6763",
+      "function_name": "validate_binary_path",
+      "vulnerability": "Command injection via the HTTP API validating the path to external PostgreSQL utilities; a user can run arbitrary commands by passing commands as filenames; desktop mode unaffected."
+    },
+    "evidence": {
+      "snapshot_function_matches_code_before": "TRUE - the snapshot's validate_binary_path (web/pgadmin/misc/__init__.py:243-291) was compared to the record's code_before and matches exactly (whitespace-normalized, full function text), including the vulnerable subprocess.getoutput(r'\"{0}\" --version'.format(full_path.replace('\"','\"\"'))) statement. The code_after (get_binary_path_versions refactor) is absent, i.e. the source tree is the pre-fix vulnerable state.",
+      "alert_sink_location": "Alert 0 sink = web/pgadmin/misc/__init__.py:274, the subprocess.getoutput(...) call inside validate_binary_path - the precise statement the upstream fix removed.",
+      "alert_path_covers_vulnerable_dataflow": "Alert 0's source is request.data / json.loads(request.data) (:250/:253) feeding data['utility_path'] (:258) into the sink - the exact utility_path -> shell-command flow described by the vulnerability ('validates the path a user selects to external PostgreSQL utilities')."
+    },
+    "verdict": "HIT",
+    "hit_by": {
+      "alert_index": 0,
+      "rule_id": "py/augur/pgadmin4/pass2-command-injection",
+      "location": "web/pgadmin/misc/__init__.py:274",
+      "match_quality": "sink-level exact match (same function, same statement, same request-derived dataflow); not merely file- or function-level overlap"
+    },
+    "alerts_not_covering_this_vulnerability": [
+      "Alert 1 (process_executor.py:331) is a different BatchProcess-executor chain and is not the validate_binary_path vulnerability."
+    ],
+    "scope_note": "This comparison used only the vulnerability record quoted in the task prompt; per the task directive, no PyVul ground-truth files, fix commits or CVE advisories were read. The hit statement is therefore grounded in the prompt-supplied record plus direct source-tree verification."
+  },
+  "conclusion": {
+    "codeql_analysis": "successful",
+    "formal_alerts": "2 formal CWE-78 path alerts present (not a parse-diagnostics-only round)",
+    "triage_result": "Alert 0 (misc/__init__.py:274, validate_binary_path getoutput probe): likely_tp, confidence 0.9 - full single-request request-body -> shell-command path, partial mitigations only, and an exact sink-level hit on the known real vulnerability. Alert 1 (process_executor.py:331, batch-executor Popen with Windows shell=True): likely_tp, confidence 0.6 - real code path and real request-derived command transport, with the fork-boundary source pin and the Windows-only shell mode as documented reservations.",
+    "no_fabricated_findings": "No vulnerabilities beyond the two SARIF alerts were asserted; diagnostics-only chains (psql /pty, import-file passexec, set_binary_path utils:375, master_password hook) were deliberately not counted as formal TPs."
+  }
+}

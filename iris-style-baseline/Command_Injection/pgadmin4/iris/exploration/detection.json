@@ -1,0 +1,264 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-15",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\pgadmin4\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (exploration + candidate extraction query generation only). No CodeQL execution, no LLM labeling, no Phase 2 in this step, per the experiment constraints. The CodeQL database pgadmin4-db was created from the pgadmin4_vuln tree (sourceLocationPrefix matches, creation sha 61fa8b1), so file/line evidence below is verified against the database snapshot."
+  },
+  "target": {
+    "project": "pgadmin4",
+    "projectDescription": "pgAdmin 4: a PostgreSQL administration tool. The server side is a Python Flask web application (web/pgadmin) with per-module blueprints, SQLAlchemy storage, and a Flask-SocketIO endpoint (/pty namespace) that backs the server-side psql terminal tool. It provides server registration/connection management (including per-server password-exec hooks), pg utility execution (backup/restore/maintenance/import_export) through a background BatchProcess/process_executor pipeline, cloud instance deployment (pgacloud), and a desktop runtime mode launched from web/pgAdmin4.py. User-facing requests, socket messages, preferences, and config all reach these command-execution features.",
+    "pass": 2,
+    "cwes": ["CWE-78"],
+    "focus": "Command/Argument Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\pgadmin4_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (pgadmin4-db/codeql-database.yml)",
+      "954 .py files in the database source snapshot (src.zip); 941 under web/ (262 excluding web/regression and */tests), plus repo-root dev scripts in tools/",
+      "web/pgAdmin4.py + web/setup.py + web/pgadmin/ package layout (web/setup.py exists as the packaging entry; application bootstrap is web/pgAdmin4.py)"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\pgadmin4-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\pgadmin4_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "61fa8b16c90590b59c624e440187441349020e1a",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-27T07:40:48.510090Z"
+    },
+    "baselineLinesOfCode": 126844,
+    "finalised": true,
+    "sourceSnapshotNote": "The database source snapshot contains the whole repository tree, including web/regression, per-module tests/ directories, and repo-root tools/ dev scripts; the extraction queries exclude regression/tests/tools paths as noise per the Augur candidate strategy."
+  },
+  "toolchain": {
+    "qlpack": "iris/pgadmin4-cwe78 (dependencies: codeql/python-all: \"*\")",
+    "packResolutionExpected": "codeql/python-all resolved from the local pack cache by qlpack.yml (same resolution as the maltrail/dcnnt-py runs in this environment)",
+    "codeqlCli": "2.25.1 (validated baseline family; queries use only import python + semmle.python.ApiGraphs, the same API surface as the already-validated maltrail extraction queries)"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "flask",
+          "confidence": 1.0,
+          "evidence": [
+            "imports: web/pgadmin/__init__.py:25-30 'from flask_socketio import SocketIO' / 'from flask_babel import Babel, gettext' / 'from flask_login import user_logged_in, user_logged_out' / 'from flask_mail import Mail'; 'from flask import request/Response/session/...' appears in nearly every web/pgadmin module (e.g. pgadmin/authenticate/kerberos.py:17, pgadmin/tools/psql/__init__.py:17-19)",
+            "routes/decorators: 269 '@blueprint.route(...)' decorators across web/pgadmin/**/__init__.py (e.g. pgadmin/tools/psql/__init__.py:75,86; pgadmin/misc/__init__.py:239; pgadmin/tools/backup/__init__.py around :390); auth via @login_required / @socket_login_required / flask_security",
+            "runtime/bootstrap: web/pgAdmin4.py:209 'socketio.run(app, ...)'; web/pgadmin/__init__.py:67 'socketio = SocketIO(manage_session=False, async_mode=\"threading\", ...)' and :941 'socketio.init_app(app, cors_allowed_origins=\"*\")'; app factory create_app in web/pgadmin/__init__.py",
+            "layout: web/pgadmin/<module>/__init__.py blueprint modules (about, authenticate, browser, dashboard, misc, preferences, redirects, settings, setup, tools) plus web/config.py and web/migrations/"
+          ]
+        },
+        {
+          "name": "flask-socketio",
+          "confidence": 0.95,
+          "evidence": [
+            "web/pgadmin/__init__.py:25 'from flask_socketio import SocketIO'; :67 SocketIO(...) construction; :941 socketio.init_app(...)",
+            "web/pgadmin/tools/psql/__init__.py:150/278/444/472/484/496 six '@sio.on(...)' handlers on namespace '/pty' (connect, start_process, socket_input, resize, disconnect, server-disconnect) backed by eventlet green subprocess and pty/winpty"
+          ],
+          "note": "Companion library of the Flask primary, not scored as a separate framework; treated as an input boundary family of the Flask stack."
+        },
+        { "name": "django", "confidence": 0.0, "evidence": [] },
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] }
+      ]
+    },
+    "selected": "flask (primary, confidence 1.0) + flask-socketio companion",
+    "notes": "No dedicated references/flask.md exists in the Augur installation, so source/sink shapes for the Flask/Flask-SocketIO boundary are derived from repository evidence plus references/python.md and references/patterns.md (language reference path). Flask request proxy reads and @sio.on handler parameters are matched at AST level; the flask request object is a runtime proxy, so API-graph resolution is not expected for it."
+  },
+  "inputBoundaryInventory": {
+    "summary": "Attackers face (1) the Flask HTTP surface: 269 blueprint routes whose handlers read request.data (220 sites), request.form (185), request.args (101), request.get_json (8), request.cookies/headers/environ (4/6/4) and json.loads(request...) bodies; (2) the Flask-SocketIO /pty namespace: six socket event handlers in web/pgadmin/tools/psql/__init__.py receive client message payloads (db, sid, pwd, user, input, rows, cols) and start a psql pty process; (3) the preferences/config surface: user-stored binary paths and config values (config.py patched by PGADMIN_CONFIG_* environment variables via evaluate_config.py); (4) server registration data including per-server passexec_cmd password-exec hook commands stored through the browser server API; (5) CLI entry points (web/setup.py argparse, pgacloud/pgacloud.py argparse). Command-execution sinks are subprocess.Popen/run/getoutput (three of them with shell=True or a Windows shell=True toggle), bare from-imported Popen call sites in the BatchProcess/process_executor pipeline, and the pty/winpty spawn in the psql tool.",
+    "sourceFamilies": [
+      {
+        "family": "flask_request_state",
+        "evidence": [
+          "request attribute reads: request.data x220, request.form x185, request.args x101, request.values x1, request.cookies x4, request.headers x6 (e.g. pgadmin/authenticate/kerberos.py:108/179 request.headers.get('Authorization')), request.environ x4 (e.g. pgadmin/about/__init__.py:117 request.environ.get('HTTP_USER_AGENT'), pgadmin/authenticate/webserver.py:79 request.environ.get(config.WEBSERVER_REMOTE_USER))",
+          "request.get_json(...) x8 (e.g. pgadmin/authenticate/kerberos.py:181, pgadmin/tools/sqleditor/__init__.py)",
+          "alias forms: pgadmin/misc/file_manager/__init__.py:26 'from flask import ... request as req' then req.data/req.json/req.form/req.files (e.g. :209, :275, :881, :883); browser delete helpers receive the request object as a parameter 'request_object' and read request_object.form / request_object.data (e.g. pgadmin/browser/server_groups/servers/databases/casts/__init__.py:475,490-491)"
+        ]
+      },
+      {
+        "family": "json_decode",
+        "evidence": [
+          "json.loads(request.data) / json.loads(request.form['data']) / json.loads(request.data.decode()) in the tool and cloud endpoints: pgadmin/tools/backup/__init__.py:401, pgadmin/tools/restore/__init__.py:135-138, pgadmin/tools/import_export/__init__.py:241-244, pgadmin/tools/maintenance/__init__.py:183-186, pgadmin/misc/cloud/__init__.py:135,247, pgadmin/misc/cloud/rds/__init__.py:62, pgadmin/misc/cloud/azure/__init__.py:72, pgadmin/misc/cloud/google/__init__.py:76, pgadmin/preferences/__init__.py:191-192, pgadmin/misc/__init__.py:249-253 (validate_binary_path)",
+          "browser node endpoints decode request bodies with json.loads throughout pgadmin/browser/server_groups/... (e.g. servers/__init__.py:1457,1799; roles/__init__.py:529)",
+          "pgadmin/tools/psql/__init__.py:169 'user_env = json.loads(os.environ[current_user.username])' - socket-server environment carried JSON"
+        ]
+      },
+      {
+        "family": "socketio_handlers",
+        "evidence": [
+          "web/pgadmin/tools/psql/__init__.py:150 @sio.on('connect'), :278 @sio.on('start_process') -> start_process(data) with data['db']/:296 underscore_unescape, data['sid']/:300, data['pwd']/data['user']/:350",
+          ":444 @sio.on('socket_input') -> socket_input(data) with data['key_name']/:456 and data['input'] forwarded to the pty via os.write (:412,421,440) or PtyProcess.write (:417,437)",
+          ":472 @sio.on('resize') -> resize(data) with data['rows']/data['cols']",
+          ":496 @sio.on('server-disconnect') -> server_disconnect(data) with data['sid']"
+        ]
+      },
+      {
+        "family": "route_handler_params",
+        "evidence": [
+          "Flask URL path parameters of the 269 @blueprint.route handlers, e.g. pgadmin/tools/psql/__init__.py:86-90 panel(trans_id) plus request.form['title']/:97 and request.args merging/:101-102; pgadmin/tools/backup/__init__.py create_backup_job(sid, backup_obj_type) style endpoints"
+        ]
+      },
+      {
+        "family": "env_cli",
+        "evidence": [
+          "config overrides from the environment: web/pgadmin/evaluate_config.py:109-110 'if 'PGADMIN_CONFIG_DEFAULT_SERVER' in os.environ: config['DEFAULT_SERVER'] = os.environ[...]', applied at web/config.py:913 'locals().update(evaluate_and_patch_config(locals()))'",
+          "os.environ[...] reads: pgadmin/misc/bgprocess/process_executor.py:319-320 'os.environ[os.environ['PROCID']' -> PGPASSWORD, :429 os.environ['OUTDIR']; pgadmin/tools/psql/__init__.py:169 json.loads(os.environ[current_user.username]); pgadmin/misc/bgprocess/processes.py:265 os.environ['PATH']",
+          "CLI: web/setup.py:172 argparse.ArgumentParser with --dump-servers/--load-servers/--sqlite-path/--user (dump/load server configs); web/pgacloud/pgacloud.py:12,43 argparse provider CLI; web/pgAdmin4.py desktop runtime bootstrap"
+        ]
+      },
+      {
+        "family": "config_reads",
+        "evidence": [
+          "config.<NAME> attribute reads everywhere (web/config.py is the local settings module): config.ENABLE_PSQL / config.SERVER_MODE in pgadmin/tools/psql/__init__.py:126,158,168,291,453; config.MASTER_PASSWORD_HOOK / config.MASTER_PASSWORD_REQUIRED in pgadmin/utils/master_password.py:28-44 and pgadmin/browser/__init__.py:802,935,961; config.SESSION_DB_PATH in pgadmin/misc/bgprocess/processes.py:176"
+        ]
+      },
+      {
+        "family": "internal_transfer",
+        "evidence": [
+          "set_binary_path(binary_path, ...) / replace_binary_path(...) - pgadmin/utils/__init__.py:354,404; called with request-derived utility_path from pgadmin/misc/__init__.py:258 (validate_binary_path endpoint) and from preference conversion pgadmin/browser/server_groups/servers/types.py:77,246,250",
+          "get_connection_str(psql_utility, db, manager) - pgadmin/tools/psql/__init__.py:370-385; builds the psql argv (utility + connection dsn) consumed by subprocess.Popen at :182"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "subprocess_exec",
+        "evidence": [
+          "pgadmin/utils/passexec.py:36-43 'p = subprocess.run(self.cmd, shell=True, timeout=..., capture_output=True, text=True, check=True)' - self.cmd is the server passexec_cmd (stored via browser server API, pgadmin/browser/server_groups/servers/__init__.py:1195 passexec_cmd=data.get('passexec_cmd'); consumed through pgadmin/utils/driver/psycopg3/server_manager.py:86 PasswordExec(server.passexec_cmd, ...))",
+          "pgadmin/utils/master_password.py:140 'p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)' - command built from config.MASTER_PASSWORD_HOOK at :41-44 (get_crypt_key -> get_master_password_from_master_hook)",
+          "pgadmin/tools/psql/__init__.py:182 'p = subprocess.Popen(connection_data, preexec_fn=os.setsid, ...)' - connection_data = [psql_utility, conn_attr] from get_connection_str (:302); subprocess imported from eventlet.green at :15",
+          "pgadmin/misc/bgprocess/processes.py:21 'from subprocess import Popen, PIPE'; Popen at :330, :345, :381 (BatchProcess.start / get_process_output; cmd = [interpreter, executor, self.cmd] + self.args at :290-291)",
+          "pgadmin/misc/bgprocess/process_executor.py:37 'from subprocess import Popen, PIPE'; Popen at :330 (execute(): command = argv[1:], kwargs['shell'] = True if _IS_WIN else False at :324) and :493 (Windows detached re-exec of [sys.executable] + argv)",
+          "pgadmin/utils/driver/psycopg3/generate_keywords.py:20-21 os.popen('pg_config --includedir') / os.popen('pg_config --version') - static dev codegen script, recorded as candidate only",
+          "pgadmin/utils/javascript/javascript_bundler.py:12,63 'from subprocess import call' + call(['yarn', 'run', 'bundle:dev']) - dev bundling helper"
+        ]
+      },
+      {
+        "family": "shell_true_flag",
+        "evidence": [
+          "pgadmin/utils/passexec.py:38 shell=True (subprocess.run)",
+          "pgadmin/utils/master_password.py:140 shell=True (subprocess.Popen)",
+          "pgadmin/misc/bgprocess/process_executor.py:324 'kwargs['shell'] = True if _IS_WIN else False' - dynamic shell toggle, not a literal keyword argument; documented as an unresolved case rather than a shell_true row"
+        ]
+      },
+      {
+        "family": "getoutput_version_probes",
+        "evidence": [
+          "pgadmin/utils/__init__.py:375 'subprocess.getoutput('\"{0}\" --version'.format(full_path))' inside set_binary_path - full_path derived from binary_path (validate_binary_path request / preferences)",
+          "pgadmin/misc/__init__.py:274 'subprocess.getoutput(r'\"{0}\" --version'.format(full_path.replace('\"', '\"\"')))' inside validate_binary_path - double-quote escaped variant of the same probe"
+        ]
+      },
+      {
+        "family": "pty_process_spawn",
+        "evidence": [
+          "pgadmin/tools/psql/__init__.py:235 'process = PtyProcess.spawn('cmd.exe', env=get_user_env())' (winpty, imported at :35) followed by :237 'process.write(r'\"{0}\" \"{1}\" 2>>&1'.format(connection_data[0], connection_data[1]))' - writes the psql invocation into a running cmd.exe shell; input reaches the same shell through socket_input -> process.write (:417-418, :436-437)"
+        ]
+      },
+      {
+        "family": "batch_process_boundary",
+        "evidence": [
+          "BatchProcess(**{'desc': ..., 'cmd': utility, 'args': escaped_args}) constructions: pgadmin/tools/backup/__init__.py:456,465 (args built by _get_args_params_values from json.loads(request.data) at :401, escaped via escape_dquotes_process_arg at :447-449); pgadmin/tools/restore/__init__.py, pgadmin/tools/import_export/__init__.py, pgadmin/tools/maintenance/__init__.py same pattern",
+          "pgadmin/misc/cloud/rds/__init__.py:306-311 BatchProcess(cmd=_cmd, args=args) with args from the deploy request data (:262-289); pgadmin/misc/cloud/azure/__init__.py:690, biganimal and google equivalents; env carries AWS keys (:314-324)",
+          "BatchProcess.start (pgadmin/misc/bgprocess/processes.py:281-373) spawns [interpreter, process_executor.py, self.cmd] + self.args; process_executor.execute (:291-332) runs it with shell=True on Windows"
+        ]
+      },
+      {
+        "family": "internal_exec_wrappers",
+        "evidence": [
+          "pgadmin/utils/passexec.py:25 PasswordExec.get() - contains subprocess.run(shell=True)",
+          "pgadmin/utils/master_password.py:132 get_master_password_from_master_hook(command) - contains subprocess.Popen(shell=True)",
+          "pgadmin/misc/bgprocess/processes.py:281 BatchProcess.start() and :375 get_process_output() - contain bare Popen calls",
+          "pgadmin/misc/bgprocess/process_executor.py:291 execute(argv) - contains the Popen(command, shell=True-on-win) call; also the daemon parent re-exec at :459-493",
+          "pgadmin/tools/psql/__init__.py:175 create_pty_terminal(connection_data) - contains subprocess.Popen; :234 windows_platform(connection_data, ...) - contains PtyProcess.spawn and the .format shell write",
+          "pgadmin/utils/__init__.py:354 set_binary_path() and pgadmin/misc/__init__.py:243 validate_binary_path() - contain subprocess.getoutput probes"
+        ]
+      },
+      {
+        "family": "command_string_format",
+        "evidence": [
+          "'{0} --version'.format(full_path) as the direct argument of subprocess.getoutput: pgadmin/utils/__init__.py:375 and pgadmin/misc/__init__.py:274",
+          "r'\"{0}\" \"{1}\" 2>>&1'.format(...) written into the cmd.exe shell: pgadmin/tools/psql/__init__.py:237 (inside windows_platform, an exec wrapper)",
+          "static string commands: subprocess.run(self.cmd)/Popen(command) pass a variable; process_executor Popen(command) passes the argv list"
+        ]
+      }
+    ],
+    "sanitizerObservations": [
+      "pgadmin/misc/__init__.py:271-275 escapes double quotes ('full_path.replace('\"', '\"\"')') before the getoutput probe, while the twin probe in pgadmin/utils/__init__.py:375 does not apply the same escaping - an asymmetry recorded for the labeling step, not a vulnerability verdict",
+      "escape_dquotes_process_arg (pgadmin/misc/bgprocess/__init__.py:157) applied to backup/restore/import_export/maintenance args before BatchProcess (e.g. pgadmin/tools/backup/__init__.py:447-449), unescaped again in the executor (process_executor.py:56,414) - double-quote escaping only, not full shell quoting",
+      "pgadmin/utils/passexec.py:26-28 raises NotImplementedError in SERVER_MODE (\"Arbitrary shell execution on server is a security risk\")",
+      "no shlex.quote / pipes.quote / shlex.join anywhere in project source",
+      "os.path.exists checks on binary paths (pgadmin/misc/__init__.py:268, pgadmin/utils/__init__.py:338) verify existence, not shell safety"
+    ],
+    "nonVulnerabilityNote": "Predefined utility execution (backup/restore/maintenance/import_export via pg_dump/pg_restore/vacuum etc.), the cloud deployment pipeline, the psql terminal feature, and the passexec/master-password hooks are the product's intended command features. They are recorded as sink candidates for labeling only; none is presumed vulnerable, and no rule was added from any known vulnerability location."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query compile, then sequential codeql query run (one at a time) and codeql bqrs decode --format=csv; NOT database analyze / SARIF (deferred to Phase 2)",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output decodes directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); alias-aware, only genuine resolved calls into external modules (json.loads, os.getenv, subprocess.*, os.popen)",
+      "ast": "pure AST shape match (attribute/name text, syntactic module prefix, receiver name, decorator shapes); catches the eventlet.green subprocess import, the from-imported bare Popen names, Flask request proxy reads, @blueprint.route / @sio.on handler signatures, and other dynamic or unresolved shapes. Subject to name-collision noise; both spellings of the request object alias (request / req / request_object) are matched explicitly"
+    },
+    "flowKinds": {
+      "sources": ["return", "http_request", "request_param", "param", "env", "cli", "config", "internal_transfer"],
+      "sinks": ["arg", "shell_true", "cmd_format", "internal_exec_wrapper", "exec_boundary"]
+    },
+    "exclusions": [
+      "web/regression/ (feature test harness) and all */tests/ directories are excluded from candidate rows via file-path filters in both queries",
+      "repo-root tools/ dev scripts (get_chromedriver.py, dependency_inventory.py, ...) are excluded via the same path filter",
+      "web/pgadmin/utils/driver/psycopg3/generate_keywords.py is NOT excluded (it lives outside tests/) but is a static dev codegen script; its os.popen rows are expected to be labeled none/low-relevance",
+      "pure logging/output helpers are not extracted"
+    ]
+  },
+  "uncoveredCases": [
+    "eventlet.green subprocess: pgadmin/tools/psql/__init__.py:15 'from eventlet.green import subprocess' - API graphs may resolve subprocess.Popen through the module alias or may not; the AST-shape match (module prefix 'subprocess') guarantees the site is captured either way, with match_kind recording which mechanism produced the row",
+    "bare from-imported execution names: 'from subprocess import call' (pgadmin/utils/javascript/javascript_bundler.py:12, call at :63) is not matched because a bare 'call' name is too collision-prone; bare Popen/system/popen/getoutput/getstatusoutput/check_output/check_call are matched. This is the only known bare-call execution site in non-test code",
+    "dynamic shell flag: pgadmin/misc/bgprocess/process_executor.py:324 'kwargs['shell'] = True if _IS_WIN else False' builds the shell flag through a dict at runtime; it is not a literal shell=True keyword, so it is documented here instead of producing a shell_true row",
+    "attribute-argument indirection: process_executor.py:330 'Popen(command, ..., **kwargs)' passes the shell flag via **kwargs; the Popen call itself is still captured as an arg row",
+    "request-object aliases: 'request as req' (file_manager) and the request_object parameter convention (browser get_delete_data helpers) are matched by explicit name list; any other alias spelling would be missed",
+    "flask proxy resolution: request is a werkzeug local proxy, so request.<field> reads never resolve through API graphs; they are AST-only rows by design",
+    "data['key'] subscripts on socket payloads (data['db'], data['input'], ...) inside @sio.on handlers are not individually extracted; the handler 'data' parameter rows plus the handler function names carry the boundary",
+    "CLI option attribute reads (args.<attr> / options.<attr> after parse_args) are not extracted because the bare names 'args'/'options' are heavily reused for non-CLI values in this codebase (e.g. backup args lists); argparse registration/parse calls and sys.argv are captured instead",
+    "BatchProcess.start() method invocations are receiver-typed only at runtime; the constructor call sites (exec_boundary rows) and the internal wrapper functions cover the boundary instead",
+    "schema/DB-stored values (Server.passexec_cmd, Process.command/arguments from the SQLAlchemy store) are reached through attribute reads on ORM query results; only the direct construction and consumption sites are captured, not the ORM round-trip"
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/README.md",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "note: no references/flask.md exists in the Augur installation; Flask/Flask-SocketIO source and sink shapes were derived from repository evidence per the language reference"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: CVE_application_report.md, vulnerability_audit_report.md, cmd_sinks.csv, cmd_sinks_all.csv, cmd_sinks_test.csv, the '第一审查' file, and pgadmin4-db/cmd_sinks.csv were NOT opened during this step; candidate families are derived from repository evidence and the loaded language/pattern references only. Project source, the CodeQL database, and the Augur installation were not modified. Only three files under iris_manual/pgadmin4/iris were written: exploration/detection.json, extraction/sources.ql, extraction/sinks.ql."
+  }
+}
