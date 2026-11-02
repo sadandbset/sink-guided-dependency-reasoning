@@ -1,0 +1,243 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-15",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\dcnnt-py\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Re-execution of Phase 1 Step 1-2 against the dcnnt-py_vuln source tree checked out at commit 4084ea1 ('Version 0.9.0'), which equals the CodeQL database creation sha - tree and database are now the same snapshot. All file/line evidence below was re-verified against this checkout."
+  },
+  "target": {
+    "project": "dcnnt-py",
+    "projectDescription": "UI-less tool to connect an Android phone with a desktop: connection, configuration, plugins, and predefined remote command execution over an encrypted TCP/UDP protocol (JSON-RPC 2.0 payloads).",
+    "pass": 2,
+    "cwes": ["CWE-78"],
+    "focus": "Command/Argument Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\dcnnt-py_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (dcnnt-py-db/codeql-database.yml)",
+      "18 .py files under dcnnt-py_vuln (dcnnt/ package + setup.py)",
+      "setup.py: setuptools.setup(name='dcnnt', ..., python_requires='>=3.6', install_requires=['pycryptodome>=3.9.3'])"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\dcnnt-py-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\dcnnt-py_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "4084ea18f96d9a953315f5555fca45f26639b8be",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-26T12:23:56.291848600Z"
+    },
+    "baselineLinesOfCode": 1812,
+    "finalised": true
+  },
+  "toolchain": {
+    "qlpack": "iris/dcnnt-py-cwe78 (dependencies: codeql/python-all: \"\")",
+    "packResolutionExpected": "codeql/python-all resolved from the local pack cache by qlpack.yml",
+    "codeqlExecution": "deferred (this step only generates queries; codeql query run / bqrs decode happen in a later step)"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] },
+        { "name": "django", "confidence": 0.0, "evidence": [] },
+        { "name": "flask", "confidence": 0.0, "evidence": [] }
+      ]
+    },
+    "selected": "none (custom socket-based protocol)",
+    "notes": "No web framework detected. All framework scores are below the 0.50 threshold, so no framework reference is loaded. The externally reachable attack surface is a custom protocol stack built directly on the standard library (socketserver + socket + json + pycryptodome). Source/sink shapes below are derived from repository evidence per references/python.md and references/patterns.md (language reference path, since no framework reference matches).",
+    "customBoundaryEvidence": [
+      "dcnnt/tcp_server.py:3 'from socketserver import TCPServer, ThreadingMixIn, BaseRequestHandler'",
+      "dcnnt/tcp_server.py:8 'class DConnectThreadingTCPServer(ThreadingMixIn, TCPServer)'",
+      "dcnnt/tcp_server.py:17 'class DConnectHandler(BaseRequestHandler)' - parses 60-byte connection header, decrypts plugin mark, hands control to plugin instance",
+      "dcnnt/app.py:11 'from socketserver import ThreadingUDPServer, UDPServer' - UDP server-search + pairing channel",
+      "dcnnt/server_search.py:11 'class ServerSearchHandler(BaseRequestHandler)' - unpacks JSON UDP datagrams",
+      "dcnnt/common/jsonrpc.py - JSON-RPC 2.0 request/response objects, dispatcher and byte serializer",
+      "dcnnt/plugins/__init__.py:10 'PLUGINS = FileTransferPlugin, OpenerPlugin, RemoteCommandsPlugin, NotificationsPlugin, SyncPlugin' - plugin registry",
+      "setup.py entry point 'dcnnt=dcnnt.dcnnt:main' (argparse CLI)"
+    ]
+  },
+  "inputBoundaryInventory": {
+    "summary": "Android clients (paired devices) are the attacker-facing input source. Data enters via (1) TCP socket reads decrypted with a device key, (2) UDP JSON datagrams, (3) JSON-RPC request params consumed by plugin handlers, (4) files written during transfer, (5) CLI args / environment / JSON config at startup. Command execution sinks concentrate in plugin handlers that format config-defined command templates and run them through subprocess with shell=True; in this snapshot none of the template substitution values at those sites is escaped or shell-quoted.",
+    "sourceFamilies": [
+      {
+        "family": "socket_receive",
+        "evidence": [
+          "dcnnt/tcp_server.py:35 self.sock.recv(left) - raw TCP bytes",
+          "dcnnt/tcp_server.py:69 header = self.recv(60) - connection header",
+          "dcnnt/plugins/base.py:106 self.handler.recv(4) - message size prefix",
+          "dcnnt/plugins/base.py:109 self.handler.recv(int.from_bytes(size_raw, 'big')) - encrypted message body"
+        ]
+      },
+      {
+        "family": "decrypt_internal",
+        "evidence": [
+          "dcnnt/tcp_server.py:85 plg = decrypt(header[24:], source.key_recv)",
+          "dcnnt/plugins/base.py:114 return decrypt(encrypted, key)"
+        ]
+      },
+      {
+        "family": "json_decode",
+        "evidence": [
+          "dcnnt/server_search.py:17 request = json.loads(raw.decode()) - UDP datagram",
+          "dcnnt/plugins/base.py:128 RPCRequest.from_dict(json.loads(request_raw.decode()))",
+          "dcnnt/common/jsonrpc.py:158 data = json.loads(raw.decode())"
+        ]
+      },
+      {
+        "family": "rpc_object_factory",
+        "evidence": [
+          "dcnnt/common/jsonrpc.py:73 RPCRequest.from_dict(d)",
+          "dcnnt/common/jsonrpc.py:103 RPCResponse.from_dict(d)",
+          "dcnnt/server_search.py:25 self.unpack_raw_request(self.request[0])"
+        ]
+      },
+      {
+        "family": "request_param_reads",
+        "evidence": [
+          "dcnnt/plugins/base.py:176 request.params['name'], request.params['size']",
+          "dcnnt/plugins/remote_commands.py:40 request.params.get('index', None)",
+          "dcnnt/plugins/notifications.py:44 request.params.get('event') / :43 request.params.get('packageIcon', False)",
+          "dcnnt/plugins/notifications.py:45 map(request.params.get, ('text', 'package')) - bound-method form, see uncoveredCases",
+          "dcnnt/plugins/notifications.py:46 request.params.get('title', 'NULL')",
+          "dcnnt/plugins/opener.py:38 request.params.get('link')",
+          "dcnnt/plugins/file_transfer.py:124 request.params['index'], request.params['size']",
+          "dcnnt/plugins/sync.py:65 request.params.get('sub'); sync.py:279 request.params.get('path'); sync.py:300 request.params['name']",
+          "dcnnt/server_search.py:18 request.pop(...) / request.get('pair') on the decoded UDP JSON dict"
+        ]
+      },
+      {
+        "family": "handler_entry_points",
+        "evidence": [
+          "dcnnt/tcp_server.py:63 DConnectHandler.handle(self)",
+          "dcnnt/server_search.py:22 ServerSearchHandler.handle(self)",
+          "dcnnt/plugins/base.py:141 Plugin.process_request(request); base.py:145 Plugin.main()",
+          "dcnnt/plugins/*.py handle_* methods, main() loops, receive_file / receive_file_to_path (base.py:198-204)",
+          "dcnnt/common/jsonrpc.py:123 RPCDispatcher.dispatch(request)"
+        ]
+      },
+      {
+        "family": "internal_message_transfer",
+        "evidence": [
+          "dcnnt/plugins/base.py:123 request_raw = self.read(); base.py:148 request = self.rpc_read()",
+          "dcnnt/tcp_server.py:97 plugin(app, self, source).main() - hands the connection to a plugin",
+          "dcnnt/plugins/base.py:154 self.process_request(request)"
+        ]
+      },
+      {
+        "family": "env_cli_config",
+        "evidence": [
+          "dcnnt/common/jsonconf.py:9 os.environ['HOME']",
+          "dcnnt/app.py:83 env = {k: v for k, v in os.environ.items()}",
+          "dcnnt/dcnnt.py:20 args = parser.parse_args(sys.argv[1:])",
+          "dcnnt/app.py:111 ConfigLoader(self.environment, path, self.CONFIG_SCHEMA, True).load() - JSON config files",
+          "plugin handlers read command templates via self.conf(...) e.g. dcnnt/plugins/opener.py:31 self.conf(('file', 'default_cmd'))"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "subprocess_exec",
+        "evidence": [
+          "dcnnt/plugins/remote_commands.py:48 subprocess.check_call(cmd, shell=True)",
+          "dcnnt/plugins/notifications.py:58 subprocess.call(command, shell=True)",
+          "dcnnt/plugins/opener.py:34 subprocess.call(command, shell=True)",
+          "dcnnt/plugins/opener.py:44 subprocess.call(command, shell=True)",
+          "dcnnt/plugins/file_transfer.py:110 subprocess.call(command, shell=True)",
+          "dcnnt/plugins/sync.py:318 subprocess.call(command, shell=True)",
+          "dcnnt/plugins/sync.py:361 subprocess.call(command, shell=True)"
+        ]
+      },
+      {
+        "family": "shell_true_flag",
+        "evidence": "every subprocess execution site in the repository passes shell=True (7 sites listed above)"
+      },
+      {
+        "family": "command_template_format",
+        "evidence": [
+          "dcnnt/plugins/notifications.py:56 cmd.format(uin=uin, name=name, icon=icon, text=text, title=title, package=package) - substitution values from network params (text/title/package) and device records are inserted into the command string with no escaping in this snapshot",
+          "dcnnt/plugins/opener.py:32 on_download.format(path=path); opener.py:42 self.conf(('link', 'default_cmd')).format(url=url)",
+          "dcnnt/plugins/file_transfer.py:108 on_download.format(path=path)",
+          "dcnnt/plugins/sync.py:316 on_done.format(path=res); sync.py:359 on_merge.format(local=..., remote=..., output=path)"
+        ]
+      },
+      {
+        "family": "internal_exec_wrappers",
+        "evidence": [
+          "dcnnt/plugins/remote_commands.py:38 RemoteCommandsPlugin.handle_exec",
+          "dcnnt/plugins/notifications.py:32 NotificationsPlugin.main",
+          "dcnnt/plugins/opener.py:28 handle_open_file; opener.py:36 handle_open_link",
+          "dcnnt/plugins/file_transfer.py:103 handle_upload",
+          "dcnnt/plugins/sync.py:295 common_upload_handler; sync.py:343 handle_file_upload"
+        ]
+      }
+    ],
+    "sanitizerObservations": [
+      "dcnnt/plugins/sync.py:280 / sync.py:288 - target path checked against configured sync paths before use (allow-list style guard, substring containment in ensure_file_syncable at sync.py:331)",
+      "dcnnt/plugins/remote_commands.py:40 - command selected by index from the pre-configured remote_commands dict (index is attacker-controlled, the executed cmd string is config-controlled)",
+      "No shlex.quote / shell-escaping wrapper is present anywhere in this snapshot: notifications.py (the only file that would import it in a later state) has no quote import, and none of the seven template format sites escapes its substitution values. Sanitizer labeling for pass 2 will therefore likely produce an empty barrier set unless human review adds config-side assumptions."
+    ],
+    "nonVulnerabilityNote": "The predefined remote commands feature (remote_commands plugin running config-declared commands selected by index) is normal intended functionality and is NOT automatically treated as a vulnerability; it is recorded only as a candidate boundary for labeling."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) followed by codeql bqrs decode --format=csv; NOT database analyze / SARIF",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output is decoded directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); alias-aware, only genuine resolved calls into external modules",
+      "ast": "pure AST shape match (attribute/name text, syntactic module prefix, receiver name); catches dynamic or unresolved shapes that API graphs miss and is subject to name-collision noise"
+    },
+    "flowKinds": {
+      "sources": ["return", "param", "request_param", "env", "cli", "config", "internal_transfer"],
+      "sinks": ["arg", "shell_true", "cmd_format", "internal_exec_wrapper"]
+    },
+    "exclusions": [
+      "no test/fixture directories exist in this repository (nothing excluded on that ground)",
+      "logging-only helpers (self.log / logger.*) are not extracted as candidates",
+      "pure senders (Plugin.send / rpc_send) are not extracted as sources"
+    ]
+  },
+  "uncoveredCases": [
+    "dcnnt/tcp_server.py:97 plugin(app, self, source).main() - plugin class is looked up dynamically from the app.plugins dict (populated from the PLUGINS tuple); the constructor call target is not syntactically resolvable. Mitigated by emitting the .main() attribute call as an internal_transfer candidate row and by handler parameter rows.",
+    "dcnnt/common/jsonrpc.py:130 func(**request.params) - RPCDispatcher looks the callable up in a methods dict and calls it with attacker-controlled params (dynamic dispatch). Not resolvable by extraction; would need a MySummaries taint step if the dispatcher were wired into the live path (currently marked ToDo/unused in this version).",
+    "dcnnt/plugins/remote_commands.py:30 / notifications.py:45 / sync.py:131 - map(command.get, ...) and map(request.params.get, (...)) pass bound methods into map(); the element reads are not modeled as call rows. For notifications.py:45 this means the 'text'/'package' values are not captured by the request_param family; the adjacent direct .get calls (:43/:44/:46) and the rpc_read/handler-param families still cover the enclosing function.",
+    "dcnnt/common/jsonconf.py:145/187 - string.Template(...).safe_substitute(environment) blends environment/config values into filesystem paths; not emitted as a call candidate (root env/config reads are covered by source families instead).",
+    "dcnnt/common/jsonrpc.py:33 type(self).__call__(...) - dynamic self-invocation in RPCError.add_data.",
+    "Bare-name (from-import) execution sinks are only matched for distinctive names (system, popen, getoutput, getstatusoutput); bare call/run/check_call are too collision-prone and would need API-graph resolution or import analysis to confirm. In this repository every subprocess site is attribute-qualified (subprocess.call / subprocess.check_call), so this gap is not exercised."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth, CVE patch diffs, or vulnerability descriptions were consulted in this step; candidate families are derived from repository evidence and the loaded language/pattern references only. Project source, database, and Augur installation files were not modified. Only iris/exploration/detection.json, iris/extraction/sources.ql and iris/extraction/sinks.ql were written."
+  }
+}

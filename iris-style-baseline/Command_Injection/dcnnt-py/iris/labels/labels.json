@@ -1,0 +1,3801 @@
+{
+  "version": "0.3.0",
+  "metadata": {
+    "run_id": "dcnnt-py-iris-pass2-20261015-r2",
+    "generated_at": "2026-10-15T17:05:00+08:00",
+    "language": "python",
+    "framework": null,
+    "model": "glm-5.3",
+    "project": "dcnnt-py",
+    "notes": [
+      "Re-labeling run (r2) of Phase 1 Step 3 against the dcnnt-py_vuln source tree at commit 4084ea1, which equals the CodeQL database creation sha; tree, database and CSV line numbers now agree for every file, including plugins/notifications.py (r1 was labeled while the working tree was at a different checkout state; only notifications.py differs between the two states).",
+      "Single-pass labeling run: Pass 2 only (CWE-78 Command/Argument Injection), per exploration/detection.json target.pass=2, cwes=[CWE-78].",
+      "passes contains a pass_id=1 stub with zero entries solely to satisfy labels_schema.json 'contains' (requires a pass_id=1 element); pass 1 (path traversal) was NOT labeled in this run and must be labeled separately before any pass-1 query generation.",
+      "All 207 candidate rows (sources.csv 168 + sinks.csv 39) were dispositioned; 26 rows merged into 13 sibling entries (12 source-side duplicates, 14 sink-side arg-ast/arg-api/shell_true facets of 7 subprocess call sites).",
+      "Labeling performed in-session by the agent's underlying LLM (glm-5.3); 5 batches, no external LLM API calls.",
+      "Key r1->r2 corrections (closing the r1 omission): the notifications.py:58 subprocess.call sink is now classified tp (in snapshot 4084ea1 the cmd.format substitution values are NOT escaped - no shlex import exists anywhere in this tree), and the r1 supplementary sanitizer entry for shlex.quote (p2-e-182) was removed because that API is absent from this snapshot; the confirmed sanitizer set is now empty for pass 2.",
+      "classification semantics: tp = confirmed genuine for the assigned role in this pass; fp = candidate rejected (role none); candidate = plausible but unresolved, human review requested; unknown = unused this run.",
+      "No PyVul ground truth, vulnerability patch commits, or external security advisories were consulted; project source, CodeQL database, and extraction artifacts were not modified."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 2,
+      "focus": "Command/Argument Injection",
+      "cwes": [
+        "078"
+      ],
+      "entries": [
+        {
+          "id": "p2-e-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "environ",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "os"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/app.py",
+            "line": 83
+          },
+          "rationale": "os.environ read in DConnectApp.init_environment builds the local environment map (XDG_RUNTIME_DIR, DCNNT_RUNTIME_DIR, DCNNT_CONFIG_DIR). Controlled by the local user launching the daemon, not the remote phone; feeds filesystem path defaults only, and no environment-derived value reaches a command string on any path in this snapshot (notification command substitutions are request-derived, not environment-derived).",
+          "evidence": [
+            "app.py:83 env = {k: v for k, v in os.environ.items()}",
+            "app.py:93-94 env['DCNNT_RUNTIME_DIR']/env['DCNNT_CONFIG_DIR'] (path values only)"
+          ]
+        },
+        {
+          "id": "p2-e-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "ConfigLoader",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common.jsonconf"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/app.py",
+            "line": 111
+          },
+          "rationale": "Read of locally authored, schema-validated configuration (ConfigLoader/DictEntry checks); config files live in the user's config directory and command templates are defined there. The remote phone cannot write config content, so this is the trusted side of the boundary; for CWE-78 the attacker controls only substitution values at runtime, never the template itself. Loads the main conf.json (log paths, self uin/name/password, port, pidfile); none of it is network-writable and none of it is a command string.",
+          "evidence": [
+            "app.py:111 ConfigLoader(self.environment, path, self.CONFIG_SCHEMA, True).load()",
+            "jsonconf.py:293-299 json.load + schema.check validation"
+          ]
+        },
+        {
+          "id": "p2-e-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "ConfigLoader",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common.jsonconf",
+            "type": "PluginInitializer"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 19
+          },
+          "rationale": "Read of locally authored, schema-validated configuration (ConfigLoader/DictEntry checks); config files live in the user's config directory and command templates are defined there. The remote phone cannot write config content, so this is the trusted side of the boundary; for CWE-78 the attacker controls only substitution values at runtime, never the template itself. Plugin main configuration (<mark>.conf.json) loaded at plugin init, before any connection exists.",
+          "evidence": [
+            "plugins/base.py:19 ConfigLoader(self.environment, main_conf_path, self.cls.CONFIG_SCHEMA, True).load()"
+          ]
+        },
+        {
+          "id": "p2-e-004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "ConfigLoader",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common.jsonconf",
+            "type": "PluginInitializer"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 25
+          },
+          "rationale": "Read of locally authored, schema-validated configuration (ConfigLoader/DictEntry checks); config files live in the user's config directory and command templates are defined there. The remote phone cannot write config content, so this is the trusted side of the boundary; for CWE-78 the attacker controls only substitution values at runtime, never the template itself. Per-device plugin configuration (device UIN keyed) loaded at init from the local config directory.",
+          "evidence": [
+            "plugins/base.py:25 ConfigLoader(self.environment, path, self.cls.CONFIG_SCHEMA, False).load()"
+          ]
+        },
+        {
+          "id": "p2-e-005",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.base",
+            "type": "Plugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 74
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately.",
+          "evidence": [
+            "plugins/base.py:74 def __init__(self, app, handler, device)"
+          ]
+        },
+        {
+          "id": "p2-e-006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.base",
+            "type": "Plugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 74
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately.",
+          "evidence": [
+            "plugins/base.py:74-75 self.handler, self.sock = handler, handler.sock (transport objects)"
+          ]
+        },
+        {
+          "id": "p2-e-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "dcnnt.plugins.base",
+            "type": "Plugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 74
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately.",
+          "evidence": [
+            "plugins/base.py:74-75 self.device = device (local Device record with keys)"
+          ]
+        },
+        {
+          "id": "p2-e-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.base",
+            "type": "Plugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 86
+          },
+          "rationale": "Parameter is a config key or key sequence (literal tuples at every call site, e.g. ('file', 'default_cmd')); local config lookup, not attacker data.",
+          "evidence": [
+            "plugins/base.py:86-102 def conf(self, path) - config traversal with literal keys"
+          ]
+        },
+        {
+          "id": "p2-e-009",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "recv",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.tcp_server",
+            "type": "DConnectHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 106
+          },
+          "rationale": "4-byte message size prefix read from the connected phone over TCP (self.handler.recv(4)). Outermost raw network input of the plugin message protocol.",
+          "evidence": [
+            "plugins/base.py:106 size_raw = self.handler.recv(4)"
+          ]
+        },
+        {
+          "id": "p2-e-010",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "recv",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.tcp_server",
+            "type": "DConnectHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 109
+          },
+          "rationale": "Encrypted message body read from the socket; its length is the attacker-supplied size prefix. Raw network input.",
+          "evidence": [
+            "plugins/base.py:109 encrypted = self.handler.recv(int.from_bytes(size_raw, 'big'))"
+          ]
+        },
+        {
+          "id": "p2-e-011",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "decrypt",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 114
+          },
+          "rationale": "AES-GCM decryption of the message body with the device key. Decryption gives confidentiality/integrity against the paired phone, but the paired phone IS the attacker-facing principal in this threat model, so the plaintext is still attacker-controlled; decrypt is a propagation step, not a sanitizer (review point 1: protocol decryption does not restrict command parameters).",
+          "evidence": [
+            "plugins/base.py:113-114 key = self.device.key_recv; return decrypt(encrypted, key)",
+            "common/__init__.py:20-26 decrypt (AES GCM decrypt_and_verify)"
+          ]
+        },
+        {
+          "id": "p2-e-012",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "send",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.base",
+            "type": "Plugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 116
+          },
+          "rationale": "Outbound server-to-client payload (sendall of encrypted buffer); not attacker input (extraction contract excludes pure senders).",
+          "evidence": [
+            "plugins/base.py:116-119 def send(self, buf)"
+          ]
+        },
+        {
+          "id": "p2-e-013",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "read",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.plugins.base",
+            "type": "Plugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 123
+          },
+          "rationale": "Plugin.read() returns decrypted attacker bytes (size prefix + body read from the phone socket); the canonical network read boundary used by every plugin.",
+          "evidence": [
+            "plugins/base.py:104-114 def read(self): ... return decrypt(encrypted, key)"
+          ]
+        },
+        {
+          "id": "p2-e-014",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "from_dict",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common.jsonrpc",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 128
+          },
+          "rationale": "Constructs the RPCRequest object consumed by all plugin handlers from json.loads of decrypted network JSON; the object's method/params fields are attacker-controlled.",
+          "evidence": [
+            "plugins/base.py:128 RPCRequest.from_dict(json.loads(request_raw.decode()))"
+          ]
+        },
+        {
+          "id": "p2-e-015",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "loads",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "json"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 128
+          },
+          "rationale": "json.loads of the decrypted network message; JSON protocol decoding performs no content restriction on params (review point 1). api + ast extraction rows of the same call site merged.",
+          "evidence": [
+            "plugins/base.py:128 json.loads(request_raw.decode())",
+            "merged: sources.csv rows 16 (match_kind api) and 17 (match_kind ast)"
+          ]
+        },
+        {
+          "id": "p2-e-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "rpc_send",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.base",
+            "type": "Plugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 132
+          },
+          "rationale": "Outbound JSON-RPC response serialization; server-to-client direction, not attacker input.",
+          "evidence": [
+            "plugins/base.py:132-139 def rpc_send(self, obj)"
+          ]
+        },
+        {
+          "id": "p2-e-017",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "process_request",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.base",
+            "type": "Plugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 141
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md.",
+          "evidence": [
+            "plugins/base.py:141-143 def process_request(self, request: RPCRequest)",
+            "plugins/base.py:154 self.process_request(request) (from main loop)"
+          ]
+        },
+        {
+          "id": "p2-e-018",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "rpc_read",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.plugins.base",
+            "type": "Plugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 148
+          },
+          "rationale": "Returns an RPCRequest built from network bytes: rpc_read() -> self.read() (decrypted socket data) -> json.loads -> RPCRequest.from_dict. Genuine network input boundary of the plugin loop. The internal_transfer twin row of the same call site is merged here.",
+          "evidence": [
+            "plugins/base.py:148 request = self.rpc_read()",
+            "merged: sources.csv rows 20 (return) and 21 (internal_transfer)"
+          ]
+        },
+        {
+          "id": "p2-e-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "process_request",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.base",
+            "type": "Plugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 154
+          },
+          "rationale": "Dispatch call passing the request into the handler. Interprocedural data flow already covers argument passing and the callee parameter is labeled a source; labeling this edge again would only duplicate existing source entries.",
+          "evidence": [
+            "plugins/base.py:154 self.process_request(request)"
+          ]
+        },
+        {
+          "id": "p2-e-020",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "_receive_file",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 173
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. This is the shared file-receive primitive: request.params['name'] (attacker) is joined into the saved path (base.py:176-179) which later feeds command templates in opener/file_transfer/sync.",
+          "evidence": [
+            "plugins/base.py:173 def _receive_file(self, request, download_directory, path)",
+            "plugins/base.py:176 name, size = request.params['name'], request.params['size']"
+          ]
+        },
+        {
+          "id": "p2-e-021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "_receive_file",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 173
+          },
+          "rationale": "Download directory argument comes from self.conf('download_directory') / configured sync paths - local config, trusted side of the boundary.",
+          "evidence": [
+            "plugins/base.py:179 path = os.path.join(download_directory, name) if path is None else path"
+          ]
+        },
+        {
+          "id": "p2-e-022",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "_receive_file",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 173
+          },
+          "rationale": "Explicit destination path parameter. At the sync call sites it receives attacker-derived paths (client_file_path built from request path, sync.py:354-358; guarded request path at sync.py:363), while other callers pass config values. Attacker-influenced at runtime and ultimately reaches on_merge/on_done command templates - retained as candidate for recall; see sync sink entries for the guards.",
+          "evidence": [
+            "plugins/base.py:198-200 receive_file_to_path -> _receive_file(request, '', path)",
+            "plugins/sync.py:355-358 client_file_path built from request-controlled path",
+            "plugins/sync.py:363 self.receive_file_to_path(request, path)"
+          ]
+        },
+        {
+          "id": "p2-e-023",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "params",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.base",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 176
+          },
+          "rationale": "request.params['name'] / request.params['size'] - attacker-controlled uploaded file name and size. The name is the primary CWE-78 injection vector: it flows through os.path.join(download_directory, name) into on_download/on_done command templates formatted and executed with shell=True, with no quoting on the opener/file_transfer/sync paths. Duplicate rows of the same subscript site merged.",
+          "evidence": [
+            "plugins/base.py:176 name, size = request.params['name'], request.params['size']",
+            "plugins/base.py:179 path = os.path.join(download_directory, name)",
+            "merged: sources.csv rows 26 and 27"
+          ]
+        },
+        {
+          "id": "p2-e-024",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "read",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 185
+          },
+          "rationale": "File chunk read from the socket during file receive (attacker-controlled file content bytes).",
+          "evidence": [
+            "plugins/base.py:185 buf = self.read()"
+          ]
+        },
+        {
+          "id": "p2-e-025",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "rpc_read",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 189
+          },
+          "rationale": "Cancel-request read inside the file-receive loop; attacker RPC data. return + internal_transfer rows of the same site merged.",
+          "evidence": [
+            "plugins/base.py:189 req = self.rpc_read()"
+          ]
+        },
+        {
+          "id": "p2-e-026",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "receive_file_to_path",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 198
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md.",
+          "evidence": [
+            "plugins/base.py:198 def receive_file_to_path(self, request: RPCRequest, path)"
+          ]
+        },
+        {
+          "id": "p2-e-027",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "receive_file_to_path",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 198
+          },
+          "rationale": "Destination path parameter receives attacker-derived paths at the sync call sites (see _receive_file path candidate entry); retained as candidate for recall.",
+          "evidence": [
+            "plugins/sync.py:358,363 receive_file_to_path calls"
+          ]
+        },
+        {
+          "id": "p2-e-028",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "receive_file",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 202
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md.",
+          "evidence": [
+            "plugins/base.py:202 def receive_file(self, request: RPCRequest, download_directory)"
+          ]
+        },
+        {
+          "id": "p2-e-029",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "receive_file",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 202
+          },
+          "rationale": "Download directory argument comes from plugin config (self.conf(...)) - trusted local value.",
+          "evidence": [
+            "plugins/opener.py:30 self.receive_file(request, self.conf(('file', 'download_directory')))"
+          ]
+        },
+        {
+          "id": "p2-e-030",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "send_file",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 206
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. In send_file the request is used for response id/size verification only; no command flow, kept as a boundary source for recall.",
+          "evidence": [
+            "plugins/base.py:206 def send_file(self, request: RPCRequest, path, size=None)"
+          ]
+        },
+        {
+          "id": "p2-e-031",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "send_file",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 206
+          },
+          "rationale": "Server-side file path to transmit: comes from shared_files_index (server-built listing selected by a bounds-checked index) or from config allow-list guarded sync paths; index selection is not content injection and no route into command strings exists.",
+          "evidence": [
+            "plugins/file_transfer.py:129-131 0 <= index < len(self.shared_files_index); path = self.shared_files_index[index]"
+          ]
+        },
+        {
+          "id": "p2-e-032",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "send_file",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/base.py",
+            "line": 206
+          },
+          "rationale": "Numeric size used only for equality verification of the file being sent; never command content.",
+          "evidence": [
+            "plugins/base.py:212-214 if file_size != size: raise HandlerExit"
+          ]
+        },
+        {
+          "id": "p2-e-033",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "environ",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "os"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/common/daemon.py",
+            "line": 12
+          },
+          "rationale": "os.environ['HOME'] used once for the default pidfile path at daemon startup; no route into command construction.",
+          "evidence": [
+            "common/daemon.py:12 self.pidfile = os.path.join(os.environ['HOME'], '.dcnnt.pid')"
+          ]
+        },
+        {
+          "id": "p2-e-034",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "add_argument",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "argparse"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/dcnnt.py",
+            "line": 11
+          },
+          "rationale": "CLI surface of a local single-user tool (argparse). Parsed values (run mode, configuration directory, pairing code) are supplied by the invoking local user at process start and never propagate into command strings; not an attacker-controlled boundary for this server's CWE-78 surface. Defines the --doc flag.",
+          "evidence": [
+            "dcnnt.py:11 parser.add_argument('--doc', ...)"
+          ]
+        },
+        {
+          "id": "p2-e-035",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "add_argument",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "argparse"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/dcnnt.py",
+            "line": 12
+          },
+          "rationale": "CLI surface of a local single-user tool (argparse). Parsed values (run mode, configuration directory, pairing code) are supplied by the invoking local user at process start and never propagate into command strings; not an attacker-controlled boundary for this server's CWE-78 surface. Defines -c/--configuration-directory (local config dir).",
+          "evidence": [
+            "dcnnt.py:12-13 add_argument('-c', ...)"
+          ]
+        },
+        {
+          "id": "p2-e-036",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "environ",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "os"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/dcnnt.py",
+            "line": 13
+          },
+          "rationale": "os.environ read at process startup by the local user who launches the tool; no network origin and no unquoted route into command construction for CWE-78 (environment values only feed filesystem path defaults such as XDG_RUNTIME_DIR / config directory).",
+          "evidence": [
+            "dcnnt.py:13 default=os.path.join(os.environ['HOME'], '.config', 'dcnnt')"
+          ]
+        },
+        {
+          "id": "p2-e-037",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "add_argument",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "argparse"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/dcnnt.py",
+            "line": 14
+          },
+          "rationale": "CLI surface of a local single-user tool (argparse). Parsed values (run mode, configuration directory, pairing code) are supplied by the invoking local user at process start and never propagate into command strings; not an attacker-controlled boundary for this server's CWE-78 surface. Defines --pairing-code (pairing mode secret).",
+          "evidence": [
+            "dcnnt.py:14 add_argument('--pairing-code', ...)"
+          ]
+        },
+        {
+          "id": "p2-e-038",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "add_argument",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "argparse"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/dcnnt.py",
+            "line": 15
+          },
+          "rationale": "CLI surface of a local single-user tool (argparse). Parsed values (run mode, configuration directory, pairing code) are supplied by the invoking local user at process start and never propagate into command strings; not an attacker-controlled boundary for this server's CWE-78 surface. Defines the positional mode choice (doc/foreground/pair/start/stop/restart).",
+          "evidence": [
+            "dcnnt.py:15-19 add_argument('mode', choices=(...), ...)"
+          ]
+        },
+        {
+          "id": "p2-e-039",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "parse_args",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "argparse"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/dcnnt.py",
+            "line": 20
+          },
+          "rationale": "CLI surface of a local single-user tool (argparse). Parsed values (run mode, configuration directory, pairing code) are supplied by the invoking local user at process start and never propagate into command strings; not an attacker-controlled boundary for this server's CWE-78 surface. parse_args result only selects mode/directory/pairing code at process start.",
+          "evidence": [
+            "dcnnt.py:20 args = parser.parse_args(sys.argv[1:])"
+          ]
+        },
+        {
+          "id": "p2-e-040",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "argv",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "sys"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/dcnnt.py",
+            "line": 20
+          },
+          "rationale": "CLI surface of a local single-user tool (argparse). Parsed values (run mode, configuration directory, pairing code) are supplied by the invoking local user at process start and never propagate into command strings; not an attacker-controlled boundary for this server's CWE-78 surface.",
+          "evidence": [
+            "dcnnt.py:20 parser.parse_args(sys.argv[1:])"
+          ]
+        },
+        {
+          "id": "p2-e-041",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "ConfigLoader",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common.jsonconf",
+            "type": "DeviceManager"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/device_manager.py",
+            "line": 71
+          },
+          "rationale": "Read of locally authored, schema-validated configuration (ConfigLoader/DictEntry checks); config files live in the user's config directory and command templates are defined there. The remote phone cannot write config content, so this is the trusted side of the boundary; for CWE-78 the attacker controls only substitution values at runtime, never the template itself. Device records (uin, name, role, password) are loaded from local JSON files under the config directory and supply key material, not command content.",
+          "evidence": [
+            "device_manager.py:69-73 load_item: ConfigLoader(...).load() -> Device(**device_dict)"
+          ]
+        },
+        {
+          "id": "p2-e-042",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "environ",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "os"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/common/jsonconf.py",
+            "line": 9
+          },
+          "rationale": "Class attribute HOME_DIR = os.environ['HOME'] is used only inside path-entry defaults; os.environ read at process startup by the local user who launches the tool; no network origin and no unquoted route into command construction for CWE-78 (environment values only feed filesystem path defaults such as XDG_RUNTIME_DIR / config directory).",
+          "evidence": [
+            "common/jsonconf.py:9 HOME_DIR = os.environ['HOME']"
+          ]
+        },
+        {
+          "id": "p2-e-043",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "load",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "json"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/common/jsonconf.py",
+            "line": 293
+          },
+          "rationale": "Read of locally authored, schema-validated configuration (ConfigLoader/DictEntry checks); config files live in the user's config directory and command templates are defined there. The remote phone cannot write config content, so this is the trusted side of the boundary; for CWE-78 the attacker controls only substitution values at runtime, never the template itself. json.load(open(self.path)) is the actual config file read; the loaded dict is validated against the DictEntry schema before use. This is the definitive trust boundary answer for review point 5: command templates originate here (local user), never from the network. api + ast rows merged.",
+          "evidence": [
+            "common/jsonconf.py:293 conf = json.load(open(self.path))",
+            "common/jsonconf.py:296 res = self.schema.check(conf, self.environment)"
+          ]
+        },
+        {
+          "id": "p2-e-044",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "from_dict",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common.jsonrpc",
+            "type": "RPCError"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/common/jsonrpc.py",
+            "line": 110
+          },
+          "rationale": "Builds an RPCError from a dict that (in RPCSerializer.from_bytes) would be parsed from network bytes. Parses network data, but sits on the ToDo/unused RPCSerializer/RPCDispatcher path (see exploration/detection.json uncoveredCases) with no live call site in this version; kept as a candidate source for recall - needs human review if the serializer/dispatcher gets wired in.",
+          "evidence": [
+            "common/jsonrpc.py:36-38 RPCError.from_dict(cls, d)",
+            "common/jsonrpc.py:110 return cls(d['id'], result if error is None else RPCError.from_dict(error))"
+          ]
+        },
+        {
+          "id": "p2-e-045",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "dispatch",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.common.jsonrpc",
+            "type": "RPCDispatcher"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/common/jsonrpc.py",
+            "line": 123
+          },
+          "rationale": "RPCDispatcher.dispatch entry parameter. If wired, request.params would flow into func(**request.params) dynamic dispatch. Parses network data, but sits on the ToDo/unused RPCSerializer/RPCDispatcher path (see exploration/detection.json uncoveredCases) with no live call site in this version; kept as a candidate source for recall - needs human review if the serializer/dispatcher gets wired in.",
+          "evidence": [
+            "common/jsonrpc.py:123-131 def dispatch(self, request); func(**request.params)",
+            "common/jsonrpc.py:115 # ToDo: Rewrite dispatcher and serializer..."
+          ]
+        },
+        {
+          "id": "p2-e-046",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "callable": "params",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.common.jsonrpc",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/common/jsonrpc.py",
+            "line": 130
+          },
+          "rationale": "func(**request.params) spreads attacker-controlled params into a dynamically looked-up callable inside the unused dispatcher; dynamic dispatch is not statically resolvable (detection.json uncoveredCases). Parses network data, but sits on the ToDo/unused RPCSerializer/RPCDispatcher path (see exploration/detection.json uncoveredCases) with no live call site in this version; kept as a candidate source for recall - needs human review if the serializer/dispatcher gets wired in. Three duplicate rows of the same expression merged.",
+          "evidence": [
+            "common/jsonrpc.py:130 result = func(**request.params) if isinstance(request.params, dict) else ...",
+            "merged: sources.csv rows 74, 75, 76"
+          ]
+        },
+        {
+          "id": "p2-e-047",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "loads",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "json"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/common/jsonrpc.py",
+            "line": 158
+          },
+          "rationale": "json.loads of raw bytes in RPCSerializer.from_bytes. Parses network data, but sits on the ToDo/unused RPCSerializer/RPCDispatcher path (see exploration/detection.json uncoveredCases) with no live call site in this version; kept as a candidate source for recall - needs human review if the serializer/dispatcher gets wired in. api + ast rows merged.",
+          "evidence": [
+            "common/jsonrpc.py:158 data = json.loads(raw.decode())"
+          ]
+        },
+        {
+          "id": "p2-e-048",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "from_dict",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common.jsonrpc",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/common/jsonrpc.py",
+            "line": 170
+          },
+          "rationale": "RPCRequest.from_dict called on the unused from_bytes path (the live call site is base.py:128, labeled tp). Parses network data, but sits on the ToDo/unused RPCSerializer/RPCDispatcher path (see exploration/detection.json uncoveredCases) with no live call site in this version; kept as a candidate source for recall - needs human review if the serializer/dispatcher gets wired in.",
+          "evidence": [
+            "common/jsonrpc.py:170 res.append(RPCRequest.from_dict(d))"
+          ]
+        },
+        {
+          "id": "p2-e-049",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "from_dict",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common.jsonrpc",
+            "type": "RPCResponse"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/common/jsonrpc.py",
+            "line": 172
+          },
+          "rationale": "RPCResponse.from_dict called on the unused from_bytes path. Parses network data, but sits on the ToDo/unused RPCSerializer/RPCDispatcher path (see exploration/detection.json uncoveredCases) with no live call site in this version; kept as a candidate source for recall - needs human review if the serializer/dispatcher gets wired in.",
+          "evidence": [
+            "common/jsonrpc.py:172 res.append(RPCResponse.from_dict(d))"
+          ]
+        },
+        {
+          "id": "p2-e-050",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "loads",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "json"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/server_search.py",
+            "line": 17
+          },
+          "rationale": "json.loads of a UDP datagram from any network peer on the unauthenticated server-search channel; every field (plugin/action/uin/name/role/pair) is attacker-controlled. api + ast rows merged.",
+          "evidence": [
+            "server_search.py:17 request = json.loads(raw.decode())"
+          ]
+        },
+        {
+          "id": "p2-e-051",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.server_search"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/server_search.py",
+            "line": 19
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params['pair']) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Value is base64+AES-encrypted pairing data supplied by the UDP peer.",
+          "evidence": [
+            "server_search.py:19 pair_data = request.get('pair')",
+            "server_search.py:38 password = decrypt(b64decode(pair_data), derive_key(...))"
+          ]
+        },
+        {
+          "id": "p2-e-052",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "unpack_raw_request",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.server_search",
+            "type": "ServerSearchHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/server_search.py",
+            "line": 25
+          },
+          "rationale": "Returns the fields popped from the attacker JSON datagram (plugin, action, uin, name, role, pair_data).",
+          "evidence": [
+            "server_search.py:14-20 unpack_raw_request pops 'plugin','action','uin','name','role' and gets 'pair'",
+            "server_search.py:25 self.unpack_raw_request(self.request[0])"
+          ]
+        },
+        {
+          "id": "p2-e-053",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "decrypt",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/server_search.py",
+            "line": 38
+          },
+          "rationale": "Decrypts attacker-supplied pairing data with a key derived from the pairing code; the resulting password becomes the device credential (update_device_password). Decryption verifies the pairing secret but the plaintext password itself is attacker-chosen material; not a sanitizer.",
+          "evidence": [
+            "server_search.py:37-39 if pairing_code and pair_data: password = decrypt(b64decode(pair_data), ...).decode()"
+          ]
+        },
+        {
+          "id": "p2-e-054",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "b64decode",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "base64"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/server_search.py",
+            "line": 38
+          },
+          "rationale": "Base64-decodes the attacker-supplied 'pair' datagram field before decryption; pure encoding removal, no content restriction.",
+          "evidence": [
+            "server_search.py:38 b64decode(pair_data)"
+          ]
+        },
+        {
+          "id": "p2-e-055",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "b64encode",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "base64"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/server_search.py",
+            "line": 44
+          },
+          "rationale": "Outbound encoding of the server password into the pairing response sent to the client; server-to-client direction, not attacker input.",
+          "evidence": [
+            "server_search.py:44 b64encode(encrypt(str(info['password']).encode(), ...))"
+          ]
+        },
+        {
+          "id": "p2-e-056",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.tcp_server",
+            "type": "DConnectHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 21
+          },
+          "rationale": "Constructor parameter is the raw socket object (transport), not data; attacker bytes enter through sock.recv / self.recv, which are labeled sources separately.",
+          "evidence": [
+            "tcp_server.py:21-25 def __init__(self, request, client_address, server); self.sock = self.request"
+          ]
+        },
+        {
+          "id": "p2-e-057",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.tcp_server",
+            "type": "DConnectHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 21
+          },
+          "rationale": "Client address tuple is transport metadata (used only for logging and the UDP reply address); never command content.",
+          "evidence": [
+            "tcp_server.py:21 def __init__(self, request, client_address, server)"
+          ]
+        },
+        {
+          "id": "p2-e-058",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "dcnnt.tcp_server",
+            "type": "DConnectHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 21
+          },
+          "rationale": "Server object (DConnectThreadingTCPServer) carrying the app reference; wiring, not attacker data.",
+          "evidence": [
+            "tcp_server.py:66 app = self.server.app"
+          ]
+        },
+        {
+          "id": "p2-e-059",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "recv",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.tcp_server",
+            "type": "DConnectHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 27
+          },
+          "rationale": "Byte-count parameter of the length-framed recv (4, 60, or the attacker-derived size prefix); it only bounds the read, is numeric metadata and never becomes command content.",
+          "evidence": [
+            "tcp_server.py:27-44 def recv(self, length)"
+          ]
+        },
+        {
+          "id": "p2-e-060",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "recv",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "socket"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 35
+          },
+          "rationale": "self.sock.recv(left) - the outermost raw TCP read from the connecting peer; every byte of the custom protocol (header, encrypted bodies, file contents) enters here.",
+          "evidence": [
+            "tcp_server.py:35 data = self.sock.recv(left)"
+          ]
+        },
+        {
+          "id": "p2-e-061",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "create_header",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.tcp_server",
+            "type": "DConnectHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 50
+          },
+          "rationale": "Outbound auth-response header construction; parameter are the local server device record. Not attacker data.",
+          "evidence": [
+            "tcp_server.py:50-57 def create_header(self, dev_self, plugin_mark, source)"
+          ]
+        },
+        {
+          "id": "p2-e-062",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "create_header",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.tcp_server",
+            "type": "DConnectHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 50
+          },
+          "rationale": "Plugin mark echoed back in the auth response; it is the config-defined mark selected from app.plugins after validation, used for outbound header construction only.",
+          "evidence": [
+            "tcp_server.py:57 encrypt(plugin_mark, source.key_send)"
+          ]
+        },
+        {
+          "id": "p2-e-063",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "create_header",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "dcnnt.tcp_server",
+            "type": "DConnectHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 50
+          },
+          "rationale": "Local device record (paired phone) from the device manager; supplies keys for the outbound header. Not attacker-controlled data.",
+          "evidence": [
+            "tcp_server.py:78 source = app.dm.get(src)"
+          ]
+        },
+        {
+          "id": "p2-e-064",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "recv",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.tcp_server",
+            "type": "DConnectHandler"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 69
+          },
+          "rationale": "self.recv(60) returns the connection header read from the peer; dst/src UINs and the encrypted plugin mark are all attacker-supplied and only validated for routing (dst==app UIN, known src, key present, known mark) - none of these checks restrict downstream command parameters.",
+          "evidence": [
+            "tcp_server.py:69 header = self.recv(60)",
+            "tcp_server.py:73-92 routing/auth checks (dst, src UIN, key, plugin mark)"
+          ]
+        },
+        {
+          "id": "p2-e-065",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "decrypt",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.common"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 85
+          },
+          "rationale": "Decrypts the plugin mark from the attacker header. The header checks (dst/src UIN, key availability) plus decryption authenticate the paired device but do not sanitize anything the plugin later receives; the mark itself only selects a registered plugin (selection, not content).",
+          "evidence": [
+            "tcp_server.py:85 plg = decrypt(header[24:], source.key_recv)"
+          ]
+        },
+        {
+          "id": "p2-e-066",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "main",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "dcnnt.plugins.base"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/tcp_server.py",
+            "line": 97
+          },
+          "rationale": "plugin(app, self, source).main() - dynamic plugin dispatch (constructor target unresolvable, detection.json uncoveredCases). Control-flow transfer only; the attacker data crossing into the plugin (request stream) is already modeled by the recv/read/rpc_read/decrypt sources and the handler-parameter sources.",
+          "evidence": [
+            "tcp_server.py:97 plugin(app, self, source).main()"
+          ]
+        },
+        {
+          "id": "p2-e-067",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "check_file_filter",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 42
+          },
+          "rationale": "fnmatch glob string from local config (shared_dirs[].glob) filtering the server-side shared file listing; operates on server paths, does not sanitize attacker input for command execution.",
+          "evidence": [
+            "plugins/file_transfer.py:41-44 check_file_filter(path, glob_str) -> fnmatch.fnmatch"
+          ]
+        },
+        {
+          "id": "p2-e-068",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "shared_directory_list",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 46
+          },
+          "rationale": "Directory enumeration parameter derived from config shared_dirs; server filesystem listing, not attacker data.",
+          "evidence": [
+            "plugins/file_transfer.py:46-65 def shared_directory_list(self, directory, filter_data, max_deep, current_deep)"
+          ]
+        },
+        {
+          "id": "p2-e-069",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "shared_directory_list",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 46
+          },
+          "rationale": "Filter data is the config glob passed down the listing recursion; not attacker input."
+        },
+        {
+          "id": "p2-e-070",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "shared_directory_list",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 46
+          },
+          "rationale": "Max recursion depth from config; numeric metadata."
+        },
+        {
+          "id": "p2-e-071",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "shared_directory_list",
+            "flow_kind": "param",
+            "arg_index": 4,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 46
+          },
+          "rationale": "Current recursion depth counter; internal state."
+        },
+        {
+          "id": "p2-e-072",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "process_shared_directory",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 67
+          },
+          "rationale": "Shared directory path from local config; result tree is sent to the client (outbound).",
+          "evidence": [
+            "plugins/file_transfer.py:67-81 def process_shared_directory(self, path, name, glob, deep, res, names)"
+          ]
+        },
+        {
+          "id": "p2-e-073",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "process_shared_directory",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 67
+          },
+          "rationale": "Display name from config shared_dirs entries."
+        },
+        {
+          "id": "p2-e-074",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "process_shared_directory",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 67
+          },
+          "rationale": "Glob filter from config."
+        },
+        {
+          "id": "p2-e-075",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "process_shared_directory",
+            "flow_kind": "param",
+            "arg_index": 4,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 67
+          },
+          "rationale": "Recursion depth from config."
+        },
+        {
+          "id": "p2-e-076",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "process_shared_directory",
+            "flow_kind": "param",
+            "arg_index": 5,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 68
+          },
+          "rationale": "Accumulated result tree (server FS metadata) built for the client response; outbound data."
+        },
+        {
+          "id": "p2-e-077",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "process_shared_directory",
+            "flow_kind": "param",
+            "arg_index": 6,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 68
+          },
+          "rationale": "Name-uniquification counter dict; internal state."
+        },
+        {
+          "id": "p2-e-078",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 88
+          },
+          "rationale": "Read of local plugin configuration via self.conf('shared_dirs'). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Feeds the shared-directory listing sent to the client.",
+          "evidence": [
+            "plugins/file_transfer.py:88 for shared_dir in self.conf('shared_dirs')"
+          ]
+        },
+        {
+          "id": "p2-e-079",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 91
+          },
+          "rationale": "Read of local plugin configuration via self.conf('shared_dirs_external'). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. External list files are read from local paths and Template-substituted with the local environment; still local-trust-side data.",
+          "evidence": [
+            "plugins/file_transfer.py:91-100 self.conf('shared_dirs_external')"
+          ]
+        },
+        {
+          "id": "p2-e-080",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "handle_upload",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 103
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. The 'upload' method: request.params['name'] flows into the saved path and then unquoted into the on_download template executed at :110 - the live CWE-78 chain for this plugin.",
+          "evidence": [
+            "plugins/file_transfer.py:103-110 handle_upload -> receive_file -> on_download.format -> subprocess.call(shell=True)",
+            "plugins/file_transfer.py:135-141 process_request dispatches 'upload'"
+          ]
+        },
+        {
+          "id": "p2-e-081",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "receive_file",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 105
+          },
+          "rationale": "self.receive_file(request, self.conf('download_directory')) - taint on argument 0 (the RPCRequest) propagates to the returned saved-file path, because _receive_file joins request.params['name'] into the path (base.py:176-179). This arg0->return step is what connects the handler source to the :108 format and :110 subprocess sink.",
+          "evidence": [
+            "plugins/file_transfer.py:105 path = self.receive_file(request, self.conf('download_directory'))",
+            "plugins/base.py:176-179 name = request.params['name']; path = os.path.join(download_directory, name)"
+          ]
+        },
+        {
+          "id": "p2-e-082",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 105
+          },
+          "rationale": "Read of local plugin configuration via self.conf('download_directory'). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78.",
+          "evidence": [
+            "plugins/file_transfer.py:105"
+          ]
+        },
+        {
+          "id": "p2-e-083",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 106
+          },
+          "rationale": "Read of local plugin configuration via self.conf('on_download'). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. The command template itself is trusted config; the attacker controls only the {path} substitution value (the unquoted request-derived name) - the injection risk lives on the substitution side, covered by the sink entry at :110.",
+          "evidence": [
+            "plugins/file_transfer.py:106-107 on_download = self.conf('on_download'); isinstance(on_download, str)"
+          ]
+        },
+        {
+          "id": "p2-e-084",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "handle_list_shared",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 112
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. The 'list' method uses the request only for the response id; no command flow, kept for recall.",
+          "evidence": [
+            "plugins/file_transfer.py:112-119 handle_list_shared"
+          ]
+        },
+        {
+          "id": "p2-e-085",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "handle_download",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 121
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. The 'download' method: params index/size only select from the server-built shared_files_index with a bounds check (selection, not content injection); no command construction.",
+          "evidence": [
+            "plugins/file_transfer.py:121-133 handle_download with 0 <= index < len(self.shared_files_index)"
+          ]
+        },
+        {
+          "id": "p2-e-086",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "params",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 124
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params['index']/['size']) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Index is bounds-checked against the server-side listing; no route into command strings. Duplicate rows merged.",
+          "evidence": [
+            "plugins/file_transfer.py:124 index, size = request.params['index'], request.params['size']"
+          ]
+        },
+        {
+          "id": "p2-e-087",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "process_request",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 135
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md.",
+          "evidence": [
+            "plugins/file_transfer.py:135-141 def process_request(self, request: RPCRequest)"
+          ]
+        },
+        {
+          "id": "p2-e-088",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.notifications",
+            "type": "NotificationsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 28
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately.",
+          "evidence": [
+            "plugins/notifications.py:28 def __init__(self, app, handler, device)"
+          ]
+        },
+        {
+          "id": "p2-e-089",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.notifications",
+            "type": "NotificationsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 28
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately."
+        },
+        {
+          "id": "p2-e-090",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "dcnnt.plugins.notifications",
+            "type": "NotificationsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 28
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately."
+        },
+        {
+          "id": "p2-e-091",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "rpc_read",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.plugins.base",
+            "type": "NotificationsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 33
+          },
+          "rationale": "Returns an RPCRequest built from network bytes: rpc_read() -> self.read() (decrypted socket data) -> json.loads -> RPCRequest.from_dict. Genuine network input boundary of the plugin loop. Notification requests read from the phone. return + internal_transfer rows merged. CSV line 33 matches the current source file (snapshot 4084ea1).",
+          "evidence": [
+            "plugins/notifications.py:33 request = self.rpc_read()"
+          ]
+        },
+        {
+          "id": "p2-e-092",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.notifications",
+            "type": "NotificationsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 38
+          },
+          "rationale": "Read of local plugin configuration via self.conf('cmd'). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Notification command template (default \"notify-send -i '{icon}' '{title}' '{text}'\"). The template is trusted config; in this snapshot the substitution values reach the format at :56 without any escaping (see entries p2-e-162 and p2-e-164).",
+          "evidence": [
+            "plugins/notifications.py:38 cmd = self.conf('cmd')"
+          ]
+        },
+        {
+          "id": "p2-e-093",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.notifications",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 42
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('packageIcon')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Boolean flag gating the icon read.",
+          "evidence": [
+            "plugins/notifications.py:42 icon_data = self.read() if request.params.get('packageIcon', False) else None"
+          ]
+        },
+        {
+          "id": "p2-e-094",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "read",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.plugins.base",
+            "type": "NotificationsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 42
+          },
+          "rationale": "Icon bytes read from the phone socket (self.read()); attacker-controlled file content written to the icon path.",
+          "evidence": [
+            "plugins/notifications.py:42 icon_data = self.read()"
+          ]
+        },
+        {
+          "id": "p2-e-095",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.notifications",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 43
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('event')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Event type selector.",
+          "evidence": [
+            "plugins/notifications.py:43 if request.params.get('event') == 'posted':"
+          ]
+        },
+        {
+          "id": "p2-e-096",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.notifications",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 45
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('title') on this row; text/package via the adjacent map() bound-method form) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Notification title (this row) and text/package flow into the command template at :56 completely UNQUOTED - no shlex/escaping exists anywhere in this snapshot (see p2-e-162/p2-e-164).",
+          "evidence": [
+            "plugins/notifications.py:44 text, package = map(request.params.get, ('text', 'package'))",
+            "plugins/notifications.py:45 title = request.params.get('title', 'NULL')"
+          ]
+        },
+        {
+          "id": "p2-e-097",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.notifications",
+            "type": "NotificationsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 49
+          },
+          "rationale": "Read of local plugin configuration via self.conf('icon_dir'). Config files are authored by the local user and schema-validated; the remote phone only controls runtime substitution values, never config content. The directory itself is trusted config, but note the icon filename embeds the attacker-controlled package name (f'{package}.{uin}.icon.png' at :49) and the resulting path is substituted into the notification command unquoted - the injection relevance is carried by the package name, covered by p2-e-096/p2-e-164.",
+          "evidence": [
+            "plugins/notifications.py:49 icon_path = os.path.join(self.conf('icon_dir'), f'{package}.{self.device.uin}.icon.png')"
+          ]
+        },
+        {
+          "id": "p2-e-098",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "handle_open_file",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.opener",
+            "type": "OpenerPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 28
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. The 'open_file' method: request.params['name'] (attacker) becomes the saved file path via receive_file, which is substituted unquoted into the default_cmd template and executed with shell=True at :34 - the live CWE-78 chain for this plugin.",
+          "evidence": [
+            "plugins/opener.py:28-34 handle_open_file -> receive_file -> conf('default_cmd').format(path=path) -> subprocess.call(shell=True)"
+          ]
+        },
+        {
+          "id": "p2-e-099",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "receive_file",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 30
+          },
+          "rationale": "self.receive_file(request, self.conf(('file', 'download_directory'))) - taint on argument 0 (request) propagates to the returned saved path (request.params['name'] joined into the path in base.py:176-179), feeding the :32 format and :34 subprocess sink.",
+          "evidence": [
+            "plugins/opener.py:30 path = self.receive_file(request, self.conf(('file', 'download_directory')))"
+          ]
+        },
+        {
+          "id": "p2-e-100",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.opener",
+            "type": "OpenerPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 30
+          },
+          "rationale": "Read of local plugin configuration via self.conf(('file', 'download_directory')). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78.",
+          "evidence": [
+            "plugins/opener.py:30"
+          ]
+        },
+        {
+          "id": "p2-e-101",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.opener",
+            "type": "OpenerPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 31
+          },
+          "rationale": "Read of local plugin configuration via self.conf(('file', 'default_cmd')). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Default template 'xdg-open \"{path}\"' is local trusted config; the injection risk is the unquoted attacker-controlled {path} value, covered by the sink entry at :34. Note the default template's double quotes are not shell-safe against a value containing '\"', '$(' or backticks.",
+          "evidence": [
+            "plugins/opener.py:31 on_download = self.conf(('file', 'default_cmd'))"
+          ]
+        },
+        {
+          "id": "p2-e-102",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "handle_open_link",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.opener",
+            "type": "OpenerPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 36
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. The 'open_link' method: request.params.get('link') is substituted unquoted into the link template and executed with shell=True at :44.",
+          "evidence": [
+            "plugins/opener.py:36-44 handle_open_link -> conf(('link','default_cmd')).format(url=url) -> subprocess.call(shell=True)"
+          ]
+        },
+        {
+          "id": "p2-e-103",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.opener",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 38
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('link')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. The only check is isinstance(url, str) - a type check that filters none of the shell metacharacters; the URL then reaches the shell command unquoted.",
+          "evidence": [
+            "plugins/opener.py:38-40 url = request.params.get('link'); if not isinstance(url, str): raise PluginFail"
+          ]
+        },
+        {
+          "id": "p2-e-104",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.opener",
+            "type": "OpenerPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 42
+          },
+          "rationale": "Read of local plugin configuration via self.conf(('link', 'default_cmd')). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Default 'xdg-open \"{url}\"' - double quotes do not neutralize a URL containing '\"', '$(' or backticks; risk again lives on the substitution value side.",
+          "evidence": [
+            "plugins/opener.py:42 command = self.conf(('link', 'default_cmd')).format(url=url)"
+          ]
+        },
+        {
+          "id": "p2-e-105",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "process_request",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.opener",
+            "type": "OpenerPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 46
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md.",
+          "evidence": [
+            "plugins/opener.py:46-50 def process_request(self, request: RPCRequest)"
+          ]
+        },
+        {
+          "id": "p2-e-106",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.remote_commands",
+            "type": "RemoteCommandsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/remote_commands.py",
+            "line": 25
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately.",
+          "evidence": [
+            "plugins/remote_commands.py:25 def __init__(self, app, handler, device)"
+          ]
+        },
+        {
+          "id": "p2-e-107",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.remote_commands",
+            "type": "RemoteCommandsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/remote_commands.py",
+            "line": 25
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately."
+        },
+        {
+          "id": "p2-e-108",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "dcnnt.plugins.remote_commands",
+            "type": "RemoteCommandsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/remote_commands.py",
+            "line": 25
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately."
+        },
+        {
+          "id": "p2-e-109",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.remote_commands",
+            "type": "RemoteCommandsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/remote_commands.py",
+            "line": 29
+          },
+          "rationale": "Read of local plugin configuration via self.conf('menu'). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. The predefined remote-command menu (name/method/cmd) is entirely config-defined; at runtime the phone controls only the selection index (see :40 and the check_call sink at :48).",
+          "evidence": [
+            "plugins/remote_commands.py:29 for command in self.conf('menu'):"
+          ]
+        },
+        {
+          "id": "p2-e-110",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "handle_exec",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.remote_commands",
+            "type": "RemoteCommandsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/remote_commands.py",
+            "line": 38
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. The 'exec' method: request.params['index'] selects a config-defined command (dict lookup by identifier key) that is executed at :48.",
+          "evidence": [
+            "plugins/remote_commands.py:38-55 def handle_exec(self, request)"
+          ]
+        },
+        {
+          "id": "p2-e-111",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.remote_commands",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/remote_commands.py",
+            "line": 40
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('index')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. The index performs a dict lookup into the config-defined command map - selection of a fixed command, not injection of content into it; kept as a genuine attacker-input boundary (the eventual flow verdict is expected at the sink/triage stage).",
+          "evidence": [
+            "plugins/remote_commands.py:40 command = self.remote_commands.get(request.params.get('index', None))"
+          ]
+        },
+        {
+          "id": "p2-e-112",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "rpc_read",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "dcnnt.plugins.base",
+            "type": "RemoteCommandsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/remote_commands.py",
+            "line": 59
+          },
+          "rationale": "Returns an RPCRequest built from network bytes: rpc_read() -> self.read() (decrypted socket data) -> json.loads -> RPCRequest.from_dict. Genuine network input boundary of the plugin loop. return + internal_transfer rows of the same site merged.",
+          "evidence": [
+            "plugins/remote_commands.py:59 request = self.rpc_read()"
+          ]
+        },
+        {
+          "id": "p2-e-113",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 60
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately.",
+          "evidence": [
+            "plugins/sync.py:60 def __init__(self, app, handler, device)"
+          ]
+        },
+        {
+          "id": "p2-e-114",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 60
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately."
+        },
+        {
+          "id": "p2-e-115",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "__init__",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 60
+          },
+          "rationale": "Constructor wiring only: app (DConnectApp object), handler (DConnectHandler transport object) and device (local device record with keys) are objects, not attacker data. Network bytes enter through handler.recv/Plugin.read which are labeled as sources separately."
+        },
+        {
+          "id": "p2-e-116",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "handle_targets",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 63
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. The 'get_targets' method: params['sub'] selects a config section; response is the configured sync target list (outbound).",
+          "evidence": [
+            "plugins/sync.py:63-69 handle_targets"
+          ]
+        },
+        {
+          "id": "p2-e-117",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 65
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('sub')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. isinstance(str) is only a type check; 'sub' picks a config key - selection, not content injection.",
+          "evidence": [
+            "plugins/sync.py:65-68 sub = request.params.get('sub'); if not isinstance(sub, str): raise PluginFail"
+          ]
+        },
+        {
+          "id": "p2-e-118",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 68
+          },
+          "rationale": "Read of local plugin configuration via self.conf((sub, )). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Config section selected by the (type-checked) request value; the returned entries are config-defined paths returned to the client.",
+          "evidence": [
+            "plugins/sync.py:68 entries = self.conf((sub, ))"
+          ]
+        },
+        {
+          "id": "p2-e-119",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "rename_with_mark",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 99
+          },
+          "rationale": "Client-supplied relative name is used for filesystem renaming under the sync base directory; no command construction on this path (path-handling relevance belongs to the path-traversal pass, out of scope here).",
+          "evidence": [
+            "plugins/sync.py:99-116 rename_with_mark(base, name, mark) - os.path.join/os.rename only"
+          ]
+        },
+        {
+          "id": "p2-e-120",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "rename_with_mark",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 99
+          },
+          "rationale": "Mark is a locally generated timestamp/suffix; internal metadata."
+        },
+        {
+          "id": "p2-e-121",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "ensure_removed",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 119
+          },
+          "rationale": "Client-supplied name used for filesystem deletion under the sync base path; no command construction (path-traversal relevance, out of scope for CWE-78).",
+          "evidence": [
+            "plugins/sync.py:118-126 ensure_removed(base, name) - rmdir/unlink only"
+          ]
+        },
+        {
+          "id": "p2-e-122",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "handle_dir_list",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 128
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. The 'dir_list' method: params mode/path/on_conflict/on_delete drive the sync session; path is checked against the configured dir allow-list at :135 before use.",
+          "evidence": [
+            "plugins/sync.py:128-274 handle_dir_list"
+          ]
+        },
+        {
+          "id": "p2-e-123",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 135
+          },
+          "rationale": "Read of local plugin configuration via self.conf(('dir', )). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Builds the allow-list that the request 'path' is checked against at :135 (path not in tuple(...) -> PluginFail). Config-derived guard data, not attacker input.",
+          "evidence": [
+            "plugins/sync.py:135 if path not in tuple(str(i['path']) for i in self.conf(('dir', ))): raise PluginFail"
+          ]
+        },
+        {
+          "id": "p2-e-124",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "handle_dir_upload",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 276
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. The 'dir_upload' method: params path/name flow into the file-receive path; base is allow-list checked at :280.",
+          "evidence": [
+            "plugins/sync.py:276-282 handle_dir_upload"
+          ]
+        },
+        {
+          "id": "p2-e-125",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "params",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 278
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params (whole dict, printed)) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. print(request.params) - direct read (and log/print) of the attacker params dict.",
+          "evidence": [
+            "plugins/sync.py:278 print(request.params)"
+          ]
+        },
+        {
+          "id": "p2-e-126",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 279
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('path')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Used as the receive base directory after the allow-list check at :280 (path not in configured dir paths -> PluginFail).",
+          "evidence": [
+            "plugins/sync.py:279-281 base = request.params.get('path'); if base not in tuple(...): raise PluginFail"
+          ]
+        },
+        {
+          "id": "p2-e-127",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 280
+          },
+          "rationale": "Read of local plugin configuration via self.conf(('dir', )). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Allow-list data for the :280 path guard.",
+          "evidence": [
+            "plugins/sync.py:280"
+          ]
+        },
+        {
+          "id": "p2-e-128",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "receive_file",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 282
+          },
+          "rationale": "self.receive_file(request, base) - taint on argument 0 (request) propagates to the returned saved path (request.params['name'] joined into the path); the return value is not used in a command here but the same step shape is required wherever receive_file feeds a template.",
+          "evidence": [
+            "plugins/sync.py:282 self.receive_file(request, base)"
+          ]
+        },
+        {
+          "id": "p2-e-129",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "handle_dir_download",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 284
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. The 'dir_download' method: params base/name build the outbound file path; base is allow-list checked at :288, name is type-checked (str) but otherwise unrestricted (path relevance, not command).",
+          "evidence": [
+            "plugins/sync.py:284-293 handle_dir_download"
+          ]
+        },
+        {
+          "id": "p2-e-130",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 286
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('path')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Allow-list checked at :288 before use as send base directory.",
+          "evidence": [
+            "plugins/sync.py:286-288 base = request.params.get('path'); if base not in tuple(...): raise PluginFail"
+          ]
+        },
+        {
+          "id": "p2-e-131",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 287
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('name')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Joined into the outbound send path (os.path.join(base, name), :292) - isinstance(str) type check only.",
+          "evidence": [
+            "plugins/sync.py:287-292 name = request.params.get('name'); path = os.path.join(base, name)"
+          ]
+        },
+        {
+          "id": "p2-e-132",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 288
+          },
+          "rationale": "Read of local plugin configuration via self.conf(('dir', )). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Allow-list data for the :288 path guard.",
+          "evidence": [
+            "plugins/sync.py:288"
+          ]
+        },
+        {
+          "id": "p2-e-133",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "common_upload_handler",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 295
+          },
+          "rationale": "entity_type is the constant 'contacts'/'messages' at both call sites (:322, :326) - config-section selector, not attacker data.",
+          "evidence": [
+            "plugins/sync.py:320-326 handle_contacts_upload/handle_messages_upload -> common_upload_handler('contacts'|'messages', request)"
+          ]
+        },
+        {
+          "id": "p2-e-134",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "common_upload_handler",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 295
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. Shared backup-upload handler: request.params['name'] (attacker) is joined into the saved path whose return value feeds the on_done template executed with shell=True at :318.",
+          "evidence": [
+            "plugins/sync.py:295-318 common_upload_handler -> receive_file -> on_done.format(path=res) -> subprocess.call(shell=True)"
+          ]
+        },
+        {
+          "id": "p2-e-135",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 297
+          },
+          "rationale": "Read of local plugin configuration via self.conf((entity_type, 'path')). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78.",
+          "evidence": [
+            "plugins/sync.py:297 directory = self.conf((entity_type, 'path'))"
+          ]
+        },
+        {
+          "id": "p2-e-136",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 298
+          },
+          "rationale": "Read of local plugin configuration via self.conf((entity_type, 'backup_count')). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Numeric config value.",
+          "evidence": [
+            "plugins/sync.py:298"
+          ]
+        },
+        {
+          "id": "p2-e-137",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 299
+          },
+          "rationale": "Read of local plugin configuration via self.conf((entity_type, 'on_done')). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Command template from local config; attacker controls only the {path} substitution value (request.params['name'] via the saved path) - see sink entry at :318.",
+          "evidence": [
+            "plugins/sync.py:299 on_done = self.conf((entity_type, 'on_done'))"
+          ]
+        },
+        {
+          "id": "p2-e-138",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "params",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 300
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params['name']) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Backup file name joined into the saved path (os.path.join(directory, fn)) that is substituted unquoted into on_done and executed with shell=True at :318.",
+          "evidence": [
+            "plugins/sync.py:300 fn = request.params['name']",
+            "plugins/sync.py:310-311 src/dst backup rotation paths",
+            "plugins/sync.py:314 res = self.receive_file(request, directory)"
+          ]
+        },
+        {
+          "id": "p2-e-139",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 301
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('total')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Numeric metadata for last-entry detection; no command route.",
+          "evidence": [
+            "plugins/sync.py:301 total = request.params.get('total')"
+          ]
+        },
+        {
+          "id": "p2-e-140",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 302
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('index')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Numeric metadata for last-entry detection; no command route.",
+          "evidence": [
+            "plugins/sync.py:302 index = request.params.get('index')"
+          ]
+        },
+        {
+          "id": "p2-e-141",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "receive_file",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 314
+          },
+          "rationale": "self.receive_file(request, directory) - taint on argument 0 (request) propagates to the returned saved path (request.params['name'] joined in), which is substituted into on_done.format(path=res) at :316 and executed at :318.",
+          "evidence": [
+            "plugins/sync.py:314 res = self.receive_file(request, directory)"
+          ]
+        },
+        {
+          "id": "p2-e-142",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "handle_contacts_upload",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 320
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. 'contacts_upload' entry delegating to common_upload_handler.",
+          "evidence": [
+            "plugins/sync.py:320-322 handle_contacts_upload -> common_upload_handler('contacts', request)"
+          ]
+        },
+        {
+          "id": "p2-e-143",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "handle_messages_upload",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 324
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. 'messages_upload' entry delegating to common_upload_handler.",
+          "evidence": [
+            "plugins/sync.py:324-326 handle_messages_upload -> common_upload_handler('messages', request)"
+          ]
+        },
+        {
+          "id": "p2-e-144",
+          "role": "sanitizer",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "ensure_file_syncable",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 328
+          },
+          "rationale": "Allow-list style guard for the file-sync path: rejects any request path that is not contained in a configured sync-file entry (`if path in i['path']` at :331, else PluginFail 'No file in sync list'). It is the only data check constraining the values that reach the on_merge/on_done templates at :359/:361, but its semantics are substring containment rather than equality - any substring of an allowed path (including short prefixes) passes, so it blocks arbitrary attacker paths yet cannot block metacharacters that a configured path might itself contain. Partial sanitizer; needs human review of the intended semantics (review point 6).",
+          "evidence": [
+            "plugins/sync.py:328-333 def ensure_file_syncable(self, path): ... if path in i['path']: return i.get('on_merge')",
+            "plugins/sync.py:337-338 path = str(request.params['path']); self.ensure_file_syncable(path)",
+            "plugins/sync.py:347,368 on_merge/on_done guarded by ensure_file_syncable"
+          ]
+        },
+        {
+          "id": "p2-e-145",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 330
+          },
+          "rationale": "Read of local plugin configuration via self.conf('file'). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. The configured sync-file list acting as allow-list data for ensure_file_syncable.",
+          "evidence": [
+            "plugins/sync.py:330 for i in self.conf('file'):"
+          ]
+        },
+        {
+          "id": "p2-e-146",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "handle_file_info",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 335
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. 'file_info' entry; params['path'] is allow-list guarded before stat.",
+          "evidence": [
+            "plugins/sync.py:335-341 handle_file_info"
+          ]
+        },
+        {
+          "id": "p2-e-147",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "params",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 337
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params['path']) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Gated by ensure_file_syncable at :338 before filesystem use.",
+          "evidence": [
+            "plugins/sync.py:337-338 path = str(request.params['path']); self.ensure_file_syncable(path)"
+          ]
+        },
+        {
+          "id": "p2-e-148",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "handle_file_upload",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 343
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. 'file_upload' entry: params path/merge drive the merge flow whose output path is substituted into the on_merge template executed with shell=True at :361.",
+          "evidence": [
+            "plugins/sync.py:343-363 handle_file_upload"
+          ]
+        },
+        {
+          "id": "p2-e-149",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 345
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('path')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. str()-cast only; allow-list guarded via ensure_file_syncable at :347, then used as merge output path in on_merge.format(output=path) at :359.",
+          "evidence": [
+            "plugins/sync.py:345-347 path = str(request.params.get('path')); on_merge = self.ensure_file_syncable(path)"
+          ]
+        },
+        {
+          "id": "p2-e-150",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 346
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('merge')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Boolean flag selecting the merge branch (which reaches the on_merge execution).",
+          "evidence": [
+            "plugins/sync.py:346-348 merge_mode = bool(request.params.get('merge'))"
+          ]
+        },
+        {
+          "id": "p2-e-151",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "conf",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 352
+          },
+          "rationale": "Read of local plugin configuration via self.conf('working_directory'). Config files are authored by the local user and schema-validated (TemplateEntry/StringEntry/IntEntry bounds); the remote phone only controls runtime substitution values, never config content - clear trust boundary for CWE-78. Local temp directory for merge staging; path values only.",
+          "evidence": [
+            "plugins/sync.py:352 directory = os.path.join(self.conf('working_directory'), random)"
+          ]
+        },
+        {
+          "id": "p2-e-152",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "receive_file_to_path",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 358
+          },
+          "rationale": "self.receive_file_to_path(request, client_file_path) - taint on argument 0 (request) propagates to the written client file path (staged under working_directory with a basename derived from the request path); the result feeds on_merge.format(remote=client_file_path) at :359.",
+          "evidence": [
+            "plugins/sync.py:354-358 name = os.path.basename(path); client_file_path = os.path.join(directory, f'client-{name}')",
+            "plugins/sync.py:358 self.receive_file_to_path(request, client_file_path)"
+          ]
+        },
+        {
+          "id": "p2-e-153",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "receive_file_to_path",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.base",
+            "type": "BaseFilePlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 363
+          },
+          "rationale": "self.receive_file_to_path(request, path) (non-merge branch) - taint on argument 0 propagates to the written path (allow-list guarded via ensure_file_syncable at :347).",
+          "evidence": [
+            "plugins/sync.py:363 self.receive_file_to_path(request, path)"
+          ]
+        },
+        {
+          "id": "p2-e-154",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "handle_file_download",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 365
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md. 'file_download' entry; params['path'] allow-list guarded before send_file (outbound read).",
+          "evidence": [
+            "plugins/sync.py:365-369 handle_file_download"
+          ]
+        },
+        {
+          "id": "p2-e-155",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "RPCRequest"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 367
+          },
+          "rationale": "Direct read of attacker-controlled JSON-RPC params (request.params.get('path')) from the connected phone; protocol parsing (json.loads/RPCRequest.from_dict) performs no content validation, so the value is unrestricted attacker input. Guarded by ensure_file_syncable at :368 before the outbound send.",
+          "evidence": [
+            "plugins/sync.py:367-368 path = request.params.get('path'); self.ensure_file_syncable(path)"
+          ]
+        },
+        {
+          "id": "p2-e-156",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "process_request",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 371
+          },
+          "rationale": "Externally reachable JSON-RPC plugin handler entry: this parameter receives the RPCRequest read from the connected phone (rpc_read -> decrypt -> json.loads). request.params carries attacker-controlled values consumed by the handler body; standard handler-parameter source per references/python.md.",
+          "evidence": [
+            "plugins/sync.py:371-389 def process_request(self, request: RPCRequest)"
+          ]
+        },
+        {
+          "id": "p2-e-157",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "handle_upload",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "dcnnt.plugins.file_transfer",
+            "type": "FileTransferPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 103
+          },
+          "rationale": "Internal dispatch wrapper around the command execution site: its request parameter is already labeled as a source and the subprocess call inside is labeled as a sink; labeling the wrapper itself as a sink would produce degenerate source==sink paths on the same request object. No separate modeling needed. Sink at :110, source at :103 (request param), propagation summary at :105/:108.",
+          "evidence": [
+            "plugins/file_transfer.py:103-110 handle_upload body"
+          ]
+        },
+        {
+          "id": "p2-e-158",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.file_transfer"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 108
+          },
+          "rationale": "on_download.format(path=path) propagates taint from the substitution value (the request-derived saved path) into the formatted command string consumed by subprocess.call at :110; the receiver template itself is trusted config. arg_index 0 denotes the substitution-argument position (keyword argument path).",
+          "evidence": [
+            "plugins/file_transfer.py:108 command = on_download.format(path=path)",
+            "plugins/file_transfer.py:105 path = self.receive_file(request, self.conf('download_directory'))"
+          ]
+        },
+        {
+          "id": "p2-e-159",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.file_transfer"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 109
+          },
+          "rationale": "'Execute: \"{\"...\".format(command) - logging-only string formatting; no security-relevant propagation for CWE-78 (log formatting belongs to the log-injection pass).",
+          "evidence": [
+            "plugins/file_transfer.py:109 self.log('Execute: \"{\"{}\"{\"'.format(command))"
+          ]
+        },
+        {
+          "id": "p2-e-160",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "call",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/file_transfer.py",
+            "line": 110
+          },
+          "rationale": "Executed with shell=True (string command through the shell), not an argument list. command = on_download.format(path=path) where path = receive_file(...) = os.path.join(download_directory, request.params['name']): the attacker-controlled uploaded file name is substituted UNQUOTED into a shell command - direct command-injection sink. No arg-list invocation, no metacharacter filtering anywhere on this path (only isinstance checks). arg (ast), arg (api) and shell=True rows of the same call merged; API-graph resolution confirms a genuine subprocess.call.",
+          "evidence": [
+            "plugins/file_transfer.py:110 subprocess.call(command, shell=True)",
+            "plugins/base.py:176-179 name = request.params['name']; path = os.path.join(download_directory, name)",
+            "merged: sinks.csv rows 5 (arg, ast), 6 (arg, api), 7 (shell_true)"
+          ]
+        },
+        {
+          "id": "p2-e-161",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "main",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "dcnnt.plugins.notifications",
+            "type": "NotificationsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 31
+          },
+          "rationale": "Internal dispatch wrapper around the command execution site: the request read inside (rpc_read at :33) is already labeled as a source and the subprocess call inside is labeled as a sink; labeling the wrapper itself as a sink would produce degenerate source==sink paths on the same request object. No separate modeling needed. Sink at :58, source rpc_read at :33, unquoted template format at :56; CSV lines match the current source file.",
+          "evidence": [
+            "plugins/notifications.py:31-58 def main(self): ... subprocess.call(command, shell=True)"
+          ]
+        },
+        {
+          "id": "p2-e-162",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.notifications"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 56
+          },
+          "rationale": "cmd.format(uin=uin, name=name, icon=icon, text=text, title=title, package=package) propagates the notification fields (title/text/package from request.params at :44-:45; icon path embedding the package name at :49; uin/name from the local device record) into the command string consumed by subprocess.call at :58. In this snapshot (4084ea1) NONE of the substitution values is escaped or shell-quoted - the shlex.quote wrapper seen in a later checkout state does not exist here - so taint reaching any substitution argument flows straight through to the sink.",
+          "evidence": [
+            "plugins/notifications.py:56 command = cmd.format(uin=uin, name=name, icon=icon, text=text, title=title, package=package)"
+          ]
+        },
+        {
+          "id": "p2-e-163",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.notifications"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 57
+          },
+          "rationale": "Logging-only formatting of the executed command; no CWE-78 propagation.",
+          "evidence": [
+            "plugins/notifications.py:57 self.log('Execute: ...'.format(command))"
+          ]
+        },
+        {
+          "id": "p2-e-164",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.92,
+          "signature": {
+            "callable": "call",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/notifications.py",
+            "line": 58
+          },
+          "rationale": "Executed with shell=True (string command through the shell), not an argument list. command = cmd.format(uin=uin, name=name, icon=icon, text=text, title=title, package=package) built at :56 - in this snapshot there is no shlex import and no escaping of any substitution value: title comes directly from request.params.get('title', 'NULL') (:45), text/package from request.params via map() (:44), and the icon path embeds the attacker-controlled package name (:49). All are substituted UNQUOTED into the shell command string and executed - direct command-injection sink. (An earlier labeling round marked this site candidate based on a checkout state where the values were wrapped in shlex.quote; that code does not exist in snapshot 4084ea1.) arg (ast), arg (api) and shell=True rows merged.",
+          "evidence": [
+            "plugins/notifications.py:58 subprocess.call(command, shell=True)",
+            "plugins/notifications.py:44-45 text, package = map(request.params.get, ...); title = request.params.get('title', 'NULL')",
+            "plugins/notifications.py:56 command = cmd.format(uin=uin, ..., text=text, title=title, package=package)",
+            "merged: sinks.csv rows 11, 12, 13"
+          ]
+        },
+        {
+          "id": "p2-e-165",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "handle_open_file",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "dcnnt.plugins.opener",
+            "type": "OpenerPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 28
+          },
+          "rationale": "Internal dispatch wrapper around the command execution site: its request parameter is already labeled as a source and the subprocess call inside is labeled as a sink; labeling the wrapper itself as a sink would produce degenerate source==sink paths on the same request object. No separate modeling needed. Sink at :34, source at :28, propagation summaries at :30/:32.",
+          "evidence": [
+            "plugins/opener.py:28-34 handle_open_file body"
+          ]
+        },
+        {
+          "id": "p2-e-166",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.opener"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 32
+          },
+          "rationale": "on_download.format(path=path) propagates the request-derived saved path (attacker file name) into the command string executed at :34; unquoted substitution.",
+          "evidence": [
+            "plugins/opener.py:32 command = on_download.format(path=path)"
+          ]
+        },
+        {
+          "id": "p2-e-167",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.opener"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 33
+          },
+          "rationale": "Logging-only formatting; no CWE-78 propagation.",
+          "evidence": [
+            "plugins/opener.py:33 self.log('Execute: ...'.format(command))"
+          ]
+        },
+        {
+          "id": "p2-e-168",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.92,
+          "signature": {
+            "callable": "call",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 34
+          },
+          "rationale": "Executed with shell=True (string command through the shell), not an argument list. handle_open_file chain: request.params['name'] -> receive_file -> os.path.join(download_directory, name) -> on_download.format(path=path) -> subprocess.call(command, shell=True). The attacker-controlled file name is substituted unquoted; the default template 'xdg-open \"{path}\"' uses double quotes, which do NOT stop injection of '\"', '$(' or backticks (double quotes permit command substitution in POSIX shells), so even the shipped default template is exploitable. arg (ast), arg (api) and shell=True rows merged.",
+          "evidence": [
+            "plugins/opener.py:34 subprocess.call(command, shell=True)",
+            "plugins/base.py:176-179 attacker name -> saved path",
+            "merged: sinks.csv rows 17, 18, 19"
+          ]
+        },
+        {
+          "id": "p2-e-169",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "handle_open_link",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "dcnnt.plugins.opener",
+            "type": "OpenerPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 36
+          },
+          "rationale": "Internal dispatch wrapper around the command execution site: its request parameter is already labeled as a source and the subprocess call inside is labeled as a sink; labeling the wrapper itself as a sink would produce degenerate source==sink paths on the same request object. No separate modeling needed. Sink at :44, source at :36, propagation summary at :42.",
+          "evidence": [
+            "plugins/opener.py:36-44 handle_open_link body"
+          ]
+        },
+        {
+          "id": "p2-e-170",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.opener"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 42
+          },
+          "rationale": "self.conf(('link', 'default_cmd')).format(url=url) propagates the attacker URL into the command string executed at :44; only an isinstance(str) type check precedes it (no metacharacter filtering).",
+          "evidence": [
+            "plugins/opener.py:42 command = self.conf(('link', 'default_cmd')).format(url=url)"
+          ]
+        },
+        {
+          "id": "p2-e-171",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.opener"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 43
+          },
+          "rationale": "Logging-only formatting; no CWE-78 propagation.",
+          "evidence": [
+            "plugins/opener.py:43 self.log('Execute: ...'.format(command))"
+          ]
+        },
+        {
+          "id": "p2-e-172",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.92,
+          "signature": {
+            "callable": "call",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/opener.py",
+            "line": 44
+          },
+          "rationale": "Executed with shell=True (string command through the shell), not an argument list. handle_open_link chain: url = request.params.get('link') (type-checked only) -> conf(('link','default_cmd')).format(url=url) -> subprocess.call(command, shell=True). Attacker URL substituted unquoted; default template 'xdg-open \"{url}\"' double quotes are bypassable ('\"', '$(', backticks). Direct command-injection sink. arg (ast), arg (api) and shell=True rows merged.",
+          "evidence": [
+            "plugins/opener.py:44 subprocess.call(command, shell=True)",
+            "plugins/opener.py:38-42 url = request.params.get('link') -> .format(url=url)",
+            "merged: sinks.csv rows 23, 24, 25"
+          ]
+        },
+        {
+          "id": "p2-e-173",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "handle_exec",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "dcnnt.plugins.remote_commands",
+            "type": "RemoteCommandsPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/remote_commands.py",
+            "line": 38
+          },
+          "rationale": "Internal dispatch wrapper around the command execution site: its request parameter is already labeled as a source and the subprocess call inside is labeled as a sink; labeling the wrapper itself as a sink would produce degenerate source==sink paths on the same request object. No separate modeling needed. Sink at :48, source at :38, index selector at :40.",
+          "evidence": [
+            "plugins/remote_commands.py:38-55 handle_exec body"
+          ]
+        },
+        {
+          "id": "p2-e-174",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.remote_commands"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/remote_commands.py",
+            "line": 46
+          },
+          "rationale": "'Execute: ...'.format(cmd) - logging-only formatting of the config-defined command; no CWE-78 propagation.",
+          "evidence": [
+            "plugins/remote_commands.py:46 self.log('Execute shell command: ...'.format(cmd))"
+          ]
+        },
+        {
+          "id": "p2-e-175",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "check_call",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/remote_commands.py",
+            "line": 48
+          },
+          "rationale": "Executed with shell=True (string command through the shell), not an argument list. The cmd string is loaded from local config (menu[].cmd, e.g. 'true') and selected at runtime by request.params['index'] via dict lookup - index-based SELECTION of a fixed command, not content injection: the attacker cannot alter the executed string. Shell execution of config-defined commands is the intended predefined-remote-commands feature (detection.json nonVulnerabilityNote: not automatically a vulnerability). Labeled sink because it is a genuine shell-execution site reachable from the RPC entry; expected taint verdict is FP unless a dict-key lookup is (incorrectly) modeled as taint propagation; kept as candidate pending human review of the intended-functionality classification. arg (ast), arg (api) and shell=True rows merged.",
+          "evidence": [
+            "plugins/remote_commands.py:48 subprocess.check_call(cmd, shell=True)",
+            "plugins/remote_commands.py:40-44 command = self.remote_commands.get(request.params.get('index', None)); cmd = command.get('cmd')",
+            "merged: sinks.csv rows 28, 29, 30"
+          ]
+        },
+        {
+          "id": "p2-e-176",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "common_upload_handler",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 295
+          },
+          "rationale": "Internal dispatch wrapper around the command execution site: its request parameter is already labeled as a source and the subprocess call inside is labeled as a sink; labeling the wrapper itself as a sink would produce degenerate source==sink paths on the same request object. No separate modeling needed. Sink at :318, source at :295, propagation summaries at :314/:316.",
+          "evidence": [
+            "plugins/sync.py:295-318 common_upload_handler body"
+          ]
+        },
+        {
+          "id": "p2-e-177",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.sync"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 316
+          },
+          "rationale": "on_done.format(path=res) propagates the request-derived saved path (request.params['name'] joined into the backup directory) into the command string executed at :318; unquoted substitution.",
+          "evidence": [
+            "plugins/sync.py:316 command = on_done.format(path=res)",
+            "plugins/sync.py:314 res = self.receive_file(request, directory)"
+          ]
+        },
+        {
+          "id": "p2-e-178",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "callable": "call",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 318
+          },
+          "rationale": "Executed with shell=True (string command through the shell), not an argument list. common_upload_handler chain: request.params['name'] (fn) -> receive_file -> os.path.join(directory, fn) -> on_done.format(path=res) -> subprocess.call(command, shell=True). The attacker-controlled backup file name is substituted unquoted; directory is config-controlled but does not neutralize the name; on_done defaults to None (user must author the template), so no quoting is guaranteed on this path. Direct command-injection sink. arg (ast), arg (api) and shell=True rows merged.",
+          "evidence": [
+            "plugins/sync.py:318 subprocess.call(command, shell=True)",
+            "plugins/sync.py:300 fn = request.params['name']",
+            "merged: sinks.csv rows 33, 34, 35"
+          ]
+        },
+        {
+          "id": "p2-e-179",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "handle_file_upload",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "dcnnt.plugins.sync",
+            "type": "SyncPlugin"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 343
+          },
+          "rationale": "Internal dispatch wrapper around the command execution site: its request parameter is already labeled as a source and the subprocess call inside is labeled as a sink; labeling the wrapper itself as a sink would produce degenerate source==sink paths on the same request object. No separate modeling needed. Sink at :361, source at :343, guard ensure_file_syncable at :328, propagation summaries at :358/:359.",
+          "evidence": [
+            "plugins/sync.py:343-363 handle_file_upload body"
+          ]
+        },
+        {
+          "id": "p2-e-180",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "dcnnt.plugins.sync"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 359
+          },
+          "rationale": "on_merge.format(local=server_file_path, remote=client_file_path, output=path) propagates the request-derived paths (basename of the allow-list-guarded request path; merged output path) into the command string executed at :361.",
+          "evidence": [
+            "plugins/sync.py:359 command = on_merge.format(local=server_file_path, remote=client_file_path, output=path)"
+          ]
+        },
+        {
+          "id": "p2-e-181",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "call",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/dcnnt-py_vuln/dcnnt/plugins/sync.py",
+            "line": 361
+          },
+          "rationale": "Executed with shell=True (string command through the shell), not an argument list. handle_file_upload merge branch: output path = request.params['path'] gated by ensure_file_syncable (substring allow-list, see sanitizer entry); local/remote values are server-generated staging paths built from os.path.basename(path) of the guarded request path; default on_merge template 'cat \"{local}\" \"{remote}\" > \"{output}\"' double-quotes all three (bypassable with '\"'/'$('/backticks only if the guarded values can contain them, which requires a configured sync path to contain such characters). Injection requires specific local config (metacharacters in an allowed path or a custom unquoted template) - plausible but config-dependent; candidate pending review of the substring-guard semantics and custom-template assumptions. arg (ast), arg (api) and shell=True rows merged.",
+          "evidence": [
+            "plugins/sync.py:361 subprocess.call(command, shell=True)",
+            "plugins/sync.py:345-359 path = str(request.params.get('path')); ensure_file_syncable(path); on_merge.format(...)",
+            "merged: sinks.csv rows 38, 39, 40"
+          ]
+        }
+      ]
+    }
+  ]
+}

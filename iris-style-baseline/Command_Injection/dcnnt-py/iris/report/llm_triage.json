@@ -1,0 +1,244 @@
+{
+  "version": "1.0",
+  "review_type": "independent_llm_path_review",
+  "review_round": 3,
+  "run_id_under_review": "formal results in results/pass2.sarif (mtime 2026-10-15 13:33:48, produced with the r2 query after --rerun)",
+  "reviewed_at": "2026-10-15",
+  "project": "dcnnt-py",
+  "pass": 2,
+  "cwe": "CWE-78",
+  "inputs": [
+    "results/pass2.sarif",
+    "report/iris_report.md",
+    "labels/labels.json (run dcnnt-py-iris-pass2-20261015-r2)",
+    "report/query_generation_notes.md (run r2)",
+    "source tree at dataset/codeql_databases/dcnnt-py_vuln (commit 4084ea1, re-verified: notifications.py:45 title read, :56 unquoted cmd.format, :58 subprocess.call, no shlex import anywhere in the tree)"
+  ],
+  "formal_alert_count": 5,
+  "sarif_status": "CodeQL 分析成功，本轮 SARIF 命中 5 条正式 CWE-78 污点路径告警（规则 py/augur/dcnnt-py/pass2-command-injection，含完整 codeFlows）：file_transfer.py:110、notifications.py:58（本轮新增）、opener.py:34、opener.py:44、sync.py:318。SARIF 中的 py/baseline/* 与 cli/* 条目为数据库创建期遥测/基线通知（解析诊断类），不计入正式告警。results/ 下无诊断查询输出，无需要排除的正式化诊断结果。",
+  "provenance_check": {
+    "summary": "本 SARIF 确为 r2 查询的真实执行产物（第 2 轮复核指出的『缓存复用旧结果』问题已通过 --rerun 解决）。",
+    "evidence": [
+      "规则 fullDescription 含 'dcnnt-py-iris-pass2-20261015-r2' 与 'five location-pinned tp sink sites (… notifications.py:58 …)'",
+      "结果数 4 -> 5，新增 notifications.py:58（指纹 c85cd5defd24fdf5:1，前两轮不存在该指纹）",
+      "其余 4 条结果指纹与前两轮完全一致（75401c660a78bc89:1 / 4cd9af55e1908c9a:1 / 68b17bc30b52387f:1 / f82ff681bf00bca5:1），路径未变",
+      "report/iris_report.md 同批再生成（13:33:59，Raw=5）"
+    ]
+  },
+  "summary": {
+    "likely_tp": 5,
+    "likely_fp": 0,
+    "uncertain": 0
+  },
+  "verdicts": [
+    {
+      "alert_index": 0,
+      "rule": "py/augur/dcnnt-py/pass2-command-injection",
+      "sink_location": {
+        "file": "dcnnt/plugins/file_transfer.py",
+        "line": 110,
+        "code": "subprocess.call(command, shell=True)"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "path": [
+        "tcp_server.py:35 self.sock.recv(left)（配对手机 TCP 原始字节）→ :69 60 字节连接头（:73-92 仅路由/认证，不限制后续参数）→ :97 plugin(...).main()",
+        "base.py:106/109 handler.recv(4)/recv(size) → :114 decrypt(encrypted, key)（AES-GCM 认证配对设备，不限制内容）",
+        "base.py:128 RPCRequest.from_dict(json.loads(request_raw.decode()))；jsonrpc.py:53-73 仅类型断言",
+        "base.py:148/154 main 循环 → file_transfer.py:135-141 method=='upload' → handle_upload",
+        "base.py:176 name = request.params['name']（攻击者完全可控）→ :179 os.path.join(download_directory, name) → :196 return path",
+        "base.py:202-204 receive_file 转发 → file_transfer.py:105 path = self.receive_file(request, conf('download_directory'))",
+        "file_transfer.py:108 command = on_download.format(path=path) → :110 subprocess.call(command, shell=True)"
+      ],
+      "review_answers": {
+        "q1_source_is_network_boundary": "是。request.params['name'] 来自配对手机经 TCP 自定义协议的明文（recv→decrypt→json.loads），无内容校验。",
+        "q2_propagation_real_evidence": "是。codeFlows 与源码逐行核对一致（base.py:176/179/196/202-204、file_transfer.py:105/108/110），分发链 process_request(:135-141) 真实存在。",
+        "q3_sink_executes_system_command": "是。subprocess.call(command, shell=True) 以 shell 解释执行命令字符串。",
+        "q4_command_content_source_influenced": "是。path 含未转义的 request.params['name']，文件名中的 ;、|、反引号、$() 可注入命令。",
+        "q5_protections": "无有效防护：无转义、无白名单；on_download 为本地配置模板（required=True 决定可达性而非消毒）；RPCRequest 仅类型断言。",
+        "q6_predefined_command_feature": "模板执行是配置功能，但未转义的网络可控替换值构成真实注入。",
+        "q7_path_reachable_or_overapprox": "真实可达（method=='upload' 实际分支），无过度近似成分。"
+      }
+    },
+    {
+      "alert_index": 1,
+      "rule": "py/augur/dcnnt-py/pass2-command-injection",
+      "sink_location": {
+        "file": "dcnnt/plugins/notifications.py",
+        "line": 58,
+        "code": "subprocess.call(command, shell=True)"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.92,
+      "path": [
+        "base.py:114 decrypt(encrypted, key)（AES-GCM 解密配对手机消息体，codeFlows 起点）→ base.py:123/128 json.loads → RPCRequest.from_dict",
+        "jsonrpc.py:53-73 from_dict：params 字段为攻击者控制的字典（仅类型断言）",
+        "notifications.py:33 request = self.rpc_read()（插件循环读取手机端通知请求）",
+        "notifications.py:45 title = request.params.get('title', 'NULL')（攻击者直接可控的通知标题，dict.get 步）",
+        "notifications.py:56 command = cmd.format(uin=uin, name=name, icon=icon, text=text, title=title, package=package)（本地配置模板 + 未转义替换，Config/format 步）",
+        "notifications.py:58 subprocess.call(command, shell=True)"
+      ],
+      "review_answers": {
+        "q1_source_is_network_boundary": "是。title 来自 request.params（配对手机经 TCP 协议发送的 JSON-RPC notification 请求字段），codeFlows 从 base.py:114 decrypt 一路可溯。协议解密/JSON 解码均不限制字段内容。",
+        "q2_propagation_real_evidence": "是。23 步 codeFlows 逐行核对：base.py:114/123/128、jsonrpc.py:70/73/53/57、notifications.py:33/45/56/58 全部对应真实代码；title → cmd.format(title=title) → command → subprocess.call 为同一函数内的直接赋值链，format 步骤有 MySummaries 建模 + python-all 原生 .format 建模双重支撑。",
+        "q3_sink_executes_system_command": "是。notifications.py:58 subprocess.call(command, shell=True)。",
+        "q4_command_content_source_influenced": "是。title 未转义进入命令模板；默认模板 notify-send -i '{icon}' '{title}' '{text}' 使用单引号——title 含单引号即可闭合并注入任意 shell 内容。text/package（同一条 format 语句的相邻替换值，经 map() 读取）与 package 派生的 icon 文件名（:49）同样未转义，均为同一 sink 的等价注入向量。",
+        "q5_protections": "无。已核实整棵源码树（commit 4084ea1）不存在任何 shlex 导入或转义调用；title 无 isinstance 检查；cmd 模板来自本地配置（trusted），但替换值全部裸拼。无白名单、无过滤。",
+        "q6_predefined_command_feature": "『收到手机通知时弹通知』是设计功能，但未转义的网络可控 title/text/package 进入 shell 命令构成真实命令注入——这正是项目维护者后来用 shlex.quote 修复的模式。",
+        "q7_path_reachable_or_overapprox": "真实可达（method=='notification' 且 event=='posted' 为实际请求分支）。路径无过度近似：每一步都有直接代码证据，title 是 request.params.get 的直接调用点（不受 map() 形状限制）。"
+      },
+      "rationale": "与项目已确认修复的 notifications.py 命令注入（真实漏洞）逐语句对应：函数 main()、输入 request.params、未转义的 cmd.format 替换、subprocess.call(shell=True)。likely_tp，最高置信。"
+    },
+    {
+      "alert_index": 2,
+      "rule": "py/augur/dcnnt-py/pass2-command-injection",
+      "sink_location": {
+        "file": "dcnnt/plugins/opener.py",
+        "line": 34,
+        "code": "subprocess.call(command, shell=True)"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "path": [
+        "同 alert 0 协议入口（tcp_server.py:35/69/97 → base.py:106-128）",
+        "base.py:148/154 分发 → opener.py:46-50 method=='open_file' → handle_open_file",
+        "base.py:176/179/196 request.params['name'] → join → return；base.py:202-204 转发；opener.py:30 receive_file",
+        "opener.py:31-32 default_cmd（默认 'xdg-open \"{path}\"'）→ command = on_download.format(path=path)",
+        "opener.py:34 subprocess.call(command, shell=True)"
+      ],
+      "review_answers": {
+        "q1_source_is_network_boundary": "是（request.params['name']）。",
+        "q2_propagation_real_evidence": "是，base.py 与 opener.py:28-34 逐行一致，分发链真实。",
+        "q3_sink_executes_system_command": "是。",
+        "q4_command_content_source_influenced": "是。默认模板双引号挡不住 \\\"、$()、反引号（POSIX 双引号内命令替换仍展开）。",
+        "q5_protections": "无。模板双引号非 shell 转义；name 无类型检查、无白名单。",
+        "q6_predefined_command_feature": "设计功能 + 未转义替换 = 真实注入点。",
+        "q7_path_reachable_or_overapprox": "真实可达。"
+      }
+    },
+    {
+      "alert_index": 3,
+      "rule": "py/augur/dcnnt-py/pass2-command-injection",
+      "sink_location": {
+        "file": "dcnnt/plugins/opener.py",
+        "line": 44,
+        "code": "subprocess.call(command, shell=True)"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.92,
+      "path": [
+        "同上协议入口 → base.py:148/154 分发 → opener.py:46-50 method=='open_link' → handle_open_link",
+        "opener.py:38 url = request.params.get('link')（手机端直接提供的字符串）",
+        "opener.py:39 isinstance(url, str)（仅类型检查，非消毒）",
+        "opener.py:42 command = conf(('link','default_cmd')).format(url=url)（默认 'xdg-open \"{url}\"'）",
+        "opener.py:44 subprocess.call(command, shell=True)"
+      ],
+      "review_answers": {
+        "q1_source_is_network_boundary": "是。url 即 request.params['link']，无中间转换。",
+        "q2_propagation_real_evidence": "是。同一函数内 38→42→44 直接赋值链，codeFlows（含 dict.get 步）与源码一致。",
+        "q3_sink_executes_system_command": "是。",
+        "q4_command_content_source_influenced": "是，且最直接：攻击者字符串原样进入命令模板，\\\"/;/$()/反引号 多条注入路径。",
+        "q5_protections": "无。isinstance 只是类型检查；模板双引号不构成防护。",
+        "q6_predefined_command_feature": "『打开链接』为设计功能，shell 拼接未转义 URL 构成直接注入。",
+        "q7_path_reachable_or_overapprox": "真实可达，路径最短，无模型化近似环节。"
+      }
+    },
+    {
+      "alert_index": 4,
+      "rule": "py/augur/dcnnt-py/pass2-command-injection",
+      "sink_location": {
+        "file": "dcnnt/plugins/sync.py",
+        "line": 318,
+        "code": "subprocess.call(command, shell=True)"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.88,
+      "path": [
+        "同上协议入口 → base.py:148/154 分发 → sync.py:371-389（contacts_upload/messages_upload 分支）",
+        "sync.py:320-326 handle_contacts/messages_upload → common_upload_handler('contacts'|'messages', request)",
+        "sync.py:295-302 common_upload_handler（fn = request.params['name'] 仅用于备份轮换命名）",
+        "base.py:176/179/196 request.params['name'] → join(directory, name) → return；base.py:202-204 转发",
+        "sync.py:314 res = self.receive_file(request, directory)",
+        "sync.py:315-316 if on_done and is_last_entry: command = on_done.format(path=res)",
+        "sync.py:318 subprocess.call(command, shell=True)"
+      ],
+      "review_answers": {
+        "q1_source_is_network_boundary": "是。进入命令的 name 来自 request.params['name']（同一 TCP 协议边界）。",
+        "q2_propagation_real_evidence": "是。codeFlows 与 sync.py:371/381/320/322/295/314/316/318 及 base.py:176/179/196 一致。",
+        "q3_sink_executes_system_command": "是。",
+        "q4_command_content_source_influenced": "是。res=os.path.join(directory, request.params['name'])，name 未转义。",
+        "q5_protections": "仅条件约束：on_done 可选配置（为空不执行，决定可达性）；is_last_entry 控制触发时机；directory 本地配置。无内容过滤、无转义、无白名单（对比 sync.py:361 有 ensure_file_syncable 前置检查，本路径连该检查都没有）。",
+        "q6_predefined_command_feature": "on_done 为配置功能，未加引号的 name 替换构成真实注入。",
+        "q7_path_reachable_or_overapprox": "真实可达（contacts_upload/messages_upload 为实际 RPC 方法）。"
+      }
+    }
+  ],
+  "ground_truth_hit_check": {
+    "question": "用户提供的真实漏洞（commit b4021d784a97e25151a5353aa763a741e9a148f5 修复的 dcnnt/plugins/notifications.py main() 命令注入：cmd.format 的 text/package/title 等未转义进入 subprocess.call(command, shell=True)）是否被本轮正式告警命中？",
+    "answer": "命中（HIT）。正式告警 1 的 sink 位于 notifications.py:58，与真实漏洞逐要素对应：同一函数（NotificationsPlugin.main，notifications.py:31-58）、同一输入通道（request.params，经 rpc_read:33 ← decrypt ← json.loads）、同一条未转义命令构造语句（notifications.py:56 command = cmd.format(uin=uin, ..., text=text, title=title, package=package)，即修复提交改动的 code_before 行）、同一个 sink（notifications.py:58 subprocess.call(command, shell=True)，紧随修复提交未变的行）。codeFlows 记录的完整路径：base.py:114 decrypt → jsonrpc.py params → notifications.py:33 rpc_read → :45 request.params.get('title') → :56 cmd.format → :58 subprocess.call。",
+    "vector_note": "告警路径的污点载体是 title（request.params.get('title', 'NULL')，:45 的直接调用点）；真实漏洞描述强调 text/package（map(request.params.get, ...) 读取，:44 的 bound-method 形状，非调用点、不可被源谓词直接匹配）。两者来自同一 request.params 字典、进入同一条 cmd.format 的相邻替换值、汇于同一 sink——函数级与语句级均精确命中；title 单独即可完成注入（默认模板单引号可被 title 中的单引号闭合），text/package 是同一语句的等价注入向量。命中判定不受载体差异影响。",
+    "round_history": [
+      "第 1 轮：未命中——分析快照恰为修复后状态（HEAD=fix commit），真值漏洞在分析对象中不存在。",
+      "第 2 轮：未命中——快照已切回漏洞版（4084ea1），但分析运行复用了 r1 代查询的输出（其 sink 集结构性排除 notifications.py:58，且携带不存在的 shlex.quote barrier）。",
+      "第 3 轮（本轮）：命中——r2 查询经 --rerun 真实执行，notifications.py:58 进入正式结果。"
+    ],
+    "evidence_used": [
+      "用户在提示中提供的漏洞元数据（commit/cwe/function/diff）",
+      "SARIF：5 条结果、规则描述含 r2 标记与 notifications.py:58 钉定、新指纹 c85cd5defd24fdf5:1、23 步 codeFlows",
+      "源码快照 git HEAD 4084ea1 与 notifications.py:33/45/56/58 内容（无 shlex、未转义 format）",
+      "修复提交与本快照的行对应：code_before 的 cmd.format 行 = 本快照 :56，其后的 subprocess.call = :58"
+    ],
+    "disclosure": "本轮未读取 PyVul 真值数据集文件、其他修复提交或 CVE 公告。为回答用户显式提出的命中性问题，仅使用了提示中粘贴的该条真值，以及本仓库自身状态（git HEAD、文件内容、SARIF 指纹与 mtime）。"
+  },
+  "exploitability_preconditions": {
+    "summary": "回溯复核补充：5 条 sink 全部需要管理员先在配置中启用对应命令模板才会执行到 subprocess.call（jsonconf 语义经源码核验：TemplateEntry/ConfEntryBase 第 3 参为 optional，pre_process 为 'default if value is None and self.optional'——optional=False 表示配置中必须出现该项，否则 schema 校验失败、插件不加载；optional=True 且 default=None 表示未配置时值为 None，代码分支跳过）。该前提与真值漏洞本身完全一致（notifications 的 cmd 同为 required 配置项），属可达性前提而非防护，不改变漏洞判定，只影响各部署的实际暴露面。",
+    "per_sink": [
+      {
+        "sink": "notifications.py:58",
+        "template": "cmd",
+        "optional": false,
+        "note": "notifications.py:17-19 TemplateEntry('cmd', ..., False, ...) — 必须配置；默认模板 \"notify-send -i '{icon}' '{title}' '{text}'\" 仅为文档默认（--doc 输出），不会自动填充",
+        "gating": "cmd 未配置时插件加载失败（ConfigLoader 返回错误串，init_plugin 拒绝加载），sink 不可达；配置后 title/text/package 及 package 派生的 icon 文件名均未转义进入 shell 命令"
+      },
+      {
+        "sink": "opener.py:34",
+        "template": "file.default_cmd",
+        "optional": false,
+        "note": "opener.py:16 TemplateEntry('default_cmd', ..., False, 0, 4096, 'xdg-open \"{path}\"', ...) — 必须配置",
+        "gating": "未配置 default_cmd 时 Opener 插件不加载；配置后上传文件名（request.params['name']）未转义注入"
+      },
+      {
+        "sink": "opener.py:44",
+        "template": "link.default_cmd",
+        "optional": false,
+        "note": "opener.py:20 同上，默认 'xdg-open \"{url}\"' 仅为文档默认",
+        "gating": "同上；url 仅经 isinstance(str) 类型检查"
+      },
+      {
+        "sink": "file_transfer.py:110",
+        "template": "on_download",
+        "optional": true,
+        "note": "file_transfer.py:21-22 TemplateEntry('on_download', ..., True, 0, 4096, None, ...) — 可选，无默认",
+        "gating": "未配置时 conf 返回 None，isinstance(on_download, str) 分支跳过；配置后上传文件名未转义注入"
+      },
+      {
+        "sink": "sync.py:318",
+        "template": "contacts|messages.on_done",
+        "optional": true,
+        "note": "sync.py:49-50/55-56 TemplateEntry('on_done', ..., True, 0, 4096, None, ...) — 可选，无默认",
+        "gating": "未配置时 on_done 为 None，if on_done 分支跳过；配置后备份文件名（request.params['name'] 经 receive_file 返回路径）未转义注入"
+      }
+    ],
+    "contrast_note": "对照组：sync.py:361 的 on_merge 为 optional=True 且带真实默认值 'cat \"{local}\" \"{remote}\" > \"{output}\"'（sync.py:27-31）——即那个 candidate（非正式）路径是唯一默认启用的执行点，但它受 ensure_file_syncable 子串白名单前置守卫且默认模板对三个替换值都加了双引号，维持 candidate 定级合理。",
+    "threat_model_note": "攻击者主体为已配对手机（持有设备密钥、可通过 AES-GCM 认证的一方）——与项目修复提交自述的威胁模型一致（'All text received over the network MUST be escaped'）。未配对的外部网络攻击者无法通过 tcp_server.py:73-92 的路由/认证检查到达插件层。",
+    "verdict_impact": "判定不变：5/5 likely_tp。门控是可达性前提而非消毒措施；真值漏洞（notifications）同样依赖 cmd 配置却被项目定性为 high-risk RCE——按同一标准，其余 4 条为真实同类缺陷：代码在 4084ea1 中客观可注入（网络可控替换值未转义进入 shell=True），且不在用户提供的修复提交覆盖范围内（该提交仅改 notifications.py）。"
+  },
+  "overall_conclusion": "5/5 正式告警为 likely_tp（平均置信约 0.90）：Source 均为配对手机经 TCP 自定义协议的真实网络输入，传播链有逐行真实代码证据，Sink 均为 subprocess.call(..., shell=True)，替换值未转义、无有效防护，路径真实可达且无过度近似成分。用户提供的真实漏洞（notifications.py main() 命令注入）本轮正式命中——sink、函数、未转义 format 语句、输入通道逐要素对应，污点载体为 title（与真值强调的 text/package 同字典、同语句、同汇点）。回溯复核补充了 exploitability_preconditions：5 条 sink 均以对应命令模板已配置为可达前提（与真值漏洞自身的门控一致，属部署暴露面差异而非判定差异）。至此三轮复核的演化闭环：第 1 轮快照已修复、第 2 轮查询缓存陈旧、第 3 轮 r2 查询真实执行并命中。",
+  "integrity": {
+    "original_sarif_modified": false,
+    "labels_modified": false,
+    "queries_modified": false,
+    "ground_truth_files_read": false,
+    "notes": "仅写入本文件 report/llm_triage.json（覆盖第 2 轮同名复核文件；第 1、2 轮结论在 ground_truth_hit_check.round_history 中留档）。未使用诊断查询结果作为正式 TP。"
+  }
+}
