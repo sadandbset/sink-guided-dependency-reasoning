@@ -1,0 +1,231 @@
+{
+  "run": {
+    "timestamp": "2026-10-22",
+    "pipeline": "Augur 0.3.0 (IRIS manual workflow)",
+    "phase": "Phase 1, Step 1-2 (explore + candidate extraction query generation)",
+    "analyst": "iris-manual agent run"
+  },
+  "project": {
+    "name": "opendiamond",
+    "variant_root": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/opendiamond_vuln",
+    "version": "10.1.1 (opendiamond/__init__.py: __version__ = '10.1.1')",
+    "description": "OpenDiamond Platform for Interactive Search (CMU) - distributed multimedia search: scope servers, data retrievers, JSON blaster, filters, proxy",
+    "source_layout": {
+      "audited": [
+        "opendiamond/ (81 .py files: the shipped package - all networked services)",
+        "proxy.py (root entry point for DiamondProxy, listens on HYPERFIND_PORT 5904)"
+      ],
+      "excluded_from_candidate_scope": [
+        "opendiamond-db/ (nested CodeQL database - excluded from all code traversal, search and evidence collection)",
+        "tests/ (test files - extraction noise per workflow 4.3.2)",
+        "setup.py (build manifest)"
+      ],
+      "excluded_for_experiment_independence": [
+        "VULNERABILITY_AUDIT_REPORT.md (root; looks like ground-truth-derived audit material - NOT read)",
+        "path_traversal_sinks.csv (root; looks like ground-truth-derived sink list - NOT read)"
+      ]
+    }
+  },
+  "database": {
+    "path": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/opendiamond_vuln/opendiamond-db",
+    "primaryLanguage": "python",
+    "codeql_cli_version": "2.25.1",
+    "python_pack": "codeql/python-all 7.1.2 (resolved locally at ~/.codeql/packages; qlpack.yml depends on codeql/python-all: *)",
+    "baseline_lines_of_code": 10613,
+    "source_location_prefix": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/opendiamond_vuln"
+  },
+  "pass": {
+    "id": 1,
+    "name": "Path Traversal",
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"],
+    "pass_query": "iris/queries/Pass1_PathTraversal.ql (Phase 2 artifact; not generated in this step)"
+  },
+  "language_detection": {
+    "language": "python",
+    "evidence": [
+      "DB metadata: primaryLanguage: python",
+      "setup.py + find_packages; 81 .py files under opendiamond/",
+      "python pack dependency in iris/qlpack.yml"
+    ]
+  },
+  "framework_detection": {
+    "primary": "Flask",
+    "frameworks": [
+      {
+        "name": "Flask",
+        "role": "dataretriever HTTP service (object/scopelist serving - the main file-access boundary)",
+        "confidence": 0.95,
+        "evidence": [
+          "import: 'from flask import Blueprint, url_for, Response, stream_with_context, send_file, jsonify' in opendiamond/dataretriever/{diamond,test,mixer,augment,yfcc100m_mysql,gigapan}_store.py",
+          "routes: ~35 '@scope_blueprint.route(...)' decorators across 8 store modules, including '/obj/<path:obj_path>' path-converter routes",
+          "bootstrap: 'app = Flask(__name__)' + 'app.run(host=..., threaded=False, processes=16)' in opendiamond/dataretriever/__main__.py:26,90",
+          "setup.py REQUIRES_DATARETRIEVER: 'flask>=0.12.4'"
+        ]
+      },
+      {
+        "name": "Django",
+        "role": "scopeserver web app (scope cookie generation UI - form-driven, no direct file access in views)",
+        "confidence": 1.0,
+        "evidence": [
+          "routes: 'urlpatterns = [...]' with 'url(...)' in opendiamond/scopeserver/{core,cocktail,flickr,gatekeeper,gigapan,metadata,mirage}/urls.py",
+          "imports: 'from django.conf.urls import url' (urls.py), 'from django.conf import settings' (gatekeeper/views.py:16)",
+          "runtime: generate_cookie_django reads settings.SCOPE_KEY_FILE (opendiamond/scope.py:296-302)",
+          "layout: views.py/models.py/forms.py/urls.py/admin.py per app; setup.py REQUIRES_SCOPESERVER: 'Django>=1.11.29'"
+        ]
+      },
+      {
+        "name": "Tornado (+ sockjs-tornado)",
+        "role": "JSON Blaster web service (search submission, result retrieval, blob cache, sockjs websocket search control)",
+        "confidence": 0.95,
+        "evidence": [
+          "import: 'from tornado.web import asynchronous, RequestHandler, HTTPError' (blaster/handlers.py:36), 'from sockjs.tornado import SockJSConnection' (handlers.py:31)",
+          "routes: JSONBlaster.handlers tuple with url(r'/result/([0-9a-f]{64})/([0-9a-f]{64})/raw/(.*)$', AttributeHandler, ...) in blaster/__init__.py:48-66",
+          "bootstrap: 'class JSONBlaster(tornado.web.Application)' (blaster/__init__.py:47), HTTPServer(...).listen in blaster/__main__.py:35-41",
+          "setup.py REQUIRES_BLASTER: 'tornado>=4.4.2', 'sockjs-tornado>=1.0.3'"
+        ]
+      },
+      {
+        "name": "custom XDR/protobuf-style RPC over raw sockets (not a web framework)",
+        "role": "diamondservers and proxy control/data channels - an untrusted network boundary",
+        "confidence": 0.9,
+        "evidence": [
+          "opendiamond/rpc.py + opendiamond/protocol.py: RPCHeader/XDR_* request encoding",
+          "@RPCHandlers.handler(25, protocol.XDR_setup, ...) style dispatch in opendiamond/server/search.py:128-318 and opendiamond/proxy/search.py:137-310",
+          "ConnListener accept loop in proxy.py:112-119 (HYPERFIND_PORT 5904), server listening on PORT 5874"
+        ]
+      }
+    ],
+    "frameworks_not_detected": [
+      "FastAPI (no fastapi imports)",
+      "no static file-serving framework beyond the Flask send_file sites and Tornado static_path"
+    ]
+  },
+  "references_loaded": [
+    "references/patterns.md (always)",
+    "references/python.md (always)",
+    "references/flask.md (Flask detected - primary file-serving framework)",
+    "references/django.md (Django detected)",
+    "tornado/sockjs: no dedicated reference exists in references/ (tornado.md absent); Tornado boundary knowledge derived from repo evidence (handlers/routes/sockjs decorators) per WORKFLOW 4.2.3 fallback rule",
+    "assets/extraction/python_sources.ql.tmpl + python_sinks.ql.tmpl (starter stubs - filled from repo evidence)"
+  ],
+  "entry_point_map": {
+    "flask_dataretriever": {
+      "transport": "HTTP (default 127.0.0.1:5873, config DRHOST/DRPORT)",
+      "entry": "opendiamond/dataretriever/__main__.py run() registers store blueprints",
+      "untrusted_inputs": [
+        "URL path segments: '<path:obj_path>' / '<path:object_path>' / '<path:rel_path>' / '<path:video>' / '<path:suffix>' / '<path:dest_url>' path-converter route params (accept '/' - traversal-capable)",
+        "URL path segments: '<gididx>' / '<baseidx>' / '<mixeridx>' / '<rootdir>' / '<dataset>' / '<params>' default string-converter params (no '/', but '..' as a full segment possible)",
+        "query string: request.args.get('slice'/'distribute') (yfcc100m_simple_store.py:54,58 - values only, not paths)"
+      ]
+    },
+    "tornado_blaster": {
+      "transport": "HTTP (default :8080) + sockjs websocket at /search",
+      "entry": "opendiamond/blaster/__main__.py run() -> JSONBlaster",
+      "untrusted_inputs": [
+        "URL path params constrained by route regexes to [0-9a-f]{64} for search_key/object_key (blaster/__init__.py:51-58) - hex-only, not traversal-capable",
+        "AttributeHandler attr_name is matched by '(.*)$' (blaster/__init__.py:55,57) - used as a ZIP member key inside an already-open archive, not as a filesystem path",
+        "sockjs websocket JSON events: SearchConnection.start(search_key) (handlers.py:553) - search_key reaches SearchCache.get_search -> open() WITHOUT the hex regex constraint",
+        "request bodies: self.request.body JSON search spec (handlers.py:313) containing filter blob URIs 'blob:<sig>' -> _BlasterBlob.fetch -> blob_cache[parts.path] (handlers.py:207) -> BlobCache._path sig used in open/os.link/os.utime",
+        "scope cookie strings from the JSON body: config['cookies'] -> ScopeCookie.parse (handlers.py:253) - signature-verified, scopeurls semi-trusted"
+      ]
+    },
+    "django_scopeserver": {
+      "transport": "HTTP (Django views, login-protected)",
+      "entry": "scopeserver apps (cocktail/flickr/gatekeeper/gigapan/metadata/mirage)",
+      "untrusted_inputs": [
+        "request.POST / request.GET form fields (collection/keyword form data)",
+        "form-cleaned scope parameters flow into generate_cookie scopeurls -> scope lists -> dataretriever object src/meta 'file://<path>' URIs (long-range chain; no direct file access in views)"
+      ]
+    },
+    "xdr_rpc_servers": {
+      "transport": "raw TCP socket RPC (5874 control/blast, 5904 proxy)",
+      "entry": "opendiamond/server/__main__.py, proxy.py (root)",
+      "untrusted_inputs": [
+        "XDR_setup filter configs: code/blob 'sha256:<sig>' URIs -> ExecutableBlobCache.executable_path(sig)/BlobCache[sig] (server/filter.py:645-671, blobcache.py:59-99,170-201)",
+        "XDR_reexecute object_id -> ObjectLoader.load -> file:/sha256: scheme split -> open(path) (server/object_.py:241-324)",
+        "scope cookies -> ScopeListLoader scope URLs (server/scopelist.py:126-142) -> object id/src/meta URIs (file: scheme -> open)"
+      ]
+    },
+    "local_boundaries_judged_not_attacker_controlled": [
+      "CLI args: scope.py _main (sys.argv), dataretriever __main__ argparse - operator-run tools",
+      "config files: DiamondConfig open(path) (config.py:186), blaster_config, CERTS/key.pem files - operator-configured",
+      "environment: TMPDIR (blobcache.py:167, server/filter.py:749), HOME (client/util.py:85,95) - deployer trust level; emitted as 'env' source rows for the labeling step to judge per the boundary rule, not assumed attacker-controlled"
+    ]
+  },
+  "sink_landscape": {
+    "real_filesystem_operations": [
+      "flask send_file(path) - dataretriever '/obj/...' handlers: diamond_store.py:137, test_store.py:296, mixer_store.py:266, augment_store.py:165 (safe_join-guarded), yfcc100m_mysql_store.py:128, gigapan_store.py:108 (transcode temp)",
+      "builtin open() reads/writes - cache/index/object loads: blaster/cache.py:126,161 (pickle cache keyed by URL/websocket search_key), blobcache.py:99 (blob sig path), server/object_.py:293,314 (file:/meta: URIs from scope lists), server/filter.py:685,702 (filter code), dataretriever index/meta files (diamond_store.py:48,54; video_store.py:52; augment_store.py:184; mixer_store.py:83,182,203; yfcc100m_simple_store.py:73), dataretriever/util.py:48 (DiamondTextAttr path+'.text_attr')",
+      "os.open/os.fdopen - filter fifos: opendiamond/filter/__init__.py:191,192; server/filter.py:772,773",
+      "os.stat - video_store.py:104 (video_path from '<path:video>' route); os.path.isfile/exists checks in stores",
+      "subprocess ffmpeg/ffprobe reading video_path (video_store.py:136,162) - filesystem access from the '<path:video>' route param",
+      "os.rename/os.link/os.unlink/os.utime/os.makedirs/os.mkdir - cache keyed by search_key/object_key/sig: blaster/cache.py:71,115,117,118,142,167; blobcache.py:71,83,115,120,134,147,197; blaster/__init__.py:98",
+      "os.listdir - blobcache.py:129,141; blaster/cache.py:156",
+      "zipfile.ZipFile(path) - blaster/cache.py:50 (object cache path from search_key/object_key), :136 (temp)",
+      "shutil.rmtree/copyfile - blaster/cache.py:167, blobcache.py:195, server/child.py:117"
+    ],
+    "path_propagation_nodes": [
+      "os.path.join - the dominant builder: stores' _get_obj_absolute_path/_get_index_absolute_path (DATAROOT/INDEXDIR joins), blaster/cache.py:75,78,81,84 (search_key/object_key segments), blobcache.py:60 (sig), server/object_.py via split_scheme paths, pyramid.py:135",
+      "split_scheme (helpers) - the URI-to-path boundary for file:/sha256: object URIs (server/object_.py:235,251,259,334; server/filter.py:647,662)",
+      "urljoin - scope list id/src/meta resolution (server/scopelist.py:84,86,92)"
+    ],
+    "observed_sanitizers": [
+      "werkzeug.utils.safe_join in augment_store.py:156 (the ONLY store using safe_join - the other stores use raw os.path.join)",
+      "Tornado route regex [0-9a-f]{64} constraints for URL search_key/object_key (blaster/__init__.py:51-58)",
+      "server-side sha256 hexdigest keys (blaster/cache.py:87,141; blobcache.py:104-105) - only for keys the server itself generated; client-supplied keys (websocket search_key, blob URI sig) are not re-validated",
+      "ScopeCookie signature verification (scope.py:96-136) - limits but does not eliminate scopeurl trust (cookie-authorized scope servers control file: object URIs)"
+    ],
+    "not_sinks_verified": [
+      "proxy/utils.py load_dataset_from_zipfile: zf.read(entry) reads zip members from an in-memory archive - no filesystem write by entry name (no extract/extractall anywhere in the audited tree)",
+      "PIL.Image.open sites take BytesIO/streams (attributes.py:123, blaster/handlers.py:456, gigapan_store.py:77) - not path arguments",
+      "_CachedSearchResult.__getitem__ -> zf.read(member): archive member lookup, not a filesystem path",
+      "yfcc100m_simple/vdms '/id/<path:suffix>' handlers only build S3 URLs via urljoin (yfcc100m_simple_store.py:115-116) - no local file access"
+    ],
+    "toctou_notes": [
+      "BlobCache two-pass GC (stat/rename/unlink races documented in blobcache.py:28-54) - TOCTOU-by-design on blob paths",
+      "mktemp() use in ExecutableBlobCache.make_dest (blobcache.py:188) - deprecated unsafe temp name (link/copy fallback)"
+    ]
+  },
+  "candidate_strategy": {
+    "sources.ql": [
+      "Flask route handler parameters (all 8 store modules + __main__ scopelist_xsl) - flow_kind http_route_param",
+      "Flask request.args.get reads - flow_kind http_query",
+      "Tornado RequestHandler verb-method parameters (URL-regex-injected) - flow_kind http_route_param",
+      "Tornado self.request.body/headers attribute reads - flow_kind http_body/http_header",
+      "Tornado self.get_argument(...) calls - flow_kind http_query",
+      "sockjs event-handler parameters (incl. SearchConnection.start(search_key)) and on_message(data) - flow_kind socket_message",
+      "@RPCHandlers.handler params parameters (XDR-decoded client data) - flow_kind rpc_param",
+      "json.loads on request bodies/websocket messages in blaster - flow_kind json_body",
+      "Django views request parameters + request.POST/GET attribute reads - flow_kind http_view_request/http_form",
+      "ScopeCookie.parse boundary in blaster - flow_kind cookie_parse",
+      "os.environ.get/os.getenv/os.environ[...] reads - flow_kind env (deployer trust level, labeling judges)"
+    ],
+    "sinks.ql": [
+      "builtin open, os.open/os.fdopen - file_open/fs_open",
+      "flask send_file - file_serve",
+      "os.stat/utime/unlink/link/rename/mkdir/makedirs, os.listdir, shutil.rmtree/copyfile - fs_* families",
+      "zipfile.ZipFile - archive_open",
+      "subprocess.Popen in video_store (file path inside cmd list) - process_file_arg",
+      "os.path.join/abspath/normpath/realpath/isfile/isdir/exists/getsize/dirname/basename/split - path_join/path_resolve/path_check propagation",
+      "werkzeug safe_join - path_sanitize (sanitizer evidence row)",
+      "split_scheme calls - uri_split (URI-to-path decode boundary)",
+      "first-party path-builder functions (_get_*_absolute_path, SearchCache._*_path, BlobCache._path) - path_join_wrapper",
+      "first-party filesystem-touching wrapper functions (SearchCache get/put/prune, BlobCache accessors, ObjectLoader loaders, DiamondTextAttr, filter code loaders, read_file_list/write_data) - internal_file_wrapper"
+    ],
+    "column_contract": "10 columns identical to the prior IRIS manual Path_Traversal projects (aiohttp/airflow/ansible/coderedcms/copyparty): node, role, callableName, flowKind, receiver, moduleHint, argIndex, file, line, matchKind ('ast' vs 'api' rows kept strictly separate)"
+  },
+  "coverage_gaps": [
+    "Dynamic dispatch: Tornado handler dispatch is framework-internal (Application(routes)); handler methods are matched by HTTP-verb name + file location, not by resolved route tables - a handler class not named in JSONBlaster.handlers would still match the verb-method family but its URL binding is unknown",
+    "sockjs event dispatch is dynamic: getattr(self, event) in _StructuredSocketConnection.on_message (handlers.py:514) - event handlers matched via the @...event decorator, which covers the observed handlers (start/pause/resume/pong)",
+    "The blaster blob URI 'blob:<sig>' -> urlparse(parts.path) -> BlobCache[sig] chain crosses a string-split boundary (urlparse) that the later taint config will need as a summary/flow step; recorded here because extraction only marks the endpoints (json_body source, blobcache open/link sinks)",
+    "Flask default (string) converter route params cannot contain '/', so '<rootdir>'/'<gididx>' traversal requires the path-converter params; both are emitted with the same flow_kind and the labeling step distinguishes exploitability",
+    "Django form-cleaned data -> generate_cookie scopeurls -> scope list -> file: object URI -> open() is a multi-service chain; only the endpoints are extracted (request form sources, object_.py open sinks). No cross-service taint is possible in a single-DB pass; inter-service edges would need MySummaries entries in Phase 2",
+    "scope.py _main CLI and config.py DiamondConfig open() excluded as operator-local; client/util.py local HOME-based reads excluded from source families (emitted only as sink-side open rows, labeling judges)",
+    "opendiamond/filter/parameters.py and newscope/ contain no filesystem path sinks in the audited set; libfilter/build-aux are C tooling outside the Python DB"
+  ],
+  "next_steps": [
+    "Run codeql pack install in iris/ (qlpack.yml already present)",
+    "Execute extraction/sources.ql then extraction/sinks.ql sequentially with codeql query run + bqrs decode",
+    "LLM labeling (Step 3) then checkpoint"
+  ]
+}

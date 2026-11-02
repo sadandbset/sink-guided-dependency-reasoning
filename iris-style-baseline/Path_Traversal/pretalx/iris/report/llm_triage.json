@@ -1,0 +1,101 @@
+{
+  "triage_id": "pretalx-pass1-pathtraversal-llm-triage",
+  "generated": "2026-10-23",
+  "scope": {
+    "rule_id": "py/augur/pretalx/pass1-path-traversal",
+    "sarif": "results/pass1.sarif",
+    "formal_results": 2,
+    "other_rules_in_sarif": [],
+    "diagnostics_or_baseline_findings_counted": false,
+    "notes": "SARIF driver contains only the single Augur rule; invocation notifications are CodeQL baseline/telemetry only (py/baseline/expected-extracted-files, cli/*) and are not counted as findings. No other CWE or built-in CodeQL query results are mixed into this run."
+  },
+  "findings": [
+    {
+      "finding_index": 0,
+      "rule_id": "py/augur/pretalx/pass1-path-traversal",
+      "location": "src/pretalx/common/mixins/forms.py:450",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "codeflow": [
+        "src/pretalx/common/mixins/forms.py:439 value = self.cleaned_data[name]  (Source: formValueRead, label P1-S form_value tp)",
+        "src/pretalx/common/mixins/forms.py:450 value (isinstance(value, UploadedFile) branch)",
+        "src/pretalx/common/mixins/forms.py:450 value.name  (Summary edge uploadFileNameStep)",
+        "src/pretalx/common/mixins/forms.py:470 get_new_filename(name) parameter",
+        "src/pretalx/common/mixins/forms.py:472-479 format string return '{model}-{attr}/{pk}/{name}.{nonce}.{ext}'",
+        "src/pretalx/common/mixins/forms.py:450 default_storage.save(self.get_new_filename(value.name), value)  (Sink: storageNameArg save, label P1-K-0030 candidate)"
+      ],
+      "analysis": {
+        "q1_source_control": "Source is real: cleaned_data[name] at forms.py:439 is a second-order re-entry of request.FILES/POST through Django form validation. However the upload reaches HierarkeyMixin.save only through orga-privileged settings forms (e.g. event settings custom_css via orga/forms/event.py), so the attacker is an authenticated organizer, not an anonymous request.",
+        "q2_source_to_sink_reachability": "The flow is fully verified in first-party code: :439 -> :450 value.name -> get_new_filename (forms.py:470-479, no sanitization of `name`, embeds it raw as a path component) -> default_storage.save arg 0 at :450. No async indirection; the uploadFileNameStep and format-string propagation both have real source evidence.",
+        "q3_sink_is_real_file_access": "Yes: default_storage.save (FileSystemStorage, MEDIA_ROOT) performs an actual file write. This is not a pure concatenation sink.",
+        "q4_allowed_root_and_escape": "Implied root is MEDIA_ROOT. The format string prepends fixed components '{model}-{attr}/{pk}/' and appends '.{nonce}.{ext}'; in first-party code nothing prevents the raw client filename component from carrying separators. Escape would in principle be possible if the name were used verbatim.",
+        "q5_traversal_vectors": "Relevant vectors are directory separators/'..' inside the uploaded filename. They are neutralized before the sink: Django's UploadedFile.name setter applies os.path.basename at multipart parse time (django/core/files/uploadedfile.py), so no '/' or '\' can survive into value.name; a bare '..' cannot form a standalone component because the format string always appends '.{nonce}.{ext}' to it. Percent-encoding is already decoded by the multipart parser before basename is applied.",
+        "q6_guards_before_access": "No guard exists in pretalx first-party code (grep confirms no safe_join/basename/normpath/realpath/relative_to on this path). The effective guards are framework-internal and located before the actual disk write: (1) UploadedFile basename normalization at upload parse time, (2) FileSystemStorage._save -> path(name) -> safe_join(location, name) raising SuspiciousFileOperation on any escape outside MEDIA_ROOT. Both run before the file is written. Django is pinned ~=3.2.0 (src/setup.py:101), where both guards exist. These are outside the CodeQL DB and were therefore not modeled as barriers - the reason the tool flagged this for human review.",
+        "q7_misjudged_guards": "The FP call here does NOT rest on Path.resolve/normpath/startswith or on mere login auth. It rests on the two library guards above, which are genuine pre-access containment (basename strips separators; safe_join rejects escapes). Auth is only a secondary mitigating factor (orga-only reachability).",
+        "q8_benign_authorised_flow": "Partly: this is the normal, authorised settings-file upload flow for organizers; the taint is the upload filename, which the framework confines to MEDIA_ROOT.",
+        "q9_overgeneralisation": "Not an over-generalised source/sink: both endpoints and every intermediate step are real code. The FP arises solely from unmodeled framework-internal barriers - exactly the gap the Pass 1 notes documented for K0030 (candidate, 'framework-internal, unverifiable in this DB').",
+        "q10_mixed_results": "No: single Augur rule, formal SARIF result only."
+      },
+      "preconditions": "Authenticated organizer submits a Hierarkey settings form with a file field; traversal additionally requires the framework basename/safe_join guards to be absent, which contradicts the pinned Django version.",
+      "reason": "Real source-to-sink taint flow in first-party code, but both the filename sanitization (UploadedFile.name basename) and the root containment (FileSystemStorage safe_join) exist in the pinned Django ~=3.2.0 and execute before the write; the storage name is further constrained to the fixed '{model}-{attr}/{pk}/' prefix with a random suffix. No exploitable traversal survives. Downgraded to likely_fp with medium confidence because the guards live outside the CodeQL DB and were not verifiable from source in this experiment.",
+      "label_crosscheck": "SARIF finding matches the predicted alert #2 in report/query_generation_notes.md §6 (forms.py:439 -> K0030) and label P1-K-0030 (candidate, conf 0.5)."
+    },
+    {
+      "finding_index": 1,
+      "rule_id": "py/augur/pretalx/pass1-path-traversal",
+      "location": "src/pretalx/common/views.py:56",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "codeflow": [
+        "src/pretalx/common/views.py:48 def get_static(request, path, content_type)  (Source: routedHandlerParam, label P1-S-0056 candidate)",
+        "src/pretalx/common/views.py:52 path = settings.BASE_DIR / 'pretalx/static' / path",
+        "src/pretalx/common/views.py:56 open(path, 'rb')  (Sink: openPathArg, label P1-K-0010 candidate)"
+      ],
+      "analysis": {
+        "q1_source_control": "The source is the `path` parameter of get_static, but its value is injected by the urlconfig, not by the request. The only shipped binding is agenda/urls.py:124-131: path('sw.js', get_static, {'path': 'agenda/js/serviceworker.js', 'content_type': 'application/javascript'}) - a fixed literal. No route variable, converter, or request field reaches this parameter anywhere in the codebase (grep: get_static referenced only at common/views.py:48 and agenda/urls.py:3,126). Attacker control would require a malicious or plugin urlconfig, i.e. code-write privilege, not request input.",
+        "q2_source_to_sink_reachability": "Flow verified in code: literal -> pathlib join at :52 -> exists() check at :53 (check-then-use) -> open(path,'rb') at :56 -> FileResponse at :55-57. No sanitization, no containment anywhere on the path; the code-level chain is real.",
+        "q3_sink_is_real_file_access": "Yes: open(path, 'rb') at views.py:56 reads the file and FileResponse at :55 streams it to the client. Genuine read+response sink.",
+        "q4_allowed_root_and_escape": "Intended root is settings.BASE_DIR/'pretalx/static'. A urlconfig-supplied relative path containing '..' would indeed escape it - there is no containment check. But the controllable input (urlconfig) is operator-controlled configuration, not request data.",
+        "q5_traversal_vectors": "'..' components in the injected path would survive the raw pathlib join and the exists() check (check-then-use, no canonicalization). Percent-decoding happens in the WSGI layer before routing but is irrelevant here since no URL component feeds the parameter. Symlinks are transparent; none of this matters while the value is a fixed literal.",
+        "q6_guards_before_access": "None in first-party code: no normpath/abspath/resolve/basename/whitelist; only exists() at :53, which is a check-then-use, not containment. No guard is needed because the value is a constant in the shipped configuration.",
+        "q7_misjudged_guards": "The FP verdict does not rely on resolve/normpath/startswith or on login auth - none exist. It relies on the source not being attacker-reachable: the shipped route binds a literal.",
+        "q8_benign_authorised_flow": "Yes: this is a single hard-coded static file route serving pretalx's own serviceworker.js. The view's own docstring (views.py:49-50) acknowledges traversal is only possible 'by a malicious urlconfig, so not a huge attack vector'.",
+        "q9_overgeneralisation": "The source rule routedHandlerParam matched a genuine handler parameter, but reachability analysis (label P1-S-0056, classification candidate, conf 0.6) already recorded that the shipped binding is a literal. This is a reachability FP, not a source/sink overgeneralisation or DB coverage issue.",
+        "q10_mixed_results": "No: single Augur rule, formal SARIF result only."
+      },
+      "preconditions": "Exploitation requires an attacker who can register a Django route passing an arbitrary `path` kwarg to get_static - i.e. arbitrary code execution or a malicious plugin - which is a strictly stronger privilege than the file read it would grant.",
+      "reason": "Complete first-party code chain with zero containment, but the only value ever passed is the urlconfig literal 'agenda/js/serviceworker.js'. No URL path, route variable, or request field can reach the parameter in the shipped or plausibly deployed configuration. Classic unreachable-source false positive; the code is nonetheless a latent hazard if a plugin ever binds a variable route (documented in the docstring itself).",
+      "label_crosscheck": "SARIF finding matches predicted alert #1 in report/query_generation_notes.md §6 (S0056 -> K0010) and labels P1-S-0056 / P1-K-0010 (both candidate)."
+    }
+  ],
+  "summary": {
+    "formal_pass1_alerts": 2,
+    "likely_tp": 0,
+    "likely_fp": 2,
+    "uncertain": 0,
+    "conclusion": "CodeQL 分析成功，本轮命中 2 条正式路径穿越污点路径，但经逐条独立复核，两条均为 likely_fp（一条因框架内置防护真实生效于文件访问之前，一条因 source 在实际路由绑定中为固定字面量、攻击者不可控）。Pass 1 无 likely_tp。"
+  },
+  "real_vulnerability_hit_check": {
+    "provided_reference": {
+      "commit": "https://github.com/pretalx/pretalx/commit/60722c43cf975f319e94102e6bff320723776890",
+      "cwe": "CWE-22",
+      "functions": ["dump_content", "get_mediastatic_content"],
+      "file": "src/pretalx/agenda/management/commands/export_schedule_html.py"
+    },
+    "db_source_matches_vulnerable_version": "The DB source at export_schedule_html.py:112-123 (dump_content) and :126-135 (get_mediastatic_content) is byte-for-byte the pre-fix 'code_before' version: Path(destination) / path.lstrip('/') with no resolve() and no parents containment; STATIC_ROOT/MEDIA_ROOT raw join of url[len(STATIC_URL):] with no containment. The vulnerable code is present in the analyzed snapshot.",
+    "hit_by_formal_pass1": false,
+    "verdict": "missed (false negative)",
+    "evidence": [
+      "results/pass1.sarif contains exactly 2 results; neither is located in export_schedule_html.py (finding 0: common/mixins/forms.py:450; finding 1: common/views.py:56).",
+      "The vulnerable sinks WERE modeled: labels P1-K-0012 (dump_content open at :121), P1-K-0013 (get_mediastatic_content open at :134), P1-K-0008 (path.parent.mkdir receiver at :119) are all role=sink/candidate and were rendered into MySinks (report/query_generation_notes.md §1.2).",
+      "No source reached them: the export URL set is built from event_urls() generators (reverse() URLs, talk.urls.public, resource.resource.url, exporter URLs) and CSS url() matches - none of the 475 source nodes (request fields, cleaned_data, cfp session, route kwargs, handler params) flow into this chain, so TaintTracking::Global found no path. report/query_generation_notes.md §6 explicitly predicted 'no alert' for K0012/K0013/K0008 for exactly this reason."
+    ],
+    "root_cause_of_miss": [
+      "The attack data is second-order and stored: attacker-influenced file/resource names become storage URLs (via Django FieldFile.url / storage internals, outside the DB) and only re-enter as paths when the organizer triggers the export. The Pass 1 source model has no source at this boundary.",
+      "Extraction gaps already documented in the notes: FileField.save chains (e.g. submission models resource.answer_file/resource.save with uploaded value.name, forms.py:370) were never extracted as sink candidates (§4.3-6), so the upload-side entry into the export chain is invisible to the model.",
+      "The un-modeled library functions (reverse(), FieldFile.url, urlparse path handling in get_path) break the dataflow between any labeled source and the export sinks; no summary edges cover them."
+    ],
+    "notes": "The only Pass 1 findings are in unrelated files. The genuinely vulnerable code (dump_content arbitrary-file write via '../'-bearing exported URLs, get_mediastatic_content arbitrary-file read) produced zero formal alerts, i.e. the real CWE-22 vulnerability of this snapshot was NOT hit by rule py/augur/pretalx/pass1-path-traversal."
+  },
+  "independence_statement": "Triage of the two SARIF findings was performed from the SARIF codeFlows, labels.json, query_generation_notes.md and the DB source only, before consulting the provided real-vulnerability reference; the reference was used solely for the separate hit/miss analysis above. No PyVul ground-truth files, fix commits, or CVE descriptions beyond the user-provided block were read; no SARIF, labels, or formal queries were modified."
+}

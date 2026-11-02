@@ -1,0 +1,179 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-22",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\py7zr\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round per the task contract) against the py7zr_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database py7zr-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded py7zr-db. The database sourceLocationPrefix matches the explored tree (creation sha 04e3af5a), so file/line evidence below refers to the same snapshot the database was built from. The audit target is the py7zr library itself (7-zip archive reader/writer, ~0.20.0+ unreleased snapshot): a pure library plus an argparse CLI (py7zr command, subcommands l/x/c/a/t/i). There is NO web/routing/static-file/request surface at all; the dominant untrusted boundary is the ARCHIVE CONTENT (7z header entry names, entry attributes, and decompressed symlink/junction target strings), which flows from FilesInfo._read_name (archiveinfo.py:757) through SevenZipFile._extract (py7zr.py:524-669) into pathlib path construction and Worker._extract_single filesystem operations (py7zr.py:1298-1365)."
+  },
+  "target": {
+    "project": "py7zr",
+    "projectDescription": "py7zr ~0.20.0+ (Changelog.rst top entry is v0.20.0 with an 'Unreleased' section above it; the exact version is setuptools-scm dynamic - py7zr/version.py is generated at build time and is not present in the tree or the database; database creation sha 04e3af5ae5092137ee7b015b85efac1c7fd8974e) - pure-python 7-zip archive library with an argparse CLI. Read path: SevenZipFile.__init__ (py7zr.py:318-403) opens the archive file (open(file)/file.open per str/pathlib.Path arg), _real_get_contents (py7zr.py:417-522) parses the signature header and encoded/plain header via archiveinfo.py (FilesInfo._read archiveinfo.py:702-753 -> _read_name :755-757 f['filename'] = read_utf16(buffer).replace('\\\\', '/') - the attacker-controlled entry-name decode, with backslash-to-slash normalization), file_info dicts become ArchiveFile objects (py7zr.py:67-225, .filename property at :111-113, .is_symlink/.is_junction at :175-191 driven by archive-supplied attributes). Extraction: SevenZipFile.extract/extractall/read/readall -> _extract (py7zr.py:524-669): optional output dir (path.mkdir(parents=True) :545), outname = f.filename (:561) with _%d duplicate suffixing (:563-568), remove_relative_path_marker(outname) strips ONLY a leading './' (helpers.py:424-433), path.joinpath(...) (:582) or pathlib.Path(os.getcwd()).joinpath(...) (:577), relative_to() containment checks raising Bad7zFile (:577-579, :583-586), Windows '\\\\\\\\?' long-path prefixing (:596-597), worker.register_filelike(f.id, outfilename) (:619/:621), target_dir.mkdir(parents=True) (:625), worker.extract (py7zr.py:1203-1269, parallel branch re-opens the archive via open(filename, 'rb') :1239) -> extract_single/_extract_single (py7zr.py:1271-1365): fileish.parent.mkdir(parents=True, exist_ok=True) (:1328), junction path: ofp.read().decode('utf-8') -> _winapi.CreateJunction(str(fileish), dst) (:1333/:1338), symlink path: omfp.read().decode('utf-8') -> pathlib.Path(...) -> fileish.symlink_to(sym_target) (:1343/:1347), normal path: fileish.open(mode='wb') decompression write (:1349), fileish.touch() for empty files (:1357), post-extract os.utime(str(outfilename)) (:659) and outfilename.chmod(...) (:663/:668). Write path: writeall/write -> _make_file_info (lstat/stat :834/:837/:865/:868/:894) -> Worker.write f.origin.open(mode='rb') (:1460). CLI (cli.py): argparse subparsers (l/x/c/a/t/i, :101-146), run(arg) -> self.parser.parse_args(arg) (:95-96, arg default None -> sys.argv), run_extract passes args.odir to a.extractall(path=args.odir) (:355-358), run_create/run_append build pathlib.Path(sztarget) and pathlib.Path(path) from args.arcfile/args.filenames (:399/:415/:426/:440/:447), run_list/run_test open the archive (cli.py:301 open(target, 'rb'), :217 SevenZipFile(target, 'r')). shutil integration hooks unpack_7zarchive(archive, path)/pack_7zarchive(base_name, base_dir) (py7zr.py:1167-1183).",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\py7zr_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (py7zr-db/codeql-database.yml, baselineLinesOfCode 8539, columnKind utf32)",
+      "the database source archive (py7zr-db/src.zip) covers 29 .py files: 11 under py7zr/ (the package under audit), 14 under tests/, 3 under utils/ (bench/dev scripts), plus docs/conf.py",
+      "pyproject.toml + setup.cfg (setuptools / setuptools-scm build backend) packaging the py7zr package; setup.cfg [options.entry_points] console_scripts: py7zr = py7zr.__main__:main; py7zr/__main__.py imports py7zr.cli and calls cli.Cli().run()"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\py7zr_vuln\\py7zr-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\py7zr_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "04e3af5ae5092137ee7b015b85efac1c7fd8974e",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:58:13.322594500Z"
+    },
+    "baselineLinesOfCode": 8539,
+    "finalised": true,
+    "locationNote": "py7zr-db is nested inside the source tree; it was excluded from all exploration and is excluded from extraction result rows via the path filter in both queries. The database snapshot also covers tests/ (14 files), utils/ (3 files) and docs/conf.py; both queries filter /tests/, /py7zr-db/ and /docs/ paths. utils/ is kept in scope (benchmark/dev scripts with argparse/literal paths - at most one open() row in utils/bench_result.py:50, expected to be labeled none/FP) so the package code under py7zr/ dominates the candidate rows."
+  },
+  "toolchain": {
+    "qlpack": "iris/py7zr-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1)",
+    "compatibilityBasis": "API facts used by the generated queries were cross-checked against the cached python-all 7.1.2 library sources (read-only, no execution): AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), AssignStmt.getATarget() (semmle/python/AstGenerated.qll:58 via Assign_), Subscript.getIndex() (AstGenerated.qll:1377) and Subscript.getObject() (Exprs.qll:98), StringLiteral.getText() (semmle/python/Exprs.qll:557 - not getValue()), Attribute.getName()/getObject() (Exprs.qll:77/:84 region), Call.getFunc()/getPositionalArg(int) (AstGenerated.qll:203-209, index must be bound before lookup), Function.getArgByName(string) (Function.qll:65), Function.getAnArg()/getEnclosingScope()/getName() (Function.qll), Parameter.getPosition()/getName()/isSelf() (Function.qll:280-283), AssignStmt/Assign (Stmts.qll:76-85), class Class (semmle/python/Class.qll), Scope.getEnclosingModule()/Module.getName() (Scope.qll/Module.qll). The two queries reuse the structural shapes already proven on this same CLI + pack family in earlier projects of this series (moduleHintOf/receiverHint/receiverHintOfCall helpers, bindingset[path] excludedPath, AST-cast matching with unbound receivers, no QL classes, no API::Node-to-DataFlow::Node assignment, variable named moduleHint instead of `module`). Deprecations/compile pitfalls avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name, no unbound `this`, no class without a valid supertype, no {{...}} template placeholders, every variable bound through a positive body. NOTE: unlike some earlier rounds in this series, NO check-only compile was run this round because the task contract forbids executing CodeQL in this step; compile/run validation is deferred to the execution round."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        { "name": "flask", "confidence": 0.0, "evidence": ["no flask import anywhere in the tree - references/flask.md was not loaded"] },
+        { "name": "django", "confidence": 0.0, "evidence": ["no django import - references/django.md was not loaded"] },
+        { "name": "fastapi", "confidence": 0.0, "evidence": ["no fastapi import - references/fastapi.md was not loaded"] },
+        { "name": "argparse CLI (console_scripts entry, not a web framework)", "confidence": 1.0, "evidence": ["import/package +0.45 equivalent: setup.cfg [options.entry_points] console_scripts py7zr = py7zr.__main__:main; py7zr/cli.py imports argparse (:20) and builds an ArgumentParser with subparsers l/x/c/a/t/i (:101-146)", "runtime/bootstrap +0.20 equivalent: Cli.run() -> self.parser.parse_args(arg) with arg defaulting to None (i.e. sys.argv) at cli.py:95-96; handler dispatch via set_defaults(func=...) (:110/:114/:125/:136/:140/:143)"], "kind": "cli-boundary" },
+        { "name": "multivolumefile (multi-volume archive file I/O dependency, not a web framework)", "confidence": 1.0, "evidence": ["py7zr.py:42 import multivolumefile; SevenZipFile.__init__ accepts multivolumefile.MultiVolume instances (:368-372); cli.py run_list/run_create wrap archives in MultiVolume (cli.py:205-207, :423); the library itself is outside the database - its internal file operations are invisible to extraction (documented in uncoveredCases)"], "kind": "file-io-dependency" }
+      ]
+    },
+    "selected": "none (no web framework - the audit target is a standalone archive library; the only external input boundary is the archive content itself, plus the argparse CLI for the py7zr command)",
+    "notes": "No framework reference was loaded: no web framework import evidence exists in the tree (references/flask.md / django.md / fastapi.md exist in the Augur installation but match nothing here). references/python.md and references/patterns.md were loaded: python.md Pass 1 sink cues (open/Path/os.path/shutil, archive extraction destination handling) map onto the observed pathlib pipeline and Worker write channel; its source cues (handler parameters, parser/deserializer entrypoints) map onto the archive-header parser entrypoints and the CLI argparse boundary; its sanitizer cues (canonicalize + base containment, explicit '..' rejection, basename-only) map onto the observed relative_to() containment checks and the remove_relative_path_marker './'-stripping wrapper. patterns.md Pass 1 sink families (file open/read/write APIs with user-controlled path, resource loader methods taking path strings) map onto fileish.open/fileish.mkdir/os.utime and the SevenZipFile/unpack_7zarchive path-taking APIs. No routing, request, upload, static-file or file-response functionality exists in this project - none was assumed."
+  },
+  "inputBoundaryInventory": {
+    "summary": "The audit target is a library, so the untrusted-input boundary is the ARCHIVE CONTENT (a 7z file opened for reading), not HTTP: (1) the 7z header entry-name decode - FilesInfo._read (archiveinfo.py:702-753) walks property blocks; PROPERTY.NAME leads to _read_name (archiveinfo.py:755-757) where f['filename'] = read_utf16(buffer).replace('\\\\', '/') decodes attacker-controlled UTF-16LE names from the archive bytes AND normalizes backslashes to forward slashes (mixed-separator evidence: a Windows-style '..\\\\..' traversal becomes posix '..' - CWE-22-relevant on all platforms after the rewrite); names without a 'filename' key get a fallback derived from the archive file's own basename (py7zr.py:504-516, os.path.splitext(os.path.basename(self.filename)) - operator input, documented not emitted); (2) entry-name consumption in SevenZipFile._extract (py7zr.py:555-622): outname = f.filename (:561), '_%d' duplicate suffixing (:563-568), remove_relative_path_marker(outname) strips ONLY a leading './' and does not reject '..' or absolute paths (helpers.py:424-433), path.joinpath(...) (:582) or pathlib.Path(os.getcwd()).joinpath(...) (:577) with relative_to() containment checks raising Bad7zFile (:577-579 path=None branch against os.getcwd(), :583-586 path branch), Windows '\\\\\\\\?' long-path prefixing when outfilename.is_absolute() and not a UNC path (:596-597), targets filter f.filename not in targets (:598) - THE dominant attacker-controlled file-location input of this project; (3) archive-supplied entry attributes drive special-file handling: is_symlink/is_junction (py7zr.py:175-191) route to link creation whose TARGET is decompressed archive content - ofp.read().decode('utf-8') -> _winapi.CreateJunction(str(fileish), dst) (:1333/:1338) and omfp.read().decode('utf-8') -> pathlib.Path(...) -> fileish.symlink_to(sym_target) (:1343/:1347) - archive-controlled both where the link is created and what it points at (CWE-23/36-style absolute/arbitrary link targets, plus pre-creation fileish.unlink() at :1336/:1346); posix_mode from attributes reaches outfilename.chmod(st_mode) (:663) and lastwritetime reaches os.utime(str(outfilename)) (:659); (4) CLI boundary: argparse subcommands (cli.py:101-146) - args.arcfile (pathlib.Path-typed archive path), args.odir (extraction output directory, passed as a.extractall(path=args.odir) at :356), args.filenames (create/append source paths); parse boundary self.parser.parse_args(arg) at cli.py:96 (arg defaults to None -> sys.argv); local-user trust level but a real process-input boundary, emitted for labeling; (5) library API parameters (caller-provided, semi-trusted - applications embedding py7zr may pass untrusted values): SevenZipFile.__init__ file, _extract path/targets, extractall/extract path/targets, read targets, writeall path, write file, is_7zfile file, unpack_7zarchive archive/path (the shutil.register_unpack_format hook - a service-style entry where a caller-supplied archive+path pair is unpacked), pack_7zarchive base_name/base_dir, Cli.run arg; (6) environment: the only os.environ/getenv read in the database is os.getenv('GITHUB_TOKEN') in utils/github_comment_bench.py:26 - NOT path-relevant, not emitted; getpass.getpass() (cli.py:331/:408) returns a password, not a path - not emitted; (7) operator-configured file paths (NOT attacker input, emitted only where they flow into filesystem operations as sink rows, not as source rows): the archive file path itself (self.filename / args.arcfile), the extraction output dir, multivolume targets, CLI create/append source paths. The dominant filesystem-operation channels are: fileish.open(mode='wb') extract write (py7zr.py:1349), fileish.parent.mkdir (:1328), target_dir.mkdir (:625), path.mkdir (:545), fileish.touch (:1357), fileish.unlink (:1336/:1346), fileish.symlink_to (:1347), _winapi.CreateJunction (:1338), os.utime (:659), outfilename.chmod (:663/:668), archive open family (open(file,...) :344-350, file.open(...) :358-364, is_7zfile open/file.open :1155/:1158, Worker.extract open(filename,'rb') :1239, extract_single open(fp,'rb') :1288, cli run_test open(target,'rb') :301), stat/metadata family (.stat/.lstat/.exists/.is_dir/.is_file/.samefile, os.stat py7zr.py:936 + cli.py:286, os.path.islink/os.path.exists helpers.py:270/:302, GetFileAttributesW win32compat.py:94, readlink helpers.py:290-304 + py7zr.py:1422, os.listdir :729), and the pathlib path pipeline (Path/WindowsPath ctors, joinpath, relative_to) plus the custom remove_relative_path_marker wrapper.",
+    "sourceFamilies": [
+      "archive_entry_name (origin): read_utf16(buffer) call at archiveinfo.py:757 whose return value is the raw decoded entry name, and the f['filename'] dict store (AssignStmt target Subscript) at the same line where the name enters the file_info dicts that become ArchiveFile objects",
+      "archive_entry_name (reads): f.filename / x.filename attribute reads carrying entry names - py7zr.py:560/:561/:565/:598 (duplicate check, outname assignment, targets filter in _extract), :959 (list()), :926 (getnames lambda), :1316/:1353/:1362/:1375 (Worker._extract_single progress and CrcError), cli.py:274 (run_list table output)",
+      "archive_link_target: ofp.read() at py7zr.py:1333 and omfp.read() at py7zr.py:1343 - decompressed link/junction target strings read out of the archive payload",
+      "cli: args.arcfile / args.odir / args.filenames attribute reads in cli.py (run_list :200, run_test :297, run_extract :322/:355, run_create :390/:391, run_append :434/:435) and the self.parser.parse_args(arg) boundary call at cli.py:96",
+      "param (library/CLI API boundary parameters): SevenZipFile.__init__ file, SevenZipFile._extract path/targets, extractall path, extract path/targets, read targets, writeall path, write file, is_7zfile file, unpack_7zarchive archive/path, pack_7zarchive base_name/base_dir, Cli.run arg - true parameter positions emitted"
+    ],
+    "sinkFamilies": [
+      "file_open: builtin open(...) (py7zr.py:344/:346/:348/:350 archive open by str path, :1155 is_7zfile, :1239 Worker.extract parallel re-open, :1288 extract_single str fp; cli.py:301 run_test; utils/bench_result.py:50 dev script), pathlib .open(...) member calls (py7zr.py:358/:360/:362/:364 archive open by Path, :1158 is_7zfile, :1349 fileish.open(mode='wb') THE archive-content write sink, :1359 empty-file open, :1460 f.origin.open(mode='rb') write-side source read), _winapi.CreateJunction (py7zr.py:1338, arg 0 = link path, arg 1 = archive-controlled target) and CreateFileW (win32compat.py:139, reparse-point handle open, arg 0)",
+      "file_mkdir: path.mkdir(parents=True) py7zr.py:545 (caller output dir), target_dir.mkdir(parents=True) :625 (archive-entry directory names), fileish.parent.mkdir(parents=True, exist_ok=True) :1328 (archive-entry parent directories)",
+      "file_unlink / file_touch: fileish.unlink() :1336/:1346 and fileish.touch() :1357 - archive-entry-controlled deletion/creation",
+      "file_symlink: fileish.symlink_to(sym_target) py7zr.py:1347 - receiver is the archive-controlled path, arg 0 is the archive-controlled link target",
+      "file_stat: .stat()/.lstat()/.exists()/.is_dir()/.is_file()/.is_symlink()/.samefile() member calls (py7zr.py:544/:549/:611/:627/:629/:630/:668/:722/:724/:726/:727/:834/:835/:837/:850/:853/:865/:866/:868/:883/:888/:894/:895/:898/:932/:1016/:1018 x2/:1335/:1345, cli.py:400/:416/:427/:441/:448), os.stat (py7zr.py:936, cli.py:286), os.path.islink/os.path.exists (helpers.py:270/:302), GetFileAttributesW (win32compat.py:94)",
+      "file_read: os.listdir (py7zr.py:729) and the readlink family (helpers.py:290 path.readlink(), :292/:294 os.readlink, :304 py7zr.win32compat.readlink; py7zr.py:1422 readlink(targetname))",
+      "file_utime / file_chmod: os.utime(str(outfilename)) py7zr.py:659 and outfilename.chmod(...) :663/:668 - archive-entry-controlled paths with archive-supplied times/modes",
+      "path_ctor: pathlib.Path(...) / pathlib.WindowsPath(...) constructor calls (py7zr.py:542/:577/:580/:597/:830/:912/:1015/:1026/:1343/:1427, helpers.py:299, win32compat.py:198, cli.py:203/:399/:415/:426/:440/:447)",
+      "path_join: .joinpath(argument 0) calls (py7zr.py:577/:582 - the archive-entry-name join onto the base/output path - and :731 write-side directory walk)",
+      "path_containment_check: .relative_to(argument 0) calls (py7zr.py:577 against os.getcwd(), :584 outfilename.relative_to(path) - the Bad7zFile-raising base-containment validation)",
+      "path_wrapper: remove_relative_path_marker(...) calls (py7zr.py:577/:580/:582 - the custom './'-stripping wrapper), os.path.join/basename/splitext/relpath/dirname (py7zr.py:513/:730/:1432), and the entry-name '.replace('\\\\', '/')' normalization call (archiveinfo.py:757)",
+      "file_api_def (definition rows of path-consuming internal APIs for labeling as summary/boundary): SevenZipFile._make_file_info target, SevenZipFile._writeall path, Worker.extract fp, Worker.extract_single fp, Worker.register_filelike fileish, Worker._find_link_target target, remove_relative_path_marker path, helpers.readlink path, win32compat.readlink path, win32compat.is_reparse_point path"
+    ],
+    "guardAndTraversalEvidence": [
+      "Base-directory containment: outfilename.relative_to(path) / pathlib.Path(os.getcwd()).joinpath(...).relative_to(os.getcwd()) with ValueError -> Bad7zFile (py7zr.py:577-579, :583-586) - the primary CWE-22 guard, applied AFTER joinpath on a name whose '..' segments survive remove_relative_path_marker",
+      "Custom wrapper weakness evidence: remove_relative_path_marker (helpers.py:424-433) strips only a leading './' (RELATIVE_PATH_MARKER); it does not reject '..', backslashes, drive letters or absolute paths - emitted as path_wrapper rows for the labeling step to judge",
+      "Mixed separators: archiveinfo.py:757 .replace('\\\\', '/') rewrites Windows separators into posix separators at the decode boundary; no other separator handling exists between the decode and the joinpath",
+      "Absolute-path handling: py7zr.py:596-597 - on native Windows, is_absolute() + is_windows_unc_path() checks then pathlib.WindowsPath('\\\\\\\\?' + str(outfilename)) long-path prefixing (prefixes, not rejection)",
+      "Symlink/junction channels: archive attributes select is_symlink/is_junction; link TARGET is archive content (py7zr.py:1333/:1343); creation is preceded by fileish.exists() then fileish.unlink() (:1335-1336/:1345-1346) - TOCTOU window and arbitrary-target link creation evidence (CWE-23/36/73 adjacent)",
+      "Post-extract metadata: os.utime(str(outfilename)) and chmod driven by archive-supplied lastwritetime/posix_mode (py7zr.py:651-668)",
+      "Duplicated names: '_%d' suffix loop (py7zr.py:562-568) - name collision handling, not a traversal guard",
+      "TOCTOU in dir creation: path.exists() then path.mkdir(parents=True) with EEXIST tolerance (py7zr.py:543-552), target_dirs collected then mkdir'd later (:623-632)"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution is deferred to the next round per the task contract (generation only; this round also ran no compile check).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables; @kind problem requires the element+message two-column select) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index carrying the path/value; parameter position including the self slot for param/file_api_def rows; -1 when the receiver or the return value carries it)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO source or sink row is expected to resolve at API level: the file-access channels flow through pathlib instance attributes on local variables (file/outfilename/fileish/path/target/src) and library-internal values (f.filename attribute reads, dict stores, argparse Namespace fields) that API graphs cannot bind to stdlib members, and pathlib/os/_winapi are not part of the database (only the py7zr tree is). The column is kept 'ast' for all families for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, f/args/pathlib/os name conventions). Member-name matching (.open/.stat/.joinpath/...) is receiver-name-agnostic on purpose: receiver identity cannot be proven syntactically (a .open() on a non-path object would be a name-collision row - the MemIO/NullIO duck-typed stubs in helpers.py:307-383 define .open/.mkdir/.parent but contain no call sites, so no stub rows are produced; receiver hints like fileish/outfilename/f.origin are emitted for the labeling step)."
+    },
+    "flowKinds": {
+      "sources": [
+        "archive_entry_name",
+        "archive_link_target",
+        "cli",
+        "param"
+      ],
+      "sinks": [
+        "path_ctor",
+        "path_join",
+        "path_containment_check",
+        "path_wrapper",
+        "file_open",
+        "file_junction",
+        "file_mkdir",
+        "file_unlink",
+        "file_touch",
+        "file_symlink",
+        "file_stat",
+        "file_read",
+        "file_utime",
+        "file_chmod",
+        "file_api_def"
+      ]
+    },
+    "exclusions": [
+      "paths containing /tests/ (14 files of the database snapshot - the workflow's noise rule for tests and fixtures)",
+      "/py7zr-db/ (the CodeQL database directory nested inside the source tree)",
+      "/docs/ (documentation tree; docs/conf.py is in the database but is Sphinx config)",
+      "utils/ is NOT excluded: it is inside the database and carries at most one open() row (utils/bench_result.py:50) with a script-argument path; its rows are expected to be labeled none/FP (kept for auditability, consistent with prior projects in this series)"
+    ],
+    "expectedVolume": "roughly 39 source rows (read_utf16 origin 1, f['filename'] dict store 1, f.filename/x.filename attribute reads 11, archive link-target reads 2, cli attribute reads 8 (arcfile x5, odir x1, filenames x2), parse_args boundary 1, API param rows 15 (SevenZipFile.__init__ file 1, _extract path+targets 2, extractall 1, extract 2, read 1, writeall 1, write 1, is_7zfile 1, unpack_7zarchive 2, pack_7zarchive 2, Cli.run arg 1)) and roughly 116 sink rows (path_ctor 18 (py7zr.py 10, cli.py 6, helpers.py 1, win32compat.py 1), path_join 3, path_containment_check 2, path_wrapper 9 (remove_relative_path_marker 3, os.path ops 5, entry-name replace 1), file_open 18 (builtin open 9 incl. utils, .open member 8, CreateFileW 1), file_mkdir 3, file_unlink 2, file_touch 1, file_symlink 1, file_junction 1, file_stat 39 (member calls 34 incl. the two calls on py7zr.py:1018, os.stat 2, os.path.islink/exists 2, GetFileAttributesW 1), file_read 6 (os.listdir 1, readlink family 5), file_utime 1, file_chmod 2, file_api_def 10). In line with prior projects in this series; the archive-extract pipeline in py7zr.py is the single concentrated attack surface."
+  },
+  "uncoveredCases": [
+    "Dynamic dispatch / duck-typed IO stubs: Worker.register_filelike stores pathlib.Path or MemIO values into the target_filepath dict and every downstream member call (.parent/.mkdir/.open/.unlink/.touch) is resolved dynamically at runtime; the extraction matches member names receiver-agnostically, so a non-path object with the same member name would be a name-collision row (the MemIO/NullIO stub classes in helpers.py:307-383 define .open/.mkdir/.parent/.write/.read but contain no matching call sites, so no false rows are produced from their bodies).",
+    "Archive's own filename (operator input, not attacker-controlled): self.filename reads (py7zr.py:342/:356/:507/:934), cli.py:305 a.filename, cli.py:227/:284 archive_info.filename, and the fallback entry-name generation os.path.splitext(os.path.basename(self.filename)) at py7zr.py:513 are NOT emitted as source rows; only the __init__ file parameter row and the cli args.arcfile rows carry this input family.",
+    "Non-path CLI fields are not emitted: args.version (:97), args.verbose (:201/:323), args.password (:327/:404), args.volume (:392 via getattr) - none of them reaches a filesystem path.",
+    "Environment reads: the only os.environ/getenv read in the database is os.getenv('GITHUB_TOKEN') at utils/github_comment_bench.py:26 (a token, not a path); get_memory_limit()/blocksize come from py7zr/properties.py defaults, not env - no path-relevant env source exists, so no env family is emitted.",
+    "pathlib `/` operator constructions: none observed in the package (paths are built via pathlib.Path(...) and .joinpath(...)); if any existed they could not be distinguished from numeric division syntactically and would be documented here rather than extracted.",
+    "Pure path predicates with no filesystem access are not emitted: outfilename.is_absolute() (py7zr.py:596), is_windows_unc_path's path.drive.startswith('\\\\\\\\') (win32compat.py:213), .as_posix() conversions (py7zr.py:606/:830/:912/:1421/:1427/:1430), str(...) coercions (py7zr.py:659/:729/:1338). They are recorded here as guard/normalization evidence instead.",
+    "Entry-name backslash-to-slash normalization (the .replace('\\\\', '/') call at archiveinfo.py:757) IS emitted as a path_wrapper row because it rewrites separator semantics of the attacker-controlled name before it reaches the path pipeline.",
+    "multivolumefile.MultiVolume (external dependency, not in the database): its internal file open/stat operations are invisible; the visible boundary is the SevenZipFile.__init__ isinstance branch (py7zr.py:368-372) and the CLI constructions cli.py:205-207/:423.",
+    "win32compat.py win32 block (CreateFileW/GetFileAttributesW/DeviceIoControl and readlink/is_reparse_point) is defined under `if sys.platform == 'win32':` - statically extracted rows are produced regardless of platform branch evaluation; DeviceIoControl (win32compat.py:151) takes a handle (not a path) and is not emitted.",
+    "_winapi is imported conditionally (py7zr.py:60-61); the CreateJunction call at :1338 still matches statically. Its argument 1 (dst, the archive-controlled junction target) is documented in the row context; the row reports arg_index 0 (the link path).",
+    "Worker.decompress fq parameter (py7zr.py:1377) is an already-open file object (path consumed at fileish.open :1349), so it is not emitted as file_api_def; the path decision point is register_filelike/extract_single.",
+    "Compile validation: NOT performed this round (the task contract forbids executing CodeQL in this step, including check-only compiles). Both queries reuse the helper/row-assembly shapes already compiled and executed clean on the same CLI 2.25.1 + python-all 7.1.x family in earlier projects of this series (moduleHintOf/receiverHint/receiverHintOfCall/bindingset[path] excludedPath/AST-cast families). `codeql query run`/bqrs decode execution and LLM labeling remain deferred to later steps; run_manifest.json and summary.md belong to Step 0 / post-execution stages and were not fabricated."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction queries run via codeql query run + bqrs decode, never database analyze)",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "no framework reference was loaded: no web framework import evidence exists in this tree (references/flask.md / django.md / fastapi.md exist in the Augur installation but match nothing here); no references/py7zr.md or references/argparse.md exists"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: VULNERABILITY_AUDIT_REPORT.md, path_traversal_full_audit_report_py7zr.md, path_traversal_sinks.csv, path_traversal_sinks_classified.csv and path_traversal_sinks_classified_py7zr.md at the py7zr_vuln repo root were NOT opened during this step (they were only listed in a directory listing to be explicitly avoided); candidate families are derived from repository evidence and the loaded language/pattern references only. No assumption was made that any specific file, API or path is vulnerable. py7zr-db was used solely to read codeql-database.yml and the src.zip path listing (metadata/scope) and was otherwise excluded; the cached codeql/python-all pack sources under C:\\Users\\lzh\\.codeql\\packages were read (text) only to verify AST API existence for the generated queries. Project source (py7zr_vuln), the database, and the Augur installation were not modified; no CodeQL command of any kind (version check, pack install, compile, query run, bqrs decode, database analyze) and no LLM labeling were executed. Only the three Phase-1 Step-1/2 artifacts under iris_manual/Path_Traversal/py7zr/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql); the pre-existing qlpack.yml and empty subdirectories were left untouched."
+  }
+}

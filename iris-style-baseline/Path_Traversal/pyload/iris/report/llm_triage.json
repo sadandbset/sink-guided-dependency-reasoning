@@ -1,0 +1,312 @@
+{
+  "triage_run": {
+    "reviewer": "independent-llm-path-review (Claude Code, glm-5.3)",
+    "date": "2026-10-23",
+    "inputs": [
+      "iris/results/pass1.sarif",
+      "iris/report/iris_report.md",
+      "iris/labels/labels.json",
+      "iris/report/query_generation_notes.md",
+      "pyload_vuln source tree (src/pyload/**)"
+    ],
+    "ruleId_filter": "py/augur/pyload/pass1-path-traversal",
+    "source_tree": "dataset/codeql_databases/path_traversal_dbs/pyload_vuln",
+    "constraints_respected": [
+      "SARIF、labels.json、正式查询均未修改（只读）",
+      "未读取 PyVul 真值文件、修复提交 diff、CVE 描述、repo 根的 CVE_VULNERABILITY_REPORT.md / CVE_Application_Report_Unassigned.md / VULNERABILITY_AUDIT_REPORT.md / path_traversal_sinks.csv（这些文件在源码树根存在但被主动跳过）",
+      "真实漏洞对比任务仅使用用户在指令中直接给出的 commit/函数信息"
+    ]
+  },
+
+  "sarif_purity_check": {
+    "runs": 1,
+    "rules_in_sarif": ["py/augur/pyload/pass1-path-traversal"],
+    "results_total": 14,
+    "all_results_match_ruleId": true,
+    "other_cwe_or_codeql_builtin_results_present": false,
+    "diagnostics_mixed_in": false,
+    "note": "pass1.sarif 仅含一个 run、一条自定义 Augur 规则、14 条结果；无 CodeQL 内置安全查询结果，无诊断（diagnostics）类 run，无其他 CWE 规则混入。本轮 14 条全部为正式 Pass 1 codeFlows 告警。"
+  },
+
+  "findings": [
+    {
+      "finding_id": "F01",
+      "location": "src/pyload/core/api/__init__.py:536",
+      "function": "Api.check_online_status_container (legacy 别名 checkOnlineStatusContainer, api/__init__.py:105-111 经 setattr 注册为可调用属性)",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "sink_operation": "open(os.path.join(storage_folder, 'tmp_' + container), 'wb') 后 th.write(data)（api/__init__.py:535-541）——真实任意内容文件写入（二进制、内容完全为攻击者控制的 data 参数）",
+      "source_evidence": "container 参数（api/__init__.py:526，标签 P1-S-0012 tp 0.9）。RPC 可达性实证：/api/<func> 路由 (api_blueprint.py:21-24) → call_api getattr(api, func)(*literal_eval args) (api_blueprint.py:65-77)；legacy 名 checkOnlineStatusContainer 由 __new__ setattr(obj, legacy_name, func) 绑定 (api/__init__.py:105-107)；kwargs 经 unquote + literal_eval 可传任意字符串/字节串字面量",
+      "taint_flow": "route /api/checkOnlineStatusContainer (POST form/args) → literal_eval/unquote → 参数 container → 'tmp_' + container → os.path.join → open(..., 'wb') → th.write(data)",
+      "allowed_root": "config general.storage_folder（下载目录）",
+      "traversal_analysis": "路径拼接仅加 'tmp_' 前缀，无 normpath/realpath/包含判断。container='../../../x' → 组件 ['tmp_..','..','..','x']，'tmp_' 仅吞掉第一个 '..'，第 3 组点对即可逃出 storage_folder；绝对路径组件与任意深度相对穿越均可达（posix 与 Windows 均成立，分隔符未被过滤）",
+      "guards": "无。'tmp_' 前缀不是 barrier；无 purge/parse/safepath 归一化；无根目录包含检查",
+      "preconditions": "需通过 /api RPC 认证且具备 ADD 权限（@permission(Perms.ADD), api/__init__.py:525）——ADD 是普通'添加下载'权限，非管理员专属；任意 ADD 用户即可越权写任意路径任意内容",
+      "rationale": "Source（RPC 参数）真实可控，Sink 为真实 'wb' 写入，中间仅一次 join 无任何有效防护，可控内容+可控路径=典型 CWE-22 任意文件写。该链与官方修复的历史漏洞（add_package/edit_package folder 链）不同通道，但属同类越权写。"
+    },
+    {
+      "finding_id": "F02",
+      "location": "src/pyload/core/api/__init__.py:952",
+      "function": "Api.upload_container (legacy 别名 uploadContainer)",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "sink_operation": "open(os.path.join(storage_folder, 'tmp_' + filename), 'wb') 后 th.write(data)（api/__init__.py:951-957）——真实任意内容文件写入",
+      "source_evidence": "filename 参数（api/__init__.py:944，标签 P1-S-0014 tp 0.9）；RPC 可达性与 F01 相同（legacy setattr + literal_eval）",
+      "taint_flow": "route /api/uploadContainer → literal_eval 参数 filename/data → 'tmp_' + filename → os.path.join → open(..., 'wb') → th.write(data)",
+      "allowed_root": "storage_folder",
+      "traversal_analysis": "与 F01 完全同构：'tmp_' 前缀只吞一个 '..'，filename='../../../evil' 即逃出根目录；分隔符未过滤，任意深度穿越",
+      "guards": "无（同 F01）",
+      "preconditions": "RPC 认证 + ADD 权限（api/__init__.py:943）",
+      "rationale": "与 F01 相同的判定：可控参数直达真实写 sink，无 barrier。"
+    },
+    {
+      "finding_id": "F03",
+      "location": "src/pyload/webui/app/blueprints/app_blueprint.py:36",
+      "function": "render (/render/<path:filename> 路由，无 login_required)",
+      "verdict": "likely_fp",
+      "confidence": 0.7,
+      "sink_operation": "render_template(filename) → helpers.render_template → flask_themes2.render_theme_template(themeid, template)（webui/app/helpers.py:84-86）——模板查找，非直接文件读/写/删；渲染产物作为响应返回",
+      "source_evidence": "filename 为路由参数（app_blueprint.py:34，标签 P1-S-0034 tp 0.95）；路由无鉴权（app_blueprint.py:33-37 无 decorator）——Source 可控性成立",
+      "taint_flow": "/render/<path:filename> → render_template(filename) → flask_themes2.render_theme_template(当前主题, filename)",
+      "allowed_root": "主题模板目录（webui/app/themes/{modern,pyplex}/templates，由 flask_themes2 主题装载）",
+      "traversal_analysis": "flask_themes2 的主题模板经 jinja2 FileSystemLoader/PackageLoader 装载；jinja2 split_template_path 对每个 '/' 分段拒绝含 os.path.sep/altsep 的分段及等于 '..'（os.path.pardir）的分段——'..' 组件和绝对分段均被拒绝，穿越被外部（依赖库）防护阻断。剩余风险仅是未鉴权读取主题目录内任意模板（应用自有静态资产，非敏感数据）",
+      "guards": "jinja2 loader 的 split_template_path（外部库防护，发生于实际模板文件访问之前）；themeid 来自服务端配置/会话而非请求",
+      "preconditions": "无鉴权即可请求，但目标始终被限制在主题模板目录内",
+      "rationale": "Source 可控且无登录，但 Sink 是模板查找而非自由文件访问，且 jinja loader 的分段校验（拒绝 '..' 与分隔符分段）是真实生效的访问前防护。未鉴权渲染任意主题模板属于轻微信息披露，不构成 CWE-22 越权文件访问。判定为 likely_fp（外部防护不在 CodeQL DB 内，故置信度中等偏上而非最高）。"
+    },
+    {
+      "finding_id": "F04",
+      "location": "src/pyload/webui/app/blueprints/app_blueprint.py:165",
+      "function": "get_file (/files/get/<path:path>)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "sink_operation": "flask.send_from_directory(directory, path, as_attachment=True)——文件响应（读取并作为附件返回）",
+      "source_evidence": "path 为路由参数（app_blueprint.py:161，标签 P1-S-0037 tp 0.95），login_required(\"DOWNLOAD\")（app_blueprint.py:160）",
+      "taint_flow": "/files/get/<path:path> → unquote(path).replace('..','') → send_from_directory(storage_folder, path)",
+      "allowed_root": "storage_folder",
+      "traversal_analysis": "双重解码风险已被覆盖：Flask 已解码一次，view 内再 unquote 一次后立即 replace('..','')，残留 '..' 全部删除；最重要的是 werkzeug send_from_directory 内部调用 safe_join：normpath 后拒绝绝对路径、'..' 组件及含分隔符的归一化结果（posix 拒 '/'，Windows 拒 '/' 与 '\\'），不安全即 404。穿越无法到达 storage_folder 之外",
+      "guards": "(1) unquote 后的 replace('..','')（本身不健全，如 '....' 折叠，但配合 (2) 已足够）；(2) werkzeug safe_join —— 真实生效的访问前包含检查（外部库防护）；(3) 登录鉴权 DOWNLOAD 权限",
+      "preconditions": "需登录且具备 DOWNLOAD 权限",
+      "rationale": "Sink 是真实文件响应，但 werkzeug safe_join 是实际生效的规范化后包含判断（每次访问前执行）， '..' 也已被预删除。这是受控于允许根目录内的正常授权下载功能。"
+    },
+    {
+      "finding_id": "F05",
+      "location": "src/pyload/webui/app/blueprints/app_blueprint.py:259",
+      "function": "pathchooser (/pathchooser/ 与 /filechooser/)",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "sink_operation": "os.path.isfile(path)（:259）——路径探测（stat 类弱 sink），无读内容、无写、无删",
+      "source_evidence": "path = os.path.normpath(flask.request.args.get('path',''))（:257，标签 P1-S-0038 tp 0.9），login_required(\"STATUS\")（:254）",
+      "taint_flow": "query 参数 path → normpath → isfile/isdir/isabs/realpath/relpath/dirname/listdir/getmtime/getsize/join",
+      "allowed_root": "按设计为整个文件系统——该功能即服务端文件/目录选择器（browse_for='folder'/'file'，显式处理绝对路径：os.path.isabs 分支 :268、abs 标志、parentdir 导航 :277-283，供 pathchooser.html 选择下载目的地）",
+      "traversal_analysis": "绝对路径与 '..' 均被显式支持，因为功能目标就是浏览任意目录；不存在可被穿越出的'允许根目录'约束",
+      "guards": "登录 + STATUS 权限；功能本身按设计接受任意路径",
+      "preconditions": "认证用户（STATUS 权限，普通查看权限即可）",
+      "rationale": "这是有意的授权文件浏览功能：允许根目录就是整个文件系统，读操作仅限目录枚举与元数据（名称/大小/mtime），无文件内容读取与写操作。不构成对既定边界的 CWE-22 穿越。残留关注点（记录，不改判定）：STATUS 级低权用户可获得全盘目录名+元数据 oracle，若部署方视其为敏感属信息披露问题，但那是设计取舍而非污点流缺陷。"
+    },
+    {
+      "finding_id": "F06",
+      "location": "src/pyload/webui/app/blueprints/app_blueprint.py:267",
+      "function": "pathchooser",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "sink_operation": "os.path.isdir(path)（:267）——路径探测（弱 sink）",
+      "source_evidence": "同 F05（:257 args.get('path')，normpath）",
+      "taint_flow": "同 F05",
+      "allowed_root": "整个文件系统（按设计）",
+      "traversal_analysis": "同 F05：绝对路径为特性而非漏洞",
+      "guards": "同 F05（登录 + STATUS + 设计意图）",
+      "preconditions": "同 F05",
+      "rationale": "同 F05：设计内的授权文件浏览器探测调用。"
+    },
+    {
+      "finding_id": "F07",
+      "location": "src/pyload/webui/app/blueprints/app_blueprint.py:268",
+      "function": "pathchooser",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "sink_operation": "os.path.isabs(path)（:268）——纯谓词判断，非文件访问",
+      "source_evidence": "同 F05",
+      "taint_flow": "同 F05",
+      "allowed_root": "整个文件系统（按设计）",
+      "traversal_analysis": "isabs 只是分支判断；后续 realpath/relpath（:269/:272）为规范化变换，用于构造展示用 cwd",
+      "guards": "同 F05",
+      "preconditions": "同 F05",
+      "rationale": "同 F05，且该行本身连文件访问都不是（纯字符串/路径谓词）。"
+    },
+    {
+      "finding_id": "F08",
+      "location": "src/pyload/webui/app/blueprints/app_blueprint.py:289",
+      "function": "pathchooser",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "sink_operation": "os.listdir(cwd)（:289，try/except 包裹）——目录枚举（弱 sink，仅返回名称列表）",
+      "source_evidence": "同 F05；cwd 由用户提供的 path 经 isfile→dirname/isdir→realpath 派生（:259-276）",
+      "taint_flow": "args['path'] → normpath → dirname/realpath → cwd → os.listdir(cwd)",
+      "allowed_root": "整个文件系统（按设计）",
+      "traversal_analysis": "按设计可枚举任意目录的条目名（不含文件内容）",
+      "guards": "同 F05",
+      "preconditions": "同 F05",
+      "rationale": "目录浏览器核心功能；元数据级信息暴露给已认证 STATUS 用户属设计行为，非穿越缺陷。"
+    },
+    {
+      "finding_id": "F09",
+      "location": "src/pyload/webui/app/blueprints/app_blueprint.py:300",
+      "function": "pathchooser",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "sink_operation": "os.path.getmtime(os.path.join(cwd, f))（:300）——文件时间戳读取（弱 sink）",
+      "source_evidence": "同 F05；f 为 listdir 返回名",
+      "taint_flow": "args['path'] → cwd → listdir → join(cwd, f) → getmtime",
+      "allowed_root": "整个文件系统（按设计）",
+      "traversal_analysis": "同 F05；f 来自服务器侧 listdir 结果，不引入额外控制点",
+      "guards": "同 F05",
+      "preconditions": "同 F05",
+      "rationale": "同 F05：设计内文件浏览器的元数据展示。"
+    },
+    {
+      "finding_id": "F10",
+      "location": "src/pyload/webui/app/blueprints/app_blueprint.py:306",
+      "function": "pathchooser",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "sink_operation": "os.path.isfile(os.path.join(cwd, f))（:306）——路径探测（弱 sink）",
+      "source_evidence": "同 F09",
+      "taint_flow": "同 F09",
+      "allowed_root": "整个文件系统（按设计）",
+      "traversal_analysis": "同 F05",
+      "guards": "同 F05",
+      "preconditions": "同 F05",
+      "rationale": "同 F05。"
+    },
+    {
+      "finding_id": "F11",
+      "location": "src/pyload/webui/app/blueprints/app_blueprint.py:308",
+      "function": "pathchooser",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "sink_operation": "os.path.getsize(os.path.join(cwd, f))（:308）——文件大小读取（弱 sink）",
+      "source_evidence": "同 F09",
+      "taint_flow": "同 F09",
+      "allowed_root": "整个文件系统（按设计）",
+      "traversal_analysis": "同 F05",
+      "guards": "同 F05",
+      "preconditions": "同 F05",
+      "rationale": "同 F05。"
+    },
+    {
+      "finding_id": "F12",
+      "location": "src/pyload/webui/app/blueprints/cnl_blueprint.py:97",
+      "function": "addcrypted (/flash/addcrypted, @local_check)",
+      "verdict": "likely_fp",
+      "confidence": 0.75,
+      "sink_operation": "open(dlc_path, mode='wb') 写入 crypted 字段（:96-98）——真实文件写入，但目标被约束在 storage_folder 内",
+      "source_evidence": "package = flask.request.form.get('package', ...)（:89-90，标签 P1-S-0047/-0048 tp 0.85）；crypted = form['crypted']（:96）",
+      "taint_flow": "form['package'] → replace('/','').replace('\\\\','').replace(':','') → os.path.join(dl_path, package + '.dlc') → open(..., 'wb')",
+      "allowed_root": "storage_folder",
+      "traversal_analysis": "join 前将 '/'、'\\\\'、':' 全部删除，path 恒为 storage_folder 下的单一组件：残留的 '..'（如 package='..' → 文件名 '...dlc'，package='../..' → '...._....'？实际为 '.._..' 之类单组件名）无法再形成多组件穿越；没有分隔符就没有目录层级。Windows 盘符 ':' 亦被删除。穿越被该内联归一化实际阻断（非前缀/replace('..') 类不健全变形）",
+      "guards": "(1) 全分隔符+冒号剥离（真实生效，发生于 join 之前）；(2) @local_check（cnl_blueprint.py:22-36：REMOTE_ADDR 须为 127.0.0.1/::1/localhost，或 Host 头为 127.0.0.1:9666）",
+      "preconditions": "本地回环来源（注意：local_check 的 Host 头分支可被伪造 Host: 127.0.0.1:9666 绕过——这是独立于本告警的鉴权缺陷；即便绕过，写入目标仍在 storage_folder 内）",
+      "rationale": "Sink 为真实写入且内容可控，但目标路径被分隔符剥离约束在允许根目录内为单一文件名，'..' 无分隔符不可穿越。内容为攻击者控制的 DLC 密文，落在 storage_folder/*.dlc，属功能预期（CNL2 上传容器文件）。判定 likely_fp。"
+    },
+    {
+      "finding_id": "F13",
+      "location": "src/pyload/webui/app/helpers.py:86",
+      "function": "render_template (经 app_blueprint.render 调用)",
+      "verdict": "likely_fp",
+      "confidence": 0.7,
+      "sink_operation": "flask_themes2.render_theme_template(themeid, template, **context)——模板查找（arg1 模板名）",
+      "source_evidence": "与 F03 同一链路：/render/<path:filename>（无鉴权）→ render_template(filename)（标签 P1-K-0524 candidate 0.55）",
+      "taint_flow": "/render filename → helpers.render_template(template) → render_theme_template(themeid, template)",
+      "allowed_root": "主题模板目录",
+      "traversal_analysis": "同 F03：jinja2 loader split_template_path 拒绝 '..' 分段与含分隔符分段",
+      "guards": "同 F03（外部库防护，访问前生效）",
+      "preconditions": "无鉴权；themeid 服务端定",
+      "rationale": "与 F03 为同一污点链的两个 sink 锚点（路由内调用点与 helper 内展开点），判定一致：模板查找受 jinja loader 约束，非自由文件访问。"
+    },
+    {
+      "finding_id": "F14",
+      "location": "src/pyload/webui/app/blueprints/json_blueprint.py:157",
+      "function": "add_package (/json/add_package, login_required(\"ADD\"))",
+      "verdict": "likely_tp",
+      "confidence": 0.8,
+      "sink_operation": "file.save(file_path)（:157）——werkzeug FileStorage.save 以 'wb' 将上传文件内容写入 file_path（真实任意内容文件写入）",
+      "source_evidence": "file = flask.request.files['add_file']（:148，标签 P1-S-0071 tp 0.95）；file.filename（:150-152/:155，标签 P1-S-0072/-0073/-0074 tp 0.95）——multipart Content-Disposition filename，werkzeug 不做 secure_filename 处理（secure_filename 是应用侧责任），原始 HTTP 可携带含 '/'/'..' 的任意 filename",
+      "taint_flow": "POST multipart filename → 'tmp_' + file.filename → os.path.join(storage_folder, ...) → file.save(file_path)",
+      "allowed_root": "storage_folder",
+      "traversal_analysis": "file.filename = '../../../evil' → join 结果组件 ['tmp_..','..','..','evil'] → 'tmp_' 仅吞第一个 '..'，其余 '..' 逃出 storage_folder；filename 可含分隔符（werkzeug 不剥离），任意深度相对穿越成立；写入内容为完整上传体，完全可控",
+      "guards": "无路径 barrier：'tmp_' 前缀不健全（见 traversal_analysis）；无 normpath/包含检查；无文件名白名单",
+      "preconditions": "登录且具备 ADD 权限（:138）；构造含 '/' 与 '..' 的 multipart filename",
+      "rationale": "Source（原始 multipart 文件名）真实可控，Sink 为真实任意内容写盘，中间无任何有效防护——与 F01/F02 同类的 CWE-22 任意文件写。注：该函数名为 add_package 但与历史漏洞修补的 Api.add_package folder 链是不同通道（详见 ground_truth_vulnerability_check）。"
+    }
+  ],
+
+  "summary": {
+    "total": 14,
+    "likely_tp": 3,
+    "likely_fp": 11,
+    "uncertain": 0,
+    "likely_tp_list": ["F01 api/__init__.py:536 check_online_status_container", "F02 api/__init__.py:952 upload_container", "F14 json_blueprint.py:157 /json/add_package file.save"],
+    "notes": [
+      "3 条 TP 均为 'tmp_' + 可控文件名前缀的任意内容写入通道，且只需普通 ADD 权限（非管理员），前置条件低。",
+      "11 条 FP 的成因分布：2 条模板查找（jinja loader 外部防护）、1 条 send_from_directory（werkzeug safe_join 外部防护）、7 条 pathchooser（设计即全盘浏览的授权文件选择器，弱 sink 仅元数据）、1 条 CNL 写入（分隔符剥离归一化有效）。",
+      "pathchooser 系列（F05-F11）存在设计级信息披露残留风险（STATUS 级用户全盘目录/元数据 oracle），已记录但未改变 FP 判定；local_check 的 Host 头伪造绕过亦已记录（F12）。",
+      "IRIS 自动启发式将 14 条全部归为 Candidate（无 TP/FP 判定），与本次人工复核的 3 TP / 11 FP 相比偏保守，方向一致（未误杀、未虚标）。"
+    ]
+  },
+
+  "ground_truth_vulnerability_check": {
+    "provided_vulnerability": {
+      "commit": "pyload/pyload commit 695bb70cd88608dc4fee18a6a7ecb66722ebfd8f",
+      "cwe": "CWE-22",
+      "functions": ["Api.add_package (core/api/__init__.py)", "edit_package (webui flask route)"],
+      "vulnerable_tree_confirmed": true,
+      "tree_matches_code_before_evidence": [
+        "core/api/__init__.py:427-438 —— folder 消毒仅移除 'http://'/'https：'/':'/'/'/'\\\\'，无 '../'/'..\\\\' 替换（对应 add_package code_before）",
+        "json_blueprint.py:190-200 —— edit_package 直接取 flask.request.form['pack_folder'] 为 '_folder'，无 lstrip/replace 消毒（对应 edit_package code_before）"
+      ]
+    },
+    "vulnerable_flow_reconstructed": {
+      "edit_package_chain": [
+        "json_blueprint.py:196 pack_folder（form，标签 P1-S-0079 tp 0.95）",
+        "json_blueprint.py:200 api.set_package_data(id, {'_folder': pack_folder})",
+        "core/api/__init__.py:985-999 setattr(p, '_folder', value) → p.sync()",
+        "datatypes/pypackage.py:55-59 sync → managers/file_manager.py:261-265 update_package → db.update_package（sqlite 持久化）",
+        "重载/缓存: PyPackage.__init__ folder 参数 → self._folder（pypackage.py:13-19）",
+        "pypackage.py:26-28 folder property = safepath(self._folder)",
+        "utils/old/__init__.py:36-46/64-78 safepath/safejoin：split(os.sep) 逐组件 safename（仅剔除 '<>:\"/\\\\|?*\\0' 等字符），'..' 组件无坏字符而存活并按原结构重组——'..' 穿越保留（这正是补丁要堵的洞）",
+        "plugins/base/downloader.py:318-322 dl_dirname = safejoin(storage_folder, package.folder) → os.makedirs(dl_dirname, exist_ok=True)（标签 P1-K-0398 tp 0.8）→ 下载文件写入攻击者选定目录"
+      ],
+      "add_package_chain": [
+        "webui /json/add_package add_name / CNL package / RPC name → Api.add_package(name, links)（core/api/__init__.py:418）",
+        ":427-438 folder = name 消毒（'/'→'_' 等）——裸 '..' 名存活（单组件 '..' 即一层穿越：join(storage,'..') = storage 父目录），'../' 组合在旧代码折叠为 '.._..' 单组件",
+        ":440 files.add_package(name, folder) → file_manager.py:144-148 db.add_package（持久化）→ 同上 folder property → downloader makedirs/下载写",
+        "组合利用（与公告一致）：先 add_package 建包，再经 edit_package 设任意 _folder（分隔符完整保留，可 '../../..' 任意深度），下载落盘即任意目录写、可借脚本目录获得命令执行"
+      ]
+    },
+    "alert_hit_analysis": {
+      "verdict": "not_hit",
+      "detail": "14 条正式告警中没有任何一条锚定在历史漏洞的数据流上：无告警位于 json_blueprint.py:190-200（edit_package）、core/api/__init__.py:985-999（set_package_data setattr）、file_manager add_package/update_package、pypackage folder property 或 plugins/base/downloader.py:319-322（makedirs 下载目录）。唯一函数名相同的是 F14（json_blueprint.py:157，位于 webui add_package 路由），但其污点链是 multipart file.filename → 'tmp_' 前缀 → file.save，是被修补 commit 未涉及的另一条独立上传写入通道（该 commit 只改了 Api.add_package 的 folder 消毒与 edit_package 的 pack_folder 消毒，未触及此行）。F01/F02（check_online_status_container / upload_container）同样是相邻但不同的通道。",
+      "partial_credit_note": "严格按'告警命中该真实漏洞数据流'的标准：未命中。按'同类 CWE-22 越权写、同一攻击面（ADD 权限用户）'的宽标准：F01/F02/F14 是真实存在的同类任意文件写漏洞，但均非该 commit 修补的具体 folder 持久化链。"
+    },
+    "root_cause_of_miss": [
+      "持久化边界无污点边：query_generation_notes.md §6.2 明确记录 _folder 链（set_package_data setattr → sqlite → PyPackage 重载 → folder property → safejoin/makedirs）跨数据库持久化边界，未创建跨持久化污点边（与 copyparty broker-IPC 边界同策略）。Source（P1-S-0079/P1-S-0015）与 sink（P1-K-0398 等）都已被单独标注，但永远无法在单遍数据流中连通。",
+      "safepath 非障碍（non-barrier）判定正确：utils/old/__init__.py 的 '..' 存活弱点在 §5 中已正确识别（'load-bearing weakness'），但其上游值来自 DB 重载而非直接请求流，故该弱点在本轮告警中不可见。",
+      "动态 RPC dispatch 边也未被创建（§6.1），但本轮 F01/F02 通过 api_param 直接建源弥补了该缺口——说明 api_param 建源策略有效，而持久化链没有等价的补偿机制。",
+      "结论：这是一个系统性的假阴性类型——持久化中介型（write→DB→read）路径穿越，需要跨持久化 summary（set_package_data._folder → PyPackage.folder → 下载目录）或字段敏感的 additional taint step 才能命中。Pass 1 标签体系已完整覆盖该链的两端，缺的只是中间一条边。"
+    ]
+  },
+
+  "reviewer_checklist_answers": {
+    "1_source_attacker_controlled": "全部 14 条 Source 均为真实请求输入（路由参数、form 字段、multipart 文件名、RPC 参数）；其中 F01/F02 的 RPC 参数与 F14 的原始 multipart filename 可控性最强。",
+    "2_source_reaches_sink": "全部成立：codeFlows 与真实源码逐行核对（join/unquote/replace 中间变换均有源码证据），无虚构包装或异步断链；F13 与 F03 为同一链的两个锚点。",
+    "3_sink_real_file_operation": "真实敏感操作：F01/F02/F12 的 open('wb') 写入、F14 的 FileStorage.save 写入、F04 的 send_from_directory 文件响应；F03/F13 为模板查找（依赖库内部才触盘）、F05-F11 为 stat/listdir 弱操作。纯拼接（如 json:154 的 join 本身）未被当作 sink。",
+    "4_allowed_roots": "storage_folder（下载根）、主题模板目录、pathchooser 的全盘（设计）。受控输入能否越界：F01/F02/F14 能（穿越成立），F04/F12 不能（防护有效），F05-F11 无既定边界可越。",
+    "5_traversal_vectors": "'..' 多组件（tmp_ 前缀仅吞一个）、绝对路径、二次百分号解码（F04 已被 unquote+replace+safe_join 覆盖）、分隔符变化（F12 被剥离；F01/F02/F14 未剥离）、符号链接（树内无符号链接创建/跟随逻辑，非本轮因素）。",
+    "6_pre_access_guards": "真实生效且先于访问：werkzeug safe_join（F04）、jinja split_template_path（F03/F13）、F12 的分隔符剥离（join 前）；失效或缺席：F01/F02/F14（无任何包含判断/白名单）。",
+    "7_guard_misjudgment": "未将 Path.resolve/normpath/startsWith 前缀或单纯登录误判为足够防护：pathchooser 的 normpath/realpath 被正确视为变换而非 barrier（判定 FP 的依据是设计意图与弱 sink，而非规范化）；F04 判 FP 的依据是 safe_join 而非 replace('..','') 本身；纯登录鉴权不足以支持任何 TP→FP 翻转（F14 有登录仍判 TP）。",
+    "8_authorized_static_service_or_test": "F04（授权下载目录）、F03/F13（模板服务）、F05-F11（授权文件浏览器）属此类；无测试代码或不可达路径告警。",
+    "9_overgeneralization_fp": "主要 FP 成因是外部库防护不可见（werkzeug/jinja，2 类 3 条）与设计内全盘浏览（7 条）——非 Source/Sink 过度泛化；summary 边（unquote/join）与源码一致。",
+    "10_cross_contamination": "SARIF 单 run 单规则、14 条结果全部为 py/augur/pyload/pass1-path-traversal；无 diagnostics、无 CodeQL 内置基线、无其他 CWE 混入。"
+  }
+}

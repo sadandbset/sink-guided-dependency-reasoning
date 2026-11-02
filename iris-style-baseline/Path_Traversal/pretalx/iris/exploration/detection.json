@@ -1,0 +1,280 @@
+{
+  "run": {
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "workspace": "iris_manual/Path_Traversal/pretalx/iris",
+    "generated": "2026-10-22",
+    "notes": "Only detection.json, extraction/sources.ql and extraction/sinks.ql are produced in this run. No CodeQL execution, no LLM labeling, no pass queries."
+  },
+  "pass": {
+    "id": 1,
+    "name": "Path Traversal",
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"],
+    "target_query": "iris/queries/Pass1_PathTraversal.ql",
+    "verified_against": "WORKFLOW.md section 2 (Pass 1 -> CWEs 022, 023, 036, 073)"
+  },
+  "language": {
+    "detected": "python",
+    "evidence": [
+      "codeql-database.yml: primaryLanguage: python",
+      "src/ tree is a Python package (src/pretalx/__init__.py)",
+      "build manifests: src/setup.py, src/setup.cfg, src/MANIFEST.in"
+    ]
+  },
+  "project": {
+    "name": "pretalx",
+    "version": "2.3.1post0",
+    "version_evidence": "src/pretalx/__init__.py: __version__ = \"2.3.1post0\"",
+    "database": {
+      "path": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pretalx_vuln/pretalx-db",
+      "cli_version": "2.25.1",
+      "source_location_prefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\pretalx_vuln",
+      "baseline_loc": 44126,
+      "source_files": 508,
+      "scope_notes": [
+        "398 files under src/pretalx (165 of them under */migrations/), 98 files under src/ outside the package (src/tests, src/manage.py, setup.py), 12 repo-root config files.",
+        "The nested pretalx-db CodeQL database directory is NOT part of the DB source scope (src.zip contains no pretalx-db entries); extraction queries additionally apply a structural src/pretalx/% scope guard so code traversal, search and candidate extraction exclude pretalx-db, src/tests and */migrations/ regardless of DB scope.",
+        "Django framework sources are NOT included in the DB; framework API calls (FileResponse, FileSystemStorage, serializers) resolve only by name at call sites, so extraction uses syntactic name matching with module hints."
+      ]
+    },
+    "layout": {
+      "root_urls": "src/pretalx/urls.py (orga/, api/, agenda, cfp, plugin includes)",
+      "apps": ["agenda", "api", "cfp", "common", "event", "mail", "orga", "person", "schedule", "submission"],
+      "management_commands": ["agenda/management/commands/export_schedule_html.py", "common/management/commands/makemessages.py"],
+      "settings": "src/pretalx/settings.py + src/pretalx/common/settings/config.py"
+    }
+  },
+  "framework": {
+    "name": "django",
+    "confidence": 1.0,
+    "scores": {
+      "import_package_evidence": 0.45,
+      "route_decorator_evidence": 0.30,
+      "runtime_bootstrap_evidence": 0.20,
+      "directory_layout_evidence": 0.05
+    },
+    "evidence": [
+      "imports: 'from django.urls import include, path, re_path' (pretalx/urls.py:1, pretalx/agenda/urls.py:1); 'from django.http import FileResponse, Http404' (common/views.py:8); 'from django.views.generic import ...' throughout view modules",
+      "routes: urlpatterns with path()/re_path() registrations in pretalx/urls.py, pretalx/agenda/urls.py, pretalx/cfp/urls.py, pretalx/orga/urls.py, pretalx/api/urls.py; class-based views (TemplateView/FormView/DetailView subclasses) dispatched via .as_view()",
+      "bootstrap: src/manage.py, pretalx/settings.py (Django settings module), pretalx/wsgi.py, pretalx/celery_app.py",
+      "layout: Django app convention (models.py/forms.py/views.py/urls.py/migrations/ per app); DRF (rest_framework) for the api/ app; django_scopes, hierarkey-style settings"
+    ],
+    "secondary_candidates": [
+      {"name": "django-rest-framework", "confidence": 0.55, "evidence": ["api/ app uses rest_framework routers/serializers (api/urls.py:23 include(default_router.urls))", "api/views/question.py reads serializer.validated_data"], "note": "treated as part of the Django stack; no separate framework reference file exists for it"}
+    ]
+  },
+  "references_loaded": [
+    "iris_tools/augur-0.3.0/WORKFLOW.md",
+    "iris_tools/augur-0.3.0/references/patterns.md",
+    "iris_tools/augur-0.3.0/references/python.md",
+    "iris_tools/augur-0.3.0/references/django.md",
+    "iris_tools/augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl"
+  ],
+  "template_notes": "All language starter templates are stubs; placeholder bodies were generated from repository evidence per WORKFLOW.md 4.3.1. No {{...}} placeholders remain. Column order matches the most recent prior projects (mlflow/mindsdb/gradio): nodeRepr, role, callableName, flowKind, receiver, moduleHint, argIndex, filePath, line, context. Queries carry no @kind annotation on purpose (multi-column select for codeql query run + bqrs decode; @kind problem cannot carry this shape and no @kind table is assumed).",
+  "source_families": [
+    {
+      "family": "http_route_param",
+      "description": "Positional parameters (beyond 'request') of module-level functions whose first parameter is 'request', and of methods whose parameter index 1 is 'request'. In Django these bind URL route variables via path()/re_path() converters (<slug:event>, <int:pk>, <slug>, <code>, <version>, <locale>) or are request-derived values passed by framework callers (context processors, middleware, etag helpers).",
+      "evidence": [
+        "pretalx/common/views.py:48 def get_static(request, path, content_type) - 'path' is the URL-injected path segment",
+        "pretalx/agenda/views/widget.py:162/274/297 widget_data_v2/widget_script/widget_style(request, event, version[, locale])",
+        "pretalx/agenda/views/speaker.py:148 empty_avatar_view(request, event)",
+        "pretalx/agenda/views/talk.py:169 SingleICalView.get(self, request, event, **kwargs)",
+        "pretalx/orga/views/cfp.py:325/330, orga/views/event.py:387/392, orga/views/schedule.py:559/564 question/phase/room move views(request, event, pk)"
+      ],
+      "caveats": [
+        "get_static is currently routed only at agenda/urls.py:120-126 as 'sw.js' with a literal path dictionary {'path': 'agenda/js/serviceworker.js'}; the view docstring itself notes 'potential directory traversal by a malicious urlconfig, so not a huge attack vector'. The parameter is still extracted as the URL-facing boundary; reachability requires attacker control over urlconfig/plugin routing."
+      ]
+    },
+    {
+      "family": "request_field",
+      "description": "Attribute reads on request / self.request for GET, POST, FILES, headers, COOKIES, session, body, path, path_info, resolver_match, META, data. Whole-object reads (e.g. files=self.request.FILES passed to form constructors) are included as they carry multipart filenames into form/storage handling.",
+      "evidence": [
+        "pretalx/cfp/views/user.py:69,78,283,337 files=self.request.FILES (profile/questions/submission forms)",
+        "pretalx/orga/views/submission.py:368,385 files=self.request.FILES",
+        "pretalx/common/mixins/views.py:260 self.request.POST / self.request.FILES (wizard form binding)",
+        "pretalx/agenda/views/schedule.py:123 request.headers['If-None-Match']; :177 request.headers.get('Accept')",
+        "pretalx/common/middleware/domains.py:32,34,37 request.headers['X-Forwarded-Host']/['Host'] and request.META['SERVER_NAME']",
+        "pretalx/common/views.py:50 'version' in request.GET; pretalx/agenda/views/schedule.py:105 request.GET.get('lang')"
+      ]
+    },
+    {
+      "family": "request_subscript / route_kwarg",
+      "description": "Subscript reads on request mapping fields (request.GET['q'], request.META['...'], request.session['...']) and on route kwarg mappings (self.kwargs['code'], self.kwargs['version']).",
+      "evidence": [
+        "pretalx/common/mixins/views.py:155 urllib.parse.unquote(self.request.GET['q']) - URL-decoded search query",
+        "pretalx/agenda/views/schedule.py:34 unquote(self.kwargs['version']) - URL-decoded route variable",
+        "pretalx/agenda/views/talk.py:33,44,147 self.kwargs['slug']; pretalx/agenda/views/speaker.py:66,78,111 self.kwargs['code']",
+        "pretalx/cfp/views/user.py:459,460 self.kwargs['code'] / self.kwargs['invitation']",
+        "pretalx/common/middleware/domains.py:50 resolve(request.path)"
+      ]
+    },
+    {
+      "family": "request_field_get / route_kwarg_get",
+      "description": ".get()/.getlist() calls on request fields, self.kwargs and url.kwargs.",
+      "evidence": [
+        "pretalx/agenda/views/schedule.py:85 url.kwargs.get('name') or unquote(self.request.GET.get('exporter')) - exporter selector",
+        "pretalx/agenda/views/widget.py:167 unquote(request.GET.get('v') or '') - URL-decoded schedule version",
+        "pretalx/common/mixins/views.py:133 self.request.GET.getlist(key) (filter lookups incl. '__' OR-lookup hack)",
+        "pretalx/orga/views/event.py:564 request.POST.get('form')"
+      ]
+    },
+    {
+      "family": "form_cleaned_data / form_files",
+      "description": "Subscript and .get() reads of form.cleaned_data / self.cleaned_data / self.files. Second-order sources: values originate from request POST/FILES after Django form validation (which constrains shape, not path semantics).",
+      "evidence": [
+        "pretalx/orga/forms/review.py:354 json.load(uploaded_file) where uploaded_file = self.cleaned_data['import_file'] (uploaded JSON import file)",
+        "pretalx/orga/forms/event.py:194 self.files['custom_css'] (uploaded stylesheet)",
+        "pretalx/common/mixins/forms.py:439 self.cleaned_data[name] - UploadedFile values from HierarkeyMixin settings forms reach default_storage.save"
+      ]
+    },
+    {
+      "family": "session_data",
+      "description": "cfp_session.get(...) reads in the CfP wizard flow. Second-order: session stores previously submitted form data and upload tmp_names. Server-side session (signed/tamper-protected by Django session backend); included because the session 'files' dict feeds file_storage.open(tmp_name) directly.",
+      "evidence": [
+        "pretalx/cfp/flow.py:190-192 self.cfp_session.get('initial'/'data')",
+        "pretalx/cfp/flow.py:253-262 get_files(): tmp_name = field_dict.pop('tmp_name'); file=self.file_storage.open(tmp_name)"
+      ]
+    },
+    {
+      "family": "env_config",
+      "description": "os.environ.get(...) / os.getenv(...) reads. Judgment: deployment/operator configuration boundary, NOT attacker-controlled input in a standard pretalx deployment; extracted as boundary candidates with an explicit trust caveat for the labeling step.",
+      "evidence": [
+        "pretalx/common/settings/config.py:153-155 open(os.environ.get('PRETALX_CONFIG_FILE')) - config file path from environment",
+        "pretalx/settings.py:36 fallback=os.environ.get('PRETALX_DATA_DIR', ...) - DATA_DIR root for MEDIA_ROOT/HTMLEXPORT_ROOT",
+        "pretalx/settings.py + common/settings/config.py contain ~41 further os.environ/os.getenv settings reads"
+      ]
+    },
+    {
+      "family": "cli_args (NOT extracted as sources)",
+      "description": "Management command arguments (export_schedule_html 'event' slug, --zip; makemessages) are operator-run CLI inputs, not remote attacker input; django-admin/CLI runs inside the operator trust boundary. Recorded here as an explicit trust-boundary judgment instead of source rows.",
+      "evidence": [
+        "pretalx/agenda/management/commands/export_schedule_html.py:181-192 parser.add_argument('event'); Event.objects.get(slug__iexact=event_slug)",
+        "Celery task task_periodic_schedule_export(event_slug) is internally scheduled, likewise not an untrusted boundary"
+      ]
+    }
+  ],
+  "sink_families": [
+    {
+      "family": "builtins.open",
+      "arg_index": 0,
+      "evidence": [
+        "pretalx/common/views.py:56 open(path, 'rb') inside FileResponse - path = settings.BASE_DIR / 'pretalx/static' / <route-injected path> (get_static)",
+        "pretalx/orga/views/schedule.py:124 open(zip_path, 'rb') - schedule HTML export zip (zip_path = HTMLEXPORT_ROOT / event.slug + '.zip', event-derived)",
+        "pretalx/common/tasks.py:54 open(f) - staticfiles finders path, literal widget file",
+        "pretalx/common/forms/fields.py:135 open(data.temporary_file_path(), 'rb') - Django-managed upload temp path",
+        "pretalx/agenda/management/commands/export_schedule_html.py:121 open(path, 'wb') - dump_content writes exported content to Path(destination) / <URL-derived path>.lstrip('/'); :134 open(local_path, 'rb') - get_mediastatic_content reads STATIC_ROOT/MEDIA_ROOT + URL suffix",
+        "pretalx/common/settings/config.py:155 open(os.environ.get('PRETALX_CONFIG_FILE')) - env-config path"
+      ]
+    },
+    {
+      "family": "django.http.FileResponse",
+      "arg_index": 0,
+      "evidence": [
+        "pretalx/common/views.py:55 FileResponse(open(path, 'rb')) - actual file access is the open() call; FileResponse streams it",
+        "pretalx/orga/views/schedule.py:124 FileResponse(open(zip_path, 'rb'), as_attachment=True)",
+        "pretalx/common/mixins/views.py:290,294,296 FileResponse(image) / FileResponse(event.logo) / FileResponse(event.header_image) - FieldFile arguments; Django storage performs the actual read",
+        "pretalx/agenda/views/speaker.py:168 FileResponse(io.BytesIO(...)) - BytesIO argument, NO filesystem access at this call site (row still extracted, context flags it)"
+      ]
+    },
+    {
+      "family": "django storage save/open/delete",
+      "arg_index": 0,
+      "evidence": [
+        "pretalx/cfp/flow.py:266 self.file_storage.save(field_file.name, field_file) - FileSystemStorage.save with client-supplied upload filename as storage-relative name (MEDIA_ROOT/cfp_uploads)",
+        "pretalx/cfp/flow.py:260 self.file_storage.open(tmp_name) - FileSystemStorage.open with session-stored tmp_name",
+        "pretalx/common/mixins/forms.py:450 default_storage.save(self.get_new_filename(value.name), value) - get_new_filename embeds the raw uploaded filename as a path component ('{model}-{attr}/{pk}/{name}.{nonce}.{ext}')",
+        "pretalx/common/mixins/forms.py:445,461 default_storage.delete(fname.name) - deletes previously stored file by settings File name",
+        "pretalx/common/tasks.py:37,64,108 default_storage.save(...) - storage writes for widget CSS/JS with literal/checksum-built names (event.slug component at :105-108)"
+      ],
+      "caveats": [
+        "Django's FileSystemStorage applies get_valid_name/validate_file_name and safe_join(location, name) internally; whether traversal via upload filenames is possible depends on the installed Django version's storage validation. Extraction records the call sites; the containment judgment belongs to labeling/Phase 2."
+      ]
+    },
+    {
+      "family": "PIL.Image.open",
+      "arg_index": 0,
+      "evidence": ["pretalx/common/forms/fields.py:146 Image.open(file) - observed call site passes a BytesIO (in-memory upload validation), not a filesystem path"]
+    },
+    {
+      "family": "shutil.rmtree / shutil.make_archive",
+      "arg_index": "0 for rmtree; -1 for make_archive (observed call site passes base_name/root_dir/base_dir as keyword arguments)",
+      "evidence": [
+        "pretalx/agenda/management/commands/export_schedule_html.py:168 shutil.rmtree(path) in delete_directory - removes export tmp/target dirs (HTMLEXPORT_ROOT-derived)",
+        "pretalx/common/management/commands/makemessages.py:62 shutil.rmtree(new_dir) - dev tooling",
+        "pretalx/agenda/management/commands/export_schedule_html.py:213-218 make_archive(root_dir=HTMLEXPORT_ROOT, base_dir=event.slug, base_name=zip_path.parent/zip_path.stem) - zip archive creation (from-imported name, all path arguments keyword-controlled)"
+      ]
+    },
+    {
+      "family": "pathlib Path.rename / Path.mkdir",
+      "evidence": [
+        "pretalx/agenda/management/commands/export_schedule_html.py:206 tmp_dir.rename(export_dir) - destination in arg 0",
+        "pretalx/agenda/management/commands/export_schedule_html.py:201 tmp_dir.mkdir(); :119 path.parent.mkdir(parents=True, exist_ok=True); pretalx/settings.py:58 directory.mkdir(parents=True, exist_ok=True); pretalx/common/management/commands/makemessages.py:25 - receiver-controlled directory creation (arg_index -1, flow_kind receiver)"
+      ]
+    },
+    {
+      "family": "tempfile.NamedTemporaryFile",
+      "arg_index": -1,
+      "evidence": ["pretalx/orga/views/cards.py:122 tempfile.NamedTemporaryFile(suffix='.pdf') - submission cards PDF; observed call site uses a literal suffix, prefix/suffix keywords would control the generated name"]
+    }
+  ],
+  "path_propagation_and_validation_nodes": {
+    "description": "Path-construction/validation nodes observed in the codebase. Per the extraction contract these are NOT extracted as sinks (sink = actual filesystem operation with a controlled path argument); they are recorded here as evidence and as propagation/validation context for later phases.",
+    "nodes": [
+      "pretalx/common/views.py:52 settings.BASE_DIR / 'pretalx/static' / path - raw pathlib join of route-injected path, no canonicalization or containment check before path.exists()/open()",
+      "pretalx/common/utils.py:89-93 path_with_hash(name): os.path.split/splitext + get_random_string(7) + os.path.join(dir_name, ...) - KEEPS the directory portion of the uploaded filename; used by every upload_to callable",
+      "upload_to callables embedding client filename via path_with_hash: submission/models/resource.py:11, submission/models/submission.py:32, submission/models/question.py:15, person/models/user.py:30, event/models/event.py:60,64, person/models/information.py:12",
+      "pretalx/common/mixins/forms.py:470-479 get_new_filename - format string embeds raw uploaded name as a path component between fixed dirs",
+      "pretalx/agenda/management/commands/export_schedule_html.py:118 Path(destination) / path.lstrip('/') - lstrip only removes leading slashes, '..' components are not stripped",
+      "pretalx/agenda/management/commands/export_schedule_html.py:126-131 get_mediastatic_content: STATIC_ROOT/MEDIA_ROOT + url[len(STATIC_URL):] - URL suffix appended to root",
+      "pretalx/agenda/management/commands/export_schedule_html.py:171-176 get_export_path(event) = HTMLEXPORT_ROOT / event.slug; get_export_zip_path adds .zip suffix",
+      "pretalx/agenda/views/speaker.py:129 Storage().get_valid_name(name=speaker.user.name) - Django storage name validation applied to a speaker name (used for Content-Disposition only)",
+      "pretalx/common/utils.py:132-133 safe_filename() - unicodedata NFD ASCII normalization; used only in Content-Disposition headers (agenda/views/speaker.py:134, agenda/views/schedule.py:129, orga/views/schedule.py:133), never for path access",
+      "URL-decoding wrappers feeding lookups (not file access): urllib.parse.unquote at agenda/views/schedule.py:34 (kwargs version), :85-86 (GET exporter), agenda/views/widget.py:167 (GET v), common/views.py:83 (GET next), common/mixins/views.py:155 (GET q), cfp/views/user.py:430 (GET email), orga/views/person.py:69 (GET next)",
+      "pretalx/settings.py:348 Path(__file__).resolve().parent / 'locale' - the only .resolve() usage; static locale path"
+    ]
+  },
+  "toctou_and_containment_evidence": [
+    "pretalx/common/views.py:52-56 get_static: path.exists() (line 53) then open(path, 'rb') (line 56) with no canonicalization, no base-dir containment check and no '..' rejection between check and use - classic check-then-use pattern; docstring acknowledges the directory traversal potential",
+    "pretalx/event/services.py:79 zip_path.exists() check in task_periodic_schedule_export before the export job regenerates the zip read at orga/views/schedule.py:124",
+    "No safe_join, get_valid_filename, basename, abspath, normpath, realpath or relative_to containment guards exist anywhere in pretalx's own source (grep-verified); the only name validation is Django-internal (Storage.get_valid_name) plus path_with_hash's random suffix",
+    "No symlink-specific handling observed"
+  ],
+  "untrusted_boundary_judgments": [
+    "HTTP request fields (GET/POST/FILES/headers/COOKIES/path) and URL route variables: attacker-controlled - extracted as sources.",
+    "Form cleaned_data / files and cfp session data: request-derived (second-order) - extracted with caveats.",
+    "Environment variables and config files (PRETALX_CONFIG_FILE, PRETALX_DATA_DIR, pretalx.cfg): operator/deployment configuration - extracted only as boundary candidates with an explicit not-attacker-controlled caveat; config.py:155 open() of the env-named config file is recorded as a sink row.",
+    "Management-command CLI arguments and celery task arguments (export_schedule_html event slug, --zip): operator-internal, NOT extracted as sources; the export command's file writes remain sink rows because their paths are event/URL-derived.",
+    "Mail attachments (schedule/models/schedule.py:610-618, mail/models.py): in-memory dicts with serialized content, no filesystem paths.",
+    "MEDIA_URL files: served via django.conf.urls.static.static() only when settings.DEBUG (pretalx/urls.py:47) and by the operator's web server in production; pretalx itself defines no media-serving view."
+  ],
+  "not_observed": [
+    "No zipfile.ZipFile, tarfile, extractall or any archive extraction anywhere in pretalx source; the only archive API is shutil.make_archive (creation, CLI export).",
+    "No os.remove/os.replace/os.rename/os.unlink/os.listdir/os.makedirs calls in pretalx code (filesystem mutation goes through pathlib methods and Django storage).",
+    "No io.open / os.open; builtins open() only.",
+    "No shutil.move / shutil.copy* / tempfile.mkdtemp usage; tempfile usage is limited to NamedTemporaryFile (orga/views/cards.py:122) and TemporaryDirectory in test settings.",
+    "No os.path.join outside common/utils.py path_with_hash; no os.path.abspath/normpath/realpath.",
+    "No static-resource server beyond get_static (single sw.js route with a literal path)."
+  ],
+  "coverage_gaps_and_caveats": [
+    "Django framework internals are outside the DB, so FileResponse/FileSystemStorage/serializer semantics are matched syntactically by name with module hints; dynamic dispatch (default_storage, file_storage) is constrained by receiver naming, which can miss aliased storages.",
+    "Method-call file access with no positional path argument is not extracted as a sink family: SECRET_FILE.open()/SECRET_FILE.open(mode='w') (settings.py:167-173, operator-configured path) and FieldFile.read() of operator-configured event settings (agenda/views/widget.py:287,302, existing_file.read()) are recorded here instead.",
+    "QuerySet .delete()/.exists() noise makes generic .delete()/.exists()/.read() method families unusable; storage deletes are captured via the explicit default_storage receiver constraint, FieldCleanupMixin's value.delete(save=False) (common/mixins/models.py:102-103) is recorded here as a gap.",
+    "self.kwargs route variables are extracted for CBVs, but DRF serializer fields (api/serializers/) are not separately extracted; only validated_data reads (api/views/question.py:92,96) are covered via the form_cleaned_data family.",
+    "The get_static URL-boundary is currently only reachable with a literal path; flagged in row context rather than dropped, since plugin urlconfigs can add routes.",
+    "Management command export writes (dump_content/get_mediastatic_content) keep sink rows with CLI/event-derived path context; their trigger is the orga web UI via celery (ScheduleExportTriggerView -> export_schedule_html task) or the CLI, both operator-initiated."
+  ],
+  "exclusions_applied": [
+    "src/tests/** (test files, Augur noise policy)",
+    "src/pretalx/**/migrations/** (generated code, Augur noise policy)",
+    "pretalx-db/** (nested CodeQL database; structurally outside the src/pretalx/% scope guard)",
+    "repo-root config/docs (.github, *.yml, *.rst)"
+  ],
+  "next_steps": [
+    "Run codeql query run + codeql bqrs decode for extraction/sources.ql and extraction/sinks.ql sequentially (Step 2 execution)",
+    "Step 3 LLM labeling of the resulting CSV candidates for Pass 1"
+  ]
+}

@@ -1,0 +1,344 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "py7zr-pass1-llm-triage-20261023",
+    "generated_at": "2026-10-23T00:00:00+00:00",
+    "reviewer": "glm-5.3 (independent LLM path re-review, Claude Code CLI agent)",
+    "scope": "Formal Pass 1 SARIF codeFlows with ruleId = py/augur/py7zr/pass1-path-traversal only (results/pass1.sarif, 13 results, 1 run, 1 rule).",
+    "inputs_read": [
+      "iris/results/pass1.sarif (13 results, all codeFlows extracted and step-verified)",
+      "iris/report/iris_report.md",
+      "iris/labels/labels.json (partial read: metadata + pass1 source labels)",
+      "iris/report/query_generation_notes.md",
+      "py7zr_vuln/py7zr/py7zr.py (lines 75-119, 172-193, 524-669, 1300-1366, 1490-1508)",
+      "py7zr_vuln/py7zr/archiveinfo.py (lines 188-200, 745-764)",
+      "py7zr_vuln/py7zr/helpers.py (lines 38, 415-433)"
+    ],
+    "independence": "Triage verdicts derive solely from reading the real source at each codeFlow step and an empirical guard-behavior test run locally (CPython pathlib relative_to with '..' segments: no ValueError; absolute replacement: ValueError; single leading './' strip only). No PyVul ground-truth files, no CVE advisories and no fix patches on disk were opened. The fix-commit data used for the second task (ground_truth_hit_analysis) is the metadata pasted into the task prompt by the operator, used only for the coverage cross-check, never for the per-alert verdicts.",
+    "sarif_content_check": "The SARIF contains exactly one run, tool 'CodeQL', one rule (py/augur/py7zr/pass1-path-traversal) and 13 results, all of that ruleId. No diagnostics results, no CodeQL built-in security queries, and no other CWE rules are mixed into this Pass 1 formal result set."
+  },
+  "pass1_triage": {
+    "pass_id": 1,
+    "focus": "Path Traversal (CWE-022/023/036/073)",
+    "verdict_counts": {
+      "likely_tp": 13,
+      "likely_fp": 0,
+      "uncertain": 0
+    },
+    "shared_analysis": {
+      "untrusted_boundary": "py7zr is a library + local CLI with no HTTP surface. The attacker-controlled input is the archive CONTENT: (a) entry names, UTF-16LE-decoded from the 7z header PROPERTY.NAME block at py7zr/archiveinfo.py:757 (read_utf16 defined at archiveinfo.py:192-200) with backslash->slash rewrite at the same line; (b) link-target payload bytes, decompressed from the archive stream and read at py7zr.py:1333 (junction) / :1343 (symlink). Anyone who can feed a crafted .7z to SevenZipFile(..., 'r'), .extractall()/.extract()/.read(), unpack_7zarchive (shutil.unpack_archive hook), or `py7zr x` controls these values. No authentication applies to archive content.",
+      "allowed_root": "The declared extraction base is the caller-supplied `path` argument of extractall/extract (CLI --odir) — all 13 realized codeFlows run the path-is-not-None branch (py7zr.py:582 joinpath base) — or os.getcwd() in the path=None branch (:577/:580, not realized in any alert flow).",
+      "guard_evidence": "1) py7zr.py:583-586 `outfilename.relative_to(path)` -> ValueError -> Bad7zFile, and py7zr.py:576-579 (cwd variant): LEXICAL prefix checks. CPython pathlib keeps '..' as literal parts, so Path(base).joinpath('../../tmp/evil.sh').relative_to(base) returns '..\\..\\tmp\\evil.sh' WITHOUT raising (empirically re-verified locally); only absolute-path replacement / different drive raises. The guards run before every sink but do not neutralize '..' traversal. 2) helpers.py:424-433 remove_relative_path_marker strips exactly one leading './' (RELATIVE_PATH_MARKER='./', helpers.py:38); '../../x' survives. 3) py7zr.py:596-597 WindowsPath('\\\\?\\'+...) prefixes absolute survivors (win path-length workaround, not a filter). 4) py7zr.py:562-568 '_%d' suffixing is name-collision handling. 5) NO resolve(), realpath(), normpath, basename mapping, fixed-name mapping or whitelist exists anywhere between the decode (archiveinfo.py:757) and the file accesses. 6) The link-target channel (:1333/:1343 -> :1338/:1347) is never seen by ANY guard — dst/sym_target are decompressed raw bytes passed unvalidated.",
+      "flow_carrier_evidence": "py7zr.py:619/:621 self.worker.register_filelike(f.id, outfilename) -> py7zr.py:1500-1502 self.target_filepath[id] = fileish (real dict store) -> Worker.extract invoked at py7zr.py:635-644 (possibly via Thread/Process, py7zr.py:1240-1259) -> py7zr.py:1320 fileish = self.target_filepath.get(f.id, None) inside Worker._extract_single. The dict is populated before extract() is called, so the concurrency wrapper does not break the data flow; the SARIF threadFlows compress the :619->:1320 hop (site-anchored summary edge) but both endpoints and the carrier store are real code, independently verified. No fabricated interprocedural step was found.",
+      "irreport_discrepancy": "iris_report.md's automated filter marked all 13 findings 'Likely FP' via the regex guard heuristic (reject|deny|block.*\\.\\.), presumably keying on the Bad7zFile raise / 'invalid directory traversals' comment near py7zr.py:570-586. This independent path review OVERRIDES that automated verdict: the guard exists but is ineffective against '..' segments (verified above), so every alert describes a genuinely escaping path. The report's heuristic conflates presence-of-check with effectiveness-of-check."
+    },
+    "alerts": [
+      {
+        "id": "A-01",
+        "sarif_result_index": 0,
+        "verdict": "likely_tp",
+        "confidence": 0.9,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 625,
+          "operation": "target_dir.mkdir(parents=True) — directory tree creation at attacker-influenced path (SevenZipFile._extract post-pass over target_dirs)"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561,
+          "origin": "archiveinfo.py:757 read_utf16(header bytes).replace('\\\\','/')"
+        },
+        "taint_flow": ":561 outname = f.filename -> :582 outfilename = path.joinpath(remove_relative_path_marker(outname)) -> :612 target_dirs.append -> :623 sorted -> :625 mkdir receiver",
+        "preconditions": "extractall/extract called with a `path` argument; entry has is_directory attribute; outfilename does not already exist (:611).",
+        "rationale": "Real directory-creation sink; '..' entry names pass the lexical relative_to guard at :584 (verified), so a crafted archive creates directories outside the caller-declared base. Match comment/summary is accurate."
+      },
+      {
+        "id": "A-02",
+        "sarif_result_index": 1,
+        "verdict": "likely_tp",
+        "confidence": 0.9,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 659,
+          "operation": "os.utime(str(outfilename), times=(lastmodified, lastmodified)) — timestamp write on extracted path (post-extract metadata pass)"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561
+        },
+        "taint_flow": ":561 -> :582 joinpath -> :613 target_files.append((outfilename, ...)) -> :651 loop -> :659 str(outfilename) arg 0",
+        "preconditions": "path argument given; entry is a regular file (reaches :621/:622); properties['lastwritetime'] present (attacker controls it); worker extraction completed without raising.",
+        "rationale": "utime is a genuine filesystem write (metadata modification) on the escaping path; usually secondary to the :1349 write but independently realizable (e.g. empty-stream entries with target_files registration, or post-write). str() coercion is value-preserving."
+      },
+      {
+        "id": "A-03",
+        "sarif_result_index": 2,
+        "verdict": "likely_tp",
+        "confidence": 0.85,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 663,
+          "operation": "outfilename.chmod(st_mode) — permission change with archive-supplied posix_mode"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561
+        },
+        "taint_flow": ":561 -> :582 -> :613 -> :651 -> :663 receiver outfilename",
+        "preconditions": "os.name == 'posix'; properties['posix_mode'] not None (archive-supplied); regular-file entry; path argument given.",
+        "rationale": "Platform-gated but real: chmod on a path outside the base (attacker additionally controls the mode). Prefix/lexical guards do not stop it."
+      },
+      {
+        "id": "A-04",
+        "sarif_result_index": 3,
+        "verdict": "likely_tp",
+        "confidence": 0.85,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 668,
+          "operation": "outfilename.chmod(outfilename.stat().st_mode & ro_mask) — permission change (readonly fallback)"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561
+        },
+        "taint_flow": ":561 -> :582 -> :613 -> :651 -> :668 receiver",
+        "preconditions": "properties['readonly'] true and not is_directory; non-posix or posix_mode None; regular-file entry.",
+        "rationale": "Same escaping-path chmod on the Windows/non-posix fallback branch; mode bits derived from the existing file, path still entry-controlled."
+      },
+      {
+        "id": "A-05",
+        "sarif_result_index": 4,
+        "verdict": "likely_tp",
+        "confidence": 0.95,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 1349,
+          "operation": "fileish.open(mode='wb') followed by self.decompress(..., obfp, ...) — THE Zip-Slip arbitrary-file-write sink (Worker._extract_single): creates/truncates the target file and writes attacker-controlled decompressed content"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561
+        },
+        "taint_flow": ":561 -> :582 joinpath -> :621 register_filelike(f.id, outfilename) -> (dict store :1502) -> :1320 fileish = self.target_filepath.get(f.id) -> :1349 receiver fileish",
+        "preconditions": "path argument given; entry is a non-empty regular member (not directory/socket/symlink/junction, emptystream false); not a return_dict MemIO extraction.",
+        "rationale": "Both the write location (entry name, weakly guarded) and the written bytes (decompressed payload) are attacker-controlled. This is the direct realization of 'write arbitrary files via extracting a crafted 7z file' — the core CWE-22 of this project. No effective barrier on the path."
+      },
+      {
+        "id": "A-06",
+        "sarif_result_index": 5,
+        "verdict": "likely_tp",
+        "confidence": 0.9,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 1347,
+          "column_role": "receiver `fileish` of fileish.symlink_to(sym_target)",
+          "operation": "symlink creation at attacker-chosen location (link-location channel)"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561
+        },
+        "taint_flow": ":561 -> :582 -> :619 register_filelike (symlink/junction branch) -> :1320 -> :1347 receiver",
+        "preconditions": "entry flagged is_symlink (archive-supplied attributes, py7zr.py:174-182); not MemIO; path argument given.",
+        "rationale": "The link is planted at a location that can sit outside the base ('..' in entry name passes the guard). Even with a benign target, a misplaced link enables later symlink-following writes (CWE-23/36 escalation)."
+      },
+      {
+        "id": "A-07",
+        "sarif_result_index": 6,
+        "verdict": "likely_tp",
+        "confidence": 0.95,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 1347,
+          "column_role": "argument 0 `sym_target` of fileish.symlink_to(sym_target)",
+          "operation": "symlink creation with attacker-chosen TARGET (link-target channel)"
+        },
+        "source": {
+          "channel": "archive link-target payload",
+          "file": "py7zr/py7zr.py",
+          "line": 1343,
+          "origin": "omfp.read() over decompressed archive bytes (io.BytesIO fed by self.decompress at :1341)"
+        },
+        "taint_flow": ":1343 sym_target = pathlib.Path(omfp.read().decode('utf-8')) -> :1347 arg 0",
+        "preconditions": "entry flagged is_symlink; non-empty payload; not MemIO.",
+        "rationale": "Zero validation between the raw payload read and symlink_to: the target may be absolute (e.g. /etc/passwd) or a '../../' chain — the relative_to guards never inspect it at all. CWE-36-shaped arbitrary link target."
+      },
+      {
+        "id": "A-08",
+        "sarif_result_index": 7,
+        "verdict": "likely_tp",
+        "confidence": 0.85,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 1346,
+          "operation": "fileish.unlink() — file deletion at attacker-chosen path (symlink branch pre-collision clobber)"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561
+        },
+        "taint_flow": ":561 -> :582 -> :619 -> :1320 -> :1346 receiver",
+        "preconditions": "entry flagged is_symlink; a file/dir already exists at the escaping path (fileish.exists() at :1345); not MemIO.",
+        "rationale": "Deletion (or clobber of an existing link) outside the declared base; TOCTOU window between exists() and unlink()/creation is a documented residual risk but does not negate the path-escape itself."
+      },
+      {
+        "id": "A-09",
+        "sarif_result_index": 8,
+        "verdict": "likely_tp",
+        "confidence": 0.9,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 1357,
+          "operation": "fileish.touch() — empty-file creation at attacker-chosen path"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561
+        },
+        "taint_flow": ":561 -> :582 -> :621 -> :1320 -> :1357 receiver",
+        "preconditions": "entry has emptystream true (0-byte member); not a MemIO extraction; path argument given.",
+        "rationale": "touch creates/truncates nothing but creates the file node at the escaping path (and updates mtime if present) — real filesystem mutation on an uncontained path."
+      },
+      {
+        "id": "A-10",
+        "sarif_result_index": 9,
+        "verdict": "likely_tp",
+        "confidence": 0.9,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 1328,
+          "operation": "fileish.parent.mkdir(parents=True, exist_ok=True) — directory tree creation for every extracted member (Worker._extract_single)"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561
+        },
+        "taint_flow": ":561 -> :582 -> :619/:621 -> :1320 -> :1328 receiver fileish.parent",
+        "preconditions": "any member with a registered target (all non-None registrations); runs before every write/link/creation below.",
+        "rationale": "Unconditional per-member mkdir of the parent chain; with '..' in the entry name this materializes directory trees outside the base before any file write."
+      },
+      {
+        "id": "A-11",
+        "sarif_result_index": 10,
+        "verdict": "likely_tp",
+        "confidence": 0.85,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 1336,
+          "operation": "fileish.unlink() — file deletion at attacker-chosen path (junction branch)"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561
+        },
+        "taint_flow": ":561 -> :582 -> :619 -> :1320 -> :1336 receiver",
+        "preconditions": "entry flagged is_junction (archive attributes, py7zr.py:184-191); sys.platform == 'win32'; not MemIO; fileish.exists() at :1335.",
+        "rationale": "Windows-gated deletion/clobber outside the base; same weak entry-name containment."
+      },
+      {
+        "id": "A-12",
+        "sarif_result_index": 11,
+        "verdict": "likely_tp",
+        "confidence": 0.85,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 1338,
+          "column_role": "argument 0 str(fileish) of _winapi.CreateJunction(str(fileish), dst)",
+          "operation": "NTFS junction creation at attacker-chosen link path (link-location channel)"
+        },
+        "source": {
+          "channel": "archive entry name",
+          "file": "py7zr/py7zr.py",
+          "line": 561
+        },
+        "taint_flow": ":561 -> :582 -> :619 -> :1320 -> :1338 str() arg 0",
+        "preconditions": "entry flagged is_junction; sys.platform == 'win32'; not MemIO; non-empty payload.",
+        "rationale": "Windows-only branch, but statically real: the junction is planted at the (weakly guarded) entry-name location. Combined with A-13 the attacker controls BOTH ends of the junction."
+      },
+      {
+        "id": "A-13",
+        "sarif_result_index": 12,
+        "verdict": "likely_tp",
+        "confidence": 0.95,
+        "sink": {
+          "file": "py7zr/py7zr.py",
+          "line": 1338,
+          "column_role": "argument 1 `dst` of _winapi.CreateJunction(str(fileish), dst)",
+          "operation": "NTFS junction creation with attacker-chosen TARGET (link-target channel)"
+        },
+        "source": {
+          "channel": "archive link-target payload",
+          "file": "py7zr/py7zr.py",
+          "line": 1333,
+          "origin": "ofp.read() over decompressed archive bytes (io.BytesIO fed by self.decompress at :1332)"
+        },
+        "taint_flow": ":1333 dst = ofp.read().decode('utf-8') -> :1338 arg 1",
+        "preconditions": "entry flagged is_junction; sys.platform == 'win32'; non-empty payload.",
+        "rationale": "The junction target is raw archive payload with no validation whatsoever — an absolute path or arbitrary directory can be aliased from inside the extraction tree (CWE-36). Windows-gated only."
+      }
+    ],
+    "checklist_answers": {
+      "1_source_attacker_controlled": "Yes — not URL/route input but the project's genuine untrusted boundary: archive entry names (archiveinfo.py:757, UTF-16 decode of header PROPERTY.NAME bytes) and link-target payload bytes (py7zr.py:1333/:1343, decompressed stream). Fully attacker-controlled whenever a crafted .7z is supplied to the read/extract APIs (library, shutil.unpack_archive hook, CLI).",
+      "2_source_reaches_sink": "Yes — every codeFlow step was checked against real source: :561/:565 outname -> :582 path.joinpath(remove_relative_path_marker(outname)) (helpers.py:424-433 strips only one leading './') -> :612/:613/:619/:621 registration -> target_filepath dict store (py7zr.py:1500-1502) -> :1320 load in Worker._extract_single -> sinks. The thread/process wrapper (Worker.extract, py7zr.py:1240-1259) does not sever the flow: the carrier dict is populated before extraction starts. The SARIF :619->:1320 hop is a compressed but code-backed edge.",
+      "3_sink_is_real_file_operation": "Yes — all 13 sink sites are genuine operations: mkdir (:625, :1328), os.utime (:659), chmod (:663, :668), unlink (:1336, :1346), open(mode='wb')+write (:1349), touch (:1357), symlink_to (:1347), _winapi.CreateJunction (:1338). None are pure concatenation or path-object construction.",
+      "4_allowed_root_and_escape": "Declared base = caller `path` (extractall/extract/CLI --odir) or os.getcwd() (path=None branch). Controlled entry names escape via '..' segments: pathlib keeps them literally, so joinpath('..\\..\\x') stays under-concatenated and the OS resolves it outside the base at access time. Empirically re-verified locally that relative_to does not raise for this shape.",
+      "5_traversal_vectors": "Effective: '..' chains (survive both relative_to guards and remove_relative_path_marker); separator variation (backslash names are normalized to '/' at the decode boundary, archiveinfo.py:757, widening reach on posix); absolute link targets and junction targets (payload channel — never checked). Caught: absolute-path replacement / different drive (relative_to raises -> Bad7zFile). Not applicable: URL/percent decoding, repeated decoding (no second decode exists). Symlinks: created by the extractor itself with unchecked targets (CWE-23/36 pivot).",
+      "6_effective_guards_before_access": "None effective. The relative_to checks (py7zr.py:576-579, :583-586) do run before access but are lexical; no resolve/realpath/normpath/basename/whitelist exists anywhere in the pipeline; link-target values bypass all checks entirely.",
+      "7_misjudged_barrier": "No — this review explicitly does NOT credit relative_to/joinpath as sufficient (they are the vulnerability), and there is no login/auth to misjudge. The IRIS report's automated FP filter did exactly this misjudgment (regex heuristic crediting the Bad7zFile raise); overridden here with source-level and empirical evidence.",
+      "8_not_authorized_static_service_or_test": "These are not static-file-serving, test or unreachable paths: the alerts are on the core extraction pipeline of a library whose input (the archive) is untrusted by design. Only platform/attribute preconditions apply (win32 gates at :1330/:1338; posix gate at :660; is_symlink/is_junction/emptystream flags — all attacker-chosen via archive attributes).",
+      "9_fp_from_overgeneral_modeling": "No evidence: sources and sinks are site-anchored to real lines; the DB covers helpers.py (flows traverse helpers.py:424-433); no wrapper-parameter sources were promoted; sink positions carry real path text. The 4 duplicate threadFlows per result are the two source anchors (561/565) x two route variants (direct / via helpers.py) — not spurious distinct claims.",
+      "10_no_contamination": "Confirmed: single ruleId py/augur/py7zr/pass1-path-traversal, 13 results, no diagnostics and no CodeQL built-in baseline results present in the SARIF."
+    }
+  },
+  "ground_truth_hit_analysis": {
+    "task": "Cross-check whether the real vulnerability fixed by py7zr commit 1bb43f17515c7f69673a1c88ab9cc72a7bbef406 (CWE-22 path traversal, extractall arbitrary file write) is hit by the Pass 1 formal alerts. Basis: the commit metadata pasted in the task prompt (code_before/code_after for writef, _extract_single, _extract, extract, writestr) + the alert set above. No on-disk ground-truth files were opened.",
+    "overall_verdict": "HIT (extraction channel fully covered; write-side channel NOT covered)",
+    "function_level_mapping": [
+      {
+        "fixed_function": "SevenZipFile._extract",
+        "fix_nature": "Replaced the weak relative_to containment (:576-586 in code_before) with get_sanitized_output_path() built on resolve()-then-relative_to; removed the windows-namespace prefixing path.",
+        "hit": true,
+        "evidence": "The vulnerable code_before lines are exactly the alert flow steps: outname = f.filename (:561), outfilename = path.joinpath(remove_relative_path_marker(outname)) (:582), the bypassed relative_to guard (:583-586), register_filelike (:619/:621), and the sinks target_dir.mkdir (:625), os.utime (:659), chmod (:663/:668). Alerts A-01..A-05 traverse precisely the pipeline this commit rewrites; the commit's own message ('resolve() converts /hoge/fuga/../../../tmp/evil.sh to /tmp/evil.sh then relative_to() can detect') matches this review's empirical finding that the pre-fix guard keeps '..' literally.",
+        "alerts": ["A-01", "A-02", "A-03", "A-04", "A-05"]
+      },
+      {
+        "fixed_function": "Worker._extract_single",
+        "fix_nature": "Added is_target_path_valid(path, fileish.parent.joinpath(dst)) checks before junction creation (:1338) and symlink creation (:1347), raising Bad7zFile on out-of-target link targets; junction/symlink branch hardening.",
+        "hit": true,
+        "evidence": "Alerts anchor exactly at the changed sink sites: junction unlink/CreateJunction (:1336, :1338 arg0, :1338 arg1 = dst), symlink unlink/symlink_to (:1346, :1347 receiver, :1347 sym_target), plus the shared extraction machinery (:1320, :1328, :1349, :1357). The unvalidated dst (:1333) and sym_target (:1343) flows are precisely what is_target_path_valid was added to block.",
+        "alerts": ["A-05", "A-06", "A-07", "A-08", "A-09", "A-10", "A-11", "A-12", "A-13"]
+      },
+      {
+        "fixed_function": "Worker.extract",
+        "fix_nature": "Plumbing: passes `path` through extract() into extract_single() so the new link-target validation can run.",
+        "hit": true,
+        "evidence": "Covered as the (compressed) carrier segment of every Worker-sink alert flow (:619/:621 register_filelike -> :1320 target_filepath.get inside the extract/extract_single call chain), not as a standalone sink — appropriate, since the function itself only dispatches.",
+        "alerts": ["A-05..A-13 (as flow carrier)"]
+      },
+      {
+        "fixed_function": "SevenZipFile.writef / SevenZipFile.writestr",
+        "fix_nature": "Added check_archive_path(arcname) guard rejecting evil arcnames such as '../../../../tmp/evil.sh' on the archive-CREATION side (writef code_before at :671+ / writestr at :920+ in the vulnerable tree).",
+        "hit": false,
+        "evidence": "No Pass 1 alert touches writef, writestr, _writef, _writestr or _make_file_info_from_name. This is by construction of the Pass 1 labels: all write-side rows were deliberately left 'candidate' (operator-supplied arcname, not archive content) and no write-side source/sink was promoted. The write-side is a hardening addition in the same commit rather than the extractall CWE-22 channel itself, but it is a real uncovered fix surface.",
+        "alerts": []
+      }
+    ],
+    "coverage_of_primary_cve": "The primary vulnerability ('directory traversal in SevenZipFile.extractall() ... write arbitrary files via extracting a crafted 7z file') is directly hit: A-05 (py7zr.py:1349 fileish.open(mode='wb') + decompress write) is the arbitrary-file-write sink of that exact scenario, reached from the archive entry-name source through the exact guard the commit replaced. Twelve companion alerts cover the adjacent manifestations the same commit fixed (directory creation, deletion, metadata writes, and the junction/symlink target escapes).",
+    "residual_coverage_gaps": [
+      "path=None branch (extractall() without a path, read(), readall(); pipeline :577/:580 against os.getcwd()) is modeled as source/joinpath but no realized alert flow traverses it — same root cause, same fix, minor recall gap only.",
+      "Write-side hardening (writef/writestr check_archive_path) has no alert at all.",
+      "Binary-level quirks (e.g. absolute entry names on Windows drive-relative forms, UNC paths) are covered by neither alerts nor this review beyond the relative_to absolute-rejection test."
+    ]
+  }
+}

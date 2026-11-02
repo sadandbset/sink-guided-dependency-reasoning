@@ -1,0 +1,181 @@
+{
+  "triage_run": {
+    "date": "2026-10-22",
+    "reviewer": "independent LLM path re-review (glm-5.3)",
+    "rule_id": "py/augur/opendiamond/pass1-path-traversal",
+    "inputs": [
+      "results/pass1.sarif",
+      "report/iris_report.md",
+      "labels/labels.json",
+      "report/query_generation_notes.md",
+      "dataset source: opendiamond_vuln (opendiamond/dataretriever/*.py, config.py, __main__.py)"
+    ],
+    "independence": "未读取 PyVul 真值、修复提交内容或 CVE 描述；未修改 SARIF、标签、正式查询；仅读取实验产物与数据库源码快照。用户在提示中提供的函数级元数据仅用于第二项命中分析。"
+  },
+  "sarif_integrity": {
+    "execution_successful": true,
+    "total_results": 6,
+    "all_results_rule_id_matches": true,
+    "notes": "全部 6 条结果的 ruleId 均为 py/augur/opendiamond/pass1-path-traversal，且均带完整 codeFlows；run 中的 notifications 仅为基线文件覆盖/平台遥测（level=none），没有把 CodeQL 内置安全查询结果或诊断查询结果混入正式 Pass 1 结果（问题 10：通过）。"
+  },
+  "common_facts": {
+    "deployment": "dataretriever 为独立 Flask 应用（opendiamond/dataretriever/__main__.py:26,57-79,90-94）：按 config.retriever_stores（DATASTORE）动态 import 各 *_store 模块并以 url_prefix='/' + BASEURL 注册 scope_blueprint，随后 app.run(host, port)。默认绑定 127.0.0.1:5873（config.py:156-158），可用 DRHOST 环境变量或 -l/--listen 改为对外监听；这是设计上供 diamond 服务器拉取 objectlist/obj 的数据分发服务。",
+    "authentication": "所有 store 路由（/<gididx>、/id/...、/meta/...、/obj/...）无任何认证、无 cookie 校验、无 IP 白名单。前置条件仅为：该 store 模块被 DATASTORE 启用 + 网络可达。",
+    "allowed_root": "DATAROOT（默认 /srv/diamond，config.py:162；操作员级配置）是各 store 声明的允许根目录；INDEXDIR（/src/diamond/INDEXES，config.py:164）为索引根。除 augment_store 外没有任何包含性校验。",
+    "decoding": "Werkzeug 在路由匹配前完成百分号解码，<path:...> 转换器接受 '/'；全部库内无 unquote/二次解码通道（问题 5：解码因素仅一次性百分号解码，不影响结论，穿越由原始 '..' / 绝对路径段即可完成）。",
+    "join_semantics": "各 store 的路径构建均为 os.path.join(DATAROOT, 用户路径)（或 join(DATAROOT, dataset, rel_path)）：第二个参数为绝对路径时整体替换基目录，前导 '..' 段可爬出基目录 —— 受控输入确实可指向允许根之外（问题 4：是）。",
+    "barriers": "全部受审查 store（diamond/mixer/test/video/yfcc100m_mysql）中无 normpath、realpath、resolve、startswith 包含判断、basename 提取或白名单（问题 6/7：无真实防护，也不存在被误判为防护的调用）。唯一 barrier 是 augment_store.py:155-156 的 werkzeug safe_join（该 store 的 /obj、/id、/root 三个通道共用此出口），且发生在 send_file 之前 —— augment 未出现在告警中，与 barrier 建模一致。safe_join 不解析符号链接（标签 caveat 已记录），但本轮 6 条告警均不涉及 augment。",
+    "not_misjudged_defense": "os.path.isfile/exists（mixer/test :232/:262、diamond :104）仅是存在性预言机，不是路径净化；本报告未见任何把 isfile 或鉴权误当防护的告警理由（问题 7：不适用/无）。"
+  },
+  "question_10_check": "通过：6 条结果 ruleId 一致，无 diagnostics / CodeQL 内置查询 / 其他 CWE 混入。",
+  "triage": [
+    {
+      "alert_id": "result-1",
+      "location": "opendiamond/dataretriever/diamond_store.py:137 (send_file, arg0)",
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "source": {
+        "file_line": "diamond_store.py:130-131 (路由 '/obj/<path:obj_path>'，形参 obj_path；SARIF source 定位 131:25-33)",
+        "label": "S-dataretriever_diamond_store-131-get_object_src_http-a0 (tp/0.98)",
+        "attacker_controlled": true
+      },
+      "allowed_root": "DATAROOT（默认 /srv/diamond）",
+      "actual_operation": "flask send_file(path) —— 真实读取文件内容并写入 HTTP 响应（读+响应），非纯拼接",
+      "taint_flow": "obj_path(131, 路由形参) → _get_obj_absolute_path(132) → [过程间] os.path.join(DATAROOT, obj_path)(123) → path(132/137) → send_file(137)。SARIF codeFlow 与源码逐行吻合（131→132→122-123 join 标准污点步骤→132→137）。",
+      "barrier_evidence": "无。join(:123) 与 send_file(:137) 之间无任何校验；本文件无 safe_join/normpath/startswith。",
+      "preconditions": "DATASTORE 启用 diamond store；dataretriever 端口可达（默认 127.0.0.1:5873，DRHOST 可对外）。无认证。",
+      "reasoning": "问题1：是——path 转换器路由参数完全可控（接受 '/'、'..'、绝对形式，百分号已解码）。问题2：是——唯一中间环节是过程间调用 _get_obj_absolute_path，其函数体就是一行 join，真实源码证据完整，无异步/包装断裂。问题3：是——send_file 是敏感文件响应操作。问题4：可指向 DATAROOT 外（绝对路径替换或 '..' 爬出）。问题5：'..' 与绝对路径均生效。问题6：无任何防护。问题7：无被误判的防护。问题8：不是授权静态服务——端点无鉴权且输入可越出声明根目录。问题9：source/sink/中间步骤均有精确源码对应，无过度泛化。问题10：规则 ID 正确。与 query_generation_notes 第 6 节预期通道 1 完全一致。"
+    },
+    {
+      "alert_id": "result-2",
+      "location": "opendiamond/dataretriever/mixer_store.py:266 (send_file, arg0)",
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "source": {
+        "file_line": "mixer_store.py:259-260 (路由 '/obj/<path:obj_path>'，形参 obj_path；SARIF source 定位 260:25-33)",
+        "label": "S-dataretriever_mixer_store-260-get_object_src_http-a0 (tp/0.98)",
+        "attacker_controlled": true
+      },
+      "allowed_root": "DATAROOT（默认 /srv/diamond）",
+      "actual_operation": "flask send_file(path) —— 读文件内容并写入 HTTP 响应",
+      "taint_flow": "obj_path(260) → _get_obj_absolute_path(261) → join(DATAROOT, obj_path)(252) → path(261/266) → send_file(266)。codeFlow 逐点与源码一致。",
+      "barrier_evidence": "无。:252 join 与 :266 send_file 之间无校验；:231 的 path.split 手术与 :232 isfile 只影响 XML 元素内容，不在 /obj 通道上。",
+      "preconditions": "DATASTORE 启用 mixer store；端口可达；无认证。",
+      "reasoning": "与 diamond_store 逐行同构（:251-252 vs :122-123，:259-272 vs :130-143）。十个问题答案与 result-1 相同，唯一差异是本 store 的 get_object_meta(:217-226) 不读文件（仅 split 取标签），但那不在本告警路径上。likely_tp。"
+    },
+    {
+      "alert_id": "result-3",
+      "location": "opendiamond/dataretriever/test_store.py:296 (send_file, arg0)",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "source": {
+        "file_line": "test_store.py:289-290 (路由 '/obj/<path:obj_path>'，形参 obj_path；SARIF source 定位 290:25-33)",
+        "label": "S-dataretriever_test_store-290-get_object_src_http-a0 (tp/0.98)",
+        "attacker_controlled": true
+      },
+      "allowed_root": "DATAROOT（默认 /srv/diamond）",
+      "actual_operation": "flask send_file(path) —— 读文件内容并写入 HTTP 响应",
+      "taint_flow": "obj_path(290) → _get_obj_absolute_path(291) → join(DATAROOT, obj_path)(282) → path(291/296) → send_file(296)。",
+      "barrier_evidence": "无（同 diamond/mixer）。",
+      "preconditions": "DATASTORE 启用 test store；端口可达；无认证。",
+      "reasoning": "代码结构与 diamond/mixer 完全同构。问题 8 的特殊考量：模块名含 'test'，但它不是测试代码——它是 dataretriever/__main__.py:57-79 通过 config.retriever_stores 正式注册的可部署生产 store（与 diamond/mixer 同一注册机制、同一 DATASTORE 开关），提供真实 /obj 文件响应。前置条件中需操作员启用该 store，故信心略降至 0.9，但一旦启用即为与 result-1 等价的越权文件读取。其余九问答案同 result-1。"
+    },
+    {
+      "alert_id": "result-4",
+      "location": "opendiamond/dataretriever/video_store.py:104 (os.stat, arg0)",
+      "verdict": "likely_tp",
+      "confidence": 0.75,
+      "source": {
+        "file_line": "video_store.py:83-84 (路由 '/obj/start/<int:start>/span/<int:span>/<path:video>'，形参 video；SARIF source 定位 84:29-34)",
+        "label": "S-dataretriever_video_store-84-get_object-a2 (tp/0.95)",
+        "attacker_controlled": true
+      },
+      "allowed_root": "DATAROOT（默认 /srv/diamond）",
+      "actual_operation": "os.stat(video_path) —— 真实文件元数据访问：mtime/size 被写入响应的 Last-Modified 与 ETag 头（:105-113），构成存在性预言机与元数据泄露；非纯路径构造",
+      "taint_flow": "video(84, 路由形参) → _get_obj_absolute_path(87) → [过程间] join(DATAROOT, obj_path)(125) → str() 包装(87) → video_path(87/104) → os.stat(104)。codeFlow 含 124/125（被调函数体内 join）与 87（str 步骤），逐点吻合。",
+      "barrier_evidence": "无。join(:125) 与 stat(:104) 之间无校验。",
+      "preconditions": "DATASTORE 启用 video store；端口可达；无认证。",
+      "reasoning": "问题 1/2/4/5/6 同前（path 转换器、单层过程间包装、无防护）。问题 3：os.stat 是真实文件系统访问（读元数据），但影响限于存在性/元数据泄露，不直接返回文件内容；同一路径的完整内容泄露通道由 result-5（ffmpeg）承载。判定 likely_tp（真实穿越 + 真实元数据泄露），因单独影响有限，信心 0.75；若按『stat 是否算敏感操作』从严口径则可降为 uncertain，但结合 :107 ETag 含 size、:108 last_modified 直接回显给客户端，泄露是确定性的。问题 9：source/sink 均精确匹配，无过度泛化。"
+    },
+    {
+      "alert_id": "result-5",
+      "location": "opendiamond/dataretriever/video_store.py:162 (subprocess.Popen, arg0 命令列表)",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "source": {
+        "file_line": "video_store.py:83-84（同 result-4，形参 video）",
+        "label": "S-dataretriever_video_store-84-get_object-a2 (tp/0.95)",
+        "attacker_controlled": true
+      },
+      "allowed_root": "DATAROOT（默认 /srv/diamond）",
+      "actual_operation": "subprocess.Popen(['ffmpeg', ..., '-i', str(video_path), ..., 'pipe:1']) —— ffmpeg 子进程真实打开并读取该文件，内容经 stdout 流式写入 HTTP 响应（:92-102 generate 逐 4096 字节 yield）",
+      "taint_flow": "video(84) → _get_obj_absolute_path(87) → join(:125) → str()(87) → video_path(87/88) → [过程间] _create_ffmpeg_segment_proc 形参(:142) → 命令列表元素 '-i', str(video_path)(:156) → cmd_l(:153) → Popen(:162)。codeFlow 逐点吻合（87→88→142→156→153→162）。",
+      "barrier_evidence": "无。命令列表不经 shell（无命令注入），但路径元素本身无任何包含校验。",
+      "preconditions": "DATASTORE 启用 video store；系统安装 ffmpeg（文件头注释：requires ffmpeg >= 3.3）；端口可达；无认证。",
+      "reasoning": "问题 1/2/4/5/6 同前。问题 3：Popen 不只是拼接——ffmpeg 确实执行文件读取且内容回传客户端，属于敏感读操作；作为 path traversal sink 的限定条件：可读出的内容受 ffmpeg 解复用能力约束（任意二进制如 /etc/passwd 无法直接转码流出，但 DATAROOT 外任意视频/音频文件可被完整读取并流出，且 stat 通道（result-4）可先探测）。问题 7/8：无。问题 9：污点经列表元素→容器的标准步骤传播，模型链路有真实源码对应，非 summary 泛化虚构。问题 10：规则 ID 正确。判定 likely_tp，信心 0.85（利用面受 ffmpeg 格式约束，故非 0.95）。"
+    },
+    {
+      "alert_id": "result-6",
+      "location": "opendiamond/dataretriever/yfcc100m_mysql_store.py:128 (send_file, arg0)",
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "source": {
+        "file_line": "yfcc100m_mysql_store.py:125-126 (路由 '/obj/<dataset>/<path:rel_path>'，形参 rel_path 为 path 转换器；SARIF source 定位 126:34-42 = rel_path)",
+        "label": "S-dataretriever_yfcc100m_mysql_store-126-get_object_src_http-a1 (tp/0.98)；注：a0(dataset) 标签为 fp，查询建模的是 a1(rel_path)，与 SARIF 列号 34-42（rel_path）一致",
+        "attacker_controlled": true
+      },
+      "allowed_root": "DATAROOT（默认 /srv/diamond）下的各 dataset 目录",
+      "actual_operation": "flask send_file(path) —— 读文件内容并写入 HTTP 响应",
+      "taint_flow": "rel_path(126, 路由形参) → _get_obj_abosolute_path(127) → [过程间] join(DATAROOT, dataset, rel_path)(137) → path(127/128) → send_file(128)。codeFlow 逐点吻合（126→127→136-137→127→128）。",
+      "barrier_evidence": "无。rel_path 是 path 转换器：绝对形式使 join 整体替换、'..' 段可爬出；dataset 为默认 string 转换器（单段，可为 '..' 单独配合 rel_path 使用，但 rel_path 单独已足够穿越）。",
+      "preconditions": "DATASTORE 启用 yfcc100m_mysql store；端口可达；无认证。（/obj 端点本身不需要 MySQL 可用——SQL 仅在 /scope 与 /id 通道使用。）",
+      "reasoning": "问题 1：rel_path 完全可控。问题 2：唯一包装 _get_obj_abosolute_path（函数名拼写错误的历史函数，源码 :136-137 确认）过程间证据完整。问题 3：send_file 真实读+响应。问题 4-7：无防护、无被误判防护。问题 8：非授权服务。问题 9：source 建模精确到 rel_path（a1），未把 fp 的 dataset(a0) 当源；无过度泛化。问题 10：通过。likely_tp。"
+    }
+  ],
+  "question_9_global_check": "6 条告警的 source/sink/中间步骤均能落到具体源码行；没有依赖未建模的动态派发、XDR 属性读取或 blob URI 链（这些在 notes 第 6 节被明确列为预期断裂且确实未产生告警）；数据库覆盖完整（dataretriever 全部 store 文件均在 artifacts 中，python 提取无缺失告警迹象）。",
+  "summary": {
+    "total": 6,
+    "likely_tp": 6,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "statement": "CodeQL 分析成功；本轮 6 条正式 Pass 1 路径穿越告警经逐条源码路径复核均为 likely_tp，无凭空构造。未命中的预期通道（augment 受 safe_join 保护、/meta 链、blaster、XDR 链）与 notes 第 6 节的可达性预判一致。"
+  },
+  "ground_truth_hit_analysis": {
+    "task": "分析用户提供的真实漏洞（commit 398049c187ee644beabab44d6fece82251c1ea56，'Fix path traversal issues in all dataretriever backends'，CWE-22）是否被本轮正式告警命中。仅使用提示中给出的函数级元数据，未读取修复提交内容/PyVul 真值。",
+    "vulnerability_pattern": "Flask send_file 收到 os.path.join(DATAROOT, 用户路径) 的结果且无包含校验 —— 与数据库源码快照（修复前状态）逐字符吻合：diamond_store.py:122-123/137、mixer_store.py:251-252/266、test_store.py:281-282/296、yfcc100m_mysql_store.py:136-137/128（函数名 _get_obj_abosolute_path 的拼写错误亦与源码一致）。",
+    "hits": [
+      {
+        "gt_function": "get_object_src_http + _get_obj_absolute_path (os.path.join(DATAROOT, obj_path) → safe_join)",
+        "matched_alerts": ["result-1 (diamond_store.py:137)", "result-2 (mixer_store.py:266)", "result-3 (test_store.py:296)"],
+        "status": "hit",
+        "detail": "code_before 与数据库源码完全一致；污点流起点（/obj/<path:obj_path> 路由参数）到 sink（send_file）与修复所针对的越权读取通道相同。这三个 store 对应元数据中三个同时修改 _get_index_absolute_path 与 _get_obj_absolute_path 的 file_change_id。"
+      },
+      {
+        "gt_function": "get_object_src_http + _get_obj_abosolute_path (join(DATAROOT, dataset, rel_path))",
+        "matched_alerts": ["result-6 (yfcc100m_mysql_store.py:128)"],
+        "status": "hit",
+        "detail": "file_change_id 85493540041570 的三个函数中，get_object_src_http 与 _get_obj_abosolute_path 的漏洞通道被 result-6 精确命中。"
+      },
+      {
+        "gt_function": "_get_object_element (file:// src_uri 改为 _get_obj_absolute_path)",
+        "matched_alerts": [],
+        "status": "not_flagged_justified",
+        "detail": "该函数仅构造 'file://' + join(...) 的 URI 字符串（yfcc100m_mysql_store.py:141-167），不执行文件访问；按 Pass 1 sink 判定标准（纯路径/URI 构造不是 sink）不产生告警是正确的，不算漏报。"
+      },
+      {
+        "gt_function": "_get_index_absolute_path (join(INDEXDIR, index) → safe_join)",
+        "matched_alerts": [],
+        "status": "not_flagged_justified",
+        "detail": "各 store 的 gididx 路由参数为默认 string 转换器（单段、不含 '/'，且拼接了字面前缀 'GIDIDX'+upper），无法注入 '/' 或构造绝对路径穿越 INDEXDIR；该修复属于纵深防御加固，本就无可利用的污点路径。labels/query 也未把 gididx 建模为 source。不算漏报。"
+      }
+    ],
+    "additional_real_findings": [
+      {
+        "matched_alerts": ["result-4 (video_store.py:104 os.stat)", "result-5 (video_store.py:162 ffmpeg Popen)"],
+        "status": "same_class_real_issue",
+        "detail": "video_store 的 /obj/start/<int>/span/<int>/<path:video> 通道与被修复的各 backend 结构相同（join(DATAROOT, video) 无守卫 → 文件访问），属同一 CWE-22 漏洞类的真实可达流；但 video_store 的 _get_obj_absolute_path 未出现在用户提供的函数变更列表中（可能由其他提交修复或引入较晚，未读取修复提交无法确认），故单列为同类真实发现而非该 commit 函数级直接命中。"
+      }
+    ],
+    "conclusion": "真实漏洞命中：是。修复 commit 针对的可利用 send_file 越权读取通道（diamond/mixer/test/yfcc100m_mysql 四个 backend 的 get_object_src_http + _get_obj_absolute_path/_get_obj_abosolute_path）全部被正式 Pass 1 告警覆盖（result-1/2/3/6），无漏报；augment_store 在该快照中已使用 safe_join（对应其未产生告警且其 send_file sink 标签为 fp，属已修复状态）；未被命中的 _get_index_absolute_path 与 _get_object_element 变更分别对应不可利用通道与纯 URI 构造，不构成假阴性。另有 video_store 两条同类真实发现（result-4/5）超出提供的函数列表。"
+  }
+}

@@ -1,0 +1,207 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-22",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\pyload\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 only (source exploration + candidate extraction query generation; no CodeQL execution, no compile, no LLM labeling in this round) against the pyload_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 (Path Traversal) with the Phase-2 pass query name Pass1_PathTraversal.ql. The CodeQL database pyload-db sits INSIDE the source tree, so all exploration, searching and evidence collection excluded pyload-db (only codeql-database.yml was read for metadata). Ground-truth-looking artifacts at the repo root (CVE_VULNERABILITY_REPORT.md, CVE_Application_Report_Unassigned.md, VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv) were NOT opened, per the experiment-independence rule. The database sourceLocationPrefix matches the explored tree (creation sha 14a9f112), so file/line evidence below refers to the snapshot the database was built from. The audit target is pyLoad 0.5.0b3 (pyload-ng; VERSION file 0.5.0b3, src/pyload/__init__.py reads the package version), a Python download manager: a Flask web UI + JSON/RPC API layer (src/pyload/webui, src/pyload/core/api) drives a download core (src/pyload/core) with a plugin system (459 files under src/pyload/plugins) that downloads files into a configurable storage folder, organizes them into per-package folders derived from user-supplied package names, and post-processes them (archive extraction via extractors, checksum, anti-virus, scripts)."
+  },
+  "target": {
+    "project": "pyload",
+    "projectDescription": "pyLoad 0.5.0b3 (pyload-ng) - download manager with web interface. Entry: src/pyload/__main__.py (argparse CLI: --userdir/--tempdir/--storagedir/--pidfile; Core.__init__ core/__init__.py:80 builds userdir/tempdir/storagedir, makedirs core/__init__.py:96/:119-120/:141, chdir datadir :97). Web UI: src/pyload/webui/app (Flask app factory, blueprints app/api/cnl/json) started by webui/webserver_thread.py; PYLOAD_API is the core Api object (src/pyload/core/api/__init__.py, 1431 lines) exposed to the web layer. Input flows: (1) HTTP - /files/get/<path:path> file download (app_blueprint.py:159-165: unquote(path).replace('..','') then flask.send_from_directory(storage_folder, path)), /render/<path:filename> template render (app_blueprint.py:33-37 via render_template -> flask_themes2.render_theme_template helpers.py:84-86), /pathchooser//filechooser/ directory browser (app_blueprint.py:252-332: flask.request.args.get('path') -> os.path.normpath -> isfile/isdir/realpath/relpath/listdir/join/getmtime/getsize), /api/<func>[/<args>] dynamic RPC (api_blueprint.py:21-58: route vars func/args + flask.request.args.items()/form.items() kwargs -> call_api -> getattr(api, func)(...) with ast.literal_eval, api_blueprint.py:65-77), /json/* endpoints (json_blueprint.py: add_package multipart upload flask.request.files['add_file'] -> file.filename -> os.path.join(storage_folder, 'tmp_'+filename) -> file.save file write :148-157; edit_package pack_folder form field -> api.set_package_data {'_folder': value} :187-204), /flash/* ClickNLoad endpoints (cnl_blueprint.py, localhost-restricted by local_check :22-36; addcrypted :84-110 writes open(os.path.join(storage_folder, package-with-/-\\\\/-:-stripped + '.dlc'), 'wb') :93-97; add/addcrypted2/flashgot feed api.add_package(package, urls)). (2) Core API methods reachable via RPC: add_package(name, links, dest) core/api/__init__.py:418 (folder = name sanitized :427-438 -> FileManager.add_package -> PyPackage._folder, exposed as PyPackage.folder via safepath datatypes/pypackage.py:26-28 -> download destination plugins/base/downloader.py:318-322 safejoin(dl_folder, folder) + os.makedirs; extraction destination plugins/addons/ExtractArchive.py:239-255), upload_container(filename, data) :944-959 and check_online_status_container(container, data) :526-543 (open(os.path.join(storage_folder, 'tmp_'+filename/container), 'wb') with NO sanitization of the second join component), set_package_data(package_id, data) :983-1002 (setattr(p, key, value) incl. '_folder' - the json edit_package route feeds this), set_config_value :174-197 (config values incl. storage_folder / ExtractArchive destination+passwordfile are settable through /json/save_config). (3) Remote content: downloaded file names (PyFile.name sanitized by purge.name datatypes/pyfile.py:29-34; HTTP content-disposition filename parsed and sanitized in core/network/http/http_chunk.py:281-353 via posixpath/ntpath basename + purge.name + lstrip('.')), archive entry names (UnZip.py:87-92 z.namelist() members passed to z.extractall(self.dest) :90 with no pyload-side entry sanitization - relies on stdlib; UnTar.py:11-23 _safe_extractall has an explicit CVE-2007-4559 commonprefix guard), plugin updates fetched from the update server and written under userplugins (UpdateManager.py:377-378), torrent bencode 'name' (containers/TORRENT.py:62-74 via safename). (4) CLI (operator-trust): sys.argv __main__.py:282 + core/__init__.py:309-342, argparse fields args.userdir/tempdir/storagedir/pidfile __main__.py:287-292.",
+    "pass": 1,
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\pyload_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "codeql-database.yml: primaryLanguage: python",
+      "source tree is pure Python (src/pyload/**.py, 459 plugin files + core + webui)",
+      "pyproject.toml / setup.py / setup.cfg Python packaging manifests at repo root"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\pyload_vuln\\pyload-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\pyload_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "14a9f112b6f35e2b6032f2ccfc929cf2b96a21c6",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:57:00.612829800Z"
+    },
+    "baselineLinesOfCode": 44581,
+    "finalised": true,
+    "locationNote": "pyload-db is nested INSIDE the pyload_vuln source tree; every exploration search and both extraction queries exclude /pyload-db/ (and /tests/) via the excludedPath predicate."
+  },
+  "toolchain": {
+    "qlpack": "iris/qlpack.yml at the workspace root (name: iris/pyload-cwe22, dependencies: codeql/python-all '*') - already present, matches WORKFLOW.md Step 0 output",
+    "packResolutionExpected": "codeql/python-all 6.1.x family (WORKFLOW.md validated baseline: CodeQL CLI 2.24.x/2.25.x + codeql/python-all 6.1.x); local CLI reports 2.25.1",
+    "codeqlCli": "2.25.1 (E:\\codeql)",
+    "compatibilityBasis": "Extraction queries follow the proven AST-only shapes from the earlier Path_Traversal projects on this same toolchain (dfetch/copyparty/guarddog/mindsdb): no QL classes, no API::Node-to-DataFlow::Node assignment, no @kind metadata on the multi-column select, moduleHint instead of module, Location API via getLocation() (AstNode.getFile() does not exist)."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "additive evidence normalized to [0,1]: imports +0.45, routes/decorators +0.30, runtime/bootstrap +0.20, layout +0.05",
+      "candidates": [
+        {
+          "name": "Flask",
+          "score": 1.0,
+          "evidence": [
+            "import flask / import flask_themes2 / from werkzeug.serving import WSGIRequestHandler (webui/app/__init__.py:14-16) [+0.45 imports]",
+            "@bp.route(...) decorators on 40+ handlers across webui/app/blueprints/{app,api,cnl,json}_blueprint.py (app_blueprint.py:27-443, api_blueprint.py:21-100, cnl_blueprint.py:49-199, json_blueprint.py:16-420) [+0.30 routes]",
+            "App class factory with app.register_blueprint(blueprint) loop (webui/app/__init__.py:36-37, 62-66 _configure_blueprints) and flask.Blueprint construction in every blueprint module (e.g. app_blueprint.py:23 bp = flask.Blueprint('app', __name__)) [+0.20 bootstrap]",
+            "blueprints/ + extensions/filters/globals/processors/handlers layout under webui/app [+0.05 layout]"
+          ]
+        }
+      ],
+      "supportLibraries": [
+        "flask_themes2 (theme templates + /_themes static; render_template wrapper webui/app/helpers.py:84-86, static_file_url :70-76)",
+        "werkzeug (flask.send_from_directory file download app_blueprint.py:165; FileStorage.save upload json_blueprint.py:157)",
+        "flask_session / flask_caching / flask_babel / flask_compress / jinja2 (webui/app/extensions.py, _configure_templating webui/app/__init__.py:79-101)"
+      ]
+    },
+    "selected": "Flask (score 1.0 >= 0.75, primary; no other framework above 0.5 - no bottle/django/fastapi code, only a legacy bottle comment at api_blueprint.py:20)",
+    "notes": "Flask reference references/flask.md loaded in addition to references/python.md and references/patterns.md. flask/werkzeug/flask_themes2 are NOT part of the CodeQL database (only the pyload tree is), so all flask.* call shapes are matched syntactically (match_kind 'ast')."
+  },
+  "inputBoundaryInventory": {
+    "summary": "pyLoad's untrusted-input boundaries are (1) the Flask HTTP surface (route path variables, request.args/form/files/authorization, incl. an unrestricted dynamic getattr RPC dispatcher at /api/<func>), (2) the core Api methods those RPC/webui calls reach (package name -> folder, upload container filename, package data dict with _folder, config values incl. storage_folder), (3) remote/network content (downloaded file names, HTTP content-disposition, archive entry names, plugin-update payloads, torrent bencode names), and (4) the operator-level CLI. The filesystem-operation sink channels are the werkzeug/flask file-serving calls (send_from_directory, FileStorage.save), builtin/io open (download chunks, containers, config, logs, passwords, captcha, plugin data), os.makedirs (package destination folders), archive extractors (zipfile.extractall without pyload-side entry checks, tarfile behind a commonprefix guard, 7z/UnRAR subprocess), deletion/move/copy families, and the os.path.* propagation/validation chain (join/normpath/realpath/relpath/basename/commonprefix/isdir/isfile) that builds and checks the accessed paths.",
+    "sourceFamilies": [
+      "http_form (flask.request.form[...] subscripts and .get/.getlist calls: login username/password app_blueprint.py:53-54 + api_blueprint.py:83-84, log form app_blueprint.py:355-363, CNL package/source/referer/urls/passwords/crypted/jk cnl_blueprint.py:59-121/:164-167, json add_name/add_links/add_password json_blueprint.py:142-145, rpc u/p api_blueprint.py:31-32)",
+      "http_args (flask.request.args.get: pathchooser path app_blueprint.py:257, json id/pid/pos/fid/category/section json_blueprint.py:80/:98/:113/:127/:236-237/:263; args.items() in the rpc kwargs loop api_blueprint.py:53)",
+      "http_iter (flask.request.args.items() + flask.request.form.items() chained in api_blueprint.py:53 - EVERY query/form key becomes an rpc kwarg, unquote()d at :55)",
+      "http_file (flask.request.files['add_file'] multipart upload json_blueprint.py:148) and http_file_name (file.filename attribute read :152 feeding package_name and the tmp_+filename join :154-156)",
+      "http_auth (flask.request.authorization.get('username'/'password') api_blueprint.py:28-29)",
+      "route_param (route variable parameters: get_file(path) app_blueprint.py:161 - THE /files/get/<path:path> download path; render(filename) :34 - /render/<path:filename>; rpc(func, args) api_blueprint.py:24 - the /api/<func>[/<args>] dynamic RPC selector+args; filemanager(path) :439 - route declares no variable, kept for labeling to discard)",
+      "api_param (core Api methods receiving RPC-controlled values: add_package(name) core/api/__init__.py:418 - name becomes the package folder after :427-438 sanitization; upload_container(filename, data) :944; check_online_status_container(container, data) :526; set_package_data(package_id, data) :985 - setattr incl. _folder; set_package_name(package_id, name) :902; set_config_value(category, option, value, section) :174 - SETTINGS-level users can move storage_folder / extraction destination / password file through /json/save_config json_blueprint.py:258-275)",
+      "api_dispatch (call_api(func, *args, **kwargs) api_blueprint.py:65 -> getattr(api, func)(...) :72-75 - dynamic dispatch, target resolution impossible statically; recorded as a coverage gap, the api_param rows carry the receiving side)",
+      "archive_entry (zipfile namelist / tarfile getnames return values: UnZip.py:55-62/:87-92, UnTar.py:55-58/:79 - remote-controlled archive entry names feeding extractall members and the self.files join list)",
+      "cli (sys.argv: __main__.py:282 main(cmd_args=sys.argv[1:]), core/__init__.py:309-342 - OPERATOR-trust level, emitted for labeling to classify, NOT automatically attacker sources)",
+      "cli_arg (parsed argparse Namespace fields args.userdir/tempdir/storagedir/pidfile/daemon/quit __main__.py:287-292 - the storage/user/temp directory anchors and pidfile, operator-trust level)"
+    ],
+    "sinkChannels": [
+      "file_open: builtin open(...) argument 0 - api/__init__.py:346 (log read), :535-540 (check_online_status_container 'tmp_'+container write - RPC-controlled second join component), :951-956 (upload_container 'tmp_'+filename write), cnl_blueprint.py:97 (dlc write, separators stripped), downloader.py:358 (scan_download read), http_chunk.py:58/:69/:183/:208 (chunk info + download chunk files 'ab'/'wb' - the real download write), http_download.py:90/:96 (chunk merge), ExtractArchive.py:585/:591/:609 (password file read/create/write), HotFolder.py:63/:68/:75 (watch-folder state), MergeFiles.py:42/:51 (merge output/input), UpdateManager.py:377 (plugin update write), CCF.py:62, TORRENT.py:51/:74, DLC.py:118, RSDF.py:58, TXT.py:44/:72, container.py:69 (remote container 'tmp_' write), captcha.py:86, plugin.py:297 (upload read)/:406 (html dump), config/parser.py, account_manager.py, database_thread.py, plugin_thread.py, plugin_manager.py, Checksum/AntiCaptcha/Captcha9Kw/DeathByCaptcha/ExpertDecoders reads",
+      "io_open: io.open in core/utils/fs.py:158/:167/:200/:206/:207/:230 (checksum/flush/merge/mkfile - the fs wrapper layer)",
+      "file_response: flask.send_from_directory(directory, path) app_blueprint.py:165 - argument 1 carries the request-controlled relative path (base directory is the configured storage_folder)",
+      "file_save: werkzeug FileStorage.save(file_path) json_blueprint.py:157 - argument 0 is join(storage_folder, 'tmp_' + file.filename), filename from the multipart upload",
+      "template_render: render_template(filename) app_blueprint.py:36 (argument 0, the /render route variable) and flask_themes2.render_theme_template(themeid, template, ...) webui/app/helpers.py:86 (argument 1) - template file lookup in the theme/jinja loaders",
+      "archive_extract: z.extractall(self.dest, members=namelist-filtered) UnZip.py:90 (argument 0 = dest; members from z.namelist() :87-89 with NO pyload-side '..' check - stdlib zipfile sanitization is the only guard); tar.extractall(path) UnTar.py:23 and _safe_extractall(t, self.dest) UnTar.py:78 (behind the CVE-2007-4559 commonprefix guard UnTar.py:11-21); subprocess.Popen of the 7z/UnRAR CLI with dest in the command list SevenZip.py:261, UnRar.py:289; HjSplit open(join(self.dest, name)) HjSplit.py:88",
+      "dir_create: os.makedirs argument 0 - downloader.py:322 (dl_dirname = safejoin(storage_folder, package().folder) - the package-name-derived destination), ExtractArchive.py:255 (extract_folder = join(storage_folder, folder, destination-config)), webui/app/__init__.py:84/:104 (jinja/session cache under tempdir), core/__init__.py:96/:119/:120/:141 (userdir/tempdir/storagedir), account_manager.py:30, plugin_manager.py:25/:194, config/parser.py:67/:75, database_thread.py:78, HotFolder.py:60, ExternalScripts.py:83",
+      "file_delete / dir_delete: os.remove (http_download.py:110, ExtractArchive.py:521, Checksum.py:252/:262/:393/:419, BasePlugin.remove path plugin.py:112-114 -> fs.remove fs.py:329 -> send2trash/rmtree/os.remove), os.rmdir (ExtractArchive.py:388/:421), send2trash.send2trash (ExtractArchive.py:525, AntiVirus.py:109, fs.py), shutil.rmtree (fs.py remove branch)",
+      "file_move / file_copy / file_chmod: shutil.move (HotFolder.py:105, AntiVirus.py:118/:127/:134, database_thread.py:144, fs.py:257/:273), shutil.copy/copy2/copyfile/copytree (account_manager.py:87, config/parser.py:68/:85, fs.py:75-88, AntiVirus), os.chmod (account_manager.py:157, parser.py:72/:78/:240, database_thread.py:100, BasePlugin.set_permissions plugin.py:126-135)",
+      "path_propagation/validation: os.path.join (the dominant path builder: app_blueprint.py:141-146/:297/:300/:306/:308, api/__init__.py:536-537/:952-953, cnl_blueprint.py:93, json_blueprint.py:154, downloader.py:262/:489/:515, ExtractArchive.py:239-266, container.py:64, TORRENT.py:71, UpdateManager.py:328/:377/:414, core dirs, fs.py internals), os.path.normpath (app_blueprint.py:257 - applied to the request path, propagation NOT containment), os.path.realpath/relpath/abspath (pathchooser app_blueprint.py:269-283, api/__init__.py:1262-1266, fs.fullpath fs.py:124), os.path.dirname/basename/splitext/split/splitdrive (extractor archivetype, downloader, containers, pathchooser), os.path.commonprefix (UnTar.py:15 - the containment guard), os.path.isdir/isfile/isabs/exists/getmtime/getsize (pathchooser :259-308, fs, exists plugins/helpers.py:245, extractors)",
+      "fs/self wrappers: fs.free_space (api/__init__.py:309, thread_manager.py:329, core/__init__.py:386), fs.remove (plugin.py:114), self.remove(...) (downloader.py:263/:323/:338/:394/:495, container.py:51 - BasePlugin.remove wrapper), self.set_permissions(...) (downloader.py:323/:338, ExtractArchive.py:258/:360/:363 - chmod wrapper)",
+      "process_file_write: subprocess.Popen([cmd, ..., dest, ...]) in SevenZip.py:261 and UnRar.py:289 - the extractor binaries write the extracted tree at the Python-supplied destination; other subprocess uses (ExternalScripts, AntiVirus, AntiStandby, plugins/helpers) are Pass 2 material and not emitted as path sinks"
+    ],
+    "guardsAndEvidence": [
+      "purge.name() core/utils/purge.py:41-57 - removes path separators (both '/' and '\\\\') plus platform-bad chars from file names; applied at PyFile.name setter pyfile.py:29-34 and content-disposition http_chunk.py:349 - separator removal makes '..' segments inert (no separators left to traverse with)",
+      "safename/safepath/safejoin core/utils/old/__init__.py:40-83 - splitdrive + per-component purge.chars (separators removed, NOT '..' rejection); safepath preserves '..' PATH COMPONENTS on posix (split on os.sep, '..' contains no bad chars, join rejoins it) - partial sanitizer, evidence recorded for labeling",
+      "add_package folder sanitization api/__init__.py:427-438 - http(s):// stripped, ':' removed, '/'/'\\\\' replaced by '_' (separators neutralized; '..' without separators is a harmless single component)",
+      "CNL addcrypted dlc path cnl_blueprint.py:93-94 - package.replace('/','').replace('\\\\','').replace(':','') (same separator-strip shape)",
+      "get_file '..' strip app_blueprint.py:163 - unquote(path).replace('..','') removes all non-overlapping '..' substrings BEFORE flask.send_from_directory; werkzeug's send_from_directory/safe_join (external to the DB) is the actual containment for absolute paths and residual traversal",
+      "UnTar._safe_extractall UnTar.py:11-21 - explicit CVE-2007-4559 guard: os.path.abspath + os.path.commonprefix containment per member, raises ArchiveError on traversal (commonprefix is not a true prefix-boundary check - a same-prefix directory could pass; recorded for labeling)",
+      "ExtractArchive prefix check ExtractArchive.py:385 - extract_folder.startswith(pack_dl_folder) before the empty-folder rmdir (string-prefix containment, prefix-boundary caveat)",
+      "content-disposition sanitization http_chunk.py:347-350 - posixpath.basename + ntpath.basename + purge.name(sep='') + lstrip('.') on every server-provided filename",
+      "TORRENT pack name containers/TORRENT.py:70 - safename() on the bencode 'name' before the tmp_ torrent join",
+      "local_check decorator cnl_blueprint.py:22-36 - /flash/* endpoints restricted to localhost REMOTE_ADDR/HTTP_HOST (trust-boundary narrowing, but CORS '*' headers at :39-46 and FlashGot browser bridging keep the rows in scope for labeling)",
+      "login_required(permission) webui/app/helpers.py:188-217 + Api permission decorators core/api/__init__.py:35-41 - auth/permission gates on all webui routes and rpc methods (authorization context, not path sanitization)",
+      "TOCTOU-relevant sequences: pathchooser app_blueprint.py:257-289 (normpath -> isfile/isdir -> listdir) and ExtractArchive.py:254-255/:304 (exists() -> makedirs; exists(fname) :304 -> extract) - check-then-use on attacker-influenced paths, recorded as evidence"
+    ],
+    "notObserved": [
+      "NO pathlib usage anywhere in the pyload tree (no Path/PurePath constructions) - no pathlib sink family emitted",
+      "NO os.open / os.symlink / symlink-following logic observed - not emitted",
+      "NO os.chdir on request-controlled paths (only core/__init__.py:97 datadir and :446 sys.path[0] at bootstrap) - chdir family emitted but rows are config/bootstrap-level",
+      "NO request.headers/cookies/get_json data flows (headers.get only checks X-Requested-With helpers.py:203); referrer/values.next feed get_redirect_url (open-redirect surface, Pass 9 material) - NOT emitted as path-traversal sources",
+      "NO environment-variable path inputs (os.environ['PATH'] only in which() fs.py:379, os.getenv('APPDATA') only for the default datadir core/__init__.py:52) - documented, not emitted",
+      "NO message-queue consumers (no celery/rq/kafka imports); NO async handlers (no async def routes); the webui is fully synchronous Flask",
+      "flask.request.environ.get('REMOTE_ADDR'/'HTTP_HOST') cnl_blueprint.py:25-26 - request metadata for the localhost allowlist, not path data - not emitted",
+      "flask.session reads (s.get) - server-side session state, not an untrusted boundary - not emitted"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql (this round)",
+      "iris/extraction/sinks.ql (this round)"
+    ],
+    "executionPlan": "Phase 1 Step 3 (not in this round): codeql pack install already done in Step 0 (qlpack.yml present); then `codeql query run iris/extraction/sources.ql --database <DB> --output iris/extraction/sources.bqrs` and `codeql bqrs decode ... --format=csv --output iris/extraction/sources.csv`, sequentially, likewise for sinks. NOT database analyze / SARIF.",
+    "metadataForm": "Plain multi-column select queries WITHOUT @kind (a @kind problem query requires exactly 2 select columns and would break the candidate table; @kind table is not assumed to exist). Metadata carried as @name/@description/@id/@tags documentation only, as in the previous Path_Traversal projects.",
+    "columnContract": [
+      "node - candidate AST node (location-backed, decodes as file:line:col)",
+      "role - 'source_candidate' or 'sink_candidate' (constant per query)",
+      "callable - callable/member/field name, or the function name for parameter rows",
+      "flow_kind - family tag (see flowKinds below)",
+      "receiver - syntactic receiver hint (base name of the object expression; enclosing class name for definition rows; '' if none)",
+      "moduleHint - dotted module path of the containing module (variable named moduleHint; 'module' is not a valid QL variable name), or literal module hints ('flask', 'flask.request', 'zipfile', 'tarfile', 'builtins', 'io', 'os', 'os.path', 'shutil', 'send2trash', 'subprocess', 'werkzeug.datastructures', 'flask_themes2', 'sys') for external/stdlib channels",
+      "arg_index - 0-based positional index carrying the value/path (-1 when the value is a return value, an attribute value, or a variadic/star-arg); parameter position in the definition (including the self slot) for definition rows",
+      "file - absolute path via the Location API (AstNode.getLocation().getFile().getAbsolutePath(); AstNode.getFile() does not exist)",
+      "line - 1-based start line (AstNode.getLocation().getStartLine())",
+      "match_kind - 'ast' (syntax-level match) for every family: flask/werkzeug/stdlib are not part of the database so no family resolves at API level; the column is kept for cross-project contract consistency"
+    ],
+    "matchKindSemantics": {
+      "api": "resolved real API call via API graphs - expected to produce ZERO rows in this project (external libs not in the database; all channels matched syntactically)",
+      "ast": "syntax-level match on the qualifier/attribute/subscript shape - all emitted families"
+    },
+    "flowKinds": {
+      "sources": [
+        "http_form (flask.request.form subscript/.get/.getlist)",
+        "http_args (flask.request.args.get)",
+        "http_values (flask.request.values.get - redirect-only surface, kept for labeling)",
+        "http_auth (flask.request.authorization.get)",
+        "http_iter (flask.request.args.items()/form.items())",
+        "http_file (flask.request.files subscript)",
+        "http_file_name (FileStorage.filename attribute)",
+        "route_param (route-variable parameters of path-relevant handlers)",
+        "api_param (core Api method parameters receiving RPC values)",
+        "api_dispatch (call_api func parameter - the getattr dispatch selector)",
+        "archive_entry (zipfile namelist / tarfile getnames return values)",
+        "cli (sys.argv)",
+        "cli_arg (parsed argparse Namespace attribute reads - operator-trust)"
+      ],
+      "sinks": [
+        "file_open (builtin open, argument 0)",
+        "io_open (io.open, argument 0)",
+        "file_response (flask.send_from_directory, argument 1)",
+        "file_save (FileStorage.save, argument 0)",
+        "template_render (render_template call argument 0 / flask_themes2.render_theme_template argument 1)",
+        "archive_extract (zipfile/tarfile extractall argument 0, _safe_extractall argument 1)",
+        "process_file_write (extractor subprocess.Popen command list)",
+        "dir_create (os.makedirs/os.mkdir, argument 0)",
+        "file_delete (os.remove / send2trash / self.remove / fs.remove, argument 0)",
+        "dir_delete (os.rmdir / shutil.rmtree, argument 0)",
+        "file_move (shutil.move / os.rename, argument 0 = source)",
+        "file_copy (shutil.copy/copy2/copyfile/copytree, argument 0 = source)",
+        "file_chmod (os.chmod / self.set_permissions, argument 0)",
+        "chdir (os.chdir, argument 0)",
+        "path_stat (os.stat/statvfs/access, os.path.isdir/isfile/isabs/exists/getmtime/getsize, fs.free_space, argument 0)",
+        "dir_list (os.listdir, argument 0)",
+        "dir_walk (os.walk, argument 0)",
+        "path_join (os.path.join, argument 0)",
+        "path_canon (os.path.normpath/realpath/abspath, argument 0)",
+        "path_rel (os.path.relpath, argument 0)",
+        "path_part (os.path.dirname/basename/split/splitext/splitdrive, argument 0)",
+        "path_containment_check (os.path.commonprefix, argument 0)",
+        "file_api_def (definition row of a pyload-internal path-taking API with its path parameter position)",
+        "path_api_def (definition row of an internal path propagation/sanitization wrapper: safejoin/safepath/safename/purge.name/fs.fullpath)"
+      ]
+    },
+    "exclusions": [
+      "/tests/ (pyload_vuln/tests - unit test tree; rows there, if any, would be labeled FP)",
+      "/pyload-db/ (the CodeQL database directory nested inside the source tree - MUST be excluded from every search and query)",
+      "repo-root build scripts (setup.py) kept in scope like in the previous projects - rows, if any, expected to be labeled none/FP",
+      "NOT read (experiment independence): CVE_VULNERABILITY_REPORT.md, CVE_Application_Report_Unassigned.md, VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv at the repo root"
+    ]
+  },
+  "uncoveredCases": [
+    "Dynamic dispatch: getattr(api, func)(...) api_blueprint.py:72-75 resolves the RPC target by a runtime string - statically unresolved; covered only by the route_param/api_dispatch rows on the caller side and the api_param definition rows on the receiver side; taint linking needs MySummaries steps in Phase 2",
+    "External-library containment not visible to CodeQL: werkzeug safe_join inside flask.send_from_directory, jinja2 split_template_path in the theme loaders, stdlib zipfile extractall member sanitization - these guards run outside the database; the pyload-side rows are still emitted and the labeling step must weigh the external guard",
+    "db-backed attributes: PyPackage._folder / PyFile.name / PyFile.url are loaded from the sqlite database (file_database/storage_database) and re-exposed as attributes - attribute reads of these are NOT emitted as sources (over-broad); the api_param rows (add_package/set_package_data/set_package_name) capture the write side of the same values",
+    "update-server payloads: UpdateManager plugin_name/plugin_type come from a remote version-check response fetched with pyload's own HTTP layer (network source, not a syntactic request boundary); only the sink row (open(join(userplugins, ...)) UpdateManager.py:377) is emitted, the network source side is left to the labeling context",
+    "torrent bencode 'name' (containers/TORRENT.py:62-68): remote archive-content parse feeding safename + join - sink row emitted via the generic open family, the parsed-name source is documented here only",
+    "content-disposition filename (http_chunk.py:281-353): remote header parse, fully sanitized on receipt (basename x2 + purge.name + lstrip('.')); the sanitized value flows into pyfile.name/download paths - recorded as guard evidence, not a source row",
+    "async/dynamic import aliases: no async handlers exist; alias imports of os/shutil (e.g. 'from shutil import move' inside fs.py local aliases move = shutil.move at fs.py:257) are matched at their original call sites via the os/shutil qualified families where the qualifier is visible; purely local alias reassignment (copy/move local vars in fs.py internals) is covered by the file_api_def rows for the fs wrappers instead"
+  ]
+}
