@@ -1,0 +1,133 @@
+{
+  "triage_run": {
+    "tool": "independent LLM path re-review",
+    "model": "glm-5.3 (Z.ai GLM) via Claude Code CLI",
+    "generated_at": "2026-10-20T00:00:00Z (session-local)",
+    "ruleId_filter": "py/augur/mindsdb/pass3-ssrf",
+    "sarif": "results/pass3.sarif",
+    "source_root": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/mindsdb_vuln",
+    "formal_alerts_reviewed": 2,
+    "diagnostics_only": false,
+    "statement": "SARIF contains 2 formal CWE-918 path-problem results for rule py/augur/mindsdb/pass3-ssrf (both in mindsdb/api/http/namespaces/file.py, both with codeFlows). No parse diagnostics-only condition applies. Diagnostic queries and the optional native CodeQL SSRF baseline were not counted as Augur TP.",
+    "independence_note": "Triage based solely on pass3.sarif codeFlows, labels.json, query_generation_notes.md, iris_report.md and direct reading of the Python sources in the DB root. Root-level report/*.md artifacts in the DB root (mindsdb_ssrf_cve_application_report.md, mindsdb_unfixed_ssrf_cve_status_report.md) were not read; an incidental grep hit on their filenames was not used as evidence. No PyVul ground truth, fix commits or CVE advisories were consulted."
+  },
+  "findings": [
+    {
+      "finding_id": "pass3-ssrf-01",
+      "ruleId": "py/augur/mindsdb/pass3-ssrf",
+      "location": {
+        "file": "mindsdb/api/http/namespaces/file.py",
+        "line": 99,
+        "column": 38,
+        "function": "File.put (class File, flask_restx Resource, route '/<name>' on Namespace 'files')"
+      },
+      "sink": {
+        "code": "info = requests.head(url)",
+        "kind": "requests.head, positional arg 0 = url",
+        "executes_network_request": true
+      },
+      "source": {
+        "code": "data = request.json (file.py:83)",
+        "kind": "Flask request JSON body of PUT /api/files/<name>",
+        "attacker_controlled": true
+      },
+      "taint_path": [
+        "file.py:83 data = request.json  (also reachable via multipart branch: request.stream chunks at :73 feed python-multipart parser; on_field callback at :45-48 writes attacker-controlled form fields into the same `data` dict, incl. 'source' and 'source_type')",
+        "file.py:92 if data.get(\"source_type\") == \"url\":",
+        "file.py:93 url = data[\"source\"]",
+        "file.py:99 requests.head(url)"
+      ],
+      "codeflow_check": "SARIF codeFlows match the real code: threadFlow steps at file.py:83:20 (request.json attribute), 93:13 (url assignment), 99:38 (sink argument). Second variant adds the `data` local at 83:13. The data-flow relation is real, direct and local (no modeling artifact involved).",
+      "q1_source_boundary": "Yes. request.json / multipart form fields of an HTTP endpoint. Entry real and reachable: file_ns is a registered protected namespace (api/http/initialize.py:28, :219, add_namespace at :233-234); before_request auth (initialize.py:251-266) only gates /api/files/* when config['auth']['http_auth_enabled'] is True, and the default is False (utilities/config.py:113-117), so the default self-hosted deployment exposes this endpoint unauthenticated. Untrusted-input threat model holds (even with auth on, any API user reaches it).",
+      "q2_data_propagation": "Yes. `url = data[\"source\"]` (line 93) is passed verbatim as positional arg 0 of requests.head (line 99). Pure in-function local flow; both the JSON branch and the multipart on_field branch populate `data`.",
+      "q3_url_transformation": "None. No urljoin, no base-URL concatenation, no path normalization. The full attacker-supplied URL string is used as-is; scheme, host, port and path are all taken from input.",
+      "q4_sink_is_real_network_request": "Yes. requests.head issues an actual HTTP request (not a Request-object construction, not URL parsing, not local file handling). Response is consumed (Content-Length header at :100), so it is a live network round-trip usable for host/port probing, status-code and size oracles.",
+      "q5_attacker_control_scope": "Entire URL (scheme effectively http/https since requests rejects other schemes; host, port and path fully attacker-chosen). Enables requests to internal RFC1918 hosts, link-local metadata endpoints (e.g. 169.254.169.254), and internal port scanning with a status/Content-Length oracle. Weaker than the sibling requests.get sink (response body not returned here) but still a genuine server-side request to an arbitrary destination.",
+      "q6_protections": "None. No scheme allow-list, no host allow-list, no private-IP/loopback filtering (verified: no is_private_url/ipaddress/is_private usage in any .py of this snapshot), no redirect re-validation. The only conditions around the sink are `is_cloud is True and ctx.user_class != 1` (lines 97-98) — a feature gate, not a security control.",
+      "q7_trusted_fixed_url": "No. This is the 'upload file from URL' feature where the destination URL is itself the user input, not an admin-configured or hard-coded endpoint.",
+      "q8_path_reachability": "Real and verified end-to-end: flask_restx Resource registered under /api/files/<name> (namespace 'files', initialize.py:219), method PUT, body parsed at :83 or multipart at :59-81, branch at :92 requires only that the attacker set source_type='url' and source=<url>. Prior name-uniqueness check (:85-90) is trivially satisfiable. Condition on this specific sink: requests.head executes only when the server runs with cloud config enabled AND the caller's user_class != 1; in that configuration it fires for every non-admin cloud user. The unconditional sibling sink at :116 makes the same taint path exploitable in all deployments.",
+      "q9_miscategorization_check": "No file:/local read, no parse-only, no test code, no diagnostics query. This is a formal path-problem result in production code.",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "reason": "Direct, unconditional data-flow from an unauthenticated-by-default REST body to requests.head(url) with the full URL attacker-controlled and zero validation. Confidence slightly below the get-sink because the head call itself is gated on the cloud/user_class condition; the same tainted URL unconditionally reaches requests.get at :116, so the vulnerability (not just this alert) is certain.",
+      "cwe": "CWE-918"
+    },
+    {
+      "finding_id": "pass3-ssrf-02",
+      "ruleId": "py/augur/mindsdb/pass3-ssrf",
+      "location": {
+        "file": "mindsdb/api/http/namespaces/file.py",
+        "line": 116,
+        "column": 31,
+        "function": "File.put (class File, flask_restx Resource, route '/<name>' on Namespace 'files')"
+      },
+      "sink": {
+        "code": "with requests.get(url, stream=True) as r:",
+        "kind": "requests.get, positional arg 0 = url",
+        "executes_network_request": true
+      },
+      "source": {
+        "code": "data = request.json (file.py:83)",
+        "kind": "Flask request JSON body of PUT /api/files/<name>",
+        "attacker_controlled": true
+      },
+      "taint_path": [
+        "file.py:83 data = request.json  (multipart twin: request.stream at :73 -> on_field at :45-48 populates the same dict)",
+        "file.py:92 if data.get(\"source_type\") == \"url\":",
+        "file.py:93 url = data[\"source\"]",
+        "file.py:116 requests.get(url, stream=True)"
+      ],
+      "codeflow_check": "SARIF codeFlows match the real code: 83:20 (request.json) -> 93:13 (url) -> 116:31 (sink argument); second variant inserts the `data` local. Propagation is a direct local assignment chain — fully source-supported.",
+      "q1_source_boundary": "Yes, identical to finding 01: PUT /api/files/<name> JSON/multipart body; endpoint unauthenticated in the default configuration (http_auth_enabled default False, utilities/config.py:113-117; gating code initialize.py:251-266).",
+      "q2_data_propagation": "Yes. `url = data[\"source\"]` flows verbatim into requests.get's positional URL argument. No indirection beyond the dict read.",
+      "q3_url_transformation": "None — no urljoin/base-URL handling; full URL from input used verbatim.",
+      "q4_sink_is_real_network_request": "Yes. requests.get performs the actual HTTP fetch; the response is iterated and written to disk (:122-124) and registered via ca.file_controller.save_file (:152), making the response body retrievable through the files API (GET /api/files, GET file content). Classic full-read SSRF, not merely object construction or URL parsing.",
+      "q5_attacker_control_scope": "Entire URL: host, port, path, query (scheme limited to http/https by requests). Exploitable for: internal service access, cloud metadata endpoint reads, response-body exfiltration to the attacker via the saved file, and internal port/host scanning (status code reflected in the error message at :117-120). Redirects are followed by default (allow_redirects not set), so even a host-shaped check on the initial URL would not constrain the final destination.",
+      "q6_protections": "None. No scheme/host validation, no private-IP filtering, no redirect re-validation (verified absence in the whole snapshot). The cloud size pre-check (:97-115) is a resource limit, not a destination control, and is skipped entirely on non-cloud deployments and for user_class == 1.",
+      "q7_trusted_fixed_url": "No — attacker-supplied 'source' URL by design of the remote-file-upload feature, in the pre-hardening snapshot.",
+      "q8_path_reachability": "Unconditional within the url branch: only attacker-settable preconditions (source_type == 'url', a not-yet-existing file name). Endpoint registration and auth defaults verified as in finding 01. requests.get at :116 runs for every caller in every deployment mode.",
+      "q9_miscategorization_check": "No file: scheme fetch, no parse-only, no test code, no diagnostics. The later local file write of the response is a consequence of the fetch, not a substitute for it; the SSRF is the network request itself.",
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "reason": "Textbook CWE-918: unauthenticated-by-default REST body -> verbatim full URL -> requests.get, response saved and retrievable, zero validation anywhere on the path, no conditions beyond attacker-settable request fields.",
+      "cwe": "CWE-918"
+    }
+  ],
+  "summary": {
+    "total_formal_alerts": 2,
+    "likely_tp": 2,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "all_in_one_function": "Both alerts are in File.put, mindsdb/api/http/namespaces/file.py, on the same url = data['source'] chain (requests.head :99, requests.get :116)."
+  },
+  "real_vulnerability_hit_assessment": {
+    "question": "Was the real vulnerability of commit 8d13c9c28ebcf3b36509eb679378004d4648d8fe (CWE-918) hit by the formal Augur alerts? (Assessed against the four listed functions using only the SARIF results and source reading; no ground-truth artifacts consulted.)",
+    "functions": [
+      {
+        "function_name": "put.on_file",
+        "file": "mindsdb/api/http/namespaces/file.py",
+        "hit": false,
+        "note": "The on_file callback change (clear_filename on file.file_name) is the arbitrary-file-write / filename-sanitization part of the commit, not CWE-918. No Augur alert covers it, and it is out of CWE-918 scope by definition (no network request). Correctly not counted as an SSRF hit."
+      },
+      {
+        "function_name": "put",
+        "file": "mindsdb/api/http/namespaces/file.py",
+        "hit": true,
+        "evidence": "Both formal alerts (file.py:99 requests.head, file.py:116 requests.get) are exactly the sink pair that the commit guards by adding the is_private_url(url) cloud check before them. The pre-fix snapshot has url = data['source'] (line 93) flowing unvalidated from request.json (line 83) into both calls — the precise vulnerable chain described for this function. This is the primary SSRF of the commit and it is hit, twice (once per sink)."
+      },
+      {
+        "function_name": "create (llama_index_handler, SimpleWebPageReader source_url_link)",
+        "file": "mindsdb/integrations/handlers/llama_index_handler/llama_index_handler.py",
+        "hit": false,
+        "evidence": "The vulnerable code exists in the snapshot (llama_index_handler.py:69-72: SimpleWebPageReader(html_to_text=True).load_data([args['using']['source_url_link']]) with no private-URL check), but the fetch is performed inside the third-party llama_index SDK, which is outside the CodeQL database — no sink node exists for it, so no alert could fire. Not hit."
+      },
+      {
+        "function_name": "select (web_handler crawl, url -> get_all_websites)",
+        "file": "mindsdb/integrations/handlers/web_handler/web_handler.py",
+        "hit": false,
+        "evidence": "The vulnerable code exists in the snapshot (web_handler.py:45-56: urls extracted from the WHERE clause, passed to get_all_websites -> session.get in urlcrawl_helpers.py, no private-URL filter), but the taint crosses the mindsdb_sql parser boundary (SQL text -> AST -> dict values), which the query's data flow cannot bridge — explicitly documented as a known recall gap in query_generation_notes.md §6.2. Not hit."
+      }
+    ],
+    "conclusion": "HIT (partial). The commit's primary and headline SSRF — the put method in mindsdb/api/http/namespaces/file.py — is hit by both formal Augur alerts, at the exact pre-fix sink lines (requests.head :99, requests.get :116). The commit's two secondary SSRF entry points (llama_index_handler create, web_handler select) exist in the snapshot but were not detected, for two structurally different reasons: third-party SDK boundary (invisible sink) and SQL parser boundary (unreachable data flow). The on_file change is a non-CWE-918 file-write fix and is correctly absent. Recall on the commit's CWE-918 fix sites: 1 of 3 functions hit (2 of 4 functions if counting on_file, which is out of scope); precision on formal alerts: 2/2 likely_tp."
+  }
+}

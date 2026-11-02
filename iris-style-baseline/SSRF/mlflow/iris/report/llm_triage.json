@@ -1,0 +1,256 @@
+{
+  "triage_run": {
+    "target": "mlflow (IRIS/Augur Pass 3, CWE-918 SSRF)",
+    "rule_id": "py/augur/mlflow/pass3-ssrf",
+    "reviewer": "independent LLM path re-review (Augur formal alerts only)",
+    "date": "2026-10-20",
+    "sarif": "results/pass3.sarif",
+    "source_tree": "dataset/codeql_databases/ssrf_dbs/mlflow_vuln/mlflow (mlflow 2.9.2.dev0, pre-fix)",
+    "formal_alerts_reviewed": 10,
+    "diagnostics_or_native_baseline_counted": false,
+    "sarif_content_note": "SARIF contains ONLY the formal rule py/augur/mlflow/pass3-ssrf (10 results, each with codeFlows). No diagnostics query results, no native CodeQL SSRF baseline results are present or counted.",
+    "constraints_respected": "Original SARIF, labels.json and formal query untouched; PyVul ground truth, fix commits and CVE advisories not consulted during alert triage (the PyVul commit analysis below was performed only on the user-supplied commit metadata after the per-alert triage was completed, per the task's second instruction).",
+    "verdict_counts": {
+      "likely_tp": 5,
+      "likely_fp": 2,
+      "uncertain": 3
+    }
+  },
+  "shared_threat_model": {
+    "unauthenticated_by_default": "Flask app in mlflow/server/__init__.py:41-46 registers all REST routes (handlers.get_endpoints()) with no authentication middleware; /get-artifact, /model-versions/get-artifact, /ajax-api/2.0/mlflow/upload-artifact, /ajax-api/2.0/mlflow/gateway-proxy are all reachable without credentials (server/__init__.py:70-106).",
+    "second_order_db_sources": [
+      "CreateExperiment (POST /api/2.0/mlflow/experiments/create) accepts attacker-controlled artifact_location; the only validation is validate_query_string (mlflow/utils/uri.py:459-464) which blocks '..' in the query component only — scheme/host/port/path are unrestricted (handlers.py:578-596).",
+      "Run artifact roots inherit the experiment artifact_location (sqlalchemy_store.py:471, 486), so run.info.artifact_uri is attacker-influenced DB content (handlers.py:1255, 1319).",
+      "CreateModelVersion (handlers.py:1626-1650) accepts an attacker-controlled source URI; _validate_source (handlers.py:1590-1621) rejects only local/file URIs and relative paths — http/https remain fully allowed."
+    ],
+    "scheme_dispatch": "get_artifact_repository (artifact_repository_registry.py:57-74, 100-101) dispatches on the URI scheme; http/https -> HttpArtifactRepository constructed with the raw URI; ArtifactRepository.__init__ stores self.artifact_uri (artifact_repo.py:45-46).",
+    "host_control_mechanism": "HttpArtifactRepository._host_creds = _get_default_host_creds(self.artifact_uri) (http_artifact_repo.py:38-40); _get_default_host_creds returns MlflowHostCreds(host=store_uri, ...) (tracking/_tracking_service/utils.py:141-153) — the artifact URI IS the request host. rest_utils.http_request builds url = f\"{cleaned_hostname}{endpoint}\" (rest_utils.py:104-105); strip_suffix only removes a trailing '/', no urljoin, no host allowlist, no scheme check, no private-IP blocking, no redirect re-validation. requests follows redirects by default (allow_redirects not set anywhere on these chains in this tree).",
+    "protections_observed": "validate_path_is_safe (path traversal only), _validate_source (local/file model sources only), validate_query_string ('..' in query only). None neutralizes URL host/scheme control on the modeled chains. _is_servable_proxied_run_artifact_root (handlers.py:190-226, 554, 950, 1261, 1665) diverts http/https/mlflow-artifacts roots to the local serving repo ONLY when the server runs --serve-artifacts (default off)."
+  },
+  "alerts": [
+    {
+      "alert_index": 0,
+      "primary_location": "mlflow/server/handlers.py:1143",
+      "function": "gateway_proxy_handler",
+      "sink": "requests.request(request_type, f\"{target_uri}/{gateway_path}\", json=json_data) (handlers.py:1143) — real outbound HTTP request",
+      "codeflows": [
+        "request.args/request.json (handlers.py:1132) -> args -> gateway_path = args.get('gateway_path') (1134) -> f-string URL -> requests.request arg (1143)"
+      ],
+      "q1_source_is_attacker_request_field": "Yes: request.args (GET) / request.json (POST) on the unauthenticated route /ajax-api/2.0/mlflow/gateway-proxy (server/__init__.py:99-101). Entry reachable when MLFLOW_DEPLOYMENTS_TARGET is set (admin env, handlers.py:1127).",
+      "q2_real_propagation_to_request_url": "Yes: gateway_path is concatenated into the request URL (handlers.py:1143).",
+      "q3_url_processing_changes_target": "No urljoin/base-URL normalization; simple f-string f\"{target_uri}/{gateway_path}\". The prefix target_uri is fixed, and the attacker part always follows a '/', so the attacker cannot change host, port, or scheme — only the path (and via '?'/'#' the query/fragment) of a fixed destination.",
+      "q4_sink_executes_network_request": "Yes, requests.request performs the call.",
+      "q5_control_scope": "path (+query/fragment) on a fixed admin-configured host. No host/port/scheme control. Exploitability limited to proxying arbitrary paths/verbs to the internal deployments gateway (possible gateway-side auth bypass / response disclosure), which is not destination-control SSRF. Redirects are followed by default, but the first hop is admin-chosen; no attacker-controlled redirect source was identified on this chain.",
+      "q6_protections": "Target host fixed by admin env var; no other validation of gateway_path (it may contain '..' — path traversal within the gateway).",
+      "q7_trusted_fixed_url": "Partially: the destination is an operator-configured service, not an attacker-chosen remote resource.",
+      "q8_static_reachability": "Route is unauthenticated and registered unconditionally; sink execution is real. But per CWE-918 host-control criteria the destination is fixed.",
+      "q9_contamination": "None: real HTTP sink, no file:/parse-only/test/diagnostics content.",
+      "verdict": "likely_fp",
+      "rationale": "Genuine unauthenticated proxy with attacker-controlled PATH on an admin-FIXED destination (MLFLOW_DEPLOYMENTS_TARGET). Under a strict CWE-918 threat model (attacker influences the network destination host/port/scheme) this is path-only and does not constitute SSRF; it is a gateway-proxy abuse issue. Residual risk noted above. Matches the query-generation notes' own concern (§7 item 2: 'attacker controls only the path on an admin-fixed host').",
+      "confidence": "high (for the path-only classification)"
+    },
+    {
+      "alert_index": 1,
+      "primary_location": "mlflow/store/artifact/http_artifact_repo.py:64",
+      "function": "HttpArtifactRepository.log_artifact",
+      "sink": "http_request(self._host_creds, endpoint, \"PUT\", data=f, ...) (http_artifact_repo.py:63-64) -> rest_utils.http_request -> url = f\"{cleaned_hostname}{endpoint}\" (rest_utils.py:104-105) -> _get_http_response_with_retries (107) -> session.request (request_utils.py:190) — real outbound HTTP PUT",
+      "codeflows": [
+        "run.info.artifact_uri (handlers.py:1255, upload-artifact handler) -> artifact_dir -> get_artifact_repository(artifact_dir) (1269) -> self.artifact_uri (http_artifact_repo.py:40) -> _get_default_host_creds -> _host_creds -> http_request arg0 (64)",
+        "run.info.artifact_uri (handlers.py:1319, _get_artifact_repo) -> same",
+        "self.artifact_uri direct (http_artifact_repo.py:40) -> same",
+        "self.artifact_uri.split (http_artifact_repo.py:84) -> url (87) -> _get_default_host_creds -> same"
+      ],
+      "q1_source": "Yes, credible second-order: run.info.artifact_uri is DB content derived from the experiment artifact_location, settable via the unauthenticated CreateExperiment API with only query-string validation (handlers.py:578-596; uri.py:459-464). The write side (proto field flow) is not modeled, but the read-side source claim is supported by real mlflow semantics (sqlalchemy_store.py:471/486).",
+      "q2_propagation": "Yes, source-code supported: get_artifact_repository(uri) constructs HttpArtifactRepository with the URI for http/https schemes (registry:100-101; artifact_repo.py:45-46); _host_creds = _get_default_host_creds(self.artifact_uri) (http_artifact_repo.py:38-40); MlflowHostCreds(host=artifact_uri) (utils.py:141-153); http_request uses host_creds.host as the URL host (rest_utils.py:74, 104-105).",
+      "q3_url_processing": "No defense: strip_suffix(hostname, '/') removes only a trailing slash; endpoint is a fixed '/...' path. The HOST is the tainted artifact URI itself — full destination control comes from the source, and no processing neutralizes it.",
+      "q4_sink": "Yes: session.request executes a real PUT; response status checked, body streamed.",
+      "q5_control_scope": "Full URL: scheme, host, port and base path are attacker-controlled via artifact_location/source (e.g. 'http://attacker:8080/x'); only the trailing endpoint path and the '!' query check constrain the tail. Highest-tier exploitability; additionally the outbound request carries the server's Authorization header when MLFLOW_TRACKING_TOKEN/creds are configured (rest_utils.py:74-89) — credential exfiltration amplifier.",
+      "q6_protections": "None effective: no scheme allowlist beyond 'http/https => this repo class' (which the attacker satisfies), no host allowlist, no IP filtering, no redirect re-validation. _is_servable_proxied_run_artifact_root (handlers.py:1261) diverts only when the server runs --serve-artifacts (default off). validate_path_is_safe guards only the uploaded artifact path.",
+      "q7_trusted_fixed_url": "No: the destination is attacker-chosen DB content, not an admin-configured address.",
+      "q8_static_reachability": "Fully reachable: unauthenticated POST /ajax-api/2.0/mlflow/upload-artifact (server/__init__.py:104-106) -> upload_artifact_handler (handlers.py:1220-1283) -> get_artifact_repository(run.info.artifact_uri) (1269) -> log_artifact. 10MB body cap is irrelevant for the PUT sink itself.",
+      "q9_contamination": "None.",
+      "verdict": "likely_tp",
+      "confidence": "high"
+    },
+    {
+      "alert_index": 2,
+      "primary_location": "mlflow/store/artifact/http_artifact_repo.py:88",
+      "function": "HttpArtifactRepository.list_artifacts",
+      "sink": "http_request(host_creds, endpoint, \"GET\", params=params) (http_artifact_repo.py:88) with host_creds = _get_default_host_creds(url) where url = self.artifact_uri.split('/mlflow-artifacts/artifacts')[0] (:84) — real outbound HTTP GET",
+      "codeflows": [
+        "run.info.artifact_uri (handlers.py:1255) -> get_artifact_repository (1269) -> self.artifact_uri.split (http_artifact_repo.py:84) -> url (87) -> _get_default_host_creds -> host_creds -> http_request (88)",
+        "same via handlers.py:1319 (_get_artifact_repo)",
+        "self.artifact_uri direct split chain (84-88)"
+      ],
+      "q1_source": "Yes — same second-order artifact-URI source as alert 1 (unauthenticated CreateExperiment artifact_location / run artifact root inheritance).",
+      "q2_propagation": "Yes — the split keeps the scheme+host+everything before '/mlflow-artifacts/artifacts'; for an attacker URI without that substring the ENTIRE URI becomes the host passed to _get_default_host_creds.",
+      "q3_url_processing": "str.split + lstrip('/') only; no target-host change by the tool itself because the host is already attacker-controlled from the source.",
+      "q4_sink": "Yes — real GET via the rest_utils/session stack.",
+      "q5_control_scope": "Full scheme/host/port control (split prefix of the attacker URI); attacker also sees the JSON listing response (handler returns file list), giving a read primitive.",
+      "q6_protections": "None on host/scheme. Proxied-root diversion (handlers.py:950) applies only under --serve-artifacts (default off), in which case http/https roots take the local branch — a real but non-default mitigation worth noting.",
+      "q7_trusted_fixed_url": "No.",
+      "q8_static_reachability": "Unauthenticated GET/POST /api/2.0/mlflow/artifacts/list (route in handlers.get_endpoints()) -> _list_artifacts (handlers.py:932-962) -> else branch (956) _get_artifact_repo(run).list_artifacts(path). Reached whenever the server is not in serve-artifacts mode (default) with an http:// run root.",
+      "q9_contamination": "None.",
+      "verdict": "likely_tp",
+      "confidence": "high"
+    },
+    {
+      "alert_index": 3,
+      "primary_location": "mlflow/store/artifact/http_artifact_repo.py:104",
+      "function": "HttpArtifactRepository._download_file",
+      "sink": "http_request(self._host_creds, endpoint, \"GET\", stream=True) (http_artifact_repo.py:104) — real outbound HTTP GET whose response bytes are written to disk and returned to the requester",
+      "codeflows": [
+        "run.info.artifact_uri (handlers.py:1255) -> get_artifact_repository (1269) -> self.artifact_uri (http_artifact_repo.py:40) -> _host_creds -> http_request (104)",
+        "same via handlers.py:1319",
+        "self.artifact_uri direct (40) -> (104)",
+        "split variant (84/87) -> (104)"
+      ],
+      "q1_source": "Yes — two independent credible sources: (a) run.info.artifact_uri (second-order, CreateExperiment artifact_location); (b) on the model-registry entry (handlers.py:1664-1672) the artifact URI is the model-version download URI, i.e. the attacker-supplied `source` from unauthenticated CreateModelVersion where http/https is explicitly allowed by _validate_source (handlers.py:1590-1621). Entry (b) matches the exploitation pattern described in the vulnerability report for the fix commit.",
+      "q2_propagation": "Yes — identical host-control mechanism as alerts 1/2 (self._host_creds -> rest_utils url -> session.request).",
+      "q3_url_processing": "None that changes or constrains the host; endpoint is posixpath.join('/', remote_file_path) appended to the attacker-chosen host.",
+      "q4_sink": "Yes — a streaming GET is executed and its content is served back to the attacker through _send_artifact (handlers.py:484-490, send_file).",
+      "q5_control_scope": "Full scheme/host/port/path. The response body is returned to the attacker: complete SSRF read primitive (internal HTTP GET + content disclosure), the strongest finding in this run.",
+      "q6_protections": "validate_path_is_safe on the requested `path` only; proxied-root diversion only under --serve-artifacts (default off). No host/scheme/IP checks, redirects followed.",
+      "q7_trusted_fixed_url": "No.",
+      "q8_static_reachability": "Unauthenticated routes /get-artifact (server/__init__.py:70-72 -> get_artifact_handler, handlers.py:547-564, else branch 561) and /model-versions/get-artifact (server/__init__.py:76-78 -> handlers.py:1655-1675, else branch 1672) -> download_artifacts (artifact_repo.py:142-198, submits self._download_file) -> sink. Fully reachable by default.",
+      "q9_contamination": "None.",
+      "verdict": "likely_tp",
+      "confidence": "high"
+    },
+    {
+      "alert_index": 4,
+      "primary_location": "mlflow/store/artifact/http_artifact_repo.py:113",
+      "function": "HttpArtifactRepository.delete_artifacts",
+      "sink": "http_request(self._host_creds, endpoint, \"DELETE\", stream=True) (http_artifact_repo.py:113) — a real network call if invoked",
+      "codeflows": [
+        "run.info.artifact_uri (handlers.py:1255/1319) -> get_artifact_repository -> self.artifact_uri (40) -> _host_creds -> http_request (113)",
+        "split variant (84/87) -> (113)"
+      ],
+      "q1_source": "Same second-order source as alerts 1-3 — the source-to-_host_creds taint is genuine.",
+      "q2_propagation": "Dataflow to the sink argument is source-code supported (same mechanism).",
+      "q3_url_processing": "Same as alert 1 (no host neutralization).",
+      "q4_sink": "The sink would perform a real DELETE, BUT the alert only proves arg flow, not that this method is ever invoked with the tainted repository object.",
+      "q5_control_scope": "Would be full host control if reachable.",
+      "q6_protections": "n/a (reachability is the deciding factor).",
+      "q7_trusted_fixed_url": "n/a.",
+      "q8_static_reachability": "NOT reachable from any server request entry: a whole-tree search for `.delete_artifacts(` finds exactly three callers — mlflow/cli.py:608 (operator CLI, client-side), handlers.py:1964 (_delete_artifact_mlflow_artifacts, which uses the LOCAL mlflow-artifacts repo with validate_path_is_safe on the path), and runs_artifact_repo.py:139 (client-side store API). No REST route triggers delete_artifacts on an HttpArtifactRepository constructed from a run/model URI. Per review criterion 8, a source->sink argument flow inside an internal method with no reachable entry is not a demonstrable SSRF.",
+      "q9_contamination": "None (not test code / diagnostics), but the missing entry makes the alert non-exploitable as reported.",
+      "verdict": "likely_fp",
+      "rationale": "Taint chain is real but no attacker-reachable entry executes this sink server-side; the only server-side delete route operates on the local, path-guarded mlflow-artifacts repository. Static path not reachable from the unauthenticated surface.",
+      "confidence": "medium-high"
+    },
+    {
+      "alert_index": 5,
+      "primary_location": "mlflow/store/artifact/http_artifact_repo.py:125",
+      "function": "HttpArtifactRepository.create_multipart_upload",
+      "sink": "http_request(host_creds, endpoint, \"POST\", json=params) (http_artifact_repo.py:125) with host_creds = _get_default_host_creds(self.artifact_uri.split('/mlflow-artifacts')[0]) (:117-118)",
+      "codeflows": [
+        "run.info.artifact_uri (handlers.py:1255/1319) -> get_artifact_repository -> self.artifact_uri.split (117) -> url (118) -> _get_default_host_creds -> host_creds -> http_request (125)",
+        "self.artifact_uri direct split chain"
+      ],
+      "q1_q2_source_and_propagation": "Genuine: same second-order artifact-URI source; split prefix carries full scheme/host control into _get_default_host_creds.",
+      "q3_url_processing": "str.split only; no host neutralization.",
+      "q4_sink": "Real network POST if executed.",
+      "q5_control_scope": "Full host control (URI prefix before '/mlflow-artifacts').",
+      "q6_protections": "None on host/scheme.",
+      "q8_static_reachability_and_conditions": "Sink execution is doubly gated: (a) log_artifact only calls _try_multipart_upload when MLFLOW_ENABLE_PROXY_MULTIPART_UPLOAD is enabled — default False (environment_variables.py:303-305) — and the file is >= MLFLOW_MULTIPART_UPLOAD_MINIMUM_FILE_SIZE, default 500MB (environment_variables.py:481-483, http_artifact_repo.py:47-55); (b) the only unauthenticated server entry to log_artifact (upload-artifact handler) caps the request body at 10MB (handlers.py:1241-1245), which can never meet the 500MB threshold. No other server-side entry logs a >=500MB artifact. Therefore under both default and plausible configurations the sink is not reachable from the unauthenticated surface.",
+      "q9_contamination": "None.",
+      "verdict": "uncertain",
+      "rationale": "The taint model and host control are correct, but the full source->sink execution path requires a non-default admin opt-in (MLFLOW_ENABLE_PROXY_MULTIPART_UPLOAD=true) that still cannot be satisfied through any server request entry due to the 10MB upload cap vs the 500MB threshold. Kept uncertain rather than fp because the gating is configuration-dependent, not a model artifact; if a future entry or configuration satisfied both conditions it would be a likely_tp.",
+      "confidence": "medium"
+    },
+    {
+      "alert_index": 6,
+      "primary_location": "mlflow/store/artifact/http_artifact_repo.py:139",
+      "function": "HttpArtifactRepository.complete_multipart_upload",
+      "sink": "http_request(host_creds, endpoint, \"POST\", json=params) (http_artifact_repo.py:139), host_creds from split at :130-131",
+      "codeflows": "analogous to alert 5 (handlers.py:1255/1319 or self.artifact_uri -> split (130) -> _get_default_host_creds (131) -> http_request (139))",
+      "q1_q2_q3_q5": "Identical to alert 5: genuine second-order source, full host control via URI prefix, no sanitization.",
+      "q8_reachability": "Same double gate as alert 5 (env default off; 500MB threshold unreachable via the 10MB-capped unauthenticated upload entry), plus this method only runs after create_multipart_upload succeeded — a strictly subset condition.",
+      "q9_contamination": "None.",
+      "verdict": "uncertain",
+      "rationale": "Same as alert 5; strictly harder to reach than alert 5.",
+      "confidence": "medium"
+    },
+    {
+      "alert_index": 7,
+      "primary_location": "mlflow/store/artifact/http_artifact_repo.py:151",
+      "function": "HttpArtifactRepository.abort_multipart_upload",
+      "sink": "http_request(host_creds, endpoint, \"POST\", json=params) (http_artifact_repo.py:151), host_creds from split at :143-144",
+      "codeflows": "analogous to alert 5 (split at 143 -> _get_default_host_creds at 144 -> http_request at 151)",
+      "q1_q2_q3_q5": "Identical to alert 5.",
+      "q8_reachability": "Same double gate; additionally abort is called only in the exception path of _try_multipart_upload (http_artifact_repo.py:206) after create_multipart_upload was already attempted — a strictly subset condition of alert 5.",
+      "q9_contamination": "None.",
+      "verdict": "uncertain",
+      "rationale": "Same as alert 5; strictly harder to reach.",
+      "confidence": "medium"
+    },
+    {
+      "alert_index": 8,
+      "primary_location": "mlflow/utils/request_utils.py:190",
+      "function": "_get_http_response_with_retries",
+      "sink": "session.request(method, url, **kwargs) (request_utils.py:190) inside _get_http_response_with_retries (request_utils.py:160-190) — the real network request sink; requests/urllib3 follow redirects by default here (no allow_redirects argument anywhere in this tree)",
+      "codeflows": [
+        "dbfs path-only variant: self.artifact_uri (dbfs_artifact_repo.py:95) -> strip_prefix -> _get_dbfs_path (94) -> f-string http_endpoint (100/105) -> _databricks_api_request (60-62) -> http_request_safe (rest_utils.py:139/143) -> http_request endpoint -> url (105) -> url at :109 -> request_utils.py:162 -> 190",
+        "host-control variant x3: run.info.artifact_uri (handlers.py:1255/1319) -> get_artifact_repository -> self.artifact_uri (http_artifact_repo.py:40) -> _get_default_host_creds -> http_request host_creds (rest_utils.py:29/74) -> hostname -> strip_suffix -> cleaned_hostname -> url = f\"{cleaned_hostname}{endpoint}\" (104-105) -> url at :109 -> request_utils.py:162 -> 190",
+        "self.artifact_uri direct variant (http_artifact_repo.py:40 -> ... -> 190)"
+      ],
+      "q1_source": "Yes — the http_artifact_repo codeFlows carry the credible second-order artifact-URI source (unauthenticated CreateExperiment artifact_location / model-version source) into host_creds.host; the dbfs codeFlow (flow 0) is a path-only variant on a fixed Databricks host (host creds from get_host_creds, dbfs_artifact_repo.py:53-58) and is by itself weak.",
+      "q2_propagation": "Yes, fully source-code supported end-to-end: rest_utils.http_request passes the constructed url (rest_utils.py:107-109) into _get_http_response_with_retries, which passes it to session.request (request_utils.py:190).",
+      "q3_url_processing": "strip_suffix(hostname, '/') only; the host originates from the attacker-controlled artifact URI and is never re-validated. urljoin/base-URL defenses are absent. Redirects are followed without re-validation — exactly the behavior the fix commit targets.",
+      "q4_sink": "Yes — session.request executes the HTTP(S) request (with a Retry adapter mounted for http/https, request_utils.py:129-133, including a 'redirect' retry allowance).",
+      "q5_control_scope": "Full scheme/host/port/path on the host-control codeFlows (artifact URI = request host); path-only on the dbfs codeFlow. The sink additionally follows 30x redirects, so even fixed-host uses can be re-targeted by an attacker-controlled redirect.",
+      "q6_protections": "None: no scheme allowlist, no resolved-IP/private-range blocking, no redirect target re-validation, no network isolation hooks. MLFLOW_ALLOW_HTTP_REDIRECTS does not exist in this tree (introduced by the fix).",
+      "q7_trusted_fixed_url": "No for the artifact chains — destination is attacker-influenced DB content.",
+      "q8_static_reachability": "Reachable by default through the unauthenticated artifact handlers (alerts 1-3 entries) converging on rest_utils.http_request -> this function.",
+      "q9_contamination": "None — real network sink, not URL parsing, not a Request-object-only construction, not test/diagnostics code.",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "note": "This alert's sink is exactly the function/line modified by the SSRF fix (see pyvul_real_vulnerability_hit below)."
+    },
+    {
+      "alert_index": 9,
+      "primary_location": "mlflow/utils/rest_utils.py:109",
+      "function": "http_request (URL argument passed to _get_http_response_with_retries)",
+      "sink": "_get_http_response_with_retries(method, url, ...) (rest_utils.py:107-119) — the URL built at rest_utils.py:104-105 (url = f\"{cleaned_hostname}{endpoint}\") flowing into the network-request wrapper; the actual request executes at request_utils.py:190",
+      "codeflows": [
+        "dbfs path-only variant: self.artifact_uri (dbfs_artifact_repo.py:95) -> ... -> endpoint (rest_utils.py:139/143/30) -> url (105) -> url at :109",
+        "host-control variants x3: run.info.artifact_uri (handlers.py:1255/1319) / self.artifact_uri -> _host_creds -> host_creds.host (rest_utils.py:74) -> hostname -> strip_suffix (string_utils.py:13-15) -> cleaned_hostname -> url (105) -> :109"
+      ],
+      "q1_source": "Same as alert 8 — credible second-order artifact-URI sources on flows 1-3; path-only dbfs flow 0.",
+      "q2_propagation": "Yes — the tainted hostname is concatenated into the request URL and passed to the retry wrapper that performs session.request.",
+      "q3_url_processing": "string concatenation f\"{cleaned_hostname}{endpoint}\" — no host normalization; host control comes directly from the tainted source, not from the join. No urljoin-based defense.",
+      "q4_sink": "Yes — this is the same real network request one frame up (the sink node is the URL argument at the call into the transport; the transport executes the request).",
+      "q5_control_scope": "Full scheme/host/port/path (artifact-URI flows); path-only (dbfs flow).",
+      "q6_protections": "None (see alert 8).",
+      "q7_trusted_fixed_url": "No for the artifact chains.",
+      "q8_static_reachability": "Same entries as alerts 1-3/8 — unauthenticated artifact handlers by default.",
+      "q9_contamination": "None.",
+      "verdict": "likely_tp",
+      "confidence": "high"
+    }
+  ],
+  "pyvul_real_vulnerability_hit": {
+    "commit": "https://github.com/mlflow/mlflow/commit/8174250f83352a04c2d42079f414759060458555",
+    "commit_message": "Add env var to disable redirects again (#10673)",
+    "cwe": "CWE-918",
+    "vulnerable_function": "_get_http_response_with_retries",
+    "vulnerable_file": "mlflow/utils/request_utils.py",
+    "pre_fix_code_verified": "The analyzed tree matches code_before exactly: _get_http_response_with_retries (request_utils.py:160-190) has no allow_redirects parameter, no MLFLOW_ALLOW_HTTP_REDIRECTS read, and ends with `return session.request(method, url, **kwargs)` at line 190. Because allow_redirects is never set, requests follows redirects (including cross-origin 30x) by default — the SSRF-via-redirect behavior this commit fixes.",
+    "was_hit": true,
+    "hitting_alerts": [
+      "alert 8 (mlflow/utils/request_utils.py:190): sink is EXACTLY the patched line inside the patched function `_get_http_response_with_retries`; 3 of its 4 codeFlows show attacker-controllable (second-order) artifact-URI host control reaching this sink via HttpArtifactRepository._host_creds -> rest_utils.http_request -> url -> _get_http_response_with_retries.",
+      "alert 9 (mlflow/utils/rest_utils.py:109): the same URL being passed into the vulnerable function one frame earlier.",
+      "alerts 1-3 (http_artifact_repo.py:64/88/104): the upstream wrapper calls (http_request) whose URLs converge on the vulnerable function."
+    ],
+    "entry_chain_matches_vulnerability_description": "The exploitation pattern in the commit description (creating a model version with an http/https source, and artifact locations using http/https) is present and unauthenticated in this tree: CreateModelVersion allows http/https source (handlers.py:1590-1650, _validate_source rejects only local/file/relative-path sources), and /model-versions/get-artifact (server/__init__.py:76-78) fetches it server-side via get_artifact_repository (handlers.py:1672) -> HttpArtifactRepository -> http_request -> _get_http_response_with_retries -> session.request, with redirects followed. The alerts' codeFlows use the equivalent run-artifact-URI entry (CreateExperiment artifact_location -> run artifact root, handlers.py:1255/1319), also unauthenticated.",
+    "coverage_nuance": "The Augur alerts hit the vulnerable function via DIRECT host control (the artifact URI is the request host), so the redirect-specific variant (fixed destination + attacker-driven 30x re-targeting) was not needed to produce the hit. A pure redirect-chain model (response-driven taint) was deliberately not modeled per the query notes (§6), but this does not affect the hit: the same sink line is reached with a fully attacker-controlled URL. Additionally, requests' default redirect-following at this sink is itself part of the vulnerable behavior fixed by the commit.",
+    "conclusion": "The real CWE-918 vulnerability (SSRF via redirect-following / attacker-controlled artifact URLs in _get_http_response_with_retries) WAS hit by the formal Augur Pass 3 alerts — specifically alert 8 at the exact vulnerable function and line, corroborated by alerts 9 and 1-3."
+  },
+  "overall_conclusion": {
+    "formal_alerts_present": true,
+    "statement": "CodeQL 分析成功，且本轮命中 10 条正式 CWE-918 污点路径告警（ruleId py/augur/mlflow/pass3-ssrf），非空结果、非诊断查询。",
+    "summary": "5 likely_tp（artifact-URI 主机控制链：log_artifact PUT、list_artifacts GET、_download_file GET、request_utils.py:190 session.request、rest_utils.py:109 URL 传递，全部经未认证入口默认可达，且 _get_http_response_with_retries 为真实漏洞修复点）；2 likely_fp（gateway-proxy 仅固定主机上的路径控制；delete_artifacts 无服务器端可达入口）；3 uncertain（multipart upload 三个 sink，污点链真实但被默认关闭的环境开关与 500MB/10MB 尺寸矛盾阻断，实际不可达）。无 file: 本地读取、URL 仅解析、测试代码或诊断查询混入造成的错误计数。",
+    "strongest_finding": "Alert 3 (http_artifact_repo.py:104): unauthenticated /get-artifact or /model-versions/get-artifact with an attacker-chosen http(s) artifact location / model-version source makes the tracking server GET an arbitrary URL and return the response body to the attacker — full SSRF read primitive; the same chain reaches the redirect-following sink fixed by commit 8174250f."
+  }
+}

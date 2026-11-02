@@ -1,0 +1,226 @@
+{
+  "step": "Step 1 - Explore and detect",
+  "target": "mindsdb",
+  "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\mindsdb_vuln\\mindsdb-db",
+  "source_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\mindsdb_vuln",
+  "timestamp": "2026-10-20",
+  "language": "python",
+  "language_evidence": [
+    "mindsdb-db/codeql-database.yml: primaryLanguage: python, creationMetadata.cliVersion: 2.25.1, sha 62d2cff43037e6f4c05c07c7d7320631ed48c21d, baselineLinesOfCode: 98143, sourceLocationPrefix is the mindsdb_vuln repo root (DB relative paths look like mindsdb/... for the application package)",
+    "repository layout: mindsdb/ application package (1200 .py files incl. per-handler tests dirs) with api/ (http REST + mysql/postgres/mongo wire protocols), integrations/ (handlers + libs + handlers_wrapper), interfaces/ (controllers), utilities/; plus repo-root tests/, docs/, protos/, requirements/",
+    "pyproject.toml / setup.py / requirements/ present at repo root"
+  ],
+  "codeql_environment": {
+    "cli_version": "2.25.1 (recorded in mindsdb-db/codeql-database.yml creationMetadata; the local CodeQL CLI was not executed in this phase per experiment constraints - no queries were run)",
+    "python_query_library": "codeql/python-all 7.1.x (7.1.1 and 7.1.2 cached under C:\\Users\\lzh\\.codeql\\packages; workspace qlpack.yml declares codeql/python-all: \"*\" with name iris/mindsdb-cwe918)",
+    "api_surface_note": "Extraction queries use only `import python` AST APIs verified against the locally cached python-all 7.1.2 library: AstNode.getLocation()/getScope()/toString(), Location.getFile()/getStartLine(), File.getRelativePath(), Call.getFunc()/getArg(int)/getAKeyword(), Keyword.getArg()/getValue(), Attribute.getName()/getObject(), Name.getId(), Assign.getATarget(), Function.getName()/getArg(int)/getScope(), Parameter.asName(), Class.getABase() (Expr; base matched as Name 'Resource'), Scope.getEnclosingModule(), StringLiteral.getText(). No AstNode.getFile(), no module-named QL variables (moduleHint is used), no API::Node vs DataFlow::Node mixing, no QL classes are defined in the extraction queries, no @kind is declared (plain multi-column select for `codeql query run` + `bqrs decode`).",
+    "dbscheme": "semmlecode.python.dbscheme (db-python directory in the DB)"
+  },
+  "scope": {
+    "passes": [3],
+    "cwes": ["918", "099", "610"],
+    "focus": "Server-Side Request Forgery (CWE-918 primary, per user instruction)"
+  },
+  "framework_candidates": [
+    {
+      "framework": "flask",
+      "kind": "web-framework",
+      "confidence": 1.0,
+      "classification": "primary",
+      "evidence": {
+        "import_evidence": {
+          "score": 0.45,
+          "snippets": [
+            "`from flask import ...` throughout the HTTP layer, e.g. mindsdb/api/http/initialize.py:12 `from flask import Flask, url_for, make_response, request, send_from_directory`",
+            "mindsdb/api/http/namespaces/agents.py:3, analysis.py:5, auth.py:7, chatbots.py:3, config.py:9, databases.py:5, default.py:3, file.py:9, handlers.py:7, models.py:5, skills.py:3, sql.py:3 etc. `from flask import request` (also `from flask import current_app as ca`)"
+          ]
+        },
+        "route_evidence": {
+          "score": 0.30,
+          "snippets": [
+            "flask_restx namespace routes: `@ns_conf.route(...)` decorators on Resource subclasses in all 22 namespace modules under mindsdb/api/http/namespaces/ (files, sql, databases, config, models, views, projects, skills, agents, chatbots, analysis, handlers, auth, tab, tree, util, default)",
+            "mindsdb/api/http/initialize.py:205-206 `@app.route('/', defaults={'path': ''}, methods=['GET'])` / `@app.route('/<path:path>', methods=['GET'])` static GUI fallback route"
+          ]
+        },
+        "runtime_bootstrap_evidence": {
+          "score": 0.20,
+          "snippets": [
+            "mindsdb/api/http/initialize.py:325 `app = Flask(__name__, **kwargs)` in initialize_flask()",
+            "mindsdb/api/http/initialize.py:343-350 `api = Swagger_Api(app, ... prefix='/api', doc='/doc/')` (Swagger_Api subclasses flask_restx.Api); initialize.py:233-236 api.add_namespace() for all protected namespaces",
+            "mindsdb/api/http/initialize.py:251-299 `@app.before_request def before_request()` - auth gate + request.headers reads (company-id, user-class, email-confirmed)"
+          ]
+        },
+        "layout_evidence": {
+          "score": 0.05,
+          "snippets": [
+            "mindsdb/api/http/ with namespaces/ (22 modules) + namespaces/configs/ (flask_restx Namespace configs) + utils.py"
+          ]
+        }
+      }
+    },
+    {
+      "framework": "flask_restx",
+      "kind": "rest-layer",
+      "confidence": 0.9,
+      "classification": "secondary (REST resource layer on Flask: Api/Resource classes, ns_conf namespaces; all handler classes in mindsdb/api/http/namespaces/** directly subclass flask_restx.Resource)",
+      "evidence": [
+        "`from flask_restx import Resource` in every namespace module (file.py:10, sql.py:3, databases.py, auth.py:8, ...); `from flask_restx import Api` at initialize.py:15",
+        "namespace configs under mindsdb/api/http/namespaces/configs/*.py define `ns_conf = Namespace(...)`; initialize.py:233-236 registers them on the Api under /api prefix"
+      ]
+    },
+    {
+      "framework": "requests",
+      "kind": "http-client-library",
+      "confidence": 0.95,
+      "classification": "secondary (the ONLY outbound HTTP client surface in this source tree for CWE-918: 54 files contain requests.* call sites; 94 requests.<verb>( occurrences excluding tests, of which 64 requests.get, 16 requests.post, 9 requests.request, 2 requests.Session, 1 each put/head/delete)",
+      "evidence": [
+        "`import requests` (never aliased, never `from requests import get/post`) in: api/http/gui.py:7, api/http/initialize.py:11, api/http/namespaces/file.py:7, api/http/namespaces/auth.py:6, api/mysql/mysql_proxy/utilities/functions.py:5, api/mysql/mysql_proxy/controllers/session_controller.py:15, integrations/libs/handler_helpers.py:5, utilities/auth.py:1, utilities/functions.py:2, and ~45 integration handler modules",
+        "call sites verified in source: requests.get(url, stream=True) at api/http/namespaces/file.py:116 and integrations/handlers/file_handler/file_handler.py:386; requests.head(url) at namespaces/file.py:99; requests.get(url) at mysql_proxy/utilities/functions.py:33 (download_file); requests.delete at session_controller.py:121; requests.get/post/put at namespaces/auth.py:44/78/109; requests.post(url, json=...) at integrations/libs/handler_helpers.py:48 (registry); requests.get at utilities/auth.py:19 (169.254.169.254 metadata) and utilities/functions.py:86 (fixed S3 URL)"
+      ]
+    },
+    {
+      "framework": "sqlalchemy",
+      "kind": "orm-library",
+      "confidence": 0.6,
+      "classification": "informational (persistence layer: mindsdb/interfaces/storage/db.py stores integrations/connection data created from SQL or REST bodies; connection args with URLs are persisted and re-used by handlers; below secondary threshold but relevant as a taint-relay through DB)",
+      "evidence": [
+        "mindsdb/interfaces/storage/db.py sqlalchemy models (Integration among them); interfaces/database/integrations.py integration_controller.add(name, engine, connection_args) persists handler connection args supplied via SQL CREATE DATABASE ... USING or POST /api/databases"
+      ]
+    },
+    {
+      "framework": "grpc",
+      "kind": "rpc-layer",
+      "confidence": 0.55,
+      "classification": "informational (modular deployment: mindsdb/microservices_grpc + integrations/handlers_wrapper (ml_grpc_wrapper, ml_handler_service) route ML handler traffic over gRPC, not HTTP; not a CWE-918 sink surface but an internal service boundary)",
+      "evidence": [
+        "mindsdb/integrations/handlers_wrapper/ml_handler_service.py starts MLServiceServicer (gRPC); mindsdb/microservices_grpc/ protos and services"
+      ]
+    },
+    {
+      "framework": "langchain",
+      "kind": "llm-library",
+      "confidence": 0.5,
+      "classification": "informational (document loaders used by file_handler chunking: TextLoader/PyPDFLoader at file_handler.py:18-19; local file processing only, not a network URL fetcher here)",
+      "evidence": [
+        "file_handler.py:18-19 `from langchain.text_splitter import RecursiveCharacterTextSplitter` / `from langchain.document_loaders import TextLoader, PyPDFLoader`"
+      ]
+    }
+  ],
+  "primary_framework": "flask",
+  "framework_notes": [
+    "Flask is the primary web framework (score 1.00 >= 0.75 threshold); references/flask.md was loaded in addition to references/python.md and references/patterns.md.",
+    "REST handlers are methods (get/post/put/delete) of flask_restx.Resource subclasses in mindsdb/api/http/namespaces/**; there is no standalone Decorator AST type, and routes are class-level @ns_conf.route(...) decorators, so source extraction keys on Resource-subclass methods and their parameters (path variables such as the file name in File.put(self, name: str), namespaces/file.py:33).",
+    "The most important external input surface is request.json (43 sites) - notably POST /api/sql/query (sql.py:29 query = request.json[\"query\"]), POST /api/databases (databases.py:31 database = request.json['database'] with 'parameters' = handler connection args, including URL-bearing engines), and PUT /api/files/<name> with source_type == 'url' (file.py:92-116).",
+    "mindsdb also accepts SQL over wire protocols, not just HTTP: MysqlProxy.process_query(self, sql) (mindsdb/api/mysql/mysql_proxy/mysql_proxy.py:522, also inherited by FakeMysqlProxy used by the HTTP /api/sql/query endpoint, classes/fake_mysql_proxy/fake_mysql_proxy.py:14) and PostgresProxy.process_query(self, sql) (mindsdb/api/postgres/postgres_proxy/postgres_proxy.py:253). The Mongo wire server (mindsdb/api/mongo/server.py) translates BSON ops into the same SQL executor layer.",
+    "Auth: initialize.py:251-267 before_request returns 403 for protected namespaces when config['auth']['http_auth_enabled'] is True and check_auth() (default.py:28-36, session username or config user match) fails; when http_auth_enabled is False (common self-hosted default) the protected namespaces are unauthenticated. SQL executed through MySQL/Postgres wire protocols follows those protocols' own auth. Reachability is noted, not judged in this phase.",
+    "Integration handlers receive caller-controlled connection_data (dict) - from CREATE DATABASE ... USING connection args (mysql proxy executor) or POST /api/databases parameters - and several handlers feed url/host values from it directly into requests calls (confluence_handler.py:57 url=self.connection_data.get('url'), phoenix_handler.py:72 url=self.connection_data['url'], dremio_handler.py base_url from host, etc.)."
+  ],
+  "references_loaded": [
+    "WORKFLOW.md",
+    "references/patterns.md",
+    "references/python.md",
+    "references/flask.md",
+    "assets/extraction/README.md",
+    "assets/extraction/extract_sources.ql.tmpl",
+    "assets/extraction/extract_sinks.ql.tmpl",
+    "assets/extraction/python_sources.ql.tmpl",
+    "assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "repo_survey": {
+    "project_identity": [
+      "MindsDB (open-source AI-SQL platform): brings ML/LLM integrations to SQL. The application package mindsdb/ contains api/ (Flask REST API under api/http, plus MySQL/Postgres/Mongo wire-protocol servers), integrations/ (~200 handler packages under handlers/, handler libs, gRPC handler wrapper), interfaces/ (controllers for integrations, files, models, jobs, skills, ...), utilities/ (config, auth, telemetry) and migrations/.",
+      "Server-side network activity for CWE-918 is concentrated in: (a) the file ingestion path (files API 'source_type == url' upload, file_handler URL fetch, mysql executor download_file for PATH-type connection args), (b) the web crawl handler (SELECT ... FROM web WHERE url = ...), (c) per-integration handler API clients (fixed provider hosts or user-supplied url/host from connection args), (d) cloud/OAuth support code (config-controlled hosts)."
+    ],
+    "http_routes": [
+      "22 namespace modules under mindsdb/api/http/namespaces/; URL/input-bearing routes relevant to Pass 3:",
+      "mindsdb/api/http/namespaces/sql.py:26-29 POST /api/sql/query - query = request.json[\"query\"]; arbitrary mindsdb SQL (CREATE DATABASE ... USING url-bearing connection args, CREATE FILE ... FROM URL / file sources, web-crawl selects) executed via FakeMysqlProxy.process_query -> Executor",
+      "mindsdb/api/http/namespaces/file.py:29-124 PUT /api/files/<name> - multipart or JSON body; when data.get(\"source_type\") == \"url\": url = data[\"source\"] (from request.json at :83 or multipart fields) -> requests.head(url) at :99 (cloud only) and requests.get(url, stream=True) at :116; also uploads zip/tar.gz archives",
+      "mindsdb/api/http/namespaces/databases.py:24-49 POST /api/databases - database = request.json['database'], parameters -> session.integration_controller.add(name, engine, parameters) (handler connection args incl. url/host per engine); :58-88 PUT /api/databases/<database_name> same via modify",
+      "mindsdb/api/http/namespaces/auth.py:55-131 GET /api/auth/callback - code = request.args.get(\"code\") -> requests.post(f\"https://{auth_server}/auth/token\") (auth_server from config); :134-164 GET /api/auth/cloud_login - location = request.args.get(\"location\")",
+      "mindsdb/api/http/namespaces/models.py, views.py, projects.py, skills.py, agents.py, chatbots.py, util.py, analysis.py, tab.py - request.json bodies (model/view/skill/agent configs; not URL-bearing in an obvious way but part of the same boundary)",
+      "mindsdb/api/http/namespaces/config.py:112-118 POST /api/config - params from request.json/request.form, request.files (file upload used for model artifacts; not URL-bearing)",
+      "mindsdb/api/http/initialize.py:251-299 before_request reads request.headers (company-id, user-class, email-confirmed) into ctx (metadata, not URL-bearing)"
+    ],
+    "request_input_surfaces": [
+      "request.json attribute reads: 43 sites in mindsdb/api/http/** (sql.py:29, file.py:83, databases.py:31/77, models.py, views.py, skills.py, agents.py, chatbots.py, default.py:55-56, config.py:56/112/206, tab.py:54, util.py:106/119, analysis.py:46/103)",
+      "request.args: 8 sites (auth.py:63 code, auth.py:143 location, config.py:29-34 log filter params; also tree.py/util.py filter params)",
+      "request.headers: 9 sites (file.py:59 Content-Type, initialize.py:269-273 company-id/user-class/email-confirmed, auth.py none)",
+      "request.form: 2 sites (config.py:113/207); request.files: 1 site (config.py:118); request.stream: 1 site (file.py:73 multipart body streaming)",
+      "path variables as parameters of flask_restx Resource methods (e.g. File.put(self, name: str) at file.py:33, DatabaseResource.get(self, database_name) at databases.py:58)",
+      "SQL wire protocol boundaries: MysqlProxy.process_query(self, sql) at mindsdb/api/mysql/mysql_proxy/mysql_proxy.py:522 (MySQL wire server and, via inheritance, the HTTP /api/sql/query endpoint) and PostgresProxy.process_query(self, sql) at mindsdb/api/postgres/postgres_proxy/postgres_proxy.py:253; Mongo wire queries arrive as BSON operations at mindsdb/api/mongo/server.py:249+ (MongoRequestHandler) and are translated to the same executor - layered, no single sql parameter (documented, not extracted as a parameter family)",
+      "environment-variable boundaries that propagate to network calls: session_controller.py:103 executor_url = os.environ.get(\"MINDSDB_EXECUTOR_URL\") -> requests.delete(url) at :121; ml_handler_service.py:24 registry_url = os.environ.get(\"REGISTRY_URL\") -> registry() (handler_helpers.py:44-48) -> requests.post(url)",
+      "Config() boundary (file/env/toml): auth server_host (namespaces/auth.py:42/72, utilities/auth.py:45 -> requests to https://{auth_server}/...), GUI version (initialize.py:68-71 fixed S3 URL), cloud flags - operator-configured, FP-leaning for CWE-918"
+    ],
+    "outbound_network_surfaces": [
+      "mindsdb/api/http/namespaces/file.py:99 requests.head(url) and :116 requests.get(url, stream=True) - url = data[\"source\"] from the PUT /api/files/<name> body when source_type == 'url' (request.json or multipart field); the downloaded bytes are saved and registered as a mindsdb file",
+      "mindsdb/api/mysql/mysql_proxy/utilities/functions.py:21-37 download_file(url): urllib.parse.urlparse scheme check then requests.get(url) at :33, writes response.content to temp file; called from executor_commands.py:1057 path = download_file(arg_value[\"url\"]) for PATH-type connection args of form {'url': ...} during CREATE DATABASE / CREATE ML_ENGINE - url comes from parsed SQL connection args",
+      "mindsdb/integrations/handlers/file_handler/file_handler.py:347-354 _get_file_path(path): if urlparse(path).scheme in ('http','https') -> _fetch_url(path) -> :386 requests.get(url, stream=True); reached from _get_data_io -> _handle_source -> FileController.save_file (interfaces/file/file_controller.py:85) and FileHandler.query (file_handler.py:95-102)",
+      "mindsdb/integrations/handlers/web_handler/urlcrawl_helpers.py:87-155 get_all_website_links(url): session = requests.Session() at :94, response = session.get(url, headers=headers) at :102; recursive same-domain crawling via get_all_website_links_rec/parallel_get_all_website_links; entered from web_handler.py select/native_query (SELECT ... FROM crawl WHERE url = ... or native query 'url, limit=n')",
+      "mindsdb/api/http/namespaces/auth.py:44/78/109 requests.get/post/put to f\"https://{auth_server}/...\" (server_host from Config; code from request.args) - cloud OAuth callback",
+      "mindsdb/api/mysql/mysql_proxy/controllers/session_controller.py:121 requests.delete(url, json=...) - url = os.environ MINDSDB_EXECUTOR_URL + '/session' (modular executor service)",
+      "mindsdb/integrations/libs/handler_helpers.py:44-48 registry(url, data, interval): requests.post(url, json=data) in a loop - url = env REGISTRY_URL + '/register' (handler discovery service)",
+      "mindsdb/utilities/auth.py:19 requests.get(f'http://169.254.169.254/latest/meta-data/{key}') - fixed AWS instance-metadata URL; :45 requests.post(f'https://{oauth_meta[\"server_host\"]}/auth/register_client') - config-derived host",
+      "mindsdb/api/http/gui.py:24 requests.get(resource[\"url\"]) - bucket = fixed 'https://mindsdb-web-builds.s3.amazonaws.com/' + version (GUI static download); initialize.py:71 requests.get(fixed S3 compatible-config.json URL)",
+      "mindsdb/utilities/functions.py:86 requests.get(fixed S3 version file URL)",
+      "~45 integration handlers under mindsdb/integrations/handlers/*_handler/: requests.get/post/request calls in each handler's API client (e.g. confluence_handler.py:57 url=self.connection_data.get('url'), phoenix_handler.py:72 url=self.connection_data['url'], dremio_handler.py:138/143/146 requests.request(\"GET\", self.base_url + ...), instatus/intercom/strapi requests.request(method, url, ...), lightdash api.py:21 and sap_erp api.py:55 requests.request(**kwargs), hackernews/aqicn/... fixed provider hosts); connection args originate from SQL CREATE DATABASE ... USING or POST /api/databases 'parameters'",
+      "NOT present in this source tree: urllib.request.urlopen, urllib.request.urlretrieve, httpx, aiohttp, http.client, pycurl (verified by grep; urllib usage is parse-only: functions.py:23 urlparse, auth.py:155 urlencode, newsapi_handler.py:30 quote_plus, file_handler.py:9/urlcrawl_helpers.py:6 urlparse/urljoin)"
+    ],
+    "url_construction_surfaces": [
+      "mindsdb/api/mysql/mysql_proxy/utilities/functions.py:23-31 download_file parses the URL scheme with urllib.parse.urlparse and rejects empty scheme - parsing/validation only, the requests.get at :33 is the sink",
+      "mindsdb/integrations/handlers/file_handler/file_handler.py:347-354 _get_file_path uses urlparse(path).scheme in ('http','https') to decide URL vs local file - classification only; _fetch_url at :383 is the sink wrapper",
+      "mindsdb/integrations/handlers/web_handler/urlcrawl_helpers.py:122 urljoin(url, href) and :126 parsed_href.scheme + '://' + netloc + path - second-order response-derived URL construction during crawling (href read from fetched page); the sink remains session.get at :102",
+      "f-string host assembly from connection args: dremio_handler base_url, confluence/phoenix url=, jira jira_url (passed to the Jira SDK), ollama/mlflow/ray_serve hosts, etc.",
+      "URL/Request-object construction or redirect handling beyond the above is not present (no urljoin-based redirect endpoints, no webhooks subsystem in this snapshot)"
+    ],
+    "auth_boundaries": [
+      "HTTP REST: before_request auth gate (initialize.py:251-267) only for protected namespaces and only when config['auth']['http_auth_enabled'] is True; check_auth (default.py:28-36) compares session username or config['auth'] credentials. When disabled, /api/sql/query, /api/files, /api/databases are reachable without authentication.",
+      "PUT /api/files/<name> URL-fetch path is additionally gated by ctx.user_class != 1 checks only for the cloud file-size pre-check (file.py:97-115); the requests.get at :116 runs for any caller regardless of user class",
+      "SQL wire protocols (MySQL :522, Postgres :253) apply their own protocol auth before process_query; mongo server likewise",
+      "recorded as evidence for later labeling; no reachability verdicts are made in this phase"
+    ],
+    "excluded_from_extraction": [
+      "mindsdb-db/ nested CodeQL database directory inside the source root (excluded from all source scanning, evidence gathering and annotation; the extraction scope predicate path.matches(\"mindsdb/%\") does not match mindsdb-db/... by construction, and additionally all DB-relative paths of the database's own files would start with mindsdb-db/)",
+      "root-level pre-existing analysis artifacts (SSRF_VULNERABILITY_REPORT.md, mindsdb_ssrf_cve_application_report.md, mindsdb_ssrf_vulnerability_audit_report.md, mindsdb_unfixed_ssrf_cve_status_report.md, ssrf_analysis_report.md, ssrf_sinks.csv, ssrf_sinks.json, ssrf_sinks_to_review.csv) were NOT read: they look like pre-existing vulnerability-analysis artifacts, and this phase forbids consulting vulnerability ground truth, CVE descriptions, fix diffs or pre-located vulnerable lines",
+      "per-handler tests directories (mindsdb/integrations/handlers/*_handler/tests/) and the repo-root tests/ tree are excluded by the scope predicate (path matches mindsdb/%/tests/% are filtered out; root tests/ does not match mindsdb/%)",
+      "request.path / request.method reads (initialize.py:207-208, auth.py:77/128 redirect_uri construction) are framework metadata used for routing/redirect strings - documented, not extracted",
+      "mysql/postgres/mongo wire-protocol packet .send() calls (mysql_proxy.py:188-354 etc.) are database protocol I/O, not HTTP fetches - out of CWE-918 sink scope",
+      "gRPC service code (microservices_grpc, handlers_wrapper) - gRPC, not HTTP URL fetches"
+    ]
+  },
+  "extraction_plan": {
+    "pass_key": "ssrf",
+    "source_families": [
+      "flask request container attribute reads request.<json|args|form|values|files|headers|stream> in mindsdb/api/http/** (flow kind field; receiver flask.request; arg index -1) - includes request.json['query'] (sql), request.json['database']['parameters'] (connection args), the file upload body, request.args.get('code'/'location'), request.headers reads",
+      "parameters (index i >= 1) of methods of flask_restx.Resource subclasses in mindsdb/api/http/namespaces/** (flow kind param; receiver flask_restx.resource) - URL path variables such as file name / database_name",
+      "the sql parameter (index 1) of process_query in MysqlProxy (mindsdb/api/mysql/mysql_proxy/mysql_proxy.py) and PostgresProxy (mindsdb/api/postgres/postgres_proxy/postgres_proxy.py) (flow kind param; receiver sql_wire_protocol) - SQL text boundary for MySQL/Postgres wire protocols and the HTTP /api/sql/query endpoint (via FakeMysqlProxy inheritance)",
+      "os.environ.get(\"MINDSDB_EXECUTOR_URL\") in session_controller.py and os.environ.get(\"REGISTRY_URL\") in ml_handler_service.py (flow kind return; receiver os.environ) - the two environment inputs verified to propagate into requests calls"
+    ],
+    "sink_families": [
+      "requests.get/post/put/delete/patch/head module-level calls (func Attribute <verb> on Name 'requests') anywhere in mindsdb/** (tests and mindsdb-db excluded): node = call with URL at positional argument 0 when no url= keyword is present, node = url= keyword value with arg index -1 otherwise (flow kind argument, receiver requests)",
+      "requests.request(...) calls (func Attribute 'request' on Name 'requests'): node = call with URL at positional argument 1 (method first) when present; requests.request(**kwargs) wrapper calls (lightdash_handler/api.py, sap_erp_handler/api.py) with node = call and arg index -1",
+      "session.get(url, headers) in mindsdb/integrations/handlers/web_handler/urlcrawl_helpers.py (func Attribute 'get' on Name 'session' assigned from requests.Session() at :94; flow kind argument, arg index 0, receiver requests.Session) - the web crawl transport"
+    ],
+    "notes": [
+      "Extraction rules were derived only from repository evidence and the CWE-918 pass focus; no vulnerability ground truth, CVE descriptions, fix diffs, or pre-located vulnerable lines were consulted (pre-existing root-level analysis artifacts were deliberately not read).",
+      "Both extraction queries are plain multi-column select queries (no @kind metadata) for use with `codeql query run` + `codeql bqrs decode`; they are not intended for `codeql database analyze` SARIF output.",
+      "CSV column order matches the prior-project convention (calibre-web / fides): node, candidate_type, callable, flow_kind, receiver, moduleHint, arg_index, line, file:line, expression. arg_index is -1 when not applicable.",
+      "flow_kind vocabulary: param/return/field/argument as in prior projects.",
+      "AST-literal matching (requests.get by object Name 'requests', Resource base matched by class-base Name 'Resource', os.environ.get matched structurally) is used because CodeQL resolved-API modeling is not guaranteed for every optional dependency; every matched call-site family was individually confirmed against this source tree, and import resolution must be validated during LLM labeling.",
+      "Expected candidate volume (from grep counts, to be confirmed by query run): ~64 request-container attribute sources, ~35-45 Resource-method path-variable params, 2 process_query sql params, 2 env-var sources; ~83 requests.<verb> sink rows (64 get, 16 post, 1 put, 1 head, 1 delete; url= keyword variants counted separately), 9 requests.request rows, 1 session.get row.",
+      "urllib.request.urlopen / urlretrieve / httpx / aiohttp / http.client are NOT used anywhere in mindsdb/ (verified by grep; urllib usage is parse-only) - no candidates and no coverage gap for those APIs.",
+      "No file:/data: scheme fetching exists in this source tree (file_handler _get_file_path explicitly restricts to http/https; download_file rejects empty scheme); nothing extracted for non-HTTP schemes. Local-only file reads are not CWE-918 sinks and are not extracted.",
+      "Scope restriction path.matches(\"mindsdb/%\") + not path.matches(\"mindsdb/%/tests/%\") excludes the nested mindsdb-db CodeQL database directory, the repo-root tests/ tree and all per-handler tests/ directories by construction."
+    ]
+  },
+  "coverage_gaps": [
+    "Jira SDK: jira_handler.py:54-61 creates requests.Session() and passes it to Jira(url=self.connection_data['jira_url'], session=s) - the HTTP requests to the jira_url happen inside the jira package (not in this database); the connection_data boundary is captured as a source-side family only via the generic request.json/SQL surfaces. Not extracted as a sink.",
+    "Other per-handler SDK-driven integrations that perform network I/O inside third-party packages (e.g. cloud SDKs, DB drivers) are invisible to taint tracking; only handlers whose own code calls requests.* are covered by the sink families.",
+    "requests.request(**kwargs) wrappers: lightdash_handler/api.py:21 and sap_erp_handler/api.py:55 pass the URL inside a kwargs dict, so the URL argument position is not extractable at the call site; extracted with arg index -1 - the URL-bearing parameter is the wrapper method's url/params argument (labeling must resolve it).",
+    "Mongo wire protocol: queries arrive as BSON operations at mindsdb/api/mongo/server.py (MongoRequestHandler, OpMsgResponder etc.) and are translated into the same SQL executor pipeline; there is no single sql parameter to extract, so this entry surface is documented rather than extracted.",
+    "Second-order (response-derived) URLs: urlcrawl_helpers.py:118-136 builds follow-up crawl URLs from href attributes read out of fetched pages (urljoin at :122) and crawls them recursively; response-to-URL propagation needs a summary step in Phase 2 if labeling considers it in-scope.",
+    "gRPC handler service boundary: in modular mode, ML handler calls and the executor service communicate over gRPC (handlers_wrapper, session_controller executor_url is http for delete only); intra-gRPC flows are not modeled.",
+    "Cloud/OAuth support code targets config-derived hosts (namespaces/auth.py, utilities/auth.py: server_host from Config) and fixed AWS metadata/S3 URLs (utilities/auth.py:19, utilities/functions.py:86, gui.py, initialize.py:71) - operator-configured or literal URLs, FP-leaning for CWE-918 per the workflow's 'admin-configured URLs -> FP' heuristic; extracted as sink candidates for completeness, weighting left to labeling.",
+    "file_handler._handle_source chunking uses langchain TextLoader/PyPDFLoader on already-downloaded local temp files - no network I/O; safe_extract/zipfile/tarfile extraction of uploaded archives is a path-traversal concern (Pass 1), not CWE-918.",
+    "Internal helper url parameters (download_file(url), _fetch_url(url: str), get_all_website_links(url), registry(url, ...)) are NOT extracted as sources - they are project-internal plumbing; the earliest untrusted boundaries (request.json/args/form/files/headers, Resource method path variables, process_query sql, env vars) are extracted instead, per the candidate strategy."
+  ]
+}

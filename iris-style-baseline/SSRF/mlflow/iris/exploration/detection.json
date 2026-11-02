@@ -1,0 +1,228 @@
+{
+  "step": "Step 1 - Explore and detect",
+  "target": "mlflow (ML lifecycle platform, version 2.9.2.dev0, mlflow/version.py:4)",
+  "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\mlflow_vuln\\mlflow-db",
+  "source_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\mlflow_vuln",
+  "timestamp": "2026-10-20",
+  "language": "python",
+  "language_evidence": [
+    "mlflow-db/codeql-database.yml: primaryLanguage: python, creationMetadata.cliVersion: 2.25.1, baselineLinesOfCode: 191482, sourceLocationPrefix = mlflow_vuln repo root (relative paths therefore look like mlflow/server/handlers.py)",
+    "repository layout: single application package mlflow/ with server/, store/, tracking/, projects/, models/, pyfunc/, gateway/, deployments/, data/, artifacts/, utils/ plus ~40 flavor integration subpackages; setup.py + pyproject.toml + requirements/ at repo root",
+    "mlflow/version.py:4 VERSION = \"2.9.2.dev0\""
+  ],
+  "codeql_environment": {
+    "cli_version": "2.25.1 (verified via `codeql version`, unpacked at E:\\codeql)",
+    "python_query_library": "codeql/python-all 7.1.1 and 7.1.2 cached under C:\\Users\\lzh\\.codeql\\packages\\codeql; workspace qlpack.yml (already present) declares name iris/mlflow-cwe918 with dependency codeql/python-all: \"*\"",
+    "api_surface_note": "Extraction queries use only `import python` AST APIs verified against the locally cached python-all 7.1.1 library (same surface validated on the earlier label-studio/django/calibre-web/core SSRF runs): AstNode.getLocation()/getScope()/toString(), Location.getFile()/getStartLine(), File.getRelativePath()/getAbsolutePath(), Call.getFunc()/getPositionalArg(int)/getANamedArg(), Keyword.getArg()/getValue(), Attribute.getName()/getObject(), Name.getId(), Parameter.asName().getId(), Function.getName()/getArg(int)/getADecorator(), Module.getName(), StringLiteral.getText(). No AstNode.getFile(), no QL classes defined in the extraction queries, no API::Node/DataFlow::Node mixing, no @kind declared (plain multi-column select for `codeql query run` + `bqrs decode --format=csv`). All string variables are bound by equality before any matches() comparison.",
+    "dbscheme": "semmlecode.python.dbscheme"
+  },
+  "scope": {
+    "passes": [3],
+    "cwes": ["918", "099", "610"],
+    "focus": "Server-Side Request Forgery (CWE-918 primary, per user instruction)"
+  },
+  "scope_exclusions": [
+    "mlflow-db/ (nested CodeQL database directory inside the source root) - excluded from all exploration, scanning and annotation; the extraction scope predicate `path.matches(\"mlflow/%\")` cannot match it because the directory name is 'mlflow-db' (hyphen, not slash) at the position where 'mlflow/' is required",
+    "mlflow/R/% (R-language flavor package, no Python) and mlflow/java/% (Java flavor assets)",
+    "tests/, examples/, dev/, docker/, docs/ are outside the mlflow/ package and therefore outside the scope predicate"
+  ],
+  "project_purpose": "MLflow is an open-source ML lifecycle platform (tracking, model registry, projects, deployments, AI gateway). Two server surfaces are relevant for CWE-918: (1) the Flask tracking/model-registry/artifacts server started by `mlflow server` (mlflow/server/__init__.py:41 app = Flask(...)) exposing /api/2.0/mlflow/* and /ajax-api/2.0/mlflow/* REST handlers from mlflow/server/handlers.py, artifact serving routes /get-artifact, /model-versions/get-artifact, /ajax-api/2.0/mlflow-artifacts/artifacts/* (when --serve-artifacts), and the deployments proxy /ajax-api/2.0/mlflow/gateway-proxy (server/__init__.py:99-101 -> gateway_proxy_handler, handlers.py:1126-1152, which forwards requests.request(request_type, f\"{target_uri}/{gateway_path}\") with gateway_path taken from request.args/request.json); (2) the FastAPI MLflow AI Gateway / deployments server (mlflow/gateway/app.py, mlflow/deployments/server/app.py) whose providers POST to configured provider base URLs via aiohttp (gateway/providers/utils.py:27). Client-side: `mlflow run <uri>` (cli.py:53-158) fetches zip/git project URIs, and HttpArtifactRepository / cloud artifact repos download artifacts over HTTP. These proxy, artifact-fetch and project-fetch paths are exactly where the server issues outbound requests driven by externally supplied values.",
+  "framework_candidates": [
+    {
+      "framework": "flask",
+      "kind": "web-framework",
+      "confidence": 1.0,
+      "classification": "primary (tracking server + model registry + artifacts server)",
+      "evidence": {
+        "import_evidence": {
+          "score": 0.45,
+          "snippets": [
+            "mlflow/server/handlers.py:14 from flask import Response, current_app, request, send_file",
+            "mlflow/server/__init__.py:41 app = Flask(__name__, static_folder=REL_STATIC_DIR)"
+          ]
+        },
+        "route_evidence": {
+          "score": 0.30,
+          "snippets": [
+            "mlflow/server/__init__.py:70-106 @app.route registrations: /get-artifact -> get_artifact_handler, /model-versions/get-artifact -> get_model_version_artifact_handler, /ajax-api/2.0/mlflow/metrics/get-history-bulk, /ajax-api/2.0/mlflow/experiments/search-datasets, /ajax-api/2.0/mlflow/runs/create-promptlab-run, /ajax-api/2.0/mlflow/gateway-proxy (GET+POST) -> gateway_proxy_handler, /ajax-api/2.0/mlflow/upload-artifact",
+            "mlflow/server/handlers.py:2115-2123 get_endpoints() registers protobuf-service handlers for /api/2.0 and /ajax-api/2.0 paths (MlflowService, ModelRegistryService, MlflowArtifactsService)",
+            "mlflow/server/handlers.py:2126-2170 HANDLERS map: CreateExperiment, CreateRun, CreateModelVersion, GetModelVersionDownloadUri, ListArtifacts, etc."
+          ]
+        },
+        "runtime_bootstrap_evidence": {
+          "score": 0.2,
+          "snippets": [
+            "mlflow/server/__init__.py runs gunicorn (Linux) or waitress (Windows) on the Flask app",
+            "mlflow/cli.py:279-375 `mlflow server` command wires backend-store-uri / registry-store-uri / serve-artifacts / artifacts-destination options"
+          ]
+        },
+        "layout_evidence": {
+          "score": 0.05,
+          "snippets": [
+            "server package layout: mlflow/server/{handlers.py,__init__.py,auth/,prometheus_exporter.py,validation.py}"
+          ]
+        }
+      }
+    },
+    {
+      "framework": "fastapi",
+      "kind": "web-framework",
+      "confidence": 0.85,
+      "classification": "secondary (MLflow AI Gateway / deployments server; separate process from the tracking server)",
+      "evidence": [
+        "mlflow/gateway/app.py and mlflow/deployments/server/app.py:6 from fastapi import FastAPI, HTTPException, Request",
+        "mlflow/deployments/server/app.py:46-69 dynamic route registration under MLFLOW_DEPLOYMENTS_ENDPOINTS_BASE and MLFLOW_GATEWAY_ROUTE_BASE; :104-105 async def _custom(request: Request): return request.json()",
+        "mlflow/gateway/providers/utils.py:22 from fastapi import HTTPException inside send_request"
+      ]
+    },
+    {
+      "framework": "requests (python-requests)",
+      "kind": "http-client-library",
+      "confidence": 1.0,
+      "classification": "secondary (the outbound-HTTP client actually used by server and client code)",
+      "evidence": [
+        "mlflow/utils/request_utils.py:130 session = requests.Session(); :190 session.request(method, url, **kwargs) - the single transport for all mlflow rest-utils traffic (http_request / cloud_storage_http_request / _get_http_response_with_retries)",
+        "mlflow/server/handlers.py:13 import requests; :1143 requests.request(request_type, f\"{target_uri}/{gateway_path}\", json=json_data) - deployments proxy egress",
+        "mlflow/store/artifact/http_artifact_repo.py:5 import requests; :157 requests.put(credential.url, data=data, headers=credential.headers) - multipart upload part",
+        "mlflow/projects/utils.py:245 requests.get(uri) - zip project fetch",
+        "client-side utilities: mlflow/pyfunc/scoring_server/client.py:46,51,83 and mlflow/openai/api_request_parallel_processor.py:104 requests.post(url=self.request_url, ...)"
+      ]
+    },
+    {
+      "framework": "aiohttp",
+      "kind": "http-client-library",
+      "confidence": 0.9,
+      "classification": "secondary (gateway provider transport)",
+      "evidence": [
+        "mlflow/gateway/providers/utils.py:3 import aiohttp; :24-27 async with aiohttp.ClientSession(headers=headers) as session: ... session.post(url, json=payload, timeout=timeout)",
+        "called from every mlflow/gateway/providers/*.py (openai.py:82,169,204, anthropic.py:114, cohere.py, etc.) with base_url from gateway route config"
+      ]
+    },
+    {
+      "framework": "urllib.request / urllib3",
+      "kind": "http-client-library",
+      "confidence": 0.2,
+      "classification": "not a direct sink family in this tree",
+      "evidence": [
+        "no urlopen()/urlretrieve()/urllib.request.urlopen() call sites exist in the mlflow/ package (only urllib.request.url2pathname / pathname2url local-path conversions in mlflow/projects/docker.py:161 and mlflow/utils/file_utils.py:630-631, and urllib3 Retry adapter plumbing inside mlflow/utils/request_utils.py)",
+        "urllib.parse (urlparse/urljoin/unquote) is used for URL processing only (mlflow/utils/uri.py, projects/utils.py, handlers.py:1576-1578) - recorded as parsing, not as sinks"
+      ]
+    }
+  ],
+  "auth_and_reachability": {
+    "default": "The Flask tracking server has NO authentication by default; all /api/2.0/mlflow/*, /ajax-api/2.0/mlflow/*, /get-artifact and /ajax-api/2.0/mlflow/gateway-proxy routes are reachable by any network client that can reach the server port.",
+    "optional_auth": "mlflow/server/auth/ provides an optional basic-auth/permission layer (sqlalchemy_store, permissions.py; enabled via --app-name basic-auth in server/__init__.py). _get_request_param (auth/__init__.py:137) and authenticate_request read request args/json when enabled. The deployments proxy route gateway_proxy_handler is registered unconditionally (server/__init__.py:99-101) and is not behind the optional auth layer unless that layer is enabled app-wide.",
+    "artifacts_only": "_disable_if_artifacts_only wrappers disable model registry handlers in --artifacts-only mode; _disable_unless_serve_artifacts (handlers.py:507) disables the proxied-artifact routes when --no-serve-artifacts is passed."
+  },
+  "input_entry_inventory": [
+    {
+      "family": "flask-request-field",
+      "evidence": "mlflow/server/handlers.py:14 imports `request` from flask; reads at :1132 args = request.args if request.method == \"GET\" else request.json; :547-548 request.query_string; :1098 request.json; :1226-1247 request.args / request.data; :405-409 _get_request_json uses flask_request.get_json(force=True, silent=True); :410-470 _get_request_message parses query string with querystring_parser and JSON body into protobuf request messages - the request materialization for ALL REST handlers; additional boundary reads in the optional auth layer mlflow/server/auth/__init__.py:139/:141/:748-749 (request.args/json/form) and the fastapi deployments server mlflow/deployments/server/app.py:105 (request.json())",
+      "note": "request.args / request.json / request.data / request.query_string / request.form / request.values / request.files attribute nodes are the earliest untrusted-input boundary"
+    },
+    {
+      "family": "rest-handler-boundary",
+      "evidence": "mlflow/server/handlers.py handler functions decorated with @catch_mlflow_exception (handlers.py:493) and @app.route functions in mlflow/server/__init__.py:58-106; HANDLERS registry handlers.py:2126+"
+    },
+    {
+      "family": "registry-and-run-uri-content",
+      "evidence": "DB-stored URIs that later drive server-side fetches: _create_model_version takes request_message.source (handlers.py:1626-1648) after _validate_source (handlers.py:1590-1621); get_model_version_artifact_handler reads artifact_uri = store.get_model_version_download_uri(name, version) (handlers.py:1664) then get_artifact_repository(artifact_uri) (handlers.py:1672); get_artifact_handler reads run.info.artifact_uri (handlers.py:554/557); _create_experiment accepts artifact_location (handlers.py:594-596); HttpArtifactRepository reads self.artifact_uri (http_artifact_repo.py:84,117,130,142); ModelsArtifactRepository resolves models:/ URIs to a download_uri (models_artifact_repo.py:94-99)",
+      "note": "run.info.artifact_uri / request_message.source / self.artifact_uri reads are the DB-content source family (source of the /get-artifact server-side fetch chain)"
+    },
+    {
+      "family": "environment-configuration",
+      "evidence": "mlflow/environment_variables.py:81 MLFLOW_TRACKING_URI, :390 MLFLOW_DEPLOYMENTS_TARGET (used directly by gateway_proxy_handler, handlers.py:1127 target_uri = MLFLOW_DEPLOYMENTS_TARGET.get()); os.environ.get / os.getenv reads throughout (e.g. server/__init__.py:81-83 STATIC_PREFIX_ENV_VAR); MlflowHostCreds.host built from tracking URI (rest_utils.py:74,104-105)"
+    },
+    {
+      "family": "cli-input",
+      "evidence": "mlflow/cli.py:53-158 `mlflow run` click command takes uri (index 0) -> projects/utils.py fetch_and_validate_project -> _fetch_project (projects/utils.py:148) -> _fetch_zip_repo -> requests.get(uri) at :245; also `mlflow deployments` / `mlflow gateway` CLI groups"
+    }
+  ],
+  "network_egress_inventory": [
+    {
+      "site": "requests.Session.request transport",
+      "location": "mlflow/utils/request_utils.py:190 (session.request(method, url, **kwargs) inside _get_http_response_with_retries)",
+      "provenance": "final egress for ALL rest-utils traffic: http_request (rest_utils.py:28-129, url = strip_suffix(hostname)+endpoint at :104-105), cloud_storage_http_request (request_utils.py:193-231), download_chunk (request_utils.py:62-87, http_uri keyword)",
+      "classification": "sink (final network I/O)"
+    },
+    {
+      "site": "deployments gateway proxy",
+      "location": "mlflow/server/handlers.py:1143 requests.request(request_type, f\"{target_uri}/{gateway_path}\", json=json_data)",
+      "provenance": "gateway_path from request.args/request.json (handlers.py:1132-1141), target_uri from MLFLOW_DEPLOYMENTS_TARGET env; direct Flask-reachable egress",
+      "classification": "sink (final network I/O, server-reachable)"
+    },
+    {
+      "site": "http artifact repository",
+      "location": "mlflow/store/artifact/http_artifact_repo.py:63,88,104,113,125,139,151 http_request(...) wrappers; :157 requests.put(credential.url, ...)",
+      "provenance": "artifact_uri registered for http:// https:// schemes (artifact_repository_registry.py:100-101); driven by /get-artifact and model-version download chains",
+      "classification": "sink (wrapper call sites + final requests.put)"
+    },
+    {
+      "site": "project zip fetch",
+      "location": "mlflow/projects/utils.py:245 requests.get(uri)",
+      "provenance": "uri from `mlflow run <uri>` CLI (cli.py:158) / fetch_and_validate_project",
+      "classification": "sink (final network I/O, CLI-driven)"
+    },
+    {
+      "site": "gateway provider transport",
+      "location": "mlflow/gateway/providers/utils.py:27 session.post(url, json=payload, timeout=timeout) (aiohttp)",
+      "provenance": "base_url from gateway route config (_request_base_url, providers/openai.py:20-36; fixed defaults like https://api.openai.com/v1, anthropic.py:106) - operator-configured, admin-file material",
+      "classification": "sink (final network I/O, config-driven)"
+    },
+    {
+      "site": "cloud artifact chunk download",
+      "location": "mlflow/utils/request_utils.py:65 cloud_storage_http_request(\"get\", http_uri, ...) inside download_chunk; call sites mlflow/utils/download_cloud_file_chunk.py:32, mlflow/utils/file_utils.py:760,799",
+      "provenance": "http_uri from cloud credential signed URIs (cloud_artifact_repo.py:203-222) or dataset/remote URIs",
+      "classification": "sink (wrapper call site)"
+    },
+    {
+      "site": "internal rest client wrappers",
+      "location": "mlflow/store/artifact/dbfs_artifact_repo.py:62,66; mlflow/deployments/mlflow/__init__.py:130; mlflow/gateway/client.py:92; mlflow/utils/rest_utils.py:107,202,225,238 (http_request / http_request_safe / call_endpoint / call_endpoints call sites)",
+      "provenance": "mlflow client-side API traffic (tracking URI, gateway URI, databricks profiles) - operator/library configured",
+      "classification": "sink candidate (wrapper call sites; LLM to label summary vs sink)"
+    },
+    {
+      "site": "non-HTTP remote access",
+      "location": "mlflow/store/artifact/ftp_artifact_repo.py:40-42 ftp = FTP(); ftp.connect(self.config[\"host\"], self.config[\"port\"]); mlflow/store/artifact/sftp_artifact_repo.py:81 pysftp.Connection(**self.config); mlflow/projects/utils.py:209-233 git fetch/remote operations (origin.fetch, repo.create_remote(\"origin\", uri) at :211)",
+      "provenance": "ftp:// and sftp:// artifact URIs (API/DB-influenced via experiment artifact_location), git project URIs (CLI)",
+      "classification": "recorded separately - non-HTTP scheme remote access (file-transfer/git protocols), not canonical CWE-918 HTTP(S) sinks"
+    },
+    {
+      "site": "client-side utilities (out of server threat model)",
+      "location": "mlflow/pyfunc/scoring_server/client.py:46,51,83 requests.get/post against self.url_prefix; mlflow/openai/api_request_parallel_processor.py:104 requests.post(url=self.request_url, ...); mlflow/openai/utils.py mock request helpers (:163,:169,:174)",
+      "classification": "sink rows still extracted (they exist in source) but expected client-side / FP material for server SSRF"
+    }
+  ],
+  "sanitizers_and_guards_observed": [
+    "mlflow/utils/uri.py validate_path_is_safe - applied to artifact path params in handlers.py:551, 1239, 1663 (path traversal guard, not URL host control)",
+    "mlflow/server/handlers.py:1590-1621 _validate_source + :1552-1587 _validate_non_local_source_contains_relative_paths - rejects relative path traversal in model version sources; does NOT restrict scheme or host (http/https/s3/... remain fetchable)",
+    "mlflow/server/handlers.py:592 validate_query_string on experiment artifact_location query component",
+    "mlflow/deployments/utils.py:26-36 _is_valid_uri / parse_target_uri - deployment target URI shape validation",
+    "no allow-list / private-IP blocking / scheme restriction exists on the gateway proxy path (handlers.py:1126-1152) or on HttpArtifactRepository fetch paths"
+  ],
+  "coverage_gaps": [
+    "urllib.request.urlopen / urlretrieve: not called anywhere in the mlflow/ package; nothing to extract",
+    "httpx: not used by mlflow code (only present transitively as a dependency of other libraries, not in this source tree)",
+    "boto3 / google-cloud-storage / azure-sdk network I/O happens inside external libraries that are NOT in this database (only mlflow application code is); s3:// gs:// azure:// artifact access rows are therefore not extracted as CWE-918 HTTP sinks (cloud-client endpoint override is a possible but unproven family here)",
+    "gRPC-based tracking store (mlflow/store/tracking/rest_store.py uses the http rest layer, not grpc, in this version) - grpc client traffic is out of scope for CWE-918 HTTP sinks anyway",
+    "flask / fastapi / requests / aiohttp library internals are external dependencies not present in the database, so source/sink rows anchor on application-level call sites only",
+    "mlflow/gateway/providers/* additional providers (cohere, mosaicml, palm, etc.) all funnel through the single aiohttp send_request call in gateway/providers/utils.py:27; their per-provider base_url expressions are config-derived and not separately extracted"
+  ],
+  "reference_files_loaded": [
+    "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0\\WORKFLOW.md",
+    "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0\\references\\patterns.md",
+    "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0\\references\\python.md",
+    "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0\\assets\\extraction\\python_sources.ql.tmpl",
+    "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0\\assets\\extraction\\python_sinks.ql.tmpl",
+    "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0\\assets\\extraction\\extract_sources.ql.tmpl (generic template contract)",
+    "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0\\assets\\extraction\\extract_sinks.ql.tmpl (generic template contract)",
+    "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0\\references\\flask.md (loaded because flask is the detected primary framework; its request.args/form/json/get_json/headers/cookies source cues were merged with the observed server/handlers.py shapes, and its outbound-HTTP sink guidance (requests.*, outbound HTTP with user-controlled URL) with the observed requests/aiohttp call sites)"
+  ],
+  "detection_method_notes": "Language detected from codeql-database.yml (primaryLanguage: python). Flask detected via import + route + bootstrap evidence with additive scoring 0.45+0.30+0.20+0.05 = 1.00 (primary). FastAPI detected at 0.45+0.30+0.20 = 0.95 for the gateway/deployments app (secondary; separate server process). requests and aiohttp recorded as http-client-library secondary candidates (confidence 1.0 / 0.9) since sink generation depends on them. Column contract follows the earlier SSRF runs (label-studio, django, calibre-web, core): node, candidate_type, callableName, flowKind, receiverHint, moduleHint (variable named moduleHint, never `module`), argIndex, line, file:line, expression text.",
+  "phase1_plan": {
+    "step": "Step 2 - Extract candidates (this run generates queries only; execution deferred)",
+    "artifacts": ["iris/extraction/sources.ql", "iris/extraction/sinks.ql"],
+    "execution": "codeql query run iris/extraction/sources.ql --database <mlflow-db> --output iris/extraction/sources.bqrs; then bqrs decode --format=csv; same for sinks.ql; strictly sequential",
+    "no_kind_note": "both queries are plain multi-column selects with NO @kind metadata (neither @kind problem nor @kind table is declared), suitable only for `codeql query run` + `codeql bqrs decode --format=csv`; they are NOT intended for `codeql database analyze` SARIF output"
+  }
+}
