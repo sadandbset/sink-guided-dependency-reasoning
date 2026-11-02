@@ -1,0 +1,271 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-16",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\ray\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (exploration + candidate extraction query generation only) against the ray_vuln source tree. The CodeQL database ray-db was created from the same tree (sourceLocationPrefix matches, creation sha 79a5643), so file/line evidence below is verified against the database snapshot. Per instructions, CodeQL is NOT run in this step: only detection.json, extraction/sources.ql and extraction/sinks.ql are generated."
+  },
+  "target": {
+    "project": "ray",
+    "projectDescription": "Distributed computing framework (Python API on top of a C++ core). The Python attack surface in this snapshot: an aiohttp-based dashboard (head server on the driver node + agent server on every node, under the repo-root dashboard/ directory), gRPC services (reporter agent, ray client server under python/ray/util/client/server/), the Ray Jobs submission API (dashboard job module executes submitted entrypoints as shell commands), Ray Serve (aiohttp/Starlette ingress and a serve dashboard module), the autoscaler (cluster config YAML drives ssh/docker command execution on cluster nodes), runtime_env setup (conda/pip/venv subprocess execution), and a large click-based CLI (ray/scripts/scripts.py).",
+    "pass": 2,
+    "cwes": ["CWE-78"],
+    "focus": "Command/Argument Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ray_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (ray-db/codeql-database.yml)",
+      "4054 .py files in the database snapshot (dashboard/ 125, python/ray/autoscaler/ 106, python/ray/_private/ 92, python/ray/serve/ 192, python/ray/util/client/ 20, remainder under python/ray/ and repo-root rllib/)",
+      "python/setup.py wheel build layout; python/ray/__init__.py package root",
+      "note: python/ray/dashboard and python/ray/rllib are 15-byte BUILD-style text stubs ('../../dashboard', '../../rllib'); the real dashboard code lives at repo root dashboard/ and the real rllib code at repo root rllib/ - both are part of the database"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ray-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ray_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "79a5643238f890f0b163c3a886aa51d1abc6e4f7",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-27T01:32:42.412498700Z"
+    },
+    "baselineLinesOfCode": 566918,
+    "finalised": true
+  },
+  "toolchain": {
+    "qlpack": "iris/ray-cwe78 (dependencies: codeql/python-all: \"\")",
+    "packResolutionExpected": "codeql/python-all resolved from the local user pack cache (7.1.1 and 7.1.2 installed; AST/API facts below verified against the 7.1.2 sources in the pack cache: Call.getFunc/getPositionalArg/getAPositionalArg/getANamedArg, Keyword.getArg/getValue, Attribute/Name/Subscript/BinaryExpr/Mod/StringLiteral/True, Parameter.getPosition/isSelf, Function.getAnArg/getADecorator, Class.getName, API::moduleImport in semmle.python.ApiGraphs)",
+    "codeqlCli": "2.25.1 (recorded from ray-db creation metadata; codeql was not executed in this step)"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] },
+        { "name": "django", "confidence": 0.0, "evidence": [] },
+        { "name": "flask", "confidence": 0.0, "evidence": [] }
+      ]
+    },
+    "selected": "none (aiohttp + grpc + click + Starlette libraries, no web-framework reference match)",
+    "notes": "No framework reference (fastapi/django/flask) matches; all scores are 0. The servers in this project are built directly on aiohttp (dashboard head/agent HTTP servers register handlers via the aiohttp `routes` decorator table) and grpc.aio (reporter service, ray client server); Ray Serve uses Starlette for per-deployment ingress and pydantic (BaseModel/Schema.parse_obj) for dashboard payload validation; CLIs use click. Source/sink shapes below are derived from repository evidence per references/python.md and references/patterns.md (language reference path, no framework reference loaded).",
+    "customBoundaryEvidence": [
+      "dashboard/head.py:168 'await http_server.run(modules)' - aiohttp head server aggregating dashboard/modules/*/*_head.py route tables (66 @routes.get/post/put/delete decorators in non-test dashboard code)",
+      "dashboard/http_server_agent.py - aiohttp agent server on every node aggregating *_agent.py route tables",
+      "dashboard/modules/job/job_head.py:273 '@routes.post(\"/api/jobs/\")' - job submission API; job_agent.py:32 '@routes.post(\"/api/job_agent/jobs/\")' forwards to the node-local JobManager",
+      "dashboard/modules/reporter/reporter_agent.py:266 'class ReporterAgent(..., reporter_pb2_grpc.ReporterServiceServicer)' - gRPC service with GetTraceback/CpuProfiling/ReportOCMetrics handlers (:348/:355/:366)",
+      "python/ray/util/client/server/server.py:96 'class RayletServicer(ray_client_pb2_grpc.RayletDriverServicer)' - ray client gRPC server (Init/Schedule/GetObject/PutObject/KV*/...); dataservicer.py:133 'class DataServicer(ray_client_pb2_grpc.RayletDataStreamerServicer)' :155 'def Datapath(self, request_iterator, context)'",
+      "python/ray/serve/http_adapters.py:73-100 'async def json_request(request) -> await request.json()', 'pandas_read_json(raw_request) -> await raw_request.body()', 'raw_request.query_params' - Starlette ingress adapters for user deployments",
+      "python/ray/scripts/scripts.py - click CLI entry point (25 @cli.command(), 204 @click.option(...), e.g. cluster_config_file arguments); dashboard/modules/job/cli.py job_cli_group (ray job submit --entrypoint ...)",
+      "python/ray/autoscaler/_private/commands.py:254/434/568/1097/1255/1326/1345 'config = yaml.safe_load(open(config_file).read())' - user cluster config YAML drives all autoscaler command execution"
+    ]
+  },
+  "inputBoundaryInventory": {
+    "summary": "Attackers face (1) the dashboard head HTTP API (default port 8265, no authentication in this snapshot): job submission fields (entrypoint shell command, runtime_env conda/pip/env_vars, submission_id), serve deployment configs, node/actor/state/log query parameters, and the py-spy profiling parameters (pid, duration, format) that reach a shell command; (2) the dashboard agent HTTP API on every node (job_agent, serve_agent, log_agent routes); (3) gRPC services: the reporter service (CpuProfiling/GetTraceback request fields) and the ray client server (client-supplied protobuf payloads, deserialized server-side); (4) Ray Serve per-deployment HTTP ingress (Starlette request bodies/params passed to user code); (5) CLI arguments (click options/arguments incl. cluster config files) and environment variables (RAY_* and third-party vars such as EDITOR, 446 os.environ/os.getenv read sites); (6) the user-supplied cluster config YAML consumed by the autoscaler, whose ssh/docker/command fields are executed on cluster nodes. Command execution sinks: subprocess.Popen (job entrypoint with shell=True), asyncio.create_subprocess_shell (py-spy profiling commands built from request pid/duration/format), the autoscaler process_runner check_call/check_output ssh/docker pipeline, runtime_env conda/pip subprocess execution, os.execvp worker replacement, and a set of smaller subprocess sites.",
+    "sourceFamilies": [
+      {
+        "family": "dashboard_http_request",
+        "evidence": [
+          "dashboard/modules/job/utils.py:140 'json_data = strip_keys_with_value_none(await req.json())' inside parse_and_validate_request - job submission JSON body (entrypoint, runtime_env, metadata)",
+          "dashboard/modules/job/job_head.py:264 'upload_package_to_gcs(package_uri, await req.read())' - raw job package upload body",
+          "dashboard/modules/serve/serve_agent.py:196 'config = ServeApplicationSchema.parse_obj(await req.json())' and :280 'ServeDeploySchema.parse_obj(await req.json())' - serve deployment config bodies",
+          "dashboard/modules/reporter/reporter_head.py:243-259/335-354 'req.query.get(\"task_id\")/(\"attempt_number\")/(\"node_id\")/(\"duration\", 5)/(\"format\", \"flamegraph\")' - profiling parameters forwarded over gRPC",
+          "dashboard/modules/reporter/reporter_head.py:416 'pid = int(req.query[\"pid\"])' and :421 'req.query.get(\"ip\")' - direct pid/ip query parameters on the cpu_profile endpoint",
+          "dashboard/modules/log/log_head.py:66 'url = req.query.get(\"url\")'; dashboard/modules/node/node_head.py:304 'view = req.query.get(\"view\")'; dashboard/modules/event/event_head.py:95 'job_id = req.query.get(\"job_id\")'",
+          "dashboard/modules/job/job_head.py:235-236/259-260 'req.match_info[\"protocol\"]/[\"package_name\"]', :312/347/382/433/475 'req.match_info[\"job_or_submission_id\"]' - path parameters; actor_head.py:258 'req.match_info.get(\"actor_id\")', node_head.py:337 'req.match_info.get(\"node_id\")'"
+        ]
+      },
+      {
+        "family": "grpc_message_fields",
+        "evidence": [
+          "dashboard/modules/reporter/reporter_agent.py:349-352 'pid = request.pid; native = request.native' (GetTraceback) and :356-360 'pid = request.pid; duration = request.duration; format = request.format' (CpuProfiling) - protobuf fields that flow into py-spy shell commands",
+          "python/ray/util/client/server/server.py:96 RayletServicer methods taking (self, request, context) or (self, req, context): Init :116, KVPut :169, KVGet :183, Terminate :359, GetObject :457, PutObject :509, WaitObject :557, Schedule :594, ClusterInfo :240 - client-supplied message fields (ids, options, serialized payloads)",
+          "python/ray/util/client/server/dataservicer.py:155 'def Datapath(self, request_iterator, context)' - streamed client data messages"
+        ]
+      },
+      {
+        "family": "serve_http_ingress",
+        "evidence": [
+          "python/ray/serve/http_adapters.py:73-75 'async def json_request(request) -> Dict: return await request.json()'",
+          "python/ray/serve/http_adapters.py:90-100 'pandas_read_json(raw_request): raw_json = await raw_request.body(); return pd.read_json(raw_json, **raw_request.query_params)'"
+        ]
+      },
+      {
+        "family": "cli_args",
+        "evidence": [
+          "python/ray/scripts/scripts.py - click CLI: 25 @cli.command(), 204 @click.option(...), 12 @click.argument(\"cluster_config_file\", ...); e.g. 'ray up/down/exec/attach/rsync' take a cluster config file path, 'ray start/stop' take node parameters",
+          "dashboard/modules/job/cli.py - job_cli_group commands (submit with --entrypoint/--runtime-env, logs, stop, status); python/ray/serve/scripts.py and python/ray/tune/cli/commands.py CLI groups",
+          "python/ray/autoscaler/_private/commands.py CLI functions (create_or_update_cluster, teardown_cluster, exec_cluster, attach_cluster, rsync) receive the cluster config file and per-node commands/arguments from the CLI",
+          "python/ray/autoscaler/launch_and_verify_cluster.py, python/ray/setup-dev.py, python/ray/experimental/raysort/main.py - argparse-based entry points"
+        ]
+      },
+      {
+        "family": "environment_variables",
+        "evidence": [
+          "446 non-test os.environ / os.getenv read sites across the tree (RAY_* configuration, proxy/temp paths, CUDA paths)",
+          "python/ray/tune/cli/commands.py:300 'subprocess.call([EDITOR, filepath.as_posix()])' - EDITOR environment variable selected at line ~290 via os.environ",
+          "dashboard/modules/job/job_manager.py:238 'os.environ.get(\"RAY_JOB_STOP_SIGNAL\")' read next to the entrypoint Popen",
+          "python/ray/util/spark/utils.py:291-293 RAY_ON_SPARK_WORKER_GPU_NUM environment read next to the shell=True nvidia-smi run"
+        ]
+      },
+      {
+        "family": "cluster_config_yaml",
+        "evidence": [
+          "python/ray/autoscaler/_private/commands.py:254/434/568/1097/1255/1326/1345 'yaml.safe_load(open(config_file).read())' - cluster config files supplied via CLI/API",
+          "python/ray/autoscaler/_private/autoscaler.py:225 'new_config = yaml.safe_load(f.read())' - live config reload",
+          "python/ray/autoscaler/_private/cluster_dump.py:569, launch_and_verify_cluster.py:261 'yaml.safe_load(cluster_config.read_text())'",
+          "config fields consumed by executors: command_runner.py:174-186 auth_config ssh_user/ssh_private_key/ssh_proxy_command, docker.py docker_config container_name/image_name, updater.py:230/284/422/481/523 cmd_runner.run(cmd) node setup commands"
+        ]
+      },
+      {
+        "family": "json_decode",
+        "evidence": [
+          "101 non-test json.loads/json.load call sites (dashboard request payloads, config blobs, job metadata, GCS kv payloads); e.g. dashboard/modules/job/job_head.py, python/ray/_private/runtime_env/conda.py parse pip requirements from runtime_env"
+        ]
+      },
+      {
+        "family": "file_input",
+        "evidence": [
+          "261 non-test open() call sites; cluster config files (commands.py above), runtime_env working_dir/conda files (_private/runtime_env/conda.py:263+), job package downloads, log/config reads"
+        ]
+      },
+      {
+        "family": "handler_entry_points",
+        "evidence": [
+          "66 non-test @routes.get/post/put/delete decorated handler functions under dashboard/modules/* (aiohttp head + agent servers) - parameters carry the decoded request objects",
+          "gRPC servicer methods: ReporterAgent.GetTraceback/CpuProfiling/ReportOCMetrics (reporter_agent.py:348/355/366), RayletServicer/DataServicer/LogstreamServicer methods (util/client/server/*.py) - (self, request*, context) signature shape",
+          "click-bound CLI command functions (scripts.py, job cli.py, serve scripts.py, tune cli commands.py) - parameters carry CLI option values",
+          "dashboard/modules/job/utils.py:118 'async def parse_and_validate_request(req, request_type)' - internal transfer wrapper handing the request body to the job pipeline"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "job_entrypoint_exec",
+        "evidence": [
+          "dashboard/modules/job/job_manager.py:229 'subprocess.Popen(self._entrypoint, shell=True, ...)' inside JobSupervisor._exec_entrypoint (:208) - the submitted entrypoint string is executed through a shell; entrypoint originates from POST /api/jobs/ (job_head.py:273 -> utils.py:140 -> job_agent.py:46 'entrypoint=submit_request.entrypoint' -> job_manager.py:832 submit_job)",
+          "dashboard/modules/job/job_manager.py:258 'subprocess.Popen(f\"while kill -s 0 {parent_pid}; do sleep 1; done; kill -9 -{child_pgid}\", shell=True, ...)' - fate-sharing watchdog built from internal pids"
+        ]
+      },
+      {
+        "family": "profiling_shell_exec",
+        "evidence": [
+          "dashboard/modules/reporter/profile_manager.py:69 'cmd = f\"py-spy dump -p {pid}\"' -> :74 'asyncio.create_subprocess_shell(cmd, ..., shell=True)' (trace_dump)",
+          "dashboard/modules/reporter/profile_manager.py:99-103 'cmd = f\"py-spy record -o {profile_file_path} -p {pid} -d {duration} -f {format}\"' -> :104 'asyncio.create_subprocess_shell(cmd, ..., shell=True)' (cpu_profile)",
+          "dashboard/modules/reporter/profile_manager.py:52 'asyncio.create_subprocess_shell(\"sudo -n true\", shell=True)' (sudo probe)",
+          "the pid/duration/format values arrive from reporter_head.py:348/351/416 req.query reads via the gRPC CpuProfiling request (reporter_agent.py:356-360)"
+        ]
+      },
+      {
+        "family": "autoscaler_process_runner",
+        "evidence": [
+          "python/ray/autoscaler/_private/command_runner.py:279 'self.process_runner.check_output(final_cmd)' - dynamic attribute call on the injected process_runner module (default subprocess, autoscaler.py:192 'process_runner: Any = subprocess'); final_cmd is the ssh command line built in SSHCommandRunner.run (:304-359) from cluster-config ssh_user/ssh_ip and the caller-supplied cmd (updater.py:230/422/481/523)",
+          "python/ray/autoscaler/_private/subprocess_output_util.py:243 'process_runner.check_call(cmd, ...)' and :251 'subprocess.Popen(cmd, ...)' inside run_cmd_redirected (:174) - the autoscaler command execution helper called from _run_helper",
+          "python/ray/autoscaler/_private/command_runner.py:304-309 'if shutdown_after_run: cmd += \"; sudo shutdown -h now\"' - string concatenation onto the executed command",
+          "python/ray/autoscaler/_private/command_runner.py:444 DockerCommandRunner.run (:477-489 'cmd = with_docker_exec([cmd], container_name=..., docker_cmd=...)[0]') - docker command wrapping from cluster config; run_rsync_up (:510-529) builds 'mkdir -p ... && chown -R ...' f-string commands"
+        ]
+      },
+      {
+        "family": "runtime_env_exec",
+        "evidence": [
+          "python/ray/_private/runtime_env/context.py:88 'subprocess.Popen(cmd, shell=True).wait()' (Windows worker exec) and :95 'os.execvp(\"bash\", args=[\"bash\", \"-c\", command_str])' - worker exec_command built from command_prefix and passthrough args (:76-86 string join with backslash-escaped spaces)",
+          "python/ray/_private/runtime_env/conda.py:79 'subprocess.check_output([python_binary, \"-c\", \"import sysconfig; ...\"])' - conda site-packages probe; surrounding functions run conda create/pip install from runtime_env config",
+          "python/ray/_private/runtime_env/conda_utils.py:196/222 'subprocess.Popen(cmd, ...)' in exec_cmd.../exec_cmd_stream_to_logger - generic command helpers used by conda env setup",
+          "python/ray/_private/runtime_env/utils.py:80 'asyncio.create_subprocess_exec(*cmd, ...)' - pip install execution driven by runtime_env pip config",
+          "python/ray/_private/runtime_env/_clonevirtualenv.py:61 'subprocess.Popen(...)'"
+        ]
+      },
+      {
+        "family": "process_bootstrap",
+        "evidence": [
+          "python/ray/_private/services.py:894 'process = ConsolePopen(...)' (ConsolePopen extends subprocess.Popen, :229) - raylet/gcs/worker/dashboard process startup; :1648-1650/1678/1683 'subprocess.list2cmdline(...)' builds the worker/dashboard command strings passed to the C++ launcher",
+          "python/ray/_private/accelerator.py:102 'subprocess.run(...)' (nvidia-smi/rocm probes); python/ray/_private/resource_spec.py:303 'subprocess.check_output(cmdargs)' (ps/memory probe)"
+        ]
+      },
+      {
+        "family": "subprocess_misc",
+        "evidence": [
+          "python/ray/scripts/scripts.py:1829 'subprocess.call(COMMAND, shell=True)' - static multi-line py-spy 'ray stack' shell script (no external interpolation)",
+          "python/ray/autoscaler/_private/fake_multi_node/command_runner.py:30-31 'subprocess.check_output(cmd, shell=True, ...)' and node_provider.py:409-421 check_output(..., shell=True) - docker commands for the local fake-multi-node provider",
+          "python/ray/util/spark/utils.py:53 'subprocess.Popen(cmd, ...)' and :303 'subprocess.run(\"nvidia-smi ...\", shell=True, ...)'; python/ray/util/spark/start_ray_node.py:54 'subprocess.Popen([ray_cli_cmd, \"start\", *arg_list])'",
+          "python/ray/experimental/packaging/load_package.py:138/150 'subprocess.check_call([\"curl\", ..., \"https://github.com/{}/{}/tarball/{}\".format(...)])' / tar extraction - URLs parsed from package spec strings",
+          "python/ray/tune/cli/commands.py:300 'subprocess.call([EDITOR, filepath.as_posix()])' - EDITOR from os.environ",
+          "python/ray/autoscaler/launch_and_verify_cluster.py:172/195/216/287/298 subprocess.run (ray up/down + smoke test commands); _private/cluster_dump.py:419 check_call; _private/kuberay/run_autoscaler.py:27 check_call; ray/cluster_utils.py:68/94/98 check_call; ray/experimental/raysort/main.py:155/405 run; ray/serve/benchmarks/scalability.py:94 run; ray/setup-dev.py:59-77 check_call; ray/autoscaler/v2/instance_manager/ray_installer.py:22 process_runner=subprocess"
+        ]
+      },
+      {
+        "family": "os_exec_absent",
+        "evidence": "no os.system / os.popen / os.spawn* call exists in non-test project source; the only os.exec* site is runtime_env/context.py:95 os.execvp (covered above). The query keeps the standard CWE-78 API set (subprocess.*, os.system/popen/exec*/spawn*) for exhaustiveness; expected real rows: subprocess family + os.execvp + asyncio.create_subprocess_*"
+      }
+    ],
+    "sanitizerObservations": [
+      "autoscaler uses shlex.quote on selected command fragments: command_runner.py:9 'from shlex import quote', docker.py:7, commands.py:77 - e.g. _with_environment_variables (command_runner.py:86) quotes environment-variable values into the ssh command; quoting is per-fragment, and SSHCommandRunner.run still appends raw caller cmd strings (:304-309 'cmd += \"; sudo shutdown -h now\"')",
+      "dashboard job pipeline validates request shape only: pydantic/dataclass validation in utils.py parse_and_validate_request and pydantic_models.py:67 'entrypoint: str = Field(...)' - entrypoint is typed as a free string with no shell metacharacter neutralization; the job entrypoint is BY DESIGN an arbitrary shell command (job submission is an authenticated-admin feature in later Ray versions; this snapshot has no dashboard authentication)",
+      "reporter_head.py converts some query values with int() (e.g. :348 'duration = int(req.query.get(\"duration\", 5))', :416 'pid = int(req.query[\"pid\"])') before sending them over gRPC - integer coercion is a partial sanitizer for those specific fields; 'format' (:351) is passed through as a string into the py-spy command f-string",
+      "no shlex.quote/pipes.quote wrapping exists in the job entrypoint path (job_manager.py:229) or the py-spy profiling path (profile_manager.py:69-107)",
+      "autoscaler cluster configs are schema-checked/filled (fillout_defaults/validate) before use - structure validation, not command neutralization"
+    ],
+    "nonVulnerabilityNote": "Ray Jobs and Ray Serve are user-facing execution features: a submitted job entrypoint is intended to run an arbitrary command on the cluster, and serve deployments run user code by design. These sites are recorded as sink candidates for CWE-78 flow analysis (the security question is which network boundary can reach them), not automatically as vulnerabilities. Likewise the static probe commands (ps/nvidia-smi/sysctl-style, 'ray stack' script, sudo -n true) and internal-pid watchdog commands are platform introspection with static or internal operands."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query compile, then codeql query run (sequential, one at a time) and codeql bqrs decode --format=csv; NOT database analyze / SARIF (per instruction, CodeQL is not run in this step - the queries are generated only)",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output is decoded directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, parameter position for 'param' rows, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); alias-aware, only genuine resolved calls into external modules (json, yaml, os, subprocess, asyncio)",
+      "ast": "pure AST shape match (attribute/name text, syntactic module prefix, receiver/variable name); catches dynamic or unresolved shapes that API graphs miss and is subject to name-collision noise. Dynamic receiver boundaries in this codebase resolve only at AST level: the autoscaler process_runner.check_output/check_call attribute calls (process_runner is an injected module variable), the req.query/req.match_info request reads, grpc message-field reads (request.pid), and pydantic Schema.parse_obj calls"
+    },
+    "flowKinds": {
+      "sources": ["return", "http_request", "message", "param", "cli", "env", "config", "file", "internal_transfer"],
+      "sinks": ["arg", "shell_true", "cmd_format", "internal_exec_wrapper", "indirect_exec"]
+    },
+    "exclusions": [
+      "test locations: any path under a tests/ directory or conftest.py (dashboard/modules/*/tests, python/ray/tests, rllib tests, etc.) are excluded in both queries",
+      "documentation and benchmark trees are not present as python source in the database in significant volume; serve/benchmarks and experimental raysort/benchmarks remain included because they are runnable module code, not test fixtures",
+      "logging-only helpers and pure response writers are not extracted as candidates"
+    ]
+  },
+  "uncoveredCases": [
+    "f-string command construction is not captured by the cmd_format sink family: this python-all version exposes no FormattedString AST class, and f-strings (profile_manager.py:69/99 py-spy commands, DockerCommandRunner.run_rsync_up:510-516 mkdir/chown commands, job_manager.py:258 kill watchdog) are therefore only represented by their sink call rows, not as separate cmd_format rows",
+    "dynamic process_runner dispatch: autoscaler command execution bottoms out in attribute calls on a module-valued variable (command_runner.py:279, subprocess_output_util.py:243); the callee module (subprocess vs a test fake) is not resolvable, captured as flow_kind 'indirect_exec' with moduleHint '<dynamic-process-runner>'",
+    "dynamic cmd_runner dispatch in updater.py:230/284/422/481/523 'self.cmd_runner.run(cmd, ...)' resolves to SSHCommandRunner/DockerCommandRunner only via runtime config; '.run' is too generic for an AST match, so the autoscaler chain is covered by the SSHCommandRunner._run_helper exec sites and internal_exec_wrapper rows instead of the .run call sites",
+    "gRPC servicer methods are detected by their (self, request*, context) signature shape rather than by resolved base classes (the generated *_pb2_grpc modules are not part of the extracted source tree), so a non-servicer method with an identical signature would also match",
+    "ray client server deserialization (server_pickler.py / client_pickler.py cloudpickle round-trips of client-supplied payloads) is an unsafe-deserialization boundary (CWE-502 territory); for CWE-78 it is recorded only via the servicer 'param' and 'message' rows",
+    "Ray core task arguments (worker.py receives deserialized task args from the C++ raylet) cross the python/C++ boundary below AST visibility; not represented as candidate rows",
+    "Bare-name (from-import) execution sinks are only matched for distinctive names (system, popen, getoutput, getstatusoutput); bare run/call/Popen/check_call are too collision-prone. In this repository every subprocess site is attribute-qualified except ConsolePopen (matched by name) and the from-imported helpers are only list2cmdline (not an exec API)",
+    "CLI cluster_config_file content reaches the executors only through yaml.safe_load rows plus the autoscaler function bodies; the config-field-to-command-field mapping (ssh_user, docker container_name, init commands) is data-driven through dicts and is not representable as AST candidate rows"
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: CVE申请报告.md (present at the ray_vuln tree root), cmd_sinks.csv, cmd_sinks_all.csv and any results/diagnostic files under ray-db were NOT opened during this step; candidate families are derived from repository evidence and the loaded language/pattern references only. Project source, database, and Augur installation files were not modified. Only files under iris_manual/ray/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). CodeQL was not executed; LLM labeling (Step 3) was not started."
+  }
+}

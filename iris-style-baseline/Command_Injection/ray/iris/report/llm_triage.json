@@ -1,0 +1,198 @@
+{
+  "run": {
+    "run_id": "ray-iris-pass2-20261016",
+    "pass": 2,
+    "cwe": "CWE-78",
+    "focus": "Command/Argument Injection",
+    "reviewer": "independent LLM path review (Claude Code CLI agent, model glm-5.3, in-session)",
+    "reviewed_at": "2026-10-16",
+    "inputs_reviewed": [
+      "results/pass2.sarif",
+      "report/iris_report.md",
+      "labels/labels.json",
+      "report/query_generation_notes.md",
+      "labels/phase1_review.md",
+      "labels/label_stats.md",
+      "queries/Pass2_CommandInjection.ql",
+      "queries/Pass2_CommandInjection_diagnostics.ql",
+      "libraries/MySources.qll, MySinks.qll, MySanitizers.qll, MySummaries.qll",
+      "extraction/sources.csv, sinks.csv",
+      "ray_vuln source: dashboard/modules/reporter/reporter_head.py, reporter_agent.py, profile_manager.py; dashboard/modules/job/job_head.py, job_agent.py; python/ray/_private/runtime_env/context.py"
+    ],
+    "constraints_honored": {
+      "no_ground_truth_access": true,
+      "notes": "未读取 PyVul 漏洞真值文件、修复提交 diff 或 CVE 公告；用户在本次 prompt 中提供的修复提交信息仅作为佐证引用，独立判定依据全部来自 ray_vuln 源码与 CodeQL 数据库的只读复核实验。原始 SARIF、标签与查询均未修改（复核用临时诊断查询已在结束后删除）。"
+    }
+  },
+  "formal_alerts": [],
+  "formal_alert_count": 0,
+  "mandatory_statement": "CodeQL 分析成功，但本轮没有命中正式污点路径。pass2.sarif 仅含 1 个 run，toolExecutionNotifications 中 invocation.executionSuccessful = true，rule py/augur/ray/pass2-command-injection 注册在案，但 results 数组为空（0 条正式 CWE-78 告警，0 条 codeFlows）。文件约 1.8MB 的体积全部来自 4526 条 artifacts 记录与 4529 条 cpp/baseline/expected-extracted-files 基线通知，不代表任何告警。iris_report.md 中各表为空与 SARIF 一致。没有可判定的正式告警，不得虚构漏洞：本轮正式判定结果为 0。",
+  "sarif_verification": {
+    "runs": 1,
+    "results": 0,
+    "results_with_codeflows": 0,
+    "execution_successful": true,
+    "rule_id": "py/augur/ray/pass2-command-injection",
+    "sarif_size_explained": "4526 artifacts + 4529 baseline notifications (cpp/baseline/expected-extracted-files)",
+    "formal_query_reproduced": "对 queries/Pass2_CommandInjection.ql 用 codeql query run 在 ray-db 上复跑，#select 结果为空，与 SARIF 一致——0 告警是真实分析输出，不是导出/解码丢失。"
+  },
+  "root_cause_analysis": {
+    "question": "为什么 report 中一条告警路径都没有（包括用户给出的真实漏洞：dashboard CPU profiling 的 format 参数命令注入）？",
+    "conclusion": "源与汇的建模全部正确且在数据库上真实命中，但源与汇之间的跨过程调用边在该数据库上全部断裂：ray 源码树采用 BUILD 重定向布局，真实 dashboard 代码位于仓库根 dashboard/（数据库模块名 dashboard.modules.*），而代码内部 60+ 处导入一律使用安装后的包路径 ray.dashboard.*；python/ray/dashboard 只是一个 15 字节的文本桩文件（内容 '../../dashboard'），不是 Python 包，因此 ray.dashboard.modules.* 无法解析到任何文件。所有 dashboard 跨模块引用都悬空，Name 解析到孤立的 GlobalVariable 而非目标 Class/Function，CodeQL 无法建立方法调用边（构造与方法调用均无法绑定），污点路径在源文件内部终止。",
+    "evidence_chain": [
+      {
+        "step": 1,
+        "claim": "正式查询真实返回 0 条路径",
+        "method": "codeql query run queries/Pass2_CommandInjection.ql --database ray-db",
+        "result": "#select 为空，与 pass2.sarif 一致"
+      },
+      {
+        "step": 2,
+        "claim": "Sink 谓词正常命中（9 个节点，含 profile_manager.py:74/:104 的 cmd）",
+        "method": "临时查询 select MySinks::isSink(n, \"command_injection\")",
+        "result": "9 行，包含 dashboard/modules/reporter/profile_manager.py 的 create_subprocess_shell arg0（:52/:74/:104）、job_manager.py:229、runtime_env/context.py:88/:95、subprocess_output_util.py:243/:251"
+      },
+      {
+        "step": 3,
+        "claim": "Source 谓词正常命中（含 py-spy 链路两端的源）",
+        "method": "临时查询 select MySources::isSource(n, \"command_injection\")，过滤 reporter_head/reporter_agent",
+        "result": "reporter_head.py:351 req.query.get(\"format\")（HTTP 边界源）与 reporter_agent.py:356-358 request.pid/duration/format（gRPC 消息源）均命中——查询设计用 agent 侧消息源桥接 head→gRPC→agent 传输，建模意图正确"
+      },
+      {
+        "step": 4,
+        "claim": "局部污点正常：cpu_profile 形参 format/duration 到达 sink 参数",
+        "method": "codeql query run queries/Pass2_CommandInjection_diagnostics.ql",
+        "result": "param format/duration/pid → cmd 的局部路径 6 行，证明 f-string 插值、+= 拼接与 sink 参数索引全部正确（诊断结果不作为正式 TP）"
+      },
+      {
+        "step": 5,
+        "claim": "断点精确定位在 reporter_agent.py → profile_manager.py 的调用边",
+        "method": "临时全局污点查询：source = reporter_agent.py:358 request.format，sink = cpu_profile 形参 format",
+        "result": "无路径；source 能到达调用点实参（format=format 的取值节点），但实参→形参的跨过程边不存在。GetTraceback→trace_dump 边同样断裂。对照：profile_manager.py 模块内裸名调用 _format_failed_pyspy_command(cmd,...) 的跨过程边正常连通——说明断裂特定于跨模块方法调用，而非数据流库本身"
+      },
+      {
+        "step": 6,
+        "claim": "类引用悬空，导入无法解析",
+        "method": "查询 Name CpuProfilingManager @reporter_agent.py:23/:351/:360 的 getVariable()",
+        "result": "解析为 'Global Variable CpuProfilingManager'（孤立导入绑定），而非 profile_manager.py:62 的类实体。物理布局证据：python/ray/dashboard 为 15 字节文本桩 '../../dashboard'（detection.json 亦记录此布局）；dashboard 树内 60+ 处导入全部为 ray.dashboard.*，无一处 dashboard.* 形式"
+      },
+      {
+        "step": 7,
+        "claim": "决定性对照：人工补上断裂的调用边后，正式源→汇路径立即连通",
+        "method": "临时查询复用 MySources/MySinks，仅在 isAdditionalFlowStep 中桥接 p.cpu_profile/p.trace_dump 实参→形参（模拟导入解析成功）",
+        "result": "立即得到 4 条 source(request.pid/duration/format Attribute)→sink(cmd) 路径。证明查询的源/汇/传播建模完全正确，唯一缺口是数据库的 ray.dashboard.* 导入解析"
+      }
+    ],
+    "scope_of_the_breakage": [
+      "py-spy 链（真实漏洞）：reporter_agent.py 内 CpuProfilingManager 导入/调用悬空 → 断在 agent→profile_manager 边（已实验证实）",
+      "job entrypoint 链：job_agent.py:17 'from ray.dashboard.modules.job.job_manager import JobManager' 同样悬空 → entrypoint 无法到达 JobSupervisor._entrypoint；job_head/job_agent 侧 parse_and_validate_request 摘要步按名匹配仍然工作，但下游跨模块边断裂",
+      "head→agent 的 gRPC 传输本身未被建模（notes §7.3 已记录），本由 agent 侧 request.<field> 源补偿——该源正常命中，若无导入问题即可出告警",
+      "runtime_env 链：主要文件在 python/ray/_private 下（导入可解析），但链路需跨生成的 pb2 模块与 kwargs/字段流（notes §7.4 已记录未建模）",
+      "autoscaler 汇：按设计无远程源（notes §7.7），无告警属预期"
+    ],
+    "not_the_cause": [
+      "不是 Windows 路径分隔符问题：数据库 getAbsolutePath() 返回正斜杠（C:/.../ray_vuln/dashboard/...），matches(\"%/dashboard/%\") 正常命中",
+      "不是 sink 参数索引错误：诊断查询证实 arg0/args 索引正确",
+      "不是 async/await 或 f-string 传播缺陷：局部污点全部正常",
+      "不是分析失败：executionSuccessful=true，且查询可完整复跑"
+    ]
+  },
+  "manual_path_review": {
+    "note": "以下为对已标注（labels.json tp 条目）链路的源码级人工复核，用于回答用户问题并记录未命中路径。它们不是正式告警，不构成 CodeQL 本轮的 TP 判定。",
+    "paths": [
+      {
+        "id": "manual-pyspy-format",
+        "title": "py-spy cpu_profile format 参数命令注入（用户给出的真实漏洞对应路径，本轮未命中）",
+        "chain": [
+          "dashboard/modules/reporter/reporter_head.py:351  format = req.query.get(\"format\", \"flamegraph\") — 无验证（仅 duration 在 :348 被 int() 强转并检查上限）",
+          "reporter_head.py 经 reporter_stub 将 format 放入 gRPC CpuProfilingRequest 发往 agent（pb2 生成代码不在数据库内）",
+          "dashboard/modules/reporter/reporter_agent.py:358  format = request.format（gRPC 消息字段，无校验）",
+          "reporter_agent.py:361-363  await p.cpu_profile(pid, format=format, duration=duration, native=native)",
+          "dashboard/modules/reporter/profile_manager.py:96-99  cmd = f\"py-spy record -o {profile_file_path} -p {pid} -d {duration} -f {format}\"",
+          "profile_manager.py:104-109  asyncio.create_subprocess_shell(cmd, ..., shell=True) — shell 解释执行"
+        ],
+        "would_be_verdict_if_alerted": "likely_tp",
+        "confidence": 0.92,
+        "reasons": [
+          "Source 真实来自攻击者可控的 dashboard HTTP 请求参数（本快照 dashboard 无认证，默认端口 8265）",
+          "format 无任何白名单/过滤/引号包裹，直接插入 shell 命令字符串（用户提供的修复提交正是为 cpu_profile 增加 format ∈ (flamegraph, raw, speedscope) 白名单并改用 argv 模式 exec，与源码复核一致）",
+          "Sink 是 asyncio.create_subprocess_shell + shell=True，真实 shell 解释执行",
+          "无有效防护：MySanitizers 为空（labels 本轮 0 个 sanitizer 条目）与源码一致"
+        ],
+        "protections_observed": "仅 duration(int+上限 60) 与 pid(int) 被整数强转、native 被布尔化；format 无防护",
+        "missed_because": "reporter_agent.py→profile_manager.py 跨过程调用边因 ray.dashboard.* 导入无法解析而断裂（见 root_cause_analysis，实验证实）"
+      },
+      {
+        "id": "manual-pyspy-trace-dump",
+        "title": "py-spy trace_dump pid 路径（sink 标签 p2-e-0393）",
+        "chain": [
+          "reporter_head.py:416  pid = int(req.query[\"pid\"])（worker 端点；task 端点 pid 由任务解析获得）",
+          "reporter_agent.py:349  pid = request.pid → :352 await p.trace_dump(pid, native=native)",
+          "profile_manager.py:68  cmd = f\"py-spy dump -p {pid}\" → :74 create_subprocess_shell(cmd, shell=True)"
+        ],
+        "would_be_verdict_if_alerted": "likely_fp",
+        "confidence": 0.7,
+        "reasons": [
+          "pid 在 HTTP 边界被 int() 强转（非数字抛 ValueError），protobuf 字段为整型，元字符无法通过——对该字段构成有效的 CWE-78 中和",
+          "native 为布尔字段",
+          "sink 本身（shell=True 的 f-string）确实是危险写法，但污点值类型受限"
+        ],
+        "missed_because": "同上调用边断裂；若出告警也应按 int 强转判 fp"
+      },
+      {
+        "id": "manual-job-entrypoint",
+        "title": "job entrypoint 执行链（sink 标签 p2-e-0332，job_manager.py:229）",
+        "chain": [
+          "job_head.py:273 @routes.post(\"/api/jobs/\") → utils.py:140 await req.json() → parse_and_validate_request（摘要步已建模）",
+          "job_agent.py:35 submit_request = await parse_and_validate_request(req, JobSubmitRequest)",
+          "job_agent.py:17 from ray.dashboard.modules.job.job_manager import JobManager（导入悬空）",
+          "job_manager.py:229 subprocess.Popen(self._entrypoint, shell=True, ...)"
+        ],
+        "would_be_verdict_if_alerted": "likely_tp",
+        "confidence": 0.75,
+        "reasons": [
+          "本快照 dashboard 无认证，POST /api/jobs/ 的 entrypoint 为网络客户端可控的自由字符串，直接进入 shell=True 执行，路径上无引号/白名单",
+          "属 Ray Jobs 预定义执行功能（exec-by-design），但快照无认证使其成为真实远程暴露面——判定口径与 phase1_review 一致（安全问题=网络可达性）",
+          "head/agent 两侧源与摘要步均命中，断点同为 job_agent→JobManager 跨模块导入悬空"
+        ],
+        "protections_observed": "pydantic 仅做形状校验（entrypoint: str 自由字符串），无命令级防护"
+      },
+      {
+        "id": "manual-runtime-env-exec",
+        "title": "runtime_env worker 执行链（sink 标签 p2-e-0762/:0763，context.py:88/:95）",
+        "chain": [
+          "python/ray/_private/runtime_env/agent/main.py:153/:165/:177 await request.read()（远程源已建模命中）",
+          "→ GetOrCreateRuntimeEnvRequest（pb2 生成模块，不在树内）→ runtime_env conda 配置",
+          "conda.py:404 command_prefix += get_conda_activate_commands(conda_env_name) → context.py command_prefix → :88 Popen(cmd, shell=True) / :95 os.execvp(\"bash\", args=[\"bash\",\"-c\",command_str])"
+        ],
+        "would_be_verdict_if_alerted": "uncertain",
+        "confidence": 0.5,
+        "reasons": [
+          "源与汇均真实且已分别命中，但中间需跨 pb2 生成代码、RuntimeEnvContext(**json.loads(...)) kwargs/字段流，Phase 1 未标注该段摘要（notes §7.4 已记录为已知缺口）",
+          "conda_env_name 未加引号进入 activate 命令片段、DYLD_LIBRARY_PATH 未转义拼接，存在真实的命令注入形状，但提交侧是否唯一可信入口需进一步证据"
+        ]
+      },
+      {
+        "id": "manual-autoscaler-exec",
+        "title": "autoscaler ssh/docker 执行引擎（sink 标签 p2-e-1111/:1112）",
+        "chain": "yaml 集群配置（CLI 提供的文件）→ SSHCommandRunner/DockerCommandRunner → subprocess_output_util.py:243/:251",
+        "would_be_verdict_if_alerted": "likely_fp",
+        "confidence": 0.7,
+        "reasons": [
+          "无远程源：集群配置由本地操作者经 CLI 提供（Phase 1 有意不将 env/config 纳入正式源，notes §7.7）",
+          "本地 argv 模式 + 远端 shell 语义，shlex.quote 覆盖部分片段——本质是操作者信任边界内的 exec-by-design"
+        ]
+      }
+    ]
+  },
+  "diagnostics_status": "queries/Pass2_CommandInjection_diagnostics.ql 的局部参数→sink 诊断在本轮复核中运行通过（cpu_profile 的 format/duration/pid、trace_dump 的 pid 等局部到达 cmd），按规则仅用于验证 sink 参数索引，不作为正式 TP，不计入任何判定。",
+  "bottom_line": {
+    "formal_outcome": "CodeQL 分析成功，但本轮没有命中正式污点路径（0 条正式 CWE-78 告警）。",
+    "why_no_hits": "源与汇建模均正确且在 ray-db 上命中；0 告警的根因是数据库中 ray.dashboard.* 导入全部无法解析（python/ray/dashboard 为 BUILD 文本桩，真实代码在仓库根 dashboard/），导致 dashboard 所有跨模块调用边断裂，污点路径无法从源连到汇。用临时桥接步模拟解析成功后，真实漏洞路径（request.format → py-spy shell 命令）立即出现——即该真实漏洞属于查询建模正确、但被数据库源码布局造成的假阴性（false negative），不是标签或查询设计错误。",
+    "recommended_followups": [
+      "在数据库创建阶段处理 BUILD 重定向布局（例如以 setup.py 安装布局提取，或将 python/ray/dashboard 桩替换为指向 ../../dashboard 的包结构），使 ray.dashboard.* 导入可解析",
+      "或在 MySummaries 中为 dashboard 跨模块调用补充按名/按类名的桥接步（如本复核第 7 步实验所示），并保持证据条件化",
+      "head→agent 的 gRPC 传输桥（pb2 生成代码缺失）可按同样思路补 agent 侧消息源（已有）+ 调用边桥接"
+    ]
+  }
+}
