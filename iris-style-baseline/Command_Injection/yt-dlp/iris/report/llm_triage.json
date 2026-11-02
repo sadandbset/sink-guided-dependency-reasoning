@@ -1,0 +1,328 @@
+{
+  "triage": {
+    "reviewer": "independent LLM path review (glm-5.3, Claude Code agent)",
+    "date": "2026-10-19",
+    "experiment": "yt-dlp / Augur IRIS Pass 2 / CWE-78",
+    "sarif": "results/pass2.sarif",
+    "rule_id": "py/augur/yt-dlp/pass2-command-injection",
+    "formal_results_total": 16,
+    "verdict_counts": {
+      "likely_tp": 0,
+      "likely_fp": 16,
+      "uncertain": 0
+    },
+    "sarif_status_note": "CodeQL 分析成功；SARIF 含 16 条正式 CWE-78 污点告警（每条含 codeFlows），不是'仅有解析诊断'的情况。本判定仅针对正式告警，诊断查询结果未作为 TP 依据。",
+    "source_tree": "dataset/codeql_databases/yt-dlp_vuln (sha 61bdf15)"
+  },
+  "findings": [
+    {
+      "index": 0,
+      "location": "yt_dlp/utils/_utils.py:4459",
+      "sink": {
+        "code": "Popen.run([exe, '-w', key, value, path] if exe == 'xattr' else [exe, '-n', key, '-v', value, path], ...)  (write_xattr, _utils.py:4458-4460)",
+        "exec_type": "argv list (no shell); fixed program name 'setfattr' or 'xattr' chosen at runtime by availability check; option letters fixed"
+      },
+      "sources": [
+        "yt_dlp/compat/__init__.py:58 os.environ.get('HOME') (P2-050 env family) -> compat_expanduser -> expand_path -> sanitize_path -> outtmpl filename -> http.py tmpfilename -> write_xattr path [2 codeFlows]",
+        "test/helper.py:28 open() / :29 params attribute (P2-042) -> FakeYDL params -> filename -> http.py tmpfilename [2 codeFlows, test-only harness]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "reasoning": {
+        "q1_source_attacker_controlled": "否。触发的 source 是 HOME 环境变量（本地用户自己的环境）和测试文件 test/helper.py 的 open()（测试代码，不是生产入口）。无任何远程输入族命中。",
+        "q2_propagation_real": "路径代码本身（expanduser→expand_path→sanitize_path→prepare_filename→HttpFD tmpfilename）真实存在，污点传播有代码证据；但起点的污点来自本地环境变量，传播真实性不构成攻击路径。",
+        "q3_sink_executes_commands": "sink 执行的是 setfattr/xattr 固定工具的 argv 列表，不解释 shell 元字符，也不是任意命令解释器。",
+        "q4_source_affects_command": "source 只影响 path 参数（文件名路径），不影响被调用的程序名或选项结构。",
+        "q5_mitigations": "exe 由 check_executable 探测、key 有 assert ':' not in key、选项字母固定；argv 列表本身消解 shell 注入。",
+        "q6_predefined_feature": "是——写 xattr 元数据是正常功能；按报告路径 source 为本地环境/测试数据。",
+        "q7_overapproximation": "是。P2-042 open() 匹配了测试文件（notes 承诺的 Step 6 测试过滤实际未生效）；P2-049/050 环境变量被当作污点边界。真正远程可达的 value（title 等元数据）未被本告警的 source 命中。"
+      }
+    },
+    {
+      "index": 1,
+      "location": "yt_dlp/extractor/common.py:1311",
+      "sink": {
+        "code": "Popen.run(cmd, text=True, shell=True, stdout=subprocess.PIPE)  (_get_netrc_login_info, common.py:1309-1311)",
+        "exec_type": "shell=True command string — 本组 16 条告警中唯一真正的 shell 字符串 sink"
+      },
+      "sources": [
+        "yt_dlp/extractor/common.py:1307 get_param('netrc_cmd') (P2-113) = --netrc-cmd CLI/配置值，即命令模板本身 [1 codeFlow]",
+        "yt_dlp/extractor/adobepass.py:1441/1443 mso_id (本地 CLI --ap-mso / extractor 常量) -> _get_login_info(netrc_machine) -> common.py:1309 cmd.replace('{}', netrc_machine) [1 codeFlow]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.7,
+      "reasoning": {
+        "q1_source_attacker_controlled": "否。两条 codeFlow 的起点都是本地 CLI/配置：--netrc-cmd 本身就是用户显式提供的 shell 命令；netrc_machine 来自 extractor 的 _NETRC_MACHINE 常量或本地 --ap-mso 选项（adobepass mso_id），不是网络消息。",
+        "q2_propagation_real": "传播真实：cmd = cmd.replace('{}', netrc_machine)（common.py:1309，P2-179 step）后直接进入 shell=True Popen.run。代码证据完整。",
+        "q3_sink_executes_commands": "是，真正的 shell 解释执行。",
+        "q4_source_affects_command": "是——命令字符串内容被 source 影响。但 source 是命令模板自身（用户手输的命令）与本地机器名。",
+        "q5_mitigations": "无引号/白名单；str.replace 未加引号（query notes 也称之为 weak seam）。但被替换值 netrc_machine 取值域为固定常量表/本地选项。",
+        "q6_predefined_feature": "是。--netrc-cmd 是项目文档化功能：用户指定一条命令以获取 netrc 凭据。用户本来就能直接运行任意命令，配置值进入 shell 不构成越过信任边界的注入。",
+        "q7_overapproximation": "部分。sink 与 seam 是真实的（若 netrc_machine 可被远程影响则为注入点），但本告警报告的路径上没有任何远程可控值；P2-113 get_param 把本地配置值建模为 source 导致告警。按 CVE-78 攻击者模型判 FP。"
+      }
+    },
+    {
+      "index": 2,
+      "location": "yt_dlp/cookies.py:931",
+      "sink": {
+        "code": "Popen.run(['security', 'find-generic-password', '-w', '-a', browser_keyring_name, '-s', f'{browser_keyring_name} Safe Storage'], ...)  (_get_mac_keyring_password, macOS)",
+        "exec_type": "argv list (no shell); fixed program 'security' 固定子命令"
+      },
+      "sources": [
+        "yt_dlp/cookies.py:1036 os.environ.get('XDG_CONFIG_HOME', expanduser('~/.config')) (P2-050) -> _config_home -> _get_chromium_based_browser_settings dict -> config['keyring_name'] -> browser_keyring_name -> argv [4 codeFlows, 同族]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.9,
+      "reasoning": {
+        "q1_source_attacker_controlled": "否。source 是本地环境变量 XDG_CONFIG_HOME/HOME。",
+        "q2_propagation_real": "传播不真实：cookies.py:231-238 中 keyring_name 是字典字面量（'Brave'/'Chrome'/'Chromium'/'Microsoft Edge'/'Opera'/'Vivaldi' 等固定字符串），与 _config_home() 无数据依赖；污点经 {'browser_dir': ..., 'keyring_name': ...} 字典容器步扩散到整个 dict，再经 config['keyring_name'] 下标读错误地传导。实际到达 sink 的 browser_keyring_name 是常量表值。",
+        "q3_sink_executes_commands": "否——argv 列表执行固定的 macOS security 命令，非 shell。",
+        "q4_source_affects_command": "实际不影响：污点只污染 browser_dir，keyring_name 是字面量；argv 中其余元素全部固定。",
+        "q5_mitigations": "argv 列表 + 固定程序名 + 常量参数。",
+        "q6_predefined_feature": "是，读取 macOS 钥匙串密码的正常功能。",
+        "q7_overapproximation": "是——典型的容器/下标 taint 过近似（python-all containerStep/subscriptStep 把整个 dict 标污），是查询报告路径不真实的直接原因。"
+      }
+    },
+    {
+      "index": 3,
+      "location": "yt_dlp/postprocessor/embedthumbnail.py:161",
+      "sink": {
+        "code": "Popen.run(cmd, text=True, stdout=..., stderr=...)  (AtomicParsley 嵌缩略图, embedthumbnail.py:151-161)",
+        "exec_type": "argv list (no shell); cmd[0] 为 AtomicParsley/atomicparsley 可执行名（check_executable 探测），固定选项 --artwork/-o"
+      },
+      "sources": [
+        "yt_dlp/postprocessor/common.py:159-160 _configuration_args('AtomicParsley') (P2-103) = --ppa AtomicParsley: 本地 CLI/配置附加参数 [3 codeFlows]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "reasoning": {
+        "q1_source_attacker_controlled": "否。source 是本地 --ppa/--postprocessor-args 配置值。",
+        "q2_propagation_real": "传播真实（cli_configuration_args → cmd += → Popen.run），代码证据完整。",
+        "q3_sink_executes_commands": "执行固定工具 AtomicParsley 的 argv 列表，无 shell。",
+        "q4_source_affects_command": "source 只追加为被调工具的参数，不影响程序名。",
+        "q5_mitigations": "argv 列表结构固定；参数注入面仅限 AtomicParsley 自身选项（本地用户本来就能传）。",
+        "q6_predefined_feature": "是。--ppa/-- AtomicParsley args 是文档化功能：向外部工具传递用户指定的附加参数。",
+        "q7_overapproximation": "P2-103 把本地配置建模为 source 所致；该边界 query notes 自己也标注为 'locally trusted on a clear boundary'。"
+      }
+    },
+    {
+      "index": 4,
+      "location": "yt_dlp/downloader/external.py:143",
+      "sink": {
+        "code": "ExternalFD._call_downloader(tmpfilename, info_dict) 参数 info_dict (InternalWrapperSinks 匹配的包装器参数, external.py:143)",
+        "exec_type": "包装器参数，非直接执行；下游为 _call_process → Popen.run(cmd) argv 列表"
+      },
+      "sources": [
+        "compat/__init__.py:58 HOME 环境变量 → expand_path → sanitize_path → filename → info_dict['filename'] [2 codeFlows]",
+        "test/helper.py:28/29 open()/params (P2-042, 测试代码) → FakeYDL params → info_dict['filename'] [2 codeFlows]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "reasoning": {
+        "q1_source_attacker_controlled": "否。HOME 环境变量与测试文件参数，均非远程。",
+        "q2_propagation_real": "传播链（outtmpl 路径→filename→info_dict→下载器）真实存在，其中一半路径穿过测试代码（test_YoutubeDL.py:562-564）。",
+        "q3_sink_executes_commands": "该 sink 只是函数参数；实际执行为 argv 列表 Popen。",
+        "q4_source_affects_command": "source 影响文件名/路径参数，不影响程序名。",
+        "q5_mitigations": "argv 列表；exe 名为各 ExternalFD 的 EXE_NAME 常量。",
+        "q6_predefined_feature": "是，外部下载器调用的正常功能。",
+        "q7_overapproximation": "是：sink 是人为引入的包装器参数（P2-166 类匹配到所有 _call_downloader 定义），source 是环境/测试输入。info_dict 中真正远程可控的字段（url、title）未被任何触发的 source 命中。"
+      }
+    },
+    {
+      "index": 5,
+      "location": "yt_dlp/downloader/external.py:192",
+      "sink": {
+        "code": "ExternalFD._call_process(cmd, info_dict) 参数 cmd (P2-167)",
+        "exec_type": "包装器参数；下游 external.py:193 Popen.run(cmd) argv 列表"
+      },
+      "sources": [
+        "HOME 环境变量 → filename/tmpfilename → CurlFD._make_cmd (external.py:201) [2 codeFlows]",
+        "external.py:222 / :238 self._configuration_args() (P2-103, --external-downloader-args 本地配置) → cmd += [2 codeFlows]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "reasoning": {
+        "q1_source_attacker_controlled": "否。环境变量与本地下载器参数配置。",
+        "q2_propagation_real": "传播真实（_make_cmd 构建列表 → _call_downloader 145 行 listcomp encodeArgument → _call_process）。",
+        "q3_sink_executes_commands": "argv 列表执行 curl/aria2c 等固定工具，无 shell。",
+        "q4_source_affects_command": "影响 tmpfilename 与用户附加参数，不影响程序名。",
+        "q5_mitigations": "argv 列表；CurlFD/AxelFD 在 url 前有 '--' 分隔符（external.py:223/239），一定程度阻断参数注入。",
+        "q6_predefined_feature": "是。--external-downloader-args 是文档化功能。",
+        "q7_overapproximation": "是：本地配置 source + 包装器 sink 的人为组合。"
+      }
+    },
+    {
+      "index": 6,
+      "location": "yt_dlp/downloader/external.py:193",
+      "sink": {
+        "code": "return Popen.run(cmd, text=True, stderr=...)  (_call_process, external.py:193)",
+        "exec_type": "PopenWrapperSinks P2-177；argv 列表，无 shell"
+      },
+      "sources": "与 index 5 完全相同（HOME 环境变量 ×2、_configuration_args at external.py:222/238 ×2）",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "reasoning": "同 index 5：同一执行点的参数节点（192 参数 / 193 实际调用）重复告警；source 均为本地环境变量与本地配置，argv 列表无 shell，程序名固定。"
+    },
+    {
+      "index": 7,
+      "location": "yt_dlp/downloader/external.py:287",
+      "sink": {
+        "code": "Aria2cFD._call_downloader(tmpfilename, info_dict) 参数 info_dict (包装器参数)",
+        "exec_type": "包装器参数；下游 super()._call_downloader → Popen.run argv 列表"
+      },
+      "sources": [
+        "HOME 环境变量 → filename → info_dict['filename'] [2 codeFlows]",
+        "test/helper.py open() → 测试 params → info_dict [2 codeFlows]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "reasoning": "同 index 4 的模式：source 为本地环境变量与测试文件；sink 是人为包装器参数；实际执行为 aria2c argv 列表（program 名 self.exe 常量）。环境变量不是攻击者可影响的网络边界。"
+    },
+    {
+      "index": 8,
+      "location": "yt_dlp/downloader/external.py:372",
+      "sink": {
+        "code": "Aria2cFD._call_process(cmd, info_dict) 参数 cmd (P2-168)",
+        "exec_type": "包装器参数；下游 external.py:395 Popen(cmd) argv 列表（__rpc 分支为 JSON-RPC 到本地 aria2）"
+      },
+      "sources": [
+        "HOME 环境变量 → filename → _make_cmd [2 codeFlows]",
+        "external.py:222/238 _configuration_args() (P2-103 本地配置) [2 codeFlows]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "reasoning": "同 index 5：本地环境/配置 source，aria2c argv 列表无 shell，程序与固定选项结构不受 source 影响。"
+    },
+    {
+      "index": 9,
+      "location": "yt_dlp/downloader/external.py:395",
+      "sink": {
+        "code": "with Popen(cmd, text=True, stdout=..., stderr=...) (Aria2cFD._call_process __rpc 分支, external.py:395)",
+        "exec_type": "PopenWrapperSinks P2-174；argv 列表"
+      },
+      "sources": "与 index 8 完全相同",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "reasoning": "同 index 8 的执行点；source 均本地（HOME env、--external-downloader-args），argv 列表无 shell。"
+    },
+    {
+      "index": 10,
+      "location": "yt_dlp/downloader/external.py:478",
+      "sink": {
+        "code": "FFmpegFD._call_downloader(tmpfilename, info_dict) 参数 info_dict (P2-166)",
+        "exec_type": "包装器参数；下游 external.py:625 Popen(args) argv 列表"
+      },
+      "sources": [
+        "HOME 环境变量 → filename → info_dict['filename'] [2 codeFlows]",
+        "test/helper.py open() → 测试 params → info_dict [2 codeFlows]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "reasoning": "同 index 4/7 模式。source 为环境变量/测试文件；下游 ffmpeg argv 列表，程序名 ffpp.executable 固定。FFmpegFD 确实把 fmt['url'] 无 '--' 防护地放入 argv（notes §2.6 提到的 argument-injection 候选），但该值来自远程 url，而本告警报告的 source 并非该路径——报告路径不支撑该风险。"
+    },
+    {
+      "index": 11,
+      "location": "yt_dlp/downloader/external.py:625",
+      "sink": {
+        "code": "with Popen(args, stdin=subprocess.PIPE, env=env) (FFmpegFD._call_downloader, external.py:625)",
+        "exec_type": "PopenWrapperSinks P2-174；argv 列表"
+      },
+      "sources": [
+        "HOME 环境变量 → tmpfilename → determine_ext/remove_end → args（-f 格式参数）[2 codeFlows]",
+        "external.py:618 / :578 self._configuration_args(...) (P2-103 本地 --ffmpeg-args) [2 codeFlows]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "reasoning": {
+        "q1_source_attacker_controlled": "否（本地环境变量与本地 ffmpeg 参数配置）。",
+        "q2_propagation_real": "传播真实（tmpfilename→ext→-f 参数、_configuration_args→args→620 行 encodeArgument→Popen）。",
+        "q3_sink_executes_commands": "argv 列表执行固定 ffmpeg，无 shell。",
+        "q4_source_affects_command": "影响输出格式参数与用户附加参数，不影响程序名。",
+        "q5_mitigations": "argv 列表；EXT_TO_OUT_FORMATS 白名单映射兜底。",
+        "q6_predefined_feature": "是，--ffmpeg-args 是文档化功能。",
+        "q7_overapproximation": "是：本地 source 模型产物。远程 fmt['url'] 同样在该 argv 中且无 '--' 防护（argument-injection 面），但未被本告警路径覆盖。"
+      }
+    },
+    {
+      "index": 12,
+      "location": "yt_dlp/downloader/rtmp.py:23",
+      "sink": {
+        "code": "run_rtmpdump(args) 参数 args (嵌套函数, P2-169)",
+        "exec_type": "包装器参数；下游 rtmp.py:27 Popen(args, stderr=PIPE) argv 列表"
+      },
+      "sources": [
+        "HOME 环境变量 → filename → RtmpFD.real_download filename [2 codeFlows]",
+        "test/helper.py open() → 测试 params → filename [2 codeFlows]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "reasoning": "source 为本地环境变量/测试文件；执行为 rtmpdump argv 列表（程序名常量），文件名/URL 占位参数。远程字段（rtmp url、app、play_path 等）确实进入该 argv（P2-169 标签 rationale），但本告警的触发 source 不是这些字段。"
+    },
+    {
+      "index": 13,
+      "location": "yt_dlp/downloader/rtmp.py:27",
+      "sink": {
+        "code": "proc = Popen(args, stderr=subprocess.PIPE) (rtmp.py:27)",
+        "exec_type": "PopenWrapperSinks P2-174；argv 列表"
+      },
+      "sources": "与 index 12 完全相同",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "reasoning": "同 index 12 的执行点重复告警；source 本地环境/测试，argv 列表无 shell。"
+    },
+    {
+      "index": 14,
+      "location": "yt_dlp/downloader/rtsp.py:27",
+      "sink": {
+        "code": "retval = subprocess.call(args) (RtspFD.real_download, rtsp.py:15-27)",
+        "exec_type": "subprocess.call 以 LIST 传参（P2-162 被建模为 shell 字符串 sink，但此处实参是 argv 列表，无 shell）"
+      },
+      "sources": [
+        "HOME 环境变量 → filename → temp_name → tmpfilename → mplayer/mpv args [2 codeFlows]",
+        "test/helper.py open() → 测试 params → filename [2 codeFlows]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "reasoning": {
+        "q1_source_attacker_controlled": "否（本地环境变量/测试文件）。",
+        "q2_propagation_real": "传播真实（filename→tmpfilename→args）。",
+        "q3_sink_executes_commands": "否——subprocess.call 收到的是 argv 列表（mplayer/mpv 固定程序 + 固定选项），list 形式不经 shell 解释。P2-162 的 shell 字符串语义在此不成立，属于 sink 模型按调用签名不区分 list/str 的过近似。",
+        "q4_source_affects_command": "影响 -dumpfile/--stream-dump 值，不影响程序名。",
+        "q5_mitigations": "argv 列表；args 中真正远程相关的 url 作为尾部参数（info_dict['url']），不在本告警 source 路径上。",
+        "q6_predefined_feature": "是，mplayer/mpv 流式下载正常功能。",
+        "q7_overapproximation": "是：sink 语义（shell 字符串 vs argv 列表）与 source（本地环境/测试）双重过近似。"
+      }
+    },
+    {
+      "index": 15,
+      "location": "yt_dlp/postprocessor/sponskrub.py:87",
+      "sink": {
+        "code": "stdout, _, returncode = Popen.run(cmd, text=True, stdout=...) (sponskrub, sponskrub.py:77-87)",
+        "exec_type": "PopenWrapperSinks P2-177；argv 列表"
+      },
+      "sources": [
+        "yt_dlp/postprocessor/sponskrub.py:82 self._configuration_args(self._exe_name, use_compat=False) (P2-103, --sponskrub-args/--ppa sponskrub 本地配置) [1 codeFlow]"
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "reasoning": {
+        "q1_source_attacker_controlled": "否。--sponskrub-args 本地 CLI/配置值（query notes §3 明确：sponskrub.py:81 将用户 --sponskrub-args shlex.split 进 argv）。",
+        "q2_propagation_real": "传播真实（cmd += _configuration_args → 84 行 encodeArgument → Popen.run）。",
+        "q3_sink_executes_commands": "argv 列表执行固定 self.path（sponskrub 二进制），无 shell。",
+        "q4_source_affects_command": "只追加 sponskrub 自身参数；程序名与 '--' 后的视频 id/文件名固定结构。",
+        "q5_mitigations": "shlex.split 分词 + argv 列表 + '--' 分隔（sponskrub.py:83）。",
+        "q6_predefined_feature": "是，--sponskrub-args 文档化功能。",
+        "q7_overapproximation": "P2-103 本地配置 source 建模产物。"
+      }
+    }
+  ],
+  "cross_alert_observations": [
+    "正式告警 16 条全部由本地输入族触发：HOME/XDG_CONFIG_HOME 环境变量（P2-049/050）、测试文件 open()（P2-042, test/helper.py）、本地配置访问器 get_param/_configuration_args（P2-113/P2-103）。零条 codeFlow 的 source 来自远程消息族（json.loads、_download_json/_download_webpage、urlopen、.read()、.recv() 等 P2-040..118 家族）。",
+    "notes 承诺的 Step 6 测试过滤未生效：多个告警的 codeFlow 起于 test/helper.py / test_YoutubeDL.py 并穿越测试代码（结果仍为 candidate，report 中 'Filtered as Likely False Positives: 无'）。",
+    "唯一 shell=True sink 告警是 common.py:1311（--netrc-cmd）；其 source 为本地 CLI。真正被项目承认的 shell sink 之一 exec.py:31（ExecPP --exec，P2-162 标签本体，conf 0.9）未产生任何正式告警。",
+    "rtsp.py:27 告警暴露 sink 模型缺陷：P2-162 对 subprocess.call arg0 一律按 shell 字符串语义处理，实际实参是 argv 列表。",
+    "cookies.py:931 告警暴露容器污点过近似：keyring_name 为字面量表值，污点经 dict 容器/下标步错误传导。",
+    "重复计数：192/193、372/395、23/27 为同一执行点的 sink 参数与实际调用的成对告警，625/143/287/478 等也大量共享同一下载执行链。"
+  ],
+  "conclusion": "16 条正式 CWE-78 告警经逐条 codeFlow 与源码复核，0 条 likely_tp、0 条 uncertain、16 条 likely_fp。原因：(1) 触发的 source 全部位于本地信任边界（环境变量、本地 CLI/配置、测试文件），无远程攻击者可控输入；(2) 绝大多数 sink 是 argv 列表（无 shell 解释），程序名与选项结构固定；(3) 若干告警由 source/sink 模型过近似（环境变量建模为污点源、subprocess.call 不区分 list/str、dict 容器污点扩散、测试代码未过滤）与人造包装器参数 sink 造成。CodeQL 分析本身成功执行且命中了 16 条正式污点路径——不适用'本轮没有命中正式污点路径'的声明。"
+}
