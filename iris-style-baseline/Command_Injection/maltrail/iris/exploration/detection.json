@@ -1,0 +1,274 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-15",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\maltrail\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (exploration + candidate extraction query generation, then compile/run) against the maltrail_vuln source tree. The CodeQL database maltrail-db was created from the same tree (sourceLocationPrefix matches, creation sha bb4d24b), so file/line evidence below is verified against the database snapshot."
+  },
+  "target": {
+    "project": "maltrail",
+    "projectDescription": "Malicious traffic detection system: a sensor that sniffs network packets (pcapy) and matches them against trails, a server (custom BaseHTTPRequestHandler HTTPD) that serves logs/events to a browser UI, and a trail update mechanism that fetches feeds over HTTP. Python 2/3 compatible via a vendored thirdparty/six.",
+    "pass": 2,
+    "cwes": ["CWE-78"],
+    "focus": "Command/Argument Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\maltrail_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (maltrail-db/codeql-database.yml)",
+      "80 .py files under maltrail_vuln excluding the safe-db copy (core/ 15, plugins/ 3, trails/feeds/ 54, trails/custom/, sensor.py, server.py, thirdparty/)",
+      "sensor.py:15 'from __future__ import print_function  # Requires: Python >= 2.6' - py2/py3 dual support via vendored thirdparty/six"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\maltrail-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\maltrail_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "bb4d24b0f689ffb4fd7216b90a0dd1b75ea97cb0",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-27T01:42:26.154394400Z"
+    },
+    "baselineLinesOfCode": 6247,
+    "finalised": true
+  },
+  "toolchain": {
+    "qlpack": "iris/maltrail-cwe78 (dependencies: codeql/python-all: \"\")",
+    "packResolutionExpected": "codeql/python-all resolved from the local pack cache by qlpack.yml (codeql/python-all 7.1.2 in the user pack cache)",
+    "codeqlCli": "2.25.1 (E:\\codeql)"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] },
+        { "name": "django", "confidence": 0.0, "evidence": [] },
+        { "name": "flask", "confidence": 0.0, "evidence": [] }
+      ]
+    },
+    "selected": "none (custom stdlib/six-based stack)",
+    "notes": "No web framework detected. All framework scores are below the 0.50 threshold, so no framework reference is loaded. The externally reachable attack surface is built directly on the standard library through the vendored thirdparty.six compatibility layer: a hand-rolled BaseHTTPRequestHandler subclass (core/httpd.py) for the server, pcapy for packet capture on the sensor, optparse for CLIs, urllib for feed fetching. Source/sink shapes below are derived from repository evidence per references/python.md and references/patterns.md (language reference path, since no framework reference matches).",
+    "customBoundaryEvidence": [
+      "core/httpd.py:54 'from thirdparty.six.moves import BaseHTTPServer as _BaseHTTPServer'",
+      "core/httpd.py:123 'class ReqHandler(_BaseHTTPServer.BaseHTTPRequestHandler)' - do_GET/do_POST parse query string, POST body, headers, cookies",
+      "core/httpd.py:124-134 'def do_GET(self): path, query = self.path.split('?', 1) ... params.update(_urllib.parse.parse_qs(query))'",
+      "core/httpd.py:147 'content = getattr(self, \"_%s\" % path)(params)' - dynamic dispatch of _* handler methods with request params",
+      "core/httpd.py:228-233 'def do_POST(self): ... data = self.rfile.read(int(length)) ... self.do_GET()'",
+      "sensor.py:1092 'def packet_handler(datalink, header, packet)' - pcapy callback boundary",
+      "sensor.py:1176 '(header, packet) = _cap.next()' - raw packet read (live interface or pcap file)",
+      "sensor.py:954 'module = __import__(filename[:-3])' + sensor.py:962 'config.plugin_functions.append(function)' - dynamic plugin loading from -p CLI value",
+      "core/common.py:43 'def retrieve_content(url, data=None, headers=None)' - urllib fetch wrapper used by all 53 trails/feeds/*.py fetch() functions",
+      "sensor.py:1241 'parser = optparse.OptionParser(version=VERSION)' (CLI), server.py:46 same, core/update.py:383 raw sys.argv main()"
+    ]
+  },
+  "inputBoundaryInventory": {
+    "summary": "Attackers face (1) the HTTP server port: query string, POST body, headers, cookies and client address flow into params and handler state, and params.get(\"username\") is interpolated into a shell command at core/httpd.py:399; (2) the network wire seen by the sensor: packet bytes via pcapy are unpacked and matched; (3) the filesystem: configuration file, trails file, log files, whitelists; (4) CLI arguments/environment of the sensor/server/update processes; (5) remote feed servers through urllib. Command execution sinks are subprocess.check_output/subprocess.Popen with shell=True; the only one whose command string is dynamically formatted from request-derived values is core/httpd.py:399.",
+    "sourceFamilies": [
+      {
+        "family": "http_request_state",
+        "evidence": [
+          "core/httpd.py:125 'path, query = self.path.split('?', 1)' - raw request target",
+          "core/httpd.py:230 'data = self.rfile.read(int(length))' - POST body",
+          "core/httpd.py:162/229/237/257/546/647 'self.headers.get(...)' - header reads (Content-Length, If-Modified-Since, Cookie, Accept-Encoding, Range)",
+          "core/httpd.py:547 'self.headers[HTTP_HEADER.RANGE]' - header subscript",
+          "core/httpd.py:244/388/399 'self.client_address[0]/[1]' - client address",
+          "core/httpd.py:232 'self.data = data' - decoded POST body stored on handler"
+        ]
+      },
+      {
+        "family": "url_decode",
+        "evidence": [
+          "core/httpd.py:131 'params.update(_urllib.parse.parse_qs(self.data))'",
+          "core/httpd.py:134 'params.update(_urllib.parse.parse_qs(query))'",
+          "core/httpd.py:231 'data = _urllib.parse.unquote_plus(data)'",
+          "sensor.py:486/528/554/555 '_urllib.parse.unquote(...)' - decoded packet payload fields"
+        ]
+      },
+      {
+        "family": "request_param_reads",
+        "evidence": [
+          "core/httpd.py:320/321/332/334 'params.get(\"username\")/(\"hash\")/(\"nonce\")' - login credentials interpolated into logger command at :399",
+          "core/httpd.py:435/439/441 'params.get(\"address\")/(\"callback\")'",
+          "core/httpd.py:507 'params.get(\"date\", \"\")'",
+          "core/httpd.py:666/672 'params.get(\"from\", \"\")/(\"to\", \"\")'",
+          "core/httpd.py:136-138 'params[key] = params[key][-1]' - params dict normalization"
+        ]
+      },
+      {
+        "family": "handler_entry_points",
+        "evidence": [
+          "core/httpd.py:124 'ReqHandler.do_GET(self)'; :228 'do_POST(self)'",
+          "core/httpd.py:317/406/412/422/446/453/460/496/652 'def _login(self, params)' and the other '_%s' dispatch handlers (dispatched from :147)",
+          "sensor.py:1092 'def packet_handler(datalink, header, packet)'; :274 'def _process_packet(packet, sec, usec, ip_offset)'",
+          "core/log.py:134 'def log_event(event_tuple, packet=None, ...)' - distributes packet-derived events to plugins",
+          "plugins/peek.py:13 / plugins/strings.py:13 'def plugin(event_tuple, packet=None)' - dynamically imported plugin boundary",
+          "core/common.py:43 'def retrieve_content(url, data=None, headers=None)'",
+          "core/settings.py:226 'def read_config(config_file)'"
+        ]
+      },
+      {
+        "family": "packet_capture",
+        "evidence": [
+          "sensor.py:1176 '(header, packet) = _cap.next()' - pcapy live/offline capture read",
+          "sensor.py:341/349 'struct.unpack(...)' - packet header field extraction inside _process_packet"
+        ]
+      },
+      {
+        "family": "network_fetch",
+        "evidence": [
+          "core/common.py:50-51 'resp = _urllib.request.urlopen(req, timeout=TIMEOUT); retval = resp.read()' - inside retrieve_content",
+          "core/update.py:354 '_urllib.request.urlopen(IPCAT_URL).read()'",
+          "53 x trails/feeds/*.py 'content = retrieve_content(__url__)' - remote feed content"
+        ]
+      },
+      {
+        "family": "file_config_input",
+        "evidence": [
+          "core/settings.py:238 'content = open(config_file, \"r\").read()' - configuration file parser (read_config)",
+          "core/common.py:245 'with open(config.TRAILS_FILE, \"r\") as f' - trails file; also core/httpd.py:451",
+          "core/httpd.py:483/516/531 'open(_, \"r\")' / open(event_log_path) - event log reads driven by request dates",
+          "core/httpd.py:157/172 'open(path, 'r').read()' / open(path, 'rb').read() - static content served to HTTP clients",
+          "core/settings.py:183/196 '/proc/meminfo', /var/run/dmesg.boot reads",
+          "core/settings.py:386/401/418/445/466/481/496 'open(_, \"r\")' - whitelist/ua/worst_asn/cdn/bogon input files",
+          "core/update.py:64 'def _fopen(filepath, mode=\"rb\", opener=open)' - internal file-open wrapper"
+        ]
+      },
+      {
+        "family": "env_cli",
+        "evidence": [
+          "core/settings.py:276 '_ = os.environ.get(\"%s_%s\" % (NAME.upper(), name))' - MALTRAIL_ prefixed config overrides",
+          "core/settings.py:289 'os.environ.get(match.group(1), match.group(0))' - $VAR interpolation in config values",
+          "core/settings.py:377 'os.environ.get(\"MALTRAIL_DREI\", 0)'",
+          "core/update.py:60 'os.environ.get(\"SUDO_UID\"/\"SUDO_GID\")'",
+          "sensor.py:1224-1232 raw sys.argv scan (-q, -i multi-pcap merge); :1238 '--version' in sys.argv",
+          "core/settings.py:30 'IS_SENSOR = \"sensor\" in sys.argv[0]'; :509-515 '--no-updates'/'-i' argv rewriting",
+          "core/update.py:384-385/388/395/420 raw sys.argv parsing (-c, --offline, -r, --console)",
+          "server.py:44 '--version' in sys.argv",
+          "sensor.py:1241-1249 optparse add_option (-c/-r/-p/-q/--console/--offline/--debug/--profile); :1253 parse_args; server.py:46-55 same",
+          "sensor.py:1260-1261 'getattr(options, option)' - CLI options copied into config"
+        ]
+      },
+      {
+        "family": "config_reads",
+        "evidence": [
+          "core/settings.py:config AttribDict singleton; e.g. core/httpd.py:323 'config.USERS', :471 'config.FAIL2BAN_REGEX', :481/514/529 'config.LOG_DIR'",
+          "sensor.py:352 'config.plugin_functions'; :927-929 'config.plugins' parsed from CLI -c/-p values"
+        ]
+      },
+      {
+        "family": "json_decode",
+        "evidence": [
+          "no json.loads/json.load call exists in the project source (only json.dumps producers: core/httpd.py:441/702, core/log.py:215); the loads/load source family is kept in the query but is expected to produce zero rows in this snapshot"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "subprocess_exec",
+        "evidence": [
+          "core/httpd.py:399 'subprocess.check_output(\"logger -p auth.info -t \\\"%s[%d]\\\" \\\"%s password for %s from %s port %s\\\"\" % (NAME.lower(), os.getpid(), \"Accepted\" if valid else \"Failed\", params.get(\"username\"), self.client_address[0], self.client_address[1]), stderr=subprocess.STDOUT, shell=True)' - command string %-formatted from request params and client address",
+          "core/settings.py:202 subprocess.check_output(\"sysctl hw\", shell=True, ...)",
+          "core/settings.py:208 subprocess.check_output(\"vmstat -s\", shell=True, ...)",
+          "core/settings.py:214 subprocess.check_output(\"free -b\", shell=True, ...)",
+          "core/settings.py:220 subprocess.check_output(\"top -n 1\", shell=True, ...)",
+          "sensor.py:1031 subprocess.check_output(\"grep -c ^processor /proc/cpuinfo\", ..., shell=True)",
+          "sensor.py:1032 subprocess.check_output(\"for pid in $(ps aux | ...) ...\", ..., shell=True)",
+          "sensor.py:1037 'p = subprocess.Popen(\"schedtool -n -2 -M 2 -p 10 -a 0x%02x %d\" % (affinity, os.getpid()), shell=True, ...)' - %-formatted from internal values"
+        ]
+      },
+      {
+        "family": "shell_true_flag",
+        "evidence": "all 8 subprocess execution sites in the repository pass shell=True (list above); there is no non-shell argument-list subprocess call in project source"
+      },
+      {
+        "family": "command_string_format",
+        "evidence": [
+          "core/httpd.py:399 '%'-string formatting (Mod expr) whose substitution values include params.get(\"username\") and self.client_address - dynamic command construction directly at the sink argument",
+          "sensor.py:1037 '%'-formatting of affinity/pid into the schedtool command",
+          "core/settings.py:202/208/214/220 and sensor.py:1031/1032 pass string literals (static commands)",
+          "core/log.py:205 'CEF_FORMAT.format(...)' exists in the repository but formats a syslog message, not a command; it is only matched if located inside an exec-wrapper function (it is not)"
+        ]
+      },
+      {
+        "family": "internal_exec_wrappers",
+        "evidence": [
+          "core/httpd.py:317 'ReqHandler._login(self, params)' - contains the only request-data-driven execution site (:399)",
+          "core/settings.py:155 '_get_total_physmem()' - contains the 4 static probe commands",
+          "sensor.py:850 'init()' - contains the cpu-affinity schedtool/Popen block (:1031-1037)"
+        ]
+      },
+      {
+        "family": "os_exec_absent",
+        "evidence": "no os.system / os.popen / os.exec* / os.spawn* / subprocess.run / subprocess.call / subprocess.check_call call exists in project source (only the vendored thirdparty/six moved-attribute table mentions subprocess.getoutput at thirdparty/six/__init__.py:250, which is a data table entry, not a call); the query keeps these API families because they are the standard CWE-78 sink set and the candidate extraction is meant to be exhaustive"
+      }
+    ],
+    "sanitizerObservations": [
+      "core/httpd.py:399 sits after a login-validity check (valid user with sha256 hash + one-time nonce at :320-336), but the executed command string itself is not quoted or escaped; params.get(\"username\") is inserted verbatim into the logger command",
+      "core/httpd.py:138 'params[key] = params[key][-1]' / parse_qs decoding only normalize shape, no shell escaping",
+      "no shlex.quote / pipes.quote / shell-escaping wrapper exists anywhere in project source",
+      "core/httpd.py:509 '\"..\" in dates' guards the events log path against traversal (path-domain sanitizer, not command-domain)",
+      "the sensor subprocess commands are built from static strings or internal numeric values (affinity/pid); no network-derived substitution was observed at sensor.py:1031-1037"
+    ],
+    "nonVulnerabilityNote": "The static probe commands in core/settings.py (sysctl/vmstat/free/top) and the schedtool affinity command in sensor.py are platform-introspection commands with static or internally-derived operands; they are recorded as sink candidates only, not as vulnerabilities."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query compile followed by codeql query run (sequential, one at a time) and codeql bqrs decode --format=csv; NOT database analyze / SARIF",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output is decoded directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); alias-aware, only genuine resolved calls into external modules",
+      "ast": "pure AST shape match (attribute/name text, syntactic module prefix, receiver name); catches dynamic or unresolved shapes that API graphs miss and is subject to name-collision noise. The vendored thirdparty.six.moves indirection (urllib/BaseHTTPServer imported as _urllib/_BaseHTTPServer) is invisible to API graphs, so the urllib parse/decode boundary is matched at AST level"
+    },
+    "flowKinds": {
+      "sources": ["return", "param", "http_request", "request_param", "env", "cli", "config", "file", "internal_transfer"],
+      "sinks": ["arg", "shell_true", "cmd_format", "internal_exec_wrapper"]
+    },
+    "exclusions": [
+      "no test/fixture directories exist in this repository (nothing excluded on that ground)",
+      "logging-only helpers (log_message / log_error / print / sys.stderr.write / send_header / wfile.write) are not extracted as candidates; pure output sites are out of scope",
+      "maltrail-safe-db (a pristine copy shipped inside the source tree) is a duplicate reference tree, not an executed entry point; rows from it are not distinguished in the raw extraction but it contains no exec API or HTTP handler code"
+    ]
+  },
+  "uncoveredCases": [
+    "core/httpd.py:147 'content = getattr(self, \"_%s\" % path)(params)' - the handler method is selected dynamically from the request path. The dispatch is captured as an internal_transfer row (call whose callee is itself a getattr(...) call), and the _% handler methods of ReqHandler are captured by the param family, but the path->method binding itself is not resolvable.",
+    "core/httpd.py:202-204 'getattr(self, \"_%s\" % name.lower(), None)' - same dynamic-getattr shape for content tag substitution.",
+    "core/log.py:223 '_(event_tuple, packet)' - plugin functions are called through a loop variable loaded from config.plugin_functions (populated by __import__ at sensor.py:954); the element call is not resolvable. Mitigated by the plugin(event_tuple, packet) parameter rows in plugins/*.py and the log_event parameter rows.",
+    "sensor.py:954 'module = __import__(filename[:-3])' - dynamic plugin import driven by the -p CLI value; not resolvable, mitigated by the cli family (parser.add_option '-p') and plugin function parameters.",
+    "core/settings.py:289 'value.replace(match.group(0), os.environ.get(match.group(1), match.group(0)))' - $VAR interpolation inside config values; the root os.environ.get read is captured, the string blending is not.",
+    "Bare-name (from-import) execution sinks are only matched for distinctive names (system, popen, getoutput, getstatusoutput); bare call/run/check_call are too collision-prone. In this repository every subprocess site is attribute-qualified (subprocess.check_output / subprocess.Popen), so this gap is not exercised.",
+    "six compatibility layer: httpd.py imports BaseHTTPServer/urllib via thirdparty.six.moves aliases, so API-graph resolution of parse_qs/unquote_plus/urlopen is not expected; those boundaries rely on the ast match_kind (module prefix _urllib/urllib or bare from-imported names)."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: cmd_sinks.csv, cmd_sinks_all.csv, confirmed_vulns.json, CVE申请报告.md, vulnerability_analysis_report.md and the maltrail-safe-db tree inside the source directory were NOT opened during this step; candidate families are derived from repository evidence and the loaded language/pattern references only. Project source, database, and Augur installation files were not modified. Only files under iris_manual/maltrail/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql, and later diagnostics/extraction_notes.md plus BQRS/CSV outputs)."
+  }
+}

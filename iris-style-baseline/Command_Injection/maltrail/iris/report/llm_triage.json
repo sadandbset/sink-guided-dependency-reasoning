@@ -1,0 +1,116 @@
+{
+  "meta": {
+    "run": "maltrail-iris-pass2-20261015",
+    "pass": 2,
+    "cwe": "CWE-78",
+    "task": "Independent LLM path re-review of formal Pass 2 SARIF findings",
+    "generated": "2026-10-15",
+    "inputs_reviewed": [
+      "iris/results/pass2.sarif",
+      "iris/report/iris_report.md",
+      "iris/labels/labels.json (alert-relevant entries: p2-e-091, p2-e-092, p2-e-102, p2-e-103, p2-e-522, p2-e-525, p2-e-060)",
+      "iris/report/query_generation_notes.md",
+      "dataset/codeql_databases/maltrail_vuln/core/httpd.py (lines 110-260, 300-419)"
+    ],
+    "formal_alert_count": 1,
+    "diagnostic_alert_count": 0,
+    "constraints_honored": [
+      "Original SARIF, labels and queries were not modified.",
+      "PyVul ground-truth files, fix commits and CVE advisories on disk were NOT read; the ground-truth comparison in section 'ground_truth_check' uses only the commit metadata supplied inline in the task prompt.",
+      "No diagnostic-query results were counted as formal TPs (pass2.sarif contains exactly one result, from the formal rule py/augur/maltrail/pass2-command-injection; the diagnostics query produced no SARIF output in this run)."
+    ]
+  },
+  "summary": {
+    "verdicts": {
+      "likely_tp": 1,
+      "likely_fp": 0,
+      "uncertain": 0
+    },
+    "headline": "The single formal alert is a confirmed true positive: the classic unauthenticated OS command injection in ReqHandler._login (maltrail <= 0.54, fixed in upstream commit a299967). The reported source-to-sink path is real, reachable without authentication, and carries no quoting, escaping or gating anywhere on the path."
+  },
+  "alerts": [
+    {
+      "alert_id": "pass2-result-1",
+      "rule_id": "py/augur/maltrail/pass2-command-injection",
+      "sink_location": {
+        "file": "core/httpd.py",
+        "line": 399,
+        "columns": "45-256",
+        "snippet": "subprocess.check_output(\"logger -p auth.info -t \\\"%s[%d]\\\" \\\"%s password for %s from %s port %s\\\"\" % (NAME.lower(), os.getpid(), \"Accepted\" if valid else \"Failed\", params.get(\"username\"), self.client_address[0], self.client_address[1]), stderr=subprocess.STDOUT, shell=True)"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "threadflow_review": [
+        {
+          "threadflow": 1,
+          "path": "core/httpd.py:317 col 26-32 (`params` parameter of _login) -> core/httpd.py:399 col 185-191 (`params` local) -> col 185-207 (`params.get(\"username\")`, dict.get taint step) -> col 45-256 (`%`-format BinaryExpr command string)",
+          "assessment": "Primary exploit path. The tracked value is exactly `params.get(\"username\")`, the 4th substitution of the format string, embedded unquoted inside the double-quoted message argument of the `logger` shell command. Verified real: line 399 of the snapshot matches character-for-character.",
+          "exploitable": true,
+          "exploit_shape": "username containing `$(...)` or backticks executes inside the double-quoted sh argument (double quotes do not suppress command substitution); a literal `\"` in the username breaks out of the quoting entirely. E.g. POST /login with body `username=$(id)&hash=x&nonce=y` (body is unquote_plus/parse_qs-decoded, so `$`, backticks and `\"` all survive)."
+        },
+        {
+          "threadflow": 2,
+          "path": "core/httpd.py:399 col 185-207 (`params.get(\"username\")` result node) -> col 45-256 (command string)",
+          "assessment": "Direct-source variant of the same edge: `params.get(...)` reads on the params dict are themselves labeled tp sources (p2-e-102, 0.95), so this sub-path does not even depend on the parameter-as-source modeling or the dispatch summary. Shortest real source->sink chain: a single expression at one line.",
+          "exploitable": true
+        },
+        {
+          "threadflow": 3,
+          "path": "core/httpd.py:399 col 209-228 (`self.client_address[0]`, client IP) -> col 45-256 (command string)",
+          "assessment": "Genuine network input boundary (TCP peer address from the socketserver machinery), and the value does flow into the command string unquoted. However, the content is a dotted-quad address string produced by the socket layer, not by request text - an attacker cannot put shell metacharacters into their own source IP. Technically tainted, practically not injectable on its own.",
+          "exploitable": false
+        },
+        {
+          "threadflow": 4,
+          "path": "core/httpd.py:399 col 233-252 (`self.client_address[1]`, client port) -> col 45-256 (command string)",
+          "assessment": "Same as threadflow 3 but for the integer peer port. Tainted by the source model, not attacker-injectable in practice.",
+          "exploitable": false
+        }
+      ],
+      "question_answers": {
+        "1_source_is_attacker_boundary": "YES. `params` is built purely from client input: request-line query via `_urllib.parse.parse_qs(query)` (core/httpd.py:134) and POST body via `self.rfile.read(int(length))` + `unquote_plus` + `parse_qs(self.data)` (core/httpd.py:229-232, dispatched into do_GET at :233), handed to `_login` through `getattr(self, \"_%s\" % path)(params)` at :147. `self.client_address` is the TCP peer tuple. All are real network-input boundaries of the reporting HTTP server, reachable unauthenticated on the listening port.",
+        "2_propagation_has_real_code_evidence": "YES with one documented model-assisted edge. Threadflows 2-4 are intra-expression and fully evidenced by the snapshot code at :399. Threadflow 1 starts at the `_login` parameter (:317): the request->handler edge relies on the labeled handler-param source (p2-e-091) and the `dispatchStep` summary (p2-e-060) because `getattr(self, \"_%s\" % path)(params)` is natively unresolvable by CodeQL. That edge is nonetheless backed by real code (do_GET :125-:147, do_POST :228-233) and is redundant for the alert: `params.get(\"username\")` at :399 is a direct source in its own right (p2-e-102), so the finding does not depend on the summary. The `%`-format operator propagating argument taint into the result string is native python-all modeling.",
+        "3_sink_executes_system_command": "YES. `subprocess.check_output(<string>, shell=True)` at core/httpd.py:399 executes the string through /bin/sh on every non-Windows deployment (`if not IS_WIN:` :397).",
+        "4_command_content_influenced_by_source": "YES. `params.get(\"username\")` is substituted unquoted into the double-quoted logger message (4th `%s`); `self.client_address[0]/[1]` are substituted as from/port. The username substitution is fully attacker-controlled in content.",
+        "5_protections": "NONE. Verified in the snapshot: (a) the login validity check (:320-:336) is not a gate - the sink at :397-399 sits outside `if valid:` and runs for failed logins with the same `params.get(\"username\")` interpolation (\"Failed password for <username> ...\"); (b) no shlex/pipes import or any quoting/escaping exists anywhere in the snapshot; (c) no whitelist or charset filter is applied to username (only truthiness at :320 and nonce single-use at :321-322, neither sanitizes); (d) `except Exception` at :400 swallows errors but the command has already run; (e) the nonce/hash machinery only gates the `valid` branch, not the sink.",
+        "6_predefined_supported_feature": "NO. The `logger` command itself is a fixed, admin-intended syslog call - this is not a feature that intentionally executes user-supplied commands. The defect is the unquoted interpolation of request data into that fixed command; upstream's fix (argument list + shell=False) preserved the logging feature while removing the injection, confirming the exec of attacker-chosen shell syntax was never intended functionality.",
+        "7_path_real_vs_overapproximated": "REAL. The alert is not a Source/Sink over-approximation artifact: (a) the sink is location-pinned to the single reviewed tp site (core/httpd.py:399, shell=True) - the candidate sensor.py:1037 schedtool site and the 6 static-literal subprocess sites cannot appear in formal results; (b) every node in every codeFlow corresponds to a real AST node at a verified line in the snapshot; (c) reachability is concrete: any unauthenticated client sending `POST /login` (or `GET /login?username=...`) reaches the sink. The only model-assisted edge (getattr dispatch) is redundant to the finding, as noted in answer 2. The two client_address sub-paths (threadflows 3-4) are true-but-non-injectable; they do not change the verdict because threadflows 1-2 are independently exploitable."
+      },
+      "label_consistency": "SARIF, labels.json and the report agree: one formal result at core/httpd.py:399 (sink label p2-e-522, tp 0.95), sources p2-e-091/p2-e-092/p2-e-102/p2-e-103, dispatch summary p2-e-060, empty sanitizer set. iris_report.md classifies it as 'Candidate (need analyst review)' only because no automated TP/FP heuristic fired; this LLM review resolves it to likely_tp."
+    }
+  ],
+  "ground_truth_check": {
+    "question": "Was the real vulnerability of this project hit by the formal analysis?",
+    "hit": true,
+    "commit": "a299967318cc226c18a6a07d1be708e3f21edd39 (maltrail, CWE-78, 'Fixes a privately reported vuln' - unauthenticated OS command injection in the login process, maltrail <= 0.54)",
+    "mapping": [
+      "Function: the PyVul entry names `start_httpd._login`; in this snapshot the identical function is `ReqHandler._login` nested in `start_httpd` (core/httpd.py:317). The `code_before` body supplied in the task matches core/httpd.py:317-404 line-for-line.",
+      "Sink: the vulnerable `subprocess.check_output(\"logger -p auth.info -t ... %s password for %s from %s port %s\" % (..., params.get(\"username\"), self.client_address[0], self.client_address[1]), stderr=subprocess.STDOUT, shell=True)` is exactly the formal alert's sink, core/httpd.py:399, argument 0, shell=True - the same site the fix commit rewrites to an argv list with shell=False.",
+      "Injection parameter: PyVul's description names `params.get(\"username\")` as the injectable parameter - this is precisely what SARIF threadflows 1 and 2 track into the command string.",
+      "Unauthenticated: the fix/advisory states the injection happens during the (failed) login process with no valid credentials required - matching the code fact that the sink executes outside `if valid:` (core/httpd.py:397 vs :341)."
+    ],
+    "verdict": "The formal Pass 2 analysis hit the real vulnerability exactly: correct file, correct line, correct sink (subprocess.check_output arg 0 with shell=True), correct tainted parameter (username), and correct unauthenticated reachability. No miss to explain.",
+    "how_a_miss_could_have_happened_and_was_it_avoided": [
+      {
+        "risk": "Dynamic handler dispatch: `getattr(self, \"_%s\" % path)(params)` (core/httpd.py:147) computes the callee from the request path, which CodeQL cannot resolve natively - a naive query would lose the request->`_login(params`> edge and miss the vuln.",
+        "avoided_by": "Dual, redundant modeling: (a) `params.get(...)` reads inside the handler are direct tp sources (p2-e-092/102), so the alert's shortest path needs no interprocedural edge at all; (b) a `dispatchStep` summary (p2-e-060) additionally links the dispatch call argument to the 9 reviewed handler parameters. Either alone would have sufficed."
+      },
+      {
+        "risk": "Auth-gating assumption: treating the login check as a sanitizer/barrier (or as a taint-gating condition) would suppress the path, since the sink textually sits in the login handler.",
+        "avoided_by": "The labels explicitly record that `if not IS_WIN:` (:397) is outside `if valid:` (:341) and that the 'Failed' branch interpolates the same username; MySanitizers resolves to `none()` (evidence-based: no shlex/pipes/escaping anywhere in the snapshot), so nothing suppressed the path."
+      },
+      {
+        "risk": "Sink over-filtering: requiring e.g. non-shell argv sinks, or leaving the sink family unpinned so that review noise from the 7 other subprocess sites could dilute/discredit the finding set.",
+        "avoided_by": "The formal sink is the single location-pinned tp site (httpd.py:399) with a shell=True requirement - the output is exactly one high-precision alert, and the candidate schedtool site (sensor.py:1037, internally derived affinity) was correctly kept out of formal results."
+      },
+      {
+        "risk": "`%`-format propagation: an engine that did not model percent-format string interpolation would drop the `params.get(\"username\")` -> command-string step.",
+        "avoided_by": "Native python-all 7.x string-formatting taint modeling, plus an explicit dict.get step rendered in the codeFlow (threadflow 1 shows the `dict.get` taxon)."
+      },
+      {
+        "residual_caveat": "The client_address sub-paths (threadflows 3-4) are true-but-non-injectable (socket-derived IP/port). This is benign over-approximation of source *content* at an already-confirmed-vulnerable sink and does not affect the TP verdict for the username path."
+      }
+    ]
+  },
+  "final_statement": "CodeQL analysis succeeded and produced exactly one formal CWE-78 taint-path alert (core/httpd.py:399, `logger` command in ReqHandler._login). Independent re-review of its codeFlows against the real source confirms it is a likely_tp with high confidence (0.95): unauthenticated, unquoted, unfiltered flow of the request parameter `username` into a shell=True command string. This is precisely the real maltrail vulnerability fixed by upstream commit a299967318cc226c18a6a07d1be708e3f21edd39. No likely_fp or uncertain formal alerts exist in this round; diagnostic-query results were not used as TP evidence."
+}
