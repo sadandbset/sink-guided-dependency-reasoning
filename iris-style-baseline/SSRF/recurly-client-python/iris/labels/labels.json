@@ -1,0 +1,3321 @@
+{
+ "version": "1.0.0",
+ "metadata": {
+  "run_id": "recurly-client-python-ssrf-pass3-20261020",
+  "generated_at": "2026-10-20T07:58:31Z",
+  "language": "python",
+  "framework": null,
+  "model": "glm-5.3",
+  "project": "recurly-client-python 2.6.1",
+  "notes": [
+   "Phase 1 Step 3 (LLM API candidate labeling) for Pass 3 (CWE-918 SSRF) against the recurly-client-python_vuln source tree (recurly-client-python 2.6.1, database creation sha 9db2d1a): every CSV line number was re-checked against the tree, and each entry's first evidence string is the verbatim source line at its location, read from the tree at generation time.",
+   "Single-pass labeling run: Pass 3 only, cwes ['918'] per the operator instruction and exploration/detection.json (focus CWE-918; CWE-99/610 are not in scope for this run).",
+   "The passes array contains only the pass_id=3 block; the schema keyword passes.contains {pass_id: 1} is a template artifact that cannot be satisfied by a user-narrowed single-pass run and is intentionally unsatisfied (same convention as the prior manual pass-3 runs).",
+   "All 156 candidate rows (sources.csv 77 + sinks.csv 79) were dispositioned: 0 rows dropped, 0 merged - every (file, line, callable) candidate is distinct. Signature-level deduplication (e.g. the 28 urljoin call sites resolving to one urljoin summary predicate) is deferred to Step 4 library generation, where it is deterministic.",
+   "No sanitizer entries: the codebase contains no scheme/host allowlist, no private-IP blocking and no redirect validation (verified recurly/resource.py:240-250); TLS CA validation, API-key authentication and the socket timeout restrict nothing about the request target.",
+   "The target is a client SDK, not a service: there are no routes, handlers or login boundaries. 'source' entries mark the embedding-application boundary (public API parameters) and second-order carriers (server-controlled href/Location/Link values); all carry classification 'candidate' pending host-application context - no vulnerability is claimed by this run."
+  ]
+ },
+ "passes": [
+  {
+   "pass_id": 3,
+   "focus": "Server-Side Request Forgery (SSRF)",
+   "cwes": [
+    "918"
+   ],
+   "entries": [
+    {
+     "id": "src-2",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.85,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "SUBDOMAIN",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 59
+     },
+     "rationale": "Module-level configuration read: recurly.SUBDOMAIN / recurly.BASE_URI are set by the embedding application's operator (trusted admin configuration) and only name the fixed *.recurly.com API host (base_uri(), __init__.py:58-62); recurly.CA_CERTS_FILE is a local TLS CA-bundle path that never reaches a request URL. Admin-configured request hosts are FP per the SSRF FP heuristic - not an attacker-controlled boundary.",
+     "evidence": [
+      "recurly/__init__.py:59     if SUBDOMAIN is None:"
+     ]
+    },
+    {
+     "id": "src-3",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.85,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "BASE_URI",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 62
+     },
+     "rationale": "Module-level configuration read: recurly.SUBDOMAIN / recurly.BASE_URI are set by the embedding application's operator (trusted admin configuration) and only name the fixed *.recurly.com API host (base_uri(), __init__.py:58-62); recurly.CA_CERTS_FILE is a local TLS CA-bundle path that never reaches a request URL. Admin-configured request hosts are FP per the SSRF FP heuristic - not an attacker-controlled boundary.",
+     "evidence": [
+      "recurly/__init__.py:62     return BASE_URI % SUBDOMAIN"
+     ]
+    },
+    {
+     "id": "src-4",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.85,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "SUBDOMAIN",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 62
+     },
+     "rationale": "Module-level configuration read: recurly.SUBDOMAIN / recurly.BASE_URI are set by the embedding application's operator (trusted admin configuration) and only name the fixed *.recurly.com API host (base_uri(), __init__.py:58-62); recurly.CA_CERTS_FILE is a local TLS CA-bundle path that never reaches a request URL. Admin-configured request hosts are FP per the SSRF FP heuristic - not an attacker-controlled boundary.",
+     "evidence": [
+      "recurly/__init__.py:62     return BASE_URI % SUBDOMAIN"
+     ]
+    },
+    {
+     "id": "src-5",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 223
+     },
+     "rationale": "Server-controlled XML attribute read - a second-order SSRF carrier: the href value comes from the parsed Recurly API response and is re-requested by the library. Attacker control requires a compromised or MITM'd endpoint (the channel is protected by API key + TLS) or webhook XML fed in via objects_for_push_notification; kept as source for conservative recall, needs human review. billing_info href -> BillingInfo.element_for_url(billing_info_url) at line 226 -> http_request.",
+     "evidence": [
+      "recurly/__init__.py:223                 billing_info_url = self._elem.find('billing_info').attrib['href']",
+      "recurly/__init__.py:226 resp, elem = BillingInfo.element_for_url(billing_info_url)"
+     ]
+    },
+    {
+     "id": "src-6",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 255
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/__init__.py:255         response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-7",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 257
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/__init__.py:257         elem = ElementTree.fromstring(response_xml)"
+     ]
+    },
+    {
+     "id": "src-8",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "getheader",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 260
+     },
+     "rationale": "Server-controlled Location response header - second-order SSRF carrier: the value is stored and re-requested by the library. Attacker control requires a compromised/MITM'd Recurly endpoint; kept as source for conservative recall, needs human review. getheader returns the header value (flow_kind=return). Stored as invoice._url (Account.invoice, line 260) and later re-requested by Invoice put/post/delete wrappers.",
+     "evidence": [
+      "recurly/__init__.py:260         invoice._url = response.getheader('Location')"
+     ]
+    },
+    {
+     "id": "src-9",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 271
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/__init__.py:271         response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-10",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 273
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/__init__.py:273         elem = ElementTree.fromstring(response_xml)"
+     ]
+    },
+    {
+     "id": "src-11",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 296
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/__init__.py:296         response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-12",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 298
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/__init__.py:298         self.update_from_element(ElementTree.fromstring(response_xml))"
+     ]
+    },
+    {
+     "id": "src-13",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "getheader",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 313
+     },
+     "rationale": "Server-controlled Location response header - second-order SSRF carrier: the value is stored and re-requested by the library. Attacker control requires a compromised/MITM'd Recurly endpoint; kept as source for conservative recall, needs human review. getheader returns the header value (flow_kind=return). Stored as billing_info._url (Account.update_billing_info, line 313) and re-requested by BillingInfo save/delete.",
+     "evidence": [
+      "recurly/__init__.py:313             billing_info._url = response.getheader('Location')"
+     ]
+    },
+    {
+     "id": "src-14",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 317
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/__init__.py:317         response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-15",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 319
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/__init__.py:319         billing_info.update_from_element(ElementTree.fromstring(response_xml))"
+     ]
+    },
+    {
+     "id": "src-16",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "GiftCard",
+      "callable": "redeem",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 453
+     },
+     "rationale": "GiftCard.redeem builds redemption_path = '%s/redeem' % self.redemption_code (line 456) and joins it onto self._url or base_uri (lines 459/461). redemption_code occupies the FIRST path position, so a scheme-prefixed value (e.g. 'http://evil.com/redeem') makes urljoin return an absolute URL, replacing scheme and host - genuine host-forgery capability if the attribute is attacker-influenced. The attribute is set by the embedding application (constructor kwargs) or parsed from the server response; the account_code parameter goes to the request body only. Boundary = embedding application; needs host-app context review.",
+     "evidence": [
+      "recurly/__init__.py:453     def redeem(self, account_code):",
+      "recurly/__init__.py:456 redemption_path = '%s/redeem' % (self.redemption_code)",
+      "recurly/__init__.py:459 url = urljoin(self._url, redemption_path)"
+     ]
+    },
+    {
+     "id": "src-17",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.75,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 522
+     },
+     "rationale": "'plan_codes' array-type discriminator in Coupon.value_for_element: the attribute value is compared to 'array' and dispatches parsing; it never reaches a request URL.",
+     "evidence": [
+      "recurly/__init__.py:522         if not elem or elem.tag != 'plan_codes' or elem.attrib.get('type') != 'array':"
+     ]
+    },
+    {
+     "id": "src-18",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 533
+     },
+     "rationale": "Serialization-side attribute WRITE (elem.attrib['type'] = 'array') in Coupon.element_for_value: produces outbound XML; reads no server data.",
+     "evidence": [
+      "recurly/__init__.py:533         elem.attrib['type'] = 'array'"
+     ]
+    },
+    {
+     "id": "src-19",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "getheader",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 585
+     },
+     "rationale": "Server-controlled Location response header - second-order SSRF carrier: the value is stored and re-requested by the library. Attacker control requires a compromised/MITM'd Recurly endpoint; kept as source for conservative recall, needs human review. getheader returns the header value (flow_kind=return). Coupon.generate follows the server-supplied Location DIRECTLY: Page.page_for_url(response.getheader('Location')) at line 585 issues the follow-up request.",
+     "evidence": [
+      "recurly/__init__.py:585         return Page.page_for_url(response.getheader('Location'))"
+     ]
+    },
+    {
+     "id": "src-20",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 761
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/__init__.py:761         return pdf_response.read()"
+     ]
+    },
+    {
+     "id": "src-21",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 876
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/__init__.py:876         response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-22",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 878
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/__init__.py:878         elem = ElementTree.fromstring(response_xml)"
+     ]
+    },
+    {
+     "id": "src-23",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "getheader",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1084
+     },
+     "rationale": "Server-controlled Location response header - second-order SSRF carrier: the value is stored and re-requested by the library. Attacker control requires a compromised/MITM'd Recurly endpoint; kept as source for conservative recall, needs human review. getheader returns the header value (flow_kind=return). Stored as self._refund_transaction_url (Transaction._handle_refund_accepted, line 1084) and fetched by get_refund_transaction via element_for_url (line 1100).",
+     "evidence": [
+      "recurly/__init__.py:1084         self._refund_transaction_url = response.getheader('Location')"
+     ]
+    },
+    {
+     "id": "src-24",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1121
+     },
+     "rationale": "anchor 'name' attribute compared to 'refund' in Transaction.refund: a match key, not URL material.",
+     "evidence": [
+      "recurly/__init__.py:1121             if anchor_elem.attrib.get('name') == 'refund':"
+     ]
+    },
+    {
+     "id": "src-25",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1122
+     },
+     "rationale": "Server-controlled XML attribute read - a second-order SSRF carrier: the href value comes from the parsed Recurly API response and is re-requested by the library. Attacker control requires a compromised or MITM'd endpoint (the channel is protected by API key + TLS) or webhook XML fed in via objects_for_push_notification; kept as source for conservative recall, needs human review. url = anchor_elem.attrib['href'] (line 1122) -> self._make_actionator(url, method) (line 1127) whose closure calls http_request(full_url, method, body).",
+     "evidence": [
+      "recurly/__init__.py:1122                 url = anchor_elem.attrib['href']",
+      "recurly/__init__.py:1127 actionator = self._make_actionator(url, method, extra_handler=self._handle_refund_accepted)"
+     ]
+    },
+    {
+     "id": "src-26",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1123
+     },
+     "rationale": "anchor 'method' attribute (.upper()) in Transaction.refund: selects the HTTP verb; not URL material.",
+     "evidence": [
+      "recurly/__init__.py:1123                 method = anchor_elem.attrib['method'].upper()"
+     ]
+    },
+    {
+     "id": "src-27",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Plan",
+      "callable": "get_add_on",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1174
+     },
+     "rationale": "add_on_code is interpolated into the trailing slots of '%s/add_ons/%s' % (self.plan_code, add_on_code) (line 1176): the urljoin path argument always STARTS with self.plan_code, so this parameter alone cannot introduce an absolute URL or change scheme/host/port - path-only control, which is not CWE-918 host forgery. (Residual first-slot plan_code risk is recorded on the create_add_on summary entry.)",
+     "evidence": [
+      "recurly/__init__.py:1174     def get_add_on(self, add_on_code):"
+     ]
+    },
+    {
+     "id": "src-28",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": null,
+      "callable": "objects_for_push_notification",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1292
+     },
+     "rationale": "Externally delivered Recurly push-notification body: the host application feeds the raw webhook POST body into this function and the SDK parses it with ElementTree.fromstring WITHOUT any signature verification. The decoded Resource elements carry href attributes that are re-requested on later attribute access (resource.py:566/:589) - a genuine external input boundary for a library. Attacker controllability depends on the host's webhook endpoint exposure; kept for conservative recall.",
+     "evidence": [
+      "recurly/__init__.py:1292 def objects_for_push_notification(notification):"
+     ]
+    },
+    {
+     "id": "src-29",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1300
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/__init__.py:1300     notification_el = ElementTree.fromstring(notification)"
+     ]
+    },
+    {
+     "id": "src-30",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.errors",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/errors.py",
+      "line": 18
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/errors.py:18             self.__dict__['response_doc'] = ElementTree.fromstring("
+     ]
+    },
+    {
+     "id": "src-31",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.85,
+     "signature": {
+      "module": "recurly.errors",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/errors.py",
+      "line": 239
+     },
+     "rationale": "Error sub-element 'field' attribute parsed from an API error body: consumed as exception metadata (field/symbol/message), never as request URL material.",
+     "evidence": [
+      "recurly/errors.py:239             field = err.attrib['field']"
+     ]
+    },
+    {
+     "id": "src-32",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.85,
+     "signature": {
+      "module": "recurly.errors",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/errors.py",
+      "line": 240
+     },
+     "rationale": "Error sub-element 'symbol' attribute parsed from an API error body: exception metadata only.",
+     "evidence": [
+      "recurly/errors.py:240             symbol = err.attrib['symbol']"
+     ]
+    },
+    {
+     "id": "src-33",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.js",
+      "type": null,
+      "callable": "fetch",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/js.py",
+      "line": 41
+     },
+     "rationale": "token is interpolated into 'recurly_js/result/%s' (js.py:42): the fixed non-scheme prefix guarantees a relative reference, so urljoin(recurly.base_uri(), ...) keeps the host at the operator-configured *.recurly.com base. Path-only control.",
+     "evidence": [
+      "recurly/js.py:41 def fetch(token):"
+     ]
+    },
+    {
+     "id": "src-34",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.85,
+     "signature": {
+      "module": "recurly.link_header",
+      "type": null,
+      "callable": "parse_link_value",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/link_header.py",
+      "line": 95
+     },
+     "rationale": "Invocation inside the module's if __name__ == '__main__' demo block (line 95 prints parse_link_value(sys.argv[1])): not part of the library runtime and not an untrusted boundary; the live call is resource.py:153 (labeled separately).",
+     "evidence": [
+      "recurly/link_header.py:95         print(parse_link_value(sys.argv[1]))"
+     ]
+    },
+    {
+     "id": "src-35",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 46
+     },
+     "rationale": "Serialization-side attribute WRITE (currency_el.attrib['type'] = 'integer') in Money.add_to_element.",
+     "evidence": [
+      "recurly/resource.py:46             currency_el.attrib['type'] = 'integer'"
+     ]
+    },
+    {
+     "id": "src-36",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Page",
+      "callable": "page_for_url",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 127
+     },
+     "rationale": "Public classmethod: the full request URL is supplied by the caller and flows directly into Resource.element_for_url(url) -> http_request. The untrusted boundary is the embedding application; no validation exists between this parameter and the network.",
+     "evidence": [
+      "recurly/resource.py:127     def page_for_url(cls, url):"
+     ]
+    },
+    {
+     "id": "src-37",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Page",
+      "callable": "count_for_url",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 137
+     },
+     "rationale": "Public classmethod: the full request URL is supplied by the caller and flows into Resource.headers_for_url(url) -> http_request(url, method='HEAD'). Boundary = embedding application.",
+     "evidence": [
+      "recurly/resource.py:137     def count_for_url(cls, url):"
+     ]
+    },
+    {
+     "id": "src-38",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "parse_link_value",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 153
+     },
+     "rationale": "Vendored Link-header parser call: propagates the server-controlled Link header value into pagination URLs (Page.start_url / next_url, resource.py:154-158) that next_page/first_page re-request. A taint propagation step, not a sink.",
+     "evidence": [
+      "recurly/resource.py:153         links = parse_link_value(resp.getheader('Link'))"
+     ]
+    },
+    {
+     "id": "src-39",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "getheader",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 153
+     },
+     "rationale": "Server-controlled Link response header - second-order SSRF carrier: parse_link_value(resp.getheader('Link')) yields Page.start_url / next_url (resource.py:154-158) which next_page/first_page re-request. Attacker control requires a compromised/MITM'd endpoint; kept for conservative recall.",
+     "evidence": [
+      "recurly/resource.py:153         links = parse_link_value(resp.getheader('Link'))"
+     ]
+    },
+    {
+     "id": "src-40",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "http_request",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 214
+     },
+     "rationale": "The single public low-level funnel: arg 0 is the complete request URL - urlsplit(url).netloc selects the connection host (resource.py:245/247/250) and the scheme selects HTTP vs HTTPS (resource.py:244). The boundary is the embedding application: within this library alone no attacker-controlled entry exists; flows realize only when a host app passes attacker-derived URLs.",
+     "evidence": [
+      "recurly/resource.py:214     def http_request(cls, url, method='GET', body=None, headers=None):"
+     ]
+    },
+    {
+     "id": "src-41",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.85,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "SUBDOMAIN",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 234
+     },
+     "rationale": "recurly.SUBDOMAIN is read here only for the non-ascii sanity check in http_request; the request host is operator configuration (admin-configured URL -> FP per SSRF heuristic).",
+     "evidence": [
+      "recurly/resource.py:234         if is_non_ascii(recurly.API_KEY) or is_non_ascii(recurly.SUBDOMAIN):"
+     ]
+    },
+    {
+     "id": "src-42",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "CA_CERTS_FILE",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 246
+     },
+     "rationale": "recurly.CA_CERTS_FILE read feeding ssl.create_default_context(cafile=...): a local CA-bundle path that gates TLS validation only; it never reaches a request URL and is operator configuration. Not an SSRF source.",
+     "evidence": [
+      "recurly/resource.py:246         elif recurly.CA_CERTS_FILE is None:"
+     ]
+    },
+    {
+     "id": "src-43",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "CA_CERTS_FILE",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 249
+     },
+     "rationale": "recurly.CA_CERTS_FILE read feeding ssl.create_default_context(cafile=...): a local CA-bundle path that gates TLS validation only; it never reaches a request URL and is operator configuration. Not an SSRF source.",
+     "evidence": [
+      "recurly/resource.py:249             connection_options['context'] = ssl.create_default_context(cafile=recurly.CA_CERTS_FILE)"
+     ]
+    },
+    {
+     "id": "src-44",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "get",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 333
+     },
+     "rationale": "uuid is interpolated into a fixed-prefix member_path ('accounts/%s', 'invoices/%s', ...) at line 341: the urljoin path argument is always a relative reference, so the host stays recurly.base_uri() (operator config). Path-only control, not CWE-918 host forgery.",
+     "evidence": [
+      "recurly/resource.py:333     def get(cls, uuid):"
+     ]
+    },
+    {
+     "id": "src-45",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "headers_for_url",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 346
+     },
+     "rationale": "Public classmethod: full request URL from the caller -> http_request(url, method='HEAD'). Boundary = embedding application.",
+     "evidence": [
+      "recurly/resource.py:346     def headers_for_url(cls, url):"
+     ]
+    },
+    {
+     "id": "src-46",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "element_for_url",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 355
+     },
+     "rationale": "Public classmethod: full request URL from the caller -> http_request(url) (GET). Boundary = embedding application.",
+     "evidence": [
+      "recurly/resource.py:355     def element_for_url(cls, url):"
+     ]
+    },
+    {
+     "id": "src-47",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.75,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "getheader",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 363
+     },
+     "rationale": "Content-Type assertion in element_for_url (response.getheader('Content-Type').startswith('application/xml')): a format check, not URL material.",
+     "evidence": [
+      "recurly/resource.py:363         assert response.getheader('Content-Type').startswith('application/xml')"
+     ]
+    },
+    {
+     "id": "src-48",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 365
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/resource.py:365         response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-49",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 367
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/resource.py:367         response_doc = ElementTree.fromstring(response_xml)"
+     ]
+    },
+    {
+     "id": "src-50",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.8,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 398
+     },
+     "rationale": "'nil' presence check in Resource.value_for_element: dispatch to None only; not URL material.",
+     "evidence": [
+      "recurly/resource.py:398         if elem.attrib.get('nil') is not None:"
+     ]
+    },
+    {
+     "id": "src-51",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.8,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 406
+     },
+     "rationale": "'type' attribute dispatch in Resource.value_for_element (integer/float/boolean/datetime/array): value typing only; never URL material.",
+     "evidence": [
+      "recurly/resource.py:406         attr_type = elem.attrib.get('type')"
+     ]
+    },
+    {
+     "id": "src-52",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 463
+     },
+     "rationale": "Serialization-side attribute WRITE in Resource.element_for_value (nil/boolean/integer/datetime typing on outbound elements); reads no server data.",
+     "evidence": [
+      "recurly/resource.py:463             el.attrib['nil'] = 'nil'"
+     ]
+    },
+    {
+     "id": "src-53",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 465
+     },
+     "rationale": "Serialization-side attribute WRITE in Resource.element_for_value (nil/boolean/integer/datetime typing on outbound elements); reads no server data.",
+     "evidence": [
+      "recurly/resource.py:465             el.attrib['type'] = 'boolean'"
+     ]
+    },
+    {
+     "id": "src-54",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 468
+     },
+     "rationale": "Serialization-side attribute WRITE in Resource.element_for_value (nil/boolean/integer/datetime typing on outbound elements); reads no server data.",
+     "evidence": [
+      "recurly/resource.py:468             el.attrib['type'] = 'integer'"
+     ]
+    },
+    {
+     "id": "src-55",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 471
+     },
+     "rationale": "Serialization-side attribute WRITE in Resource.element_for_value (nil/boolean/integer/datetime typing on outbound elements); reads no server data.",
+     "evidence": [
+      "recurly/resource.py:471             el.attrib['type'] = 'datetime'"
+     ]
+    },
+    {
+     "id": "src-56",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "paginated",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 487
+     },
+     "rationale": "Public method exposing Page.page_for_url: the full request URL is supplied by the caller. Boundary = embedding application.",
+     "evidence": [
+      "recurly/resource.py:487     def paginated(self, url):"
+     ]
+    },
+    {
+     "id": "src-57",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 508
+     },
+     "rationale": "Server-controlled XML attribute read - a second-order SSRF carrier: the href value comes from the parsed Recurly API response and is re-requested by the library. Attacker control requires a compromised or MITM'd endpoint (the channel is protected by API key + TLS) or webhook XML fed in via objects_for_push_notification; kept as source for conservative recall, needs human review. Primary carrier: update_from_element stores document_url = elem.attrib.get('href') into self._url (line 510), which delete/put/_update/redeem/preview and the __init__.py wrappers re-request through http_request.",
+     "evidence": [
+      "recurly/resource.py:508         document_url = elem.attrib.get('href')",
+      "recurly/resource.py:510 self._url = document_url"
+     ]
+    },
+    {
+     "id": "src-58",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 525
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/resource.py:525                 response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-59",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 527
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/resource.py:527                 return self.update_from_element(ElementTree.fromstring(response_xml))"
+     ]
+    },
+    {
+     "id": "src-60",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 529
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/resource.py:529                 response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-61",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 531
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/resource.py:531                 elem = ElementTree.fromstring(response_xml)"
+     ]
+    },
+    {
+     "id": "src-62",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 556
+     },
+     "rationale": "Returns xml_attribute_attributes values in Resource.__getattr__; every class that defines the tuple (BillingInfo/Adjustment/Transaction/Coupon) uses it only for the 'type' attribute - not href/URL material.",
+     "evidence": [
+      "recurly/resource.py:556                 return selfnode.attrib[name]"
+     ]
+    },
+    {
+     "id": "src-63",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 565
+     },
+     "rationale": "anchor 'name' attribute compared to the requested attribute name in Resource.__getattr__: a match key.",
+     "evidence": [
+      "recurly/resource.py:565                 if anchor_elem.attrib.get('name') == name:"
+     ]
+    },
+    {
+     "id": "src-64",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 566
+     },
+     "rationale": "Server-controlled XML attribute read - a second-order SSRF carrier: the href value comes from the parsed Recurly API response and is re-requested by the library. Attacker control requires a compromised or MITM'd endpoint (the channel is protected by API key + TLS) or webhook XML fed in via objects_for_push_notification; kept as source for conservative recall, needs human review. url = anchor_elem.attrib['href'] (line 566) -> self._make_actionator(url, method) (line 568) whose closure calls http_request(full_url, method, body) (resource.py:522).",
+     "evidence": [
+      "recurly/resource.py:566                     url = anchor_elem.attrib['href']",
+      "recurly/resource.py:568 return self._make_actionator(url, method)"
+     ]
+    },
+    {
+     "id": "src-65",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 567
+     },
+     "rationale": "anchor 'method' attribute (.upper()) in Resource.__getattr__: HTTP verb selection, not URL material.",
+     "evidence": [
+      "recurly/resource.py:567                     method = anchor_elem.attrib['method'].upper()"
+     ]
+    },
+    {
+     "id": "src-66",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.75,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 573
+     },
+     "rationale": "'href' in elem.attrib is a presence test only in Resource.__getattr__; the value read that feeds the request is line 589 and is labeled separately.",
+     "evidence": [
+      "recurly/resource.py:573         if 'href' in elem.attrib:"
+     ]
+    },
+    {
+     "id": "src-67",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 589
+     },
+     "rationale": "Server-controlled XML attribute read - a second-order SSRF carrier: the href value comes from the parsed Recurly API response and is re-requested by the library. Attacker control requires a compromised or MITM'd endpoint (the channel is protected by API key + TLS) or webhook XML fed in via objects_for_push_notification; kept as source for conservative recall, needs human review. url = elem.attrib['href'] (line 589) -> make_relatitator(url): the closure re-requests the server URL via Resource.element_for_url(full_url) (resource.py:581).",
+     "evidence": [
+      "recurly/resource.py:589             url = elem.attrib['href']",
+      "recurly/resource.py:581 resp, elem = Resource.element_for_url(full_url)"
+     ]
+    },
+    {
+     "id": "src-68",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "all",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 599
+     },
+     "rationale": "kwargs are urlencoded into the QUERY STRING of the collection URL (resource.py:609-611) whose scheme/host is recurly.base_uri() config. Query-string control with fixed scheme/host/port is not CWE-918 host forgery.",
+     "evidence": [
+      "recurly/resource.py:599     def all(cls, **kwargs):"
+     ]
+    },
+    {
+     "id": "src-69",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "count",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 615
+     },
+     "rationale": "kwargs are urlencoded into the query string of the collection URL (resource.py:619-621); host/scheme fixed by base_uri() config. Query-only control.",
+     "evidence": [
+      "recurly/resource.py:615     def count(cls, **kwargs):"
+     ]
+    },
+    {
+     "id": "src-70",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "put",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 644
+     },
+     "rationale": "Public method: PUTs this resource to the caller-supplied full URL via http_request(url, 'PUT', self, ...) (line 647). Boundary = embedding application.",
+     "evidence": [
+      "recurly/resource.py:644     def put(self, url):"
+     ]
+    },
+    {
+     "id": "src-71",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 651
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/resource.py:651         response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-72",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 653
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/resource.py:653         self.update_from_element(ElementTree.fromstring(response_xml))"
+     ]
+    },
+    {
+     "id": "src-73",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "post",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 655
+     },
+     "rationale": "Public method: POSTs to the caller-supplied full URL via http_request(url, 'POST', body or self, ...) (line 658). Boundary = embedding application.",
+     "evidence": [
+      "recurly/resource.py:655     def post(self, url, body=None):"
+     ]
+    },
+    {
+     "id": "src-74",
+     "role": "source",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "getheader",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 662
+     },
+     "rationale": "Server-controlled Location response header - second-order SSRF carrier: the value is stored and re-requested by the library. Attacker control requires a compromised/MITM'd Recurly endpoint; kept as source for conservative recall, needs human review. getheader returns the header value (flow_kind=return). Resource.post stores self._url = response.getheader('Location') (line 662); subsequent save/delete/put re-request it.",
+     "evidence": [
+      "recurly/resource.py:662         self._url = response.getheader('Location')"
+     ]
+    },
+    {
+     "id": "src-75",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 665
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/resource.py:665             response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-76",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "ElementTree",
+      "callable": "ElementTree.fromstring",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 667
+     },
+     "rationale": "Pure XML parse (xml.etree.ElementTree.fromstring) - not a network sink. Labeled as a taint propagation step (arg 0 body string -> parsed Element tree) so response/webhook bodies can reach the separately labeled elem.attrib['href'] source reads; needed in MySummaries for realistic second-order propagation.",
+     "evidence": [
+      "recurly/resource.py:667             self.update_from_element(ElementTree.fromstring(response_xml))"
+     ]
+    },
+    {
+     "id": "src-77",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "read",
+      "arg_index": null,
+      "flow_kind": "return"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 680
+     },
+     "rationale": "Server-controlled response body bytes: they flow only into ElementTree.fromstring (labeled separately as a summary step) and DEBUG logging. No direct path from the body value to a request URL exists - the URL-relevant content is the href/Link/Location values read at the separately labeled attribute/header sites. Labeled none to avoid a redundant broad source.",
+     "evidence": [
+      "recurly/resource.py:680         response_xml = response.read()"
+     ]
+    },
+    {
+     "id": "src-78",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "attrib",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 701
+     },
+     "rationale": "Serialization-side attribute WRITE (elem.attrib[attrname] = value) in Resource.to_element.",
+     "evidence": [
+      "recurly/resource.py:701                 elem.attrib[attrname] = six.text_type(value)"
+     ]
+    },
+    {
+     "id": "snk-2",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Account",
+      "callable": "__getattr__",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 220
+     },
+     "rationale": "billing_info attribute access re-requests the server-supplied href: the attrib read at line 223 (labeled source) flows to BillingInfo.element_for_url(billing_info_url) at line 226. Propagation step from the server href into the fetch sink.",
+     "evidence": [
+      "recurly/__init__.py:220     def __getattr__(self, name):",
+      "recurly/__init__.py:226 resp, elem = BillingInfo.element_for_url(billing_info_url)"
+     ]
+    },
+    {
+     "id": "snk-3",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Account",
+      "callable": "charge",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 237
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. url = urljoin(self._url, '%s/adjustments' % self.account_code) (line 239) -> charge.post(url): account_code sits in the FIRST path position, so a scheme-prefixed value yields an absolute URL.",
+     "evidence": [
+      "recurly/__init__.py:237     def charge(self, charge):",
+      "recurly/__init__.py:239 url = urljoin(self._url, '%s/adjustments' % self.account_code)",
+      "recurly/__init__.py:240 return charge.post(url)"
+     ]
+    },
+    {
+     "id": "snk-4",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 239
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.account_code (FIRST position, absolute-URL capable).",
+     "evidence": [
+      "recurly/__init__.py:239         url = urljoin(self._url, '%s/adjustments' % self.account_code)"
+     ]
+    },
+    {
+     "id": "snk-5",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Account",
+      "callable": "invoice",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 242
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/invoices' % self.account_code) (line 244) -> http_request(url, 'POST', ...); the response Location is also stored into invoice._url (line 260, labeled source).",
+     "evidence": [
+      "recurly/__init__.py:242     def invoice(self, **kwargs):"
+     ]
+    },
+    {
+     "id": "snk-6",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 244
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.account_code.",
+     "evidence": [
+      "recurly/__init__.py:244         url = urljoin(self._url, '%s/invoices' % self.account_code)"
+     ]
+    },
+    {
+     "id": "snk-7",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Account",
+      "callable": "build_invoice",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 263
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/invoices/preview' % self.account_code) (line 265) -> http_request(url, 'POST').",
+     "evidence": [
+      "recurly/__init__.py:263     def build_invoice(self):"
+     ]
+    },
+    {
+     "id": "snk-8",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 265
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.account_code.",
+     "evidence": [
+      "recurly/__init__.py:265         url = urljoin(self._url, '%s/invoices/preview' % self.account_code)"
+     ]
+    },
+    {
+     "id": "snk-9",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Account",
+      "callable": "notes",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 278
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/notes' % self.account_code) (line 280) -> Note.paginated(url).",
+     "evidence": [
+      "recurly/__init__.py:278     def notes(self):"
+     ]
+    },
+    {
+     "id": "snk-10",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 280
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.account_code.",
+     "evidence": [
+      "recurly/__init__.py:280         url = urljoin(self._url, '%s/notes' % self.account_code)"
+     ]
+    },
+    {
+     "id": "snk-11",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Account",
+      "callable": "reopen",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 289
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/reopen' % self.account_code) (line 291) -> http_request(url, 'PUT').",
+     "evidence": [
+      "recurly/__init__.py:289     def reopen(self):"
+     ]
+    },
+    {
+     "id": "snk-12",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 291
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.account_code.",
+     "evidence": [
+      "recurly/__init__.py:291         url = urljoin(self._url, '%s/reopen' % self.account_code)"
+     ]
+    },
+    {
+     "id": "snk-13",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Account",
+      "callable": "subscribe",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 300
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/subscriptions' % self.account_code) (line 302) -> subscription.post(url).",
+     "evidence": [
+      "recurly/__init__.py:300     def subscribe(self, subscription):"
+     ]
+    },
+    {
+     "id": "snk-14",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 302
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.account_code.",
+     "evidence": [
+      "recurly/__init__.py:302         url = urljoin(self._url, '%s/subscriptions' % self.account_code)"
+     ]
+    },
+    {
+     "id": "snk-15",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Account",
+      "callable": "update_billing_info",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 305
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/billing_info' % self.account_code) (line 307) -> billing_info.http_request(url, 'PUT', billing_info, ...); response Location stored at line 313 (labeled source).",
+     "evidence": [
+      "recurly/__init__.py:305     def update_billing_info(self, billing_info):"
+     ]
+    },
+    {
+     "id": "snk-16",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 307
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.account_code.",
+     "evidence": [
+      "recurly/__init__.py:307         url = urljoin(self._url, '%s/billing_info' % self.account_code)"
+     ]
+    },
+    {
+     "id": "snk-17",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Account",
+      "callable": "create_shipping_address",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 321
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/shipping_addresses' % self.account_code) (line 325) -> shipping_address.post(url).",
+     "evidence": [
+      "recurly/__init__.py:321     def create_shipping_address(self, shipping_address):"
+     ]
+    },
+    {
+     "id": "snk-18",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 325
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.account_code.",
+     "evidence": [
+      "recurly/__init__.py:325         url = urljoin(self._url, '%s/shipping_addresses' % self.account_code)"
+     ]
+    },
+    {
+     "id": "snk-19",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "GiftCard",
+      "callable": "preview",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 443
+     },
+     "rationale": "GiftCard.preview: url = self._url + '/preview' (line 447, DIRECT string concatenation - an absolute self._url propagates verbatim with no urljoin normalization) or urljoin(recurly.base_uri(), collection_path) + '/preview' (line 450, config host) -> self.post(url). Propagation step receiver-field -> post argument.",
+     "evidence": [
+      "recurly/__init__.py:443     def preview(self):",
+      "recurly/__init__.py:447 url = self._url + '/preview'"
+     ]
+    },
+    {
+     "id": "snk-20",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 450
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. At this call site both inputs are operator configuration / fixed class paths, so no taint is normally present; kept as a uniform family propagation step.",
+     "evidence": [
+      "recurly/__init__.py:450             url = urljoin(recurly.base_uri(), self.collection_path) + '/preview'"
+     ]
+    },
+    {
+     "id": "snk-21",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "GiftCard",
+      "callable": "redeem",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 453
+     },
+     "rationale": "GiftCard.redeem: URL assembled from self._url and redemption_path = '%s/redeem' % self.redemption_code (line 456; redemption_code in the FIRST path position, absolute-URL capable - see the source-side redeem entry) -> self.post(url, recipient_account) (line 464).",
+     "evidence": [
+      "recurly/__init__.py:453     def redeem(self, account_code):",
+      "recurly/__init__.py:464 return self.post(url, recipient_account)"
+     ]
+    },
+    {
+     "id": "snk-22",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 459
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.redemption_code (FIRST position, absolute-URL capable).",
+     "evidence": [
+      "recurly/__init__.py:459             url = urljoin(self._url, redemption_path)"
+     ]
+    },
+    {
+     "id": "snk-23",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 461
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = base_uri() (config); path = collection_path + '/' + redemption_path (redemption_code in FIRST position, absolute-URL capable).",
+     "evidence": [
+      "recurly/__init__.py:461             url = urljoin(recurly.base_uri(), self.collection_path) + '/' + redemption_path"
+     ]
+    },
+    {
+     "id": "snk-24",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Coupon",
+      "callable": "generate",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 572
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/generate' % self.coupon_code) (line 576; coupon_code in the FIRST path position) -> http_request(url, 'POST', body, ...); then Page.page_for_url(response.getheader('Location')) (line 585) follows the server Location directly.",
+     "evidence": [
+      "recurly/__init__.py:572     def generate(self, amount):"
+     ]
+    },
+    {
+     "id": "snk-25",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 576
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.coupon_code (FIRST position, absolute-URL capable).",
+     "evidence": [
+      "recurly/__init__.py:576         url = urljoin(self._url, '%s/generate' % (self.coupon_code, ))"
+     ]
+    },
+    {
+     "id": "snk-26",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Coupon",
+      "callable": "restore",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 587
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/restore' % self.coupon_code) (line 588; coupon_code in the first path position) -> self.put(url).",
+     "evidence": [
+      "recurly/__init__.py:587     def restore(self):"
+     ]
+    },
+    {
+     "id": "snk-27",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 588
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.coupon_code (FIRST position, absolute-URL capable).",
+     "evidence": [
+      "recurly/__init__.py:588         url = urljoin(self._url, '%s/restore' % self.coupon_code)"
+     ]
+    },
+    {
+     "id": "snk-28",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Invoice",
+      "callable": "pdf",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 749
+     },
+     "rationale": "Invoice.pdf fetches urljoin(base_uri(), cls.member_path % (uuid,)) (line 759): the host is fixed to operator config and the uuid sits behind the fixed 'invoices/' prefix - path-only control, and the returned PDF body is not URL material. Not an SSRF-relevant sink. (arg_index corrected from CSV -1 to 0: uuid is the first positional parameter.)",
+     "evidence": [
+      "recurly/__init__.py:749     def pdf(cls, uuid):"
+     ]
+    },
+    {
+     "id": "snk-29",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 759
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = base_uri() (config), path = member_path % uuid (fixed 'invoices/' prefix; path-only).",
+     "evidence": [
+      "recurly/__init__.py:759         url = urljoin(base_uri(), cls.member_path % (uuid,))"
+     ]
+    },
+    {
+     "id": "snk-30",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Invoice",
+      "callable": "_create_refund_invoice",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 796
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/refund' % self.invoice_number) (line 797) -> refund_invoice.post(url, body) (line 801).",
+     "evidence": [
+      "recurly/__init__.py:796     def _create_refund_invoice(self, element):"
+     ]
+    },
+    {
+     "id": "snk-31",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 797
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.invoice_number.",
+     "evidence": [
+      "recurly/__init__.py:797         url = urljoin(self._url, '%s/refund' % (self.invoice_number, ))"
+     ]
+    },
+    {
+     "id": "snk-32",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 842
+     },
+     "rationale": "Dead computation: the url built at line 842 (urljoin(recurly.base_uri(), self.collection_path)) is never used - line 843 calls self.__invoice(self.collection_path) and the live join happens at line 872. Pure config inputs anyway; no taint can traverse this site.",
+     "evidence": [
+      "recurly/__init__.py:842         url = urljoin(recurly.base_uri(), self.collection_path)"
+     ]
+    },
+    {
+     "id": "snk-33",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 853
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. At this call site both inputs are operator configuration / fixed class paths, so no taint is normally present; kept as a uniform family propagation step.",
+     "evidence": [
+      "recurly/__init__.py:853         url = urljoin(recurly.base_uri(), self.collection_path + '/preview')"
+     ]
+    },
+    {
+     "id": "snk-34",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Purchase",
+      "callable": "__invoice",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 856
+     },
+     "rationale": "Purchase.__invoice(url): the url parameter (a base-relative path) is joined onto recurly.base_uri() at line 872 and POSTed via http_request(url, 'POST', self) (line 873); the base host is config, the path component is the parameter. Propagation step param -> funnel argument. (arg_index corrected from CSV -1 to 0: url is the first positional parameter.)",
+     "evidence": [
+      "recurly/__init__.py:856     def __invoice(self, url):"
+     ]
+    },
+    {
+     "id": "snk-35",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 872
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = base_uri() (config), path = the url parameter of __invoice (base-relative; host fixed).",
+     "evidence": [
+      "recurly/__init__.py:872         url = urljoin(recurly.base_uri(), url)"
+     ]
+    },
+    {
+     "id": "snk-36",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Subscription",
+      "callable": "preview",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 939
+     },
+     "rationale": "Subscription.preview: url = self._url + '/preview' (line 941, DIRECT concatenation - an absolute self._url propagates verbatim) or urljoin(recurly.base_uri(), collection_path) + '/preview' (line 944, config host) -> self.post(url).",
+     "evidence": [
+      "recurly/__init__.py:939     def preview(self):"
+     ]
+    },
+    {
+     "id": "snk-37",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 944
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. At this call site both inputs are operator configuration / fixed class paths, so no taint is normally present; kept as a uniform family propagation step.",
+     "evidence": [
+      "recurly/__init__.py:944             url = urljoin(recurly.base_uri(), self.collection_path) + '/preview'"
+     ]
+    },
+    {
+     "id": "snk-38",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Subscription",
+      "callable": "update_notes",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 947
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/notes' % self.uuid) (line 951) -> self.put(url).",
+     "evidence": [
+      "recurly/__init__.py:947     def update_notes(self, **kwargs):"
+     ]
+    },
+    {
+     "id": "snk-39",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 951
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.uuid.",
+     "evidence": [
+      "recurly/__init__.py:951         url = urljoin(self._url, '%s/notes' % self.uuid)"
+     ]
+    },
+    {
+     "id": "snk-40",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Subscription",
+      "callable": "create_usage",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 965
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/add_ons/%s/usage' % (self.uuid, sub_add_on.add_on_code)) (line 968) -> usage.post(url).",
+     "evidence": [
+      "recurly/__init__.py:965     def create_usage(self, sub_add_on, usage):"
+     ]
+    },
+    {
+     "id": "snk-41",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 968
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.uuid.",
+     "evidence": [
+      "recurly/__init__.py:968         url = urljoin(self._url, '%s/add_ons/%s/usage' % (self.uuid,"
+     ]
+    },
+    {
+     "id": "snk-42",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Transaction",
+      "callable": "get_refund_transaction",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1087
+     },
+     "rationale": "url = self._refund_transaction_url (the server Location header stored at line 1084, labeled source) -> self.element_for_url(url) (line 1100) fetches it. Propagation step field -> element_for_url argument.",
+     "evidence": [
+      "recurly/__init__.py:1087     def get_refund_transaction(self):"
+     ]
+    },
+    {
+     "id": "snk-43",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Plan",
+      "callable": "get_add_on",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1174
+     },
+     "rationale": "Fetch wrapper, but the fetched URL is path-constrained: add_on_code is interpolated after the fixed '%s/add_ons/%s' prefix whose FIRST slot is self.plan_code (line 1176), so the parameter cannot relocate the host. Residual risk recorded on the create_add_on entry: a scheme-prefixed self.plan_code or a tainted self._url base would make the joined URL absolute.",
+     "evidence": [
+      "recurly/__init__.py:1174     def get_add_on(self, add_on_code):"
+     ]
+    },
+    {
+     "id": "snk-44",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1176
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.plan_code (FIRST position, absolute-URL capable).",
+     "evidence": [
+      "recurly/__init__.py:1176         url = urljoin(self._url, '%s/add_ons/%s' % (self.plan_code, add_on_code))"
+     ]
+    },
+    {
+     "id": "snk-45",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.__init__",
+      "type": "Plan",
+      "callable": "create_add_on",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1180
+     },
+     "rationale": "Internal fetch wrapper (not the final sink - the emission happens at http_request / connection.request): the request URL is assembled from RECEIVER FIELDS (self._url, a server-controlled href/Location, and a first-path-position code attribute) via urljoin, so taint propagates from those fields to the funnel argument. Labeled summary so Phase 2 models the receiver-field -> funnel-argument step. urljoin(self._url, '%s/add_ons' % self.plan_code) (line 1182; plan_code in the FIRST path position - a scheme-prefixed value yields an absolute URL and replaces the host) -> add_on.post(url) (line 1183).",
+     "evidence": [
+      "recurly/__init__.py:1180     def create_add_on(self, add_on):"
+     ]
+    },
+    {
+     "id": "snk-46",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/__init__.py",
+      "line": 1182
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = self._url (server href), path starts with self.plan_code (FIRST position, absolute-URL capable).",
+     "evidence": [
+      "recurly/__init__.py:1182         url = urljoin(self._url, '%s/add_ons' % self.plan_code)"
+     ]
+    },
+    {
+     "id": "snk-47",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.js",
+      "type": null,
+      "callable": "fetch",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/js.py",
+      "line": 41
+     },
+     "rationale": "js.fetch requests urljoin(recurly.base_uri(), 'recurly_js/result/%s' % token) (js.py:42): the fixed 'recurly_js/result/' prefix guarantees a relative reference, so the host stays at the operator-configured base. Path-only control - not an SSRF-relevant sink.",
+     "evidence": [
+      "recurly/js.py:41 def fetch(token):"
+     ]
+    },
+    {
+     "id": "snk-48",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/js.py",
+      "line": 42
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = base_uri() (config), path = 'recurly_js/result/%s' % token (fixed prefix; path-only).",
+     "evidence": [
+      "recurly/js.py:42     url = urljoin(recurly.base_uri(), 'recurly_js/result/%s' % token)"
+     ]
+    },
+    {
+     "id": "snk-49",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Page",
+      "callable": "next_page",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 98
+     },
+     "rationale": "Page.next_page re-requests the pagination URL: next_url field (server Link header, set in page_for_value via parse_link_value at resource.py:153-158) -> self.page_for_url(next_url) (line 110). Propagation step field -> page_for_url argument.",
+     "evidence": [
+      "recurly/resource.py:98     def next_page(self):"
+     ]
+    },
+    {
+     "id": "snk-50",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Page",
+      "callable": "first_page",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 112
+     },
+     "rationale": "Page.first_page re-requests start_url (server Link header rel=start) via self.page_for_url(start_url) (line 124). Propagation step field -> page_for_url argument.",
+     "evidence": [
+      "recurly/resource.py:112     def first_page(self):"
+     ]
+    },
+    {
+     "id": "snk-51",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Page",
+      "callable": "page_for_url",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 127
+     },
+     "rationale": "Fetches the url argument via Resource.element_for_url(url) -> http_request; the url argument is the request target.",
+     "evidence": [
+      "recurly/resource.py:127     def page_for_url(cls, url):"
+     ]
+    },
+    {
+     "id": "snk-52",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Page",
+      "callable": "count_for_url",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 137
+     },
+     "rationale": "HEADs the url argument via Resource.headers_for_url(url) -> http_request(url, method='HEAD').",
+     "evidence": [
+      "recurly/resource.py:137     def count_for_url(cls, url):"
+     ]
+    },
+    {
+     "id": "snk-53",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.85,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "http_request",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 214
+     },
+     "rationale": "The only request funnel: every library request passes http_request(url, ...) -> urlsplit(url) (line 240) -> HTTP(S)Connection(urlparts.netloc) (lines 245/247/250) -> connection.request(method, url, ...) (line 279). arg 0 fully determines scheme, host, port and path. Verified: no scheme/host allowlist, no private-IP blocking, no redirect validation exists (lines 240-250).",
+     "evidence": [
+      "recurly/resource.py:214     def http_request(cls, url, method='GET', body=None, headers=None):"
+     ]
+    },
+    {
+     "id": "snk-54",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.55,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urlsplit",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 240
+     },
+     "rationale": "Pure URL parsing - NOT a sink. Modeled as a taint step (url -> SplitResult) so urlsplit(url).netloc (lines 245/247/250) connects to the connection-constructor sinks; connection.request arg 1 (line 279) receives the original url string directly and is the primary sink.",
+     "evidence": [
+      "recurly/resource.py:240         urlparts = urlsplit(url)"
+     ]
+    },
+    {
+     "id": "snk-55",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "six.moves.http_client",
+      "type": null,
+      "callable": "http_client.HTTPConnection",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 245
+     },
+     "rationale": "Actual socket-level egress: http_client.HTTPConnection(urlparts.netloc) - the host/port come from urlsplit(url).netloc of the request URL, and this branch (ANY non-https scheme, including http:) connects in cleartext with no host allowlist. A true CWE-918 network sink.",
+     "evidence": [
+      "recurly/resource.py:245             connection = http_client.HTTPConnection(urlparts.netloc, **connection_options)",
+      "recurly/resource.py:240 urlparts = urlsplit(url)"
+     ]
+    },
+    {
+     "id": "snk-56",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "six.moves.http_client",
+      "type": null,
+      "callable": "http_client.HTTPSConnection",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 247
+     },
+     "rationale": "Actual socket-level egress: HTTPSConnection(urlparts.netloc) - host/port from urlsplit(url).netloc of the request URL. TLS (default context or recurly.CA_CERTS_FILE) authenticates the server but does NOT restrict which host may be contacted.",
+     "evidence": [
+      "recurly/resource.py:247             connection = http_client.HTTPSConnection(urlparts.netloc, **connection_options)"
+     ]
+    },
+    {
+     "id": "snk-57",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "six.moves.http_client",
+      "type": null,
+      "callable": "http_client.HTTPSConnection",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 250
+     },
+     "rationale": "Actual socket-level egress: HTTPSConnection(urlparts.netloc) with ssl.create_default_context(cafile=recurly.CA_CERTS_FILE) - host/port from the request URL; CA validation is server authentication, not a target restriction.",
+     "evidence": [
+      "recurly/resource.py:250             connection = http_client.HTTPSConnection(urlparts.netloc, **connection_options)"
+     ]
+    },
+    {
+     "id": "snk-58",
+     "role": "sink",
+     "classification": "tp",
+     "confidence": 0.9,
+     "signature": {
+      "module": "six.moves.http_client",
+      "type": null,
+      "callable": "HTTPConnection.request",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 279
+     },
+     "rationale": "connection.request(method, url, body, headers): arg 1 carries the full request URL (selector) - the final emission point of the request line on the already-open connection. Verified argument position (method=0, url=1, body=2, headers=3).",
+     "evidence": [
+      "recurly/resource.py:279         connection.request(method, url, body, headers)"
+     ]
+    },
+    {
+     "id": "snk-59",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.http_client",
+      "type": null,
+      "callable": "HTTPConnection.getresponse",
+      "arg_index": null,
+      "flow_kind": "receiver"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 280
+     },
+     "rationale": "connection.getresponse() completes the round trip - http.client transmits the buffered request at this call. No URL argument exists (receiver = the connection already carrying the tainted host); retained as a defense-in-depth sink, connection.request arg 1 is the primary emission point.",
+     "evidence": [
+      "recurly/resource.py:280         resp = connection.getresponse()"
+     ]
+    },
+    {
+     "id": "snk-60",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "get",
+      "arg_index": 0,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 333
+     },
+     "rationale": "Resource.get requests urljoin(recurly.base_uri(), cls.member_path % (uuid,)) (line 341): the member_path carries a fixed prefix ('accounts/', 'invoices/', ...) so the uuid can only alter the path; the host stays at operator config. Path-only control - not an SSRF-relevant sink.",
+     "evidence": [
+      "recurly/resource.py:333     def get(cls, uuid):"
+     ]
+    },
+    {
+     "id": "snk-61",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 341
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. base = base_uri() (config), path = member_path % uuid (fixed prefix; path-only).",
+     "evidence": [
+      "recurly/resource.py:341         url = urljoin(recurly.base_uri(), cls.member_path % (uuid,))"
+     ]
+    },
+    {
+     "id": "snk-62",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "headers_for_url",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 346
+     },
+     "rationale": "Issues http_request(url, method='HEAD') (line 348) with the url argument as the request target.",
+     "evidence": [
+      "recurly/resource.py:346     def headers_for_url(cls, url):"
+     ]
+    },
+    {
+     "id": "snk-63",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "element_for_url",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 355
+     },
+     "rationale": "Issues http_request(url) (GET, line 359) and parses the response; the url argument is the request target.",
+     "evidence": [
+      "recurly/resource.py:355     def element_for_url(cls, url):"
+     ]
+    },
+    {
+     "id": "snk-64",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.65,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "paginated",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 487
+     },
+     "rationale": "Delegates to Page.page_for_url(url) (line 489) which fetches the url argument.",
+     "evidence": [
+      "recurly/resource.py:487     def paginated(self, url):"
+     ]
+    },
+    {
+     "id": "snk-65",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "actionator",
+      "arg_index": null,
+      "flow_kind": "unknown"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 515
+     },
+     "rationale": "Follow-the-href closure from _make_actionator: full_url = '%s?%s' % (url, urlencode(kwargs)) (line 517; DIRECT string concatenation - an absolute captured url propagates verbatim) -> self.http_request(full_url, method, body) (line 522). url is captured from server-controlled href reads (resource.py:566 / __init__.py:1122, labeled sources). Taint step: captured href -> http_request argument.",
+     "evidence": [
+      "recurly/resource.py:515         def actionator(*args, **kwargs):",
+      "recurly/resource.py:522 response = self.http_request(full_url, method, body)"
+     ]
+    },
+    {
+     "id": "snk-66",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.5,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urlencode",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 517
+     },
+     "rationale": "Serializes kwargs into a query string appended to a fixed-host URL ('%s?%s' % (url, urlencode(kwargs))): affects the QUERY component only - never scheme/host/port. Retained as a propagation step for query-string taint; not a sink. Low confidence: query-only control is out of CWE-918 host-forgery scope.",
+     "evidence": [
+      "recurly/resource.py:517                 full_url = '%s?%s' % (url, urlencode(kwargs))"
+     ]
+    },
+    {
+     "id": "snk-67",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": null,
+      "callable": "relatitator",
+      "arg_index": null,
+      "flow_kind": "unknown"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 575
+     },
+     "rationale": "Closure re-requesting the server href: full_url = '%s?%s' % (url, urlencode(kwargs)) (line 577) -> Resource.element_for_url(full_url) (line 581); url is captured from elem.attrib['href'] (line 589, labeled source). Taint step: captured href -> element_for_url argument.",
+     "evidence": [
+      "recurly/resource.py:575                 def relatitator(**kwargs):"
+     ]
+    },
+    {
+     "id": "snk-68",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.5,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urlencode",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 577
+     },
+     "rationale": "Serializes kwargs into a query string appended to a fixed-host URL ('%s?%s' % (url, urlencode(kwargs))): affects the QUERY component only - never scheme/host/port. Retained as a propagation step for query-string taint; not a sink. Low confidence: query-only control is out of CWE-918 host-forgery scope.",
+     "evidence": [
+      "recurly/resource.py:577                         full_url = '%s?%s' % (url, urlencode(kwargs))"
+     ]
+    },
+    {
+     "id": "snk-69",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.5,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "all",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 599
+     },
+     "rationale": "url = urljoin(recurly.base_uri(), collection_path) with urlencode(kwargs) appended as the query string (lines 609-611) -> Page.page_for_url(url): kwargs reach the QUERY component only; scheme/host are operator config. Query-only propagation - out of CWE-918 host-forgery scope, retained as a taint step.",
+     "evidence": [
+      "recurly/resource.py:599     def all(cls, **kwargs):"
+     ]
+    },
+    {
+     "id": "snk-70",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 609
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. At this call site both inputs are operator configuration / fixed class paths, so no taint is normally present; kept as a uniform family propagation step.",
+     "evidence": [
+      "recurly/resource.py:609         url = urljoin(recurly.base_uri(), cls.collection_path)"
+     ]
+    },
+    {
+     "id": "snk-71",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.5,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urlencode",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 611
+     },
+     "rationale": "Serializes kwargs into a query string appended to a fixed-host URL ('%s?%s' % (url, urlencode(kwargs))): affects the QUERY component only - never scheme/host/port. Retained as a propagation step for query-string taint; not a sink. Low confidence: query-only control is out of CWE-918 host-forgery scope.",
+     "evidence": [
+      "recurly/resource.py:611             url = '%s?%s' % (url, urlencode(kwargs))"
+     ]
+    },
+    {
+     "id": "snk-72",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.5,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "count",
+      "arg_index": null,
+      "flow_kind": "param"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 615
+     },
+     "rationale": "url = urljoin(recurly.base_uri(), collection_path) + urlencode(kwargs) query (lines 619-621) -> Page.count_for_url(url): kwargs reach the query component only; host/scheme fixed by config. Query-only propagation.",
+     "evidence": [
+      "recurly/resource.py:615     def count(cls, **kwargs):"
+     ]
+    },
+    {
+     "id": "snk-73",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 619
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. At this call site both inputs are operator configuration / fixed class paths, so no taint is normally present; kept as a uniform family propagation step.",
+     "evidence": [
+      "recurly/resource.py:619         url = urljoin(recurly.base_uri(), cls.collection_path)"
+     ]
+    },
+    {
+     "id": "snk-74",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.5,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urlencode",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 621
+     },
+     "rationale": "Serializes kwargs into a query string appended to a fixed-host URL ('%s?%s' % (url, urlencode(kwargs))): affects the QUERY component only - never scheme/host/port. Retained as a propagation step for query-string taint; not a sink. Low confidence: query-only control is out of CWE-918 host-forgery scope.",
+     "evidence": [
+      "recurly/resource.py:621             url = '%s?%s' % (url, urlencode(kwargs))"
+     ]
+    },
+    {
+     "id": "snk-75",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "_update",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 637
+     },
+     "rationale": "Resource.save -> _update: self.put(self._url) (line 638) - the server href/Location stored field flows directly into the put sink. Propagation step field -> put argument.",
+     "evidence": [
+      "recurly/resource.py:637     def _update(self):"
+     ]
+    },
+    {
+     "id": "snk-76",
+     "role": "none",
+     "classification": "fp",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "_create",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 640
+     },
+     "rationale": "url = urljoin(recurly.base_uri(), self.collection_path) (line 641): assembled solely from operator configuration and a static class path - no tainted input can reach the network target through this wrapper.",
+     "evidence": [
+      "recurly/resource.py:640     def _create(self):"
+     ]
+    },
+    {
+     "id": "snk-77",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "six.moves.urllib.parse",
+      "type": null,
+      "callable": "urljoin",
+      "arg_index": 1,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 641
+     },
+     "rationale": "Pure URL construction - NOT a sink (urljoin/urlparse-style APIs are not automatically sinks for CWE-918). Labeled as a taint propagation step: urljoin(base, path) returns an ABSOLUTE URL whenever the path argument is itself absolute and keeps the base host otherwise, so taint from EITHER argument flows to the joined result (arg_index records the CSV's path position 1; the base position 0 must also be modeled in MySummaries). The joined result is what every wrapper passes to http_request. At this call site both inputs are operator configuration / fixed class paths, so no taint is normally present; kept as a uniform family propagation step.",
+     "evidence": [
+      "recurly/resource.py:641         url = urljoin(recurly.base_uri(), self.collection_path)"
+     ]
+    },
+    {
+     "id": "snk-78",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "put",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 644
+     },
+     "rationale": "http_request(url, 'PUT', self, ...) (line 647) with the caller-supplied url as the request target.",
+     "evidence": [
+      "recurly/resource.py:644     def put(self, url):"
+     ]
+    },
+    {
+     "id": "snk-79",
+     "role": "sink",
+     "classification": "candidate",
+     "confidence": 0.7,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "post",
+      "arg_index": 0,
+      "flow_kind": "argument"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 655
+     },
+     "rationale": "http_request(url, 'POST', body or self, ...) (line 658) with the caller-supplied url as the request target.",
+     "evidence": [
+      "recurly/resource.py:655     def post(self, url, body=None):"
+     ]
+    },
+    {
+     "id": "snk-80",
+     "role": "summary",
+     "classification": "candidate",
+     "confidence": 0.6,
+     "signature": {
+      "module": "recurly.resource",
+      "type": "Resource",
+      "callable": "delete",
+      "arg_index": null,
+      "flow_kind": "field"
+     },
+     "location": {
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln/recurly/resource.py",
+      "line": 669
+     },
+     "rationale": "Resource.delete issues http_request(self._url, 'DELETE') (line 672): self._url is the server XML href (resource.py:508) or Location header (resource.py:662) - a direct second-order fetch. Propagation step field -> http_request argument.",
+     "evidence": [
+      "recurly/resource.py:669     def delete(self):",
+      "recurly/resource.py:672 response = self.http_request(self._url, 'DELETE')"
+     ]
+    }
+   ]
+  }
+ ]
+}

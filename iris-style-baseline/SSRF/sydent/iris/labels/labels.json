@@ -1,0 +1,3136 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "sydent-ssrf-pass3-20261020",
+    "generated_at": "2026-10-20T00:00:00Z",
+    "language": "python",
+    "framework": "twisted.web",
+    "model": "glm-5.3",
+    "project": "matrix-sydent (vulnerable snapshot, sydent/ package, 5255 baseline LoC)",
+    "notes": [
+      "Single-pass run: Pass 3 (CWE-918/099/610, SSRF) only, per user instruction. The schema's passes.contains{pass_id=1} keyword is a template artifact that cannot be satisfied by a narrowed single-pass run; every other schema constraint is validated against assets/labels_schema.json (jsonschema 4.26.0, see labels/phase1_review.md).",
+      "Labeling LLM: glm-5.3; 7 batches (6 source batches of 21/21/20/20/20/20 + 1 sink batch of 17); 139 candidates total (122 sources + 17 sinks); every CSV row labeled, none dropped or deduplicated.",
+      "Three attacker-reachable server-side request chains confirmed from source: (1) unauthenticated v2 /account/register matrix_server_name -> get_json('matrix://%s/_matrix/federation/v1/openid/userinfo') (registerservlet.py:59); (2) /3pid/bind mxid server part -> post_json_get_nothing('matrix://%s/_matrix/federation/v1/3pid/onbind') (threepid/bind.py:153-162); (3) unauthenticated X-Matrix Authorization origin -> _getKeysForServer get_json('matrix://%s/_matrix/key/v2/server/') fetched BEFORE signature verification (verifier.py:80/:194-211).",
+      "is_valid_hostname (sydent/util/stringutils.py:39) is applied to matrix_server_name (registerservlet.py:52), the mxid server part (bind.py:146) and X-Matrix origin (verifier.py:208), but it validates hostname FORM and port range only - IP literals, localhost, private address ranges and explicit ports all pass. It is therefore NOT labeled a CWE-918 sanitizer; no sanitizer entries exist in this pass.",
+      "Zero sanitizer entries: no CSV candidate is a proven CWE-918 sanitizer. Authentication observed in source (authV2 bearer tokens, X-Matrix signature verification, replication mutual-TLS CN matching, internal API out-of-band assumption) constrains WHO can call endpoints but does not neutralize URL/host control and is not treated as a sanitizer.",
+      "Two summary entries (verifier.py:63 _getKeysForServer.server_name param, verifier.py:142 authenticate_request.request param): internal relay parameters, not standalone external sources per the boundary rules; needed as flow steps from the public unbind servlet into the key-fetch chain.",
+      "Sink arg_index corrections: all twisted Agent.request call sites use argument index 1 (index 0 is the HTTP method bytes); HostnameEndpoint/LoggingHostnameEndpoint use index 1 (host). sentry_sdk.init CSV row carried argIndex -1 with flowKind 'argument', which the schema forbids - corrected to arg_index null with flow_kind 'unknown' (dsn is a keyword argument).",
+      "Non-HTTP egress recorded but not mixed into the CWE-918 HTTP sink set: smtplib.SMTP/SMTP_SSL hosts are admin-config (fp), DNS SRV lookupService is a candidate (DNS-only, fixed record type), sentry DSN is admin-config (none/fp). file:/// next_link checks (emailservlet.py:65/:106) and the unvalidated Location redirects (emailservlet.py:108, msisdnservlet.py:129 - no file: check) are Pass 9 open-redirect territory and are documented, not labeled as sinks here.",
+      "No urllib.request.urlopen / requests / httpx call sites exist in the indexed source; per detection.json the twisted Agent.request sites are the only HTTP egress. urljoin/urlparse/URI.fromBytes are flow intermediates and were never extracted as sinks.",
+      "Constraint honored: no PyVul ground truth, CVE descriptions, fix diffs or the pre-existing SSRF analysis reports in the source root were consulted; labels derive only from reading the current source."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 3,
+      "focus": "Server-Side Request Forgery (SSRF)",
+      "cwes": [
+        "918",
+        "099",
+        "610"
+      ],
+      "entries": [
+        {
+          "id": "src-2",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.__init__",
+            "type": "twisted.web.server.Request.content",
+            "callable": "twisted.web.server.Request.content.read",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/__init__.py",
+            "line": 79
+          },
+          "rationale": "Raw HTTP request body read inside get_args; json.loads of this value (servlets/__init__.py:79) is the untrusted parameter dict feeding every v1/v2 servlet. Public client API boundary (clientapi.http.bind_address '::' default, port 8090).",
+          "evidence": [
+            "sydent/http/servlets/__init__.py:79 request_args = json.loads(request.content.read().decode('UTF-8'))",
+            "get_args is called from 22 servlet call sites plus sydent/http/auth.py:45 (detection.json source_families.request_body_and_query_args)"
+          ]
+        },
+        {
+          "id": "src-3",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.__init__",
+            "type": "twisted.web.server.Request",
+            "callable": "request.args",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/__init__.py",
+            "line": 87
+          },
+          "rationale": "request.args (query string / form parameters) read inside get_args as the v1/GET fallback input path; attacker-supplied parameters on the public client API.",
+          "evidence": [
+            "sydent/http/servlets/__init__.py:87 request_args_bytes = copy.copy(request.args)",
+            "twisted.web.server.Request.args contains urlencoded form/query parameters supplied by the remote client"
+          ]
+        },
+        {
+          "id": "src-4",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.accountservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.AccountServlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/accountservlet.py",
+            "line": 32
+          },
+          "rationale": "Twisted route handler parameter (request, index 1) for the public /_matrix/identity/v2/account endpoint. Handler boundary materializes untrusted request data via authV2/tokenFromRequest. authV2 authenticates the caller but does not sanitize the request object (per rubric, auth != SSRF sanitizer).",
+          "evidence": [
+            "sydent/http/httpserver.py:117-119 account/register|logout mounted under public v2 tree",
+            "sydent/http/servlets/accountservlet.py:38 account = authV2(self.sydent, request)"
+          ]
+        },
+        {
+          "id": "src-5",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.auth",
+            "type": "twisted.web.server.Request",
+            "callable": "twisted.web.server.Request.getHeader",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/auth.py",
+            "line": 39
+          },
+          "rationale": "Authorization header read via request.getHeader in tokenFromRequest; attacker-supplied bearer token on public endpoints. Flows only into account token lookup (db/accounts.py), never into a network request target, so it is a genuine untrusted boundary value but not an SSRF-relevant URL input.",
+          "evidence": [
+            "sydent/http/auth.py:39-41 authHeader = request.getHeader('Authorization'); token = authHeader[len('Bearer '):]",
+            "sydent/http/auth.py:77 account = accountStore.getAccountByToken(token)"
+          ]
+        },
+        {
+          "id": "src-6",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.auth",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/auth.py",
+            "line": 45
+          },
+          "rationale": "Return of get_args in auth.py tokenFromRequest: the untrusted request parameter dict (access_token query param) on v1 endpoints where no bearer header is present.",
+          "evidence": [
+            "sydent/http/auth.py:45 args = get_args(request, ('access_token',), required=False)",
+            "get_args materializes json.loads(request.content.read()) or request.args (servlets/__init__.py:79/:87)"
+          ]
+        },
+        {
+          "id": "src-7",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.auth",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/auth.py",
+            "line": 46
+          },
+          "rationale": "args.get('access_token') in auth.py:46 - attacker-supplied access token from query string/form on the public API; used for account lookup only.",
+          "evidence": [
+            "sydent/http/auth.py:46 token = args.get('access_token')"
+          ]
+        },
+        {
+          "id": "src-8",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.authenticated_bind_threepid_servlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.AuthenticatedBindThreePidServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/authenticated_bind_threepid_servlet.py",
+            "line": 33
+          },
+          "rationale": "Handler parameter for /_matrix/identity/internal/bind (InternalApiHttpServer). Default bind address is '::1' (sydent.py:117 'internalapi.http.bind_address') and the servlet itself says 'authentication happens out of band' (authenticated_bind_threepid_servlet.py:23-26). Reachability from a non-local attacker depends on operator changing the bind address; kept as candidate, not tp.",
+          "evidence": [
+            "sydent/http/httpserver.py:143-168 InternalApiHttpServer binds internal bind|unbind endpoints",
+            "sydent/http/servlets/authenticated_bind_threepid_servlet.py:23-26 'It is assumed that authentication happens out of band'"
+          ]
+        },
+        {
+          "id": "src-9",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.authenticated_bind_threepid_servlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/authenticated_bind_threepid_servlet.py",
+            "line": 35
+          },
+          "rationale": "get_args return on the internal bind endpoint: untrusted request data, but boundary is the internal API (default ::1, out-of-band auth assumption).",
+          "evidence": [
+            "sydent/http/servlets/authenticated_bind_threepid_servlet.py:35 args = get_args(request, ('medium','address','mxid'))"
+          ]
+        },
+        {
+          "id": "src-10",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.authenticated_bind_threepid_servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['medium']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/authenticated_bind_threepid_servlet.py",
+            "line": 38
+          },
+          "rationale": "args['medium'] on the internal bind endpoint; flows into ThreepidBinder.addBinding (medium is stored, not used as a network target).",
+          "evidence": [
+            "sydent/http/servlets/authenticated_bind_threepid_servlet.py:37-39 addBinding(args['medium'], args['address'], args['mxid'])"
+          ]
+        },
+        {
+          "id": "src-11",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.authenticated_bind_threepid_servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['address']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/authenticated_bind_threepid_servlet.py",
+            "line": 38
+          },
+          "rationale": "args['address'] on the internal bind endpoint; stored as association address / SMTP recipient material, not a network host.",
+          "evidence": [
+            "sydent/http/servlets/authenticated_bind_threepid_servlet.py:37-39"
+          ]
+        },
+        {
+          "id": "src-12",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.authenticated_bind_threepid_servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['mxid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/authenticated_bind_threepid_servlet.py",
+            "line": 38
+          },
+          "rationale": "args['mxid'] on the internal bind endpoint is the SSRF-relevant field: mxid server part reaches ThreepidBinder._notify which builds 'matrix://%s/_matrix/federation/v1/3pid/onbind' and POSTs it (bind.py:153-162). Full public chain exists via the equivalent public bind servlet (threepidbindservlet.py:45); this internal copy is gated by the ::1 default bind and out-of-band auth, hence candidate.",
+          "evidence": [
+            "sydent/http/servlets/authenticated_bind_threepid_servlet.py:37-39 -> sydent/threepid/bind.py:144-153",
+            "sydent/threepid/bind.py:146 is_valid_hostname(matrix_server) - form check only, does not block private IPs/localhost"
+          ]
+        },
+        {
+          "id": "src-13",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.authenticated_unbind_threepid_servlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.AuthenticatedUnbindThreePidServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/authenticated_unbind_threepid_servlet.py",
+            "line": 32
+          },
+          "rationale": "Handler parameter for /_matrix/identity/internal/unbind (InternalApiHttpServer, default ::1 bind, out-of-band auth assumption).",
+          "evidence": [
+            "sydent/http/httpserver.py:163-164 internal.putChild(b'unbind', authenticated_unbind)"
+          ]
+        },
+        {
+          "id": "src-14",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.authenticated_unbind_threepid_servlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/authenticated_unbind_threepid_servlet.py",
+            "line": 34
+          },
+          "rationale": "get_args return on the internal unbind endpoint; untrusted request data at an internal boundary.",
+          "evidence": [
+            "sydent/http/servlets/authenticated_unbind_threepid_servlet.py:34 args = get_args(request, ('medium','address','mxid'))"
+          ]
+        },
+        {
+          "id": "src-15",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.authenticated_unbind_threepid_servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['medium']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/authenticated_unbind_threepid_servlet.py",
+            "line": 36
+          },
+          "rationale": "args['medium'] on the internal unbind endpoint; flows to removeBinding (local association removal only).",
+          "evidence": [
+            "sydent/http/servlets/authenticated_unbind_threepid_servlet.py:38-39 removeBinding(args['threepid'], args['mxid'])"
+          ]
+        },
+        {
+          "id": "src-16",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.authenticated_unbind_threepid_servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['address']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/authenticated_unbind_threepid_servlet.py",
+            "line": 36
+          },
+          "rationale": "args['address'] on the internal unbind endpoint; association removal only, no network target.",
+          "evidence": [
+            "sydent/http/servlets/authenticated_unbind_threepid_servlet.py:38-39"
+          ]
+        },
+        {
+          "id": "src-17",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.authenticated_unbind_threepid_servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['mxid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/authenticated_unbind_threepid_servlet.py",
+            "line": 39
+          },
+          "rationale": "args['mxid'] on the internal unbind endpoint. Note: removeBinding triggers pusher.doLocalPush() which is a local DB copy (pusher.py:48-62), not an outbound request - unlike addBinding there is no _notify fetch on this path.",
+          "evidence": [
+            "sydent/threepid/bind.py:110-121 removeBinding -> self.sydent.pusher.doLocalPush()",
+            "sydent/replication/pusher.py:48-62 doLocalPush writes via LocalPeer.pushUpdates (no network)"
+          ]
+        },
+        {
+          "id": "src-18",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.blindlysignstuffservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.BlindlySignStuffServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/blindlysignstuffservlet.py",
+            "line": 40
+          },
+          "rationale": "Handler parameter for public /_matrix/identity/api/v1/sign-ed25519 (and v2 equivalent). Unauthenticated public endpoint; request object is the trust boundary.",
+          "evidence": [
+            "sydent/http/httpserver.py:109 v1.putChild(b'sign-ed25519', self.sydent.servlets.blindlySignStuffServlet)"
+          ]
+        },
+        {
+          "id": "src-19",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.blindlysignstuffservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/blindlysignstuffservlet.py",
+            "line": 46
+          },
+          "rationale": "get_args return in BlindlySignStuffServlet; untrusted JSON body / form parameters on a public endpoint.",
+          "evidence": [
+            "sydent/http/servlets/blindlysignstuffservlet.py:46 args = get_args(request, ('private_key','token','mxid'))"
+          ]
+        },
+        {
+          "id": "src-20",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.blindlysignstuffservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['private_key']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/blindlysignstuffservlet.py",
+            "line": 48
+          },
+          "rationale": "args['private_key'] - attacker-supplied key material used for local blind signing only; no network egress from this servlet.",
+          "evidence": [
+            "sydent/http/servlets/blindlysignstuffservlet.py:48"
+          ]
+        },
+        {
+          "id": "src-21",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.blindlysignstuffservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['token']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/blindlysignstuffservlet.py",
+            "line": 49
+          },
+          "rationale": "args['token'] - attacker-supplied token for blind signing; local use only.",
+          "evidence": [
+            "sydent/http/servlets/blindlysignstuffservlet.py:49"
+          ]
+        },
+        {
+          "id": "src-22",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.blindlysignstuffservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['mxid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/blindlysignstuffservlet.py",
+            "line": 50
+          },
+          "rationale": "args['mxid'] - attacker-supplied mxid embedded into the signed blob; local use only, no network target.",
+          "evidence": [
+            "sydent/http/servlets/blindlysignstuffservlet.py:50"
+          ]
+        },
+        {
+          "id": "src-23",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.bulklookupservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.BulkLookupServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/bulklookupservlet.py",
+            "line": 36
+          },
+          "rationale": "Handler parameter for public /_matrix/identity/api/v1/bulk_lookup. Unauthenticated public endpoint.",
+          "evidence": [
+            "sydent/http/httpserver.py:76 v1.putChild(b'bulk_lookup', self.sydent.servlets.bulk_lookup)"
+          ]
+        },
+        {
+          "id": "src-24",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.bulklookupservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/bulklookupservlet.py",
+            "line": 47
+          },
+          "rationale": "get_args return in BulkLookupServlet; untrusted request parameters (threepids list) on a public endpoint.",
+          "evidence": [
+            "sydent/http/servlets/bulklookupservlet.py:47 args = get_args(request, ('threepids',))"
+          ]
+        },
+        {
+          "id": "src-25",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.bulklookupservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['threepids']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/bulklookupservlet.py",
+            "line": 49
+          },
+          "rationale": "args['threepids'] - attacker-supplied 3pid list; used for local DB hash lookups only, no network target.",
+          "evidence": [
+            "sydent/http/servlets/bulklookupservlet.py:49"
+          ]
+        },
+        {
+          "id": "src-26",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.EmailRequestCodeServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 42
+          },
+          "rationale": "Handler parameter for public /validate/email/requestToken (v1, unauthenticated; v2 variant requires authV2). Request object is the trust boundary.",
+          "evidence": [
+            "sydent/http/httpserver.py:95-99 email requestToken/submitToken mounted under v1 and v2"
+          ]
+        },
+        {
+          "id": "src-27",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 48
+          },
+          "rationale": "get_args return in EmailRequestCodeServlet; untrusted email/client_secret/send_attempt parameters.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:48 args = get_args(request, ('email','client_secret','send_attempt'))"
+          ]
+        },
+        {
+          "id": "src-28",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['email']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 50
+          },
+          "rationale": "args['email'] - attacker-supplied email address. It becomes the SMTP *recipient* (emailutils.sendmail(mailFrom, mailTo, ...)), never the SMTP host; mailServer comes from config (emailutils.py:88). Genuine untrusted input, but not a connection-target control for CWE-918.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:50 email = args['email']",
+            "sydent/util/emailutils.py:88-89 mailServer = sydent.cfg.get('email','email.smtphost'); :109 smtp.sendmail(mailFrom, mailTo, ...)"
+          ]
+        },
+        {
+          "id": "src-29",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['send_attempt']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 51
+          },
+          "rationale": "args['send_attempt'] - attacker-supplied send attempt counter; local dedup logic only.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:51"
+          ]
+        },
+        {
+          "id": "src-30",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['client_secret']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 52
+          },
+          "rationale": "args['client_secret'] - attacker-supplied client secret, format-checked by is_valid_client_secret (stringutils.py:27); local session matching only, unrelated to network targets.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:52; sydent/util/stringutils.py:27 is_valid_client_secret (alphanumeric format check, not an SSRF sanitizer)"
+          ]
+        },
+        {
+          "id": "src-31",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['next_link']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 65
+          },
+          "rationale": "args['next_link'] - attacker-supplied redirect target. Guarded against file:/// (emailservlet.py:65) and used only (a) inside the emailed validation link and (b) as the client-facing 302 Location header (emailservlet.py:108). Never a server-side fetch target, so not CWE-918; the unvalidated-redirect aspect is Pass 9 (open redirect) and the file: aspect is recorded separately, not mixed into this pass.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:65 if 'next_link' in args and not args['next_link'].startswith('file:///')",
+            "sydent/http/servlets/emailservlet.py:108 request.setHeader('Location', next_link)  # client redirect, not a fetch",
+            "sydent/validators/emailvalidator.py:112-122 nextLink only appended to the emailed link"
+          ]
+        },
+        {
+          "id": "src-32",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['next_link']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 66
+          },
+          "rationale": "args['next_link'] (second read) - same disposition as the line-65 read: open-redirect (Pass 9) material, never a server-side request target.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:66 nextLink = args['next_link']"
+          ]
+        },
+        {
+          "id": "src-33",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.EmailValidateCodeServlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 94
+          },
+          "rationale": "Handler parameter for public /validate/email/submitToken GET (unauthenticated). Request object is the trust boundary.",
+          "evidence": [
+            "sydent/http/httpserver.py:96 email.putChild(b'submitToken', self.sydent.servlets.emailValidate)"
+          ]
+        },
+        {
+          "id": "src-34",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 95
+          },
+          "rationale": "get_args return in EmailValidateCodeServlet.render_GET; untrusted nextLink query parameter.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:95 args = get_args(request, ('nextLink',), required=False)"
+          ]
+        },
+        {
+          "id": "src-35",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['nextLink']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 105
+          },
+          "rationale": "args['nextLink'] - only used for the 302 Location response header (emailservlet.py:105-108) with a file:/// rejection. Open redirect (Pass 9), not a server-side fetch.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:105-108"
+          ]
+        },
+        {
+          "id": "src-36",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.EmailValidateCodeServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 124
+          },
+          "rationale": "Handler parameter for public /validate/email/submitToken POST (v1 unauthenticated; v2 requires authV2).",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:124 render_POST"
+          ]
+        },
+        {
+          "id": "src-37",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 145
+          },
+          "rationale": "get_args return in EmailValidateCodeServlet.render_POST; untrusted sid/token/client_secret.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:145 args = get_args(request, ('token','sid','client_secret'))"
+          ]
+        },
+        {
+          "id": "src-38",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['sid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 147
+          },
+          "rationale": "args['sid'] - attacker-supplied session id; local DB session lookup only.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:147"
+          ]
+        },
+        {
+          "id": "src-39",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['token']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 148
+          },
+          "rationale": "args['token'] - attacker-supplied validation token; local session check only.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:148"
+          ]
+        },
+        {
+          "id": "src-40",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.emailservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['client_secret']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/emailservlet.py",
+            "line": 149
+          },
+          "rationale": "args['client_secret'] - attacker-supplied client secret; local session matching only.",
+          "evidence": [
+            "sydent/http/servlets/emailservlet.py:149"
+          ]
+        },
+        {
+          "id": "src-41",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.util.emailutils",
+            "type": "sydent.config",
+            "callable": "sydent.config.get.email.smtphost",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/util/emailutils.py",
+            "line": 88
+          },
+          "rationale": "sydent.cfg.get('email','email.smtphost') is operator configuration of the outbound SMTP relay host. Admin-configured connection target (WORKFLOW 5.3.2 SSRF FP heuristic: admin-configured URLs), not attacker-influenced at any request boundary.",
+          "evidence": [
+            "sydent/util/emailutils.py:88 mailServer = sydent.cfg.get('email','email.smtphost')",
+            "sydent/util/emailutils.py:96/98/101 smtplib.SMTP*(mailServer, ...) - host argument is this config value"
+          ]
+        },
+        {
+          "id": "src-42",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.getvalidated3pidservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.GetValidated3pidServlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/getvalidated3pidservlet.py",
+            "line": 40
+          },
+          "rationale": "Handler parameter for public /3pid/getValidated3pid GET (v1 unauthenticated; v2 requires authV2).",
+          "evidence": [
+            "sydent/http/httpserver.py:84/:88 getValidated3pid mounted under v1/v2"
+          ]
+        },
+        {
+          "id": "src-43",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.getvalidated3pidservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/getvalidated3pidservlet.py",
+            "line": 44
+          },
+          "rationale": "get_args return in GetValidated3pidServlet; untrusted sid/client_secret query parameters.",
+          "evidence": [
+            "sydent/http/servlets/getvalidated3pidservlet.py:44"
+          ]
+        },
+        {
+          "id": "src-44",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.getvalidated3pidservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['sid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/getvalidated3pidservlet.py",
+            "line": 46
+          },
+          "rationale": "args['sid'] - local session lookup only.",
+          "evidence": [
+            "sydent/http/servlets/getvalidated3pidservlet.py:46"
+          ]
+        },
+        {
+          "id": "src-45",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.getvalidated3pidservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['client_secret']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/getvalidated3pidservlet.py",
+            "line": 47
+          },
+          "rationale": "args['client_secret'] - local session matching only.",
+          "evidence": [
+            "sydent/http/servlets/getvalidated3pidservlet.py:47"
+          ]
+        },
+        {
+          "id": "src-46",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.hashdetailsservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.HashDetailsServlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/hashdetailsservlet.py",
+            "line": 38
+          },
+          "rationale": "Handler parameter for public /hash_details GET (v2). authV2 authenticates the caller; the request object remains the trust boundary (auth != sanitizer).",
+          "evidence": [
+            "sydent/http/httpserver.py:129 v2.putChild(b'hash_details', self.sydent.servlets.hash_details)"
+          ]
+        },
+        {
+          "id": "src-47",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.logoutservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.LogoutServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/logoutservlet.py",
+            "line": 37
+          },
+          "rationale": "Handler parameter for public /account/logout POST (v2, authV2).",
+          "evidence": [
+            "sydent/http/httpserver.py:120 account.putChild(b'logout', self.sydent.servlets.logoutServlet)"
+          ]
+        },
+        {
+          "id": "src-48",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.lookupservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.LookupServlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/lookupservlet.py",
+            "line": 39
+          },
+          "rationale": "Handler parameter for public /lookup GET (v1, unauthenticated).",
+          "evidence": [
+            "sydent/http/httpserver.py:75 v1.putChild(b'lookup', self.sydent.servlets.lookup)"
+          ]
+        },
+        {
+          "id": "src-49",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.lookupservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/lookupservlet.py",
+            "line": 51
+          },
+          "rationale": "get_args return in LookupServlet; untrusted medium/address.",
+          "evidence": [
+            "sydent/http/servlets/lookupservlet.py:51"
+          ]
+        },
+        {
+          "id": "src-50",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.lookupservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['medium']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/lookupservlet.py",
+            "line": 53
+          },
+          "rationale": "args['medium'] - local DB lookup key only.",
+          "evidence": [
+            "sydent/http/servlets/lookupservlet.py:53"
+          ]
+        },
+        {
+          "id": "src-51",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.lookupservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['address']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/lookupservlet.py",
+            "line": 54
+          },
+          "rationale": "args['address'] - local DB lookup key only (hashed); no network target.",
+          "evidence": [
+            "sydent/http/servlets/lookupservlet.py:54"
+          ]
+        },
+        {
+          "id": "src-52",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.lookupv2servlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.LookupV2Servlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/lookupv2servlet.py",
+            "line": 39
+          },
+          "rationale": "Handler parameter for public /lookup POST (v2, authV2).",
+          "evidence": [
+            "sydent/http/httpserver.py:128 v2.putChild(b'lookup', self.sydent.servlets.lookup_v2)"
+          ]
+        },
+        {
+          "id": "src-53",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.lookupv2servlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/lookupv2servlet.py",
+            "line": 67
+          },
+          "rationale": "get_args return in LookupV2Servlet; untrusted addresses/algorithm/pepper.",
+          "evidence": [
+            "sydent/http/servlets/lookupv2servlet.py:67"
+          ]
+        },
+        {
+          "id": "src-54",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.lookupv2servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['addresses']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/lookupv2servlet.py",
+            "line": 69
+          },
+          "rationale": "args['addresses'] - local hash lookup only.",
+          "evidence": [
+            "sydent/http/servlets/lookupv2servlet.py:69"
+          ]
+        },
+        {
+          "id": "src-55",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.lookupv2servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['algorithm']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/lookupv2servlet.py",
+            "line": 74
+          },
+          "rationale": "args['algorithm'] - selects local hashing algorithm; validated against known algorithms.",
+          "evidence": [
+            "sydent/http/servlets/lookupv2servlet.py:74"
+          ]
+        },
+        {
+          "id": "src-56",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.lookupv2servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['pepper']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/lookupv2servlet.py",
+            "line": 86
+          },
+          "rationale": "args['pepper'] - compared against local pepper; local use only.",
+          "evidence": [
+            "sydent/http/servlets/lookupv2servlet.py:86"
+          ]
+        },
+        {
+          "id": "src-57",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.MsisdnRequestCodeServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 47
+          },
+          "rationale": "Handler parameter for public /validate/msisdn/requestToken (v1 unauthenticated; v2 authV2).",
+          "evidence": [
+            "sydent/http/httpserver.py:101/:104 msisdn requestToken mounted"
+          ]
+        },
+        {
+          "id": "src-58",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 53
+          },
+          "rationale": "get_args return in MsisdnRequestCodeServlet; untrusted phone_number/country/send_attempt/client_secret.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:53"
+          ]
+        },
+        {
+          "id": "src-59",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['phone_number']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 55
+          },
+          "rationale": "args['phone_number'] - attacker-supplied MSISDN; becomes the SMS *recipient* in the JSON body POSTed to the fixed OpenMarket URL (openmarket.py:28 API_BASE_URL constant). Controls message content/destination, not the connection target.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:55; sydent/sms/openmarket.py:28 API_BASE_URL = 'https://smsc.openmarket.com/sms/v4/mt' (fixed constant)"
+          ]
+        },
+        {
+          "id": "src-60",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['country']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 56
+          },
+          "rationale": "args['country'] - phone number parsing/local use only.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:56"
+          ]
+        },
+        {
+          "id": "src-61",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['send_attempt']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 57
+          },
+          "rationale": "args['send_attempt'] - local dedup only.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:57"
+          ]
+        },
+        {
+          "id": "src-62",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['client_secret']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 58
+          },
+          "rationale": "args['client_secret'] - local session matching only.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:58"
+          ]
+        },
+        {
+          "id": "src-63",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.MsisdnValidateCodeServlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 116
+          },
+          "rationale": "Handler parameter for public /validate/msisdn/submitToken GET (unauthenticated).",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:116"
+          ]
+        },
+        {
+          "id": "src-64",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 119
+          },
+          "rationale": "get_args return in MsisdnValidateCodeServlet.render_GET; untrusted next_link.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:119"
+          ]
+        },
+        {
+          "id": "src-65",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['next_link']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 127
+          },
+          "rationale": "args['next_link'] - used only for the 302 Location response header (msisdnservlet.py:127-129; note: unlike emailservlet there is NO file:/// check here). Open redirect (Pass 9), never a server-side fetch target.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:127-129 request.setHeader('Location', next_link)"
+          ]
+        },
+        {
+          "id": "src-66",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.MsisdnValidateCodeServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 145
+          },
+          "rationale": "Handler parameter for public /validate/msisdn/submitToken POST.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:145"
+          ]
+        },
+        {
+          "id": "src-67",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 167
+          },
+          "rationale": "get_args return in MsisdnValidateCodeServlet.render_POST; untrusted sid/token/client_secret.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:167"
+          ]
+        },
+        {
+          "id": "src-68",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['sid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 169
+          },
+          "rationale": "args['sid'] - local session lookup only.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:169"
+          ]
+        },
+        {
+          "id": "src-69",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['token']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 170
+          },
+          "rationale": "args['token'] - local session check only.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:170"
+          ]
+        },
+        {
+          "id": "src-70",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.msisdnservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['client_secret']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/msisdnservlet.py",
+            "line": 171
+          },
+          "rationale": "args['client_secret'] - local session matching only.",
+          "evidence": [
+            "sydent/http/servlets/msisdnservlet.py:171"
+          ]
+        },
+        {
+          "id": "src-71",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "sydent.replication.peer",
+            "type": "sydent.replication.peer.RemotePeer",
+            "callable": "sydent.replication.peer.RemotePeer.__init__.server_name",
+            "arg_index": 2,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/replication/peer.py",
+            "line": 107
+          },
+          "rationale": "RemotePeer.__init__ server_name is derived from the local peers/peer_pubkeys tables (PeerStore.getPeerByName/getAllPeers, db/peers.py:37-49/:67+). No code path inserts into the peers table at runtime (grep for INSERT INTO peers returns nothing); peers are operator-managed. DB-derived trusted configuration, not a request-boundary source.",
+          "evidence": [
+            "sydent/db/peers.py:37-49 select p.name, p.port ... from peers - operator-managed table",
+            "sydent/replication/peer.py:127-133 replication_url from cfg 'peer.%s' or https://%s:%i built from these DB values"
+          ]
+        },
+        {
+          "id": "src-72",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "sydent.replication.peer",
+            "type": "sydent.replication.peer.RemotePeer",
+            "callable": "sydent.replication.peer.RemotePeer.__init__.port",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/replication/peer.py",
+            "line": 107
+          },
+          "rationale": "RemotePeer.__init__ port is DB-derived (peers table) like server_name; operator-managed replication target, not attacker-controlled.",
+          "evidence": [
+            "sydent/db/peers.py:37-49; sydent/replication/peer.py:131-133"
+          ]
+        },
+        {
+          "id": "src-73",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.replication.peer",
+            "type": "sydent.config",
+            "callable": "sydent.config.get.base_replication_url",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/replication/peer.py",
+            "line": 127
+          },
+          "rationale": "sydent.cfg.get('peer.%s','base_replication_url') - operator configuration of the peer replication base URL. Admin-configured URL (SSRF FP heuristic), unreachable from request data.",
+          "evidence": [
+            "sydent/replication/peer.py:127-129 replication_url = sydent.cfg.get('peer.%s' % server_name, 'base_replication_url')"
+          ]
+        },
+        {
+          "id": "src-74",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.pubkeyservlets",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.Ed25519Servlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/pubkeyservlets.py",
+            "line": 32
+          },
+          "rationale": "Handler parameter for public /pubkey/ed25519:0 GET (unauthenticated).",
+          "evidence": [
+            "sydent/http/httpserver.py:80 pubkey.putChild(b'ed25519:0', ...)"
+          ]
+        },
+        {
+          "id": "src-75",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.pubkeyservlets",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.PubkeyIsValidServlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/pubkeyservlets.py",
+            "line": 45
+          },
+          "rationale": "Handler parameter for public /pubkey/isvalid GET (unauthenticated).",
+          "evidence": [
+            "sydent/http/httpserver.py:79"
+          ]
+        },
+        {
+          "id": "src-76",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.pubkeyservlets",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/pubkeyservlets.py",
+            "line": 46
+          },
+          "rationale": "get_args return in PubkeyIsValidServlet; untrusted public_key.",
+          "evidence": [
+            "sydent/http/servlets/pubkeyservlets.py:46"
+          ]
+        },
+        {
+          "id": "src-77",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.pubkeyservlets",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['public_key']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/pubkeyservlets.py",
+            "line": 51
+          },
+          "rationale": "args['public_key'] - local signature verification only.",
+          "evidence": [
+            "sydent/http/servlets/pubkeyservlets.py:51"
+          ]
+        },
+        {
+          "id": "src-78",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.pubkeyservlets",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.EphemeralPubkeyIsValidServlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/pubkeyservlets.py",
+            "line": 61
+          },
+          "rationale": "Handler parameter for public /pubkey/ephemeral/isvalid GET (unauthenticated).",
+          "evidence": [
+            "sydent/http/httpserver.py:82"
+          ]
+        },
+        {
+          "id": "src-79",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.pubkeyservlets",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/pubkeyservlets.py",
+            "line": 62
+          },
+          "rationale": "get_args return in EphemeralPubkeyIsValidServlet; untrusted public_key.",
+          "evidence": [
+            "sydent/http/servlets/pubkeyservlets.py:62"
+          ]
+        },
+        {
+          "id": "src-80",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.pubkeyservlets",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['public_key']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/pubkeyservlets.py",
+            "line": 63
+          },
+          "rationale": "args['public_key'] - local signature verification only.",
+          "evidence": [
+            "sydent/http/servlets/pubkeyservlets.py:63"
+          ]
+        },
+        {
+          "id": "src-81",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.registerservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.RegisterServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/registerservlet.py",
+            "line": 42
+          },
+          "rationale": "Handler parameter for public /_matrix/identity/v2/account/register POST. RegisterServlet.render_POST performs no authV2 call - the endpoint is unauthenticated, so matrix_server_name is directly attacker-chosen.",
+          "evidence": [
+            "sydent/http/servlets/registerservlet.py:42-48 render_POST -> get_args, no authV2",
+            "sydent/http/httpserver.py:119 account.putChild(b'register', self.sydent.servlets.registerServlet)"
+          ]
+        },
+        {
+          "id": "src-82",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.registerservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/registerservlet.py",
+            "line": 48
+          },
+          "rationale": "get_args return in RegisterServlet; the untrusted dict holding matrix_server_name and access_token.",
+          "evidence": [
+            "sydent/http/servlets/registerservlet.py:48"
+          ]
+        },
+        {
+          "id": "src-83",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.registerservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['matrix_server_name']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/registerservlet.py",
+            "line": 50
+          },
+          "rationale": "KEY SSRF source: args['matrix_server_name'] (unauthenticated v2 /account/register) is lowercased, checked with is_valid_hostname (registerservlet.py:52) and interpolated into 'matrix://%s/_matrix/federation/v1/openid/userinfo?...' (registerservlet.py:59-64). is_valid_hostname validates hostname *form* and port range only - it accepts IP literals, localhost and private addresses, and an explicit port - so it does not prevent the request target from being attacker-chosen.",
+          "evidence": [
+            "sydent/http/servlets/registerservlet.py:50-66 matrix_server -> get_json('matrix://%s/...' % (matrix_server, quote(access_token)))",
+            "sydent/util/stringutils.py:39-70 is_valid_hostname: hostname_regex + optional 1-65536 port; no private-IP/localhost/scheme restriction"
+          ]
+        },
+        {
+          "id": "src-84",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.registerservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['access_token']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/registerservlet.py",
+            "line": 63
+          },
+          "rationale": "args['access_token'] - urllib.parse.quote'd into the *query string* of the matrix:// userinfo request; influences the request query, not the host/port.",
+          "evidence": [
+            "sydent/http/servlets/registerservlet.py:63 urllib.parse.quote(args['access_token'])"
+          ]
+        },
+        {
+          "id": "src-85",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.replication",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.ReplicationPushServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/replication.py",
+            "line": 41
+          },
+          "rationale": "Handler parameter for /_matrix/identity/replicate/v1/push on the ReplicationHttpsServer. Boundary is authenticated: the client TLS certificate CN must match a known peer (replication.py:42-51) before the body is read. Remote peer input, but peer-authenticated - kept as candidate rather than tp.",
+          "evidence": [
+            "sydent/http/servlets/replication.py:42-51 peerCertCn = peerCert.get_subject().commonName; peerStore.getPeerByName(peerCertCn); 403 M_UNKNOWN_PEER otherwise",
+            "sydent/http/httpserver.py:171-207 ReplicationHttpsServer listenSSL with mutual-TLS trust root"
+          ]
+        },
+        {
+          "id": "src-86",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.replication",
+            "type": "twisted.web.server.Request.content",
+            "callable": "twisted.web.server.Request.content.read",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/replication.py",
+            "line": 63
+          },
+          "rationale": "request.content.read() in ReplicationPushServlet - body of a peer-authenticated (mutual TLS, CN matched against peers table) replication push. Untrusted-but-authenticated remote input; requires a configured peer certificate to reach.",
+          "evidence": [
+            "sydent/http/servlets/replication.py:63 inJson = json.loads(request.content.read().decode('UTF-8'))"
+          ]
+        },
+        {
+          "id": "src-87",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.replication",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "inJson.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/replication.py",
+            "line": 77
+          },
+          "rationale": "inJson.get('sgAssocs') - the replication push payload. Each association is signature-verified against the peer's configured key before storage (replication.py:84 verifySignedAssociation); no value flows to any outbound request target. Authenticated-peer input with per-item signature checks, no SSRF propagation.",
+          "evidence": [
+            "sydent/http/servlets/replication.py:77-84 sg_assocs = inJson.get('sgAssocs', {}); peer.verifySignedAssociation(sgAssoc)"
+          ]
+        },
+        {
+          "id": "src-88",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.store_invite_servlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.StoreInviteServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/store_invite_servlet.py",
+            "line": 42
+          },
+          "rationale": "Handler parameter for public /store-invite POST (v1 unauthenticated; v2 authV2).",
+          "evidence": [
+            "sydent/http/httpserver.py:107 v1.putChild(b'store-invite', ...)"
+          ]
+        },
+        {
+          "id": "src-89",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.store_invite_servlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/store_invite_servlet.py",
+            "line": 48
+          },
+          "rationale": "get_args return in StoreInviteServlet; untrusted medium/address/room_id/sender.",
+          "evidence": [
+            "sydent/http/servlets/store_invite_servlet.py:48 args = get_args(request, ('medium','address','room_id','sender',))"
+          ]
+        },
+        {
+          "id": "src-90",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.store_invite_servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['medium']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/store_invite_servlet.py",
+            "line": 49
+          },
+          "rationale": "args['medium'] - validated to 'email' and used for local invite storage; no network target.",
+          "evidence": [
+            "sydent/http/servlets/store_invite_servlet.py:49,67 if medium != 'email' -> 400"
+          ]
+        },
+        {
+          "id": "src-91",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.store_invite_servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['address']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/store_invite_servlet.py",
+            "line": 50
+          },
+          "rationale": "args['address'] - invite recipient; becomes the SMTP mailTo (emailutils.py:79/:109), i.e. message recipient, not the connection host.",
+          "evidence": [
+            "sydent/http/servlets/store_invite_servlet.py:50; sydent/util/emailutils.py:88 mailServer from config"
+          ]
+        },
+        {
+          "id": "src-92",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.store_invite_servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['room_id']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/store_invite_servlet.py",
+            "line": 51
+          },
+          "rationale": "args['room_id'] - stored locally in the invite token; no network target.",
+          "evidence": [
+            "sydent/http/servlets/store_invite_servlet.py:51"
+          ]
+        },
+        {
+          "id": "src-93",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.store_invite_servlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['sender']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/store_invite_servlet.py",
+            "line": 52
+          },
+          "rationale": "args['sender'] - stored locally / embedded in invite; no network target.",
+          "evidence": [
+            "sydent/http/servlets/store_invite_servlet.py:52"
+          ]
+        },
+        {
+          "id": "src-94",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.sydent",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/sydent.py",
+            "line": 81
+          },
+          "rationale": "os.environ.get('SYDENT_SERVER_NAME', ...) - process environment read at startup for the server's own name. Operator-controlled deployment configuration, not attacker input, and not used as any outbound request target.",
+          "evidence": [
+            "sydent/sydent.py:81 CONFIG_DEFAULTS 'general.server.name'"
+          ]
+        },
+        {
+          "id": "src-95",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.sydent",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/sydent.py",
+            "line": 84
+          },
+          "rationale": "os.environ.get('SYDENT_PID_FILE', ...) - operator environment configuration for the pidfile path (local file write, Pass 1 territory at most).",
+          "evidence": [
+            "sydent/sydent.py:84"
+          ]
+        },
+        {
+          "id": "src-96",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.sydent",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/sydent.py",
+            "line": 112
+          },
+          "rationale": "os.environ.get('SYDENT_DB_PATH', ...) - operator environment configuration for the sqlite database path.",
+          "evidence": [
+            "sydent/sydent.py:112"
+          ]
+        },
+        {
+          "id": "src-97",
+          "role": "source",
+          "classification": "fp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "sydent.sydent",
+            "type": "twisted.web.server.Request.requestHeaders",
+            "callable": "twisted.web.http_headers.Headers.getRawHeaders",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/sydent.py",
+            "line": 361
+          },
+          "rationale": "X-Forwarded-For header read in ip_from_request. It is a client-supplied (attacker-forgeable) header, but only honored when the operator sets obey_x_forwarded_for=True (default False, sydent.py:123), and the value is used for IP-based rate limiting and email templating - it never reaches any outbound request target, so for CWE-918 it is a false-positive source.",
+          "evidence": [
+            "sydent/sydent.py:358-362 obey_x_forwarded_for gate; value returned as client IP only",
+            "sydent/validators/emailvalidator.py rate limiting / template substitution consumers"
+          ]
+        },
+        {
+          "id": "src-98",
+          "role": "source",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.sydent",
+            "type": "twisted.web.server.Request",
+            "callable": "request.args",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/sydent.py",
+            "line": 374
+          },
+          "rationale": "request.args[b'brand'] in brand_from_request - attacker-supplied brand hint. It selects a *local template directory* (get_branded_template filters against valid_brands from templates.path listing, sydent.py:223-234), i.e. local file selection (Pass 1 territory), not a network request target. Role source (genuinely untrusted), classification fp for CWE-918.",
+          "evidence": [
+            "sydent/sydent.py:374-376 brand = request.args[b'brand'][0]",
+            "sydent/sydent.py:378-399 get_branded_template - constrained to valid_brands set; no network use"
+          ]
+        },
+        {
+          "id": "src-99",
+          "role": "source",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.sydent",
+            "type": "twisted.web.server.Request",
+            "callable": "request.args",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/sydent.py",
+            "line": 375
+          },
+          "rationale": "Second request.args[b'brand'] read (decode at line 375) - same disposition: local template selection, no network target.",
+          "evidence": [
+            "sydent/sydent.py:375 request.args[b'brand'][0].decode('utf-8')"
+          ]
+        },
+        {
+          "id": "src-100",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.sydent",
+            "type": "os.environ",
+            "callable": "os.environ.get",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/sydent.py",
+            "line": 508
+          },
+          "rationale": "os.environ.get('SYDENT_CONF', ...) - operator environment configuration for the config file path.",
+          "evidence": [
+            "sydent/sydent.py:508"
+          ]
+        },
+        {
+          "id": "src-101",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.termsservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.TermsServlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/termsservlet.py",
+            "line": 39
+          },
+          "rationale": "Handler parameter for public /terms GET (v2, authV2 in the POST variant).",
+          "evidence": [
+            "sydent/http/httpserver.py:116 v2.putChild(b'terms', ...)"
+          ]
+        },
+        {
+          "id": "src-102",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.termsservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.TermsServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/termsservlet.py",
+            "line": 51
+          },
+          "rationale": "Handler parameter for public /terms POST (v2, authV2 - auth verifies the caller but does not sanitize user_accepts).",
+          "evidence": [
+            "sydent/http/servlets/termsservlet.py:51"
+          ]
+        },
+        {
+          "id": "src-103",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.termsservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/termsservlet.py",
+            "line": 59
+          },
+          "rationale": "get_args return in TermsServlet.render_POST; untrusted user_accepts.",
+          "evidence": [
+            "sydent/http/servlets/termsservlet.py:59"
+          ]
+        },
+        {
+          "id": "src-104",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.termsservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['user_accepts']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/termsservlet.py",
+            "line": 61
+          },
+          "rationale": "args['user_accepts'] - local terms acceptance recording only.",
+          "evidence": [
+            "sydent/http/servlets/termsservlet.py:61"
+          ]
+        },
+        {
+          "id": "src-105",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidbindservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.ThreePidBindServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidbindservlet.py",
+            "line": 35
+          },
+          "rationale": "Handler parameter for public /3pid/bind POST. v1 variant is mounted when enable_v1_associations is true (default 'true', sydent.py:108) and performs NO authentication; the v2 variant requires authV2 and mxid==account.userId. Either way the request object is the trust boundary.",
+          "evidence": [
+            "sydent/http/httpserver.py:90-91 threepid_v1.putChild(b'bind', ...); sydent.py:108 'enable_v1_associations': 'true'",
+            "sydent/http/servlets/threepidbindservlet.py:39-55 optional authV2; mxid restriction only in the authed v2 path"
+          ]
+        },
+        {
+          "id": "src-106",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidbindservlet",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.http.servlets.get_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidbindservlet.py",
+            "line": 42
+          },
+          "rationale": "get_args return in ThreePidBindServlet; untrusted sid/mxid/client_secret.",
+          "evidence": [
+            "sydent/http/servlets/threepidbindservlet.py:42"
+          ]
+        },
+        {
+          "id": "src-107",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidbindservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['sid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidbindservlet.py",
+            "line": 44
+          },
+          "rationale": "args['sid'] - must match a validated session in the local DB before the bind proceeds.",
+          "evidence": [
+            "sydent/http/servlets/threepidbindservlet.py:58-59 getValidatedSession(sid, clientSecret)"
+          ]
+        },
+        {
+          "id": "src-108",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidbindservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['mxid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidbindservlet.py",
+            "line": 45
+          },
+          "rationale": "KEY SSRF source: args['mxid'] flows into ThreepidBinder.addBinding -> _notify, where the mxid server part (mxid.split(':',1)[1]) is checked with is_valid_hostname (bind.py:146) and interpolated into 'matrix://%s/_matrix/federation/v1/3pid/onbind' (bind.py:153) then POSTed (bind.py:162). On the default-enabled unauthenticated v1 path no restriction binds mxid to a validated owner; is_valid_hostname is form-only (IP literals / localhost / private ranges / explicit port all pass).",
+          "evidence": [
+            "sydent/http/servlets/threepidbindservlet.py:79 addBinding(s.medium, s.address, mxid)",
+            "sydent/threepid/bind.py:134-153 mxid_parts[1] -> is_valid_hostname -> post_url = 'matrix://%s/_matrix/federation/v1/3pid/onbind' % matrix_server",
+            "sydent/util/stringutils.py:39-70 hostname form check only"
+          ]
+        },
+        {
+          "id": "src-109",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidbindservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "args['client_secret']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidbindservlet.py",
+            "line": 46
+          },
+          "rationale": "args['client_secret'] - format-checked (is_valid_client_secret) and matched against a local validation session; not a network target.",
+          "evidence": [
+            "sydent/http/servlets/threepidbindservlet.py:44-48"
+          ]
+        },
+        {
+          "id": "src-110",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidunbindservlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.ThreePidUnbindServlet.render_POST",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidunbindservlet.py",
+            "line": 45
+          },
+          "rationale": "Handler parameter for public /3pid/unbind POST (v1 and v2 share the servlet). Auth is either a session sid+client_secret or an X-Matrix homeserver signature; the body fields remain attacker-supplied.",
+          "evidence": [
+            "sydent/http/servlets/threepidunbindservlet.py:45-133 two auth modes; body parsed at :54"
+          ]
+        },
+        {
+          "id": "src-111",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidunbindservlet",
+            "type": "twisted.web.server.Request.content",
+            "callable": "twisted.web.server.Request.content.read",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidunbindservlet.py",
+            "line": 54
+          },
+          "rationale": "request.content.read() in ThreePidUnbindServlet - direct json.loads of the raw public-endpoint request body; the untrusted 'body' dict used at :69/:70/:93/:94.",
+          "evidence": [
+            "sydent/http/servlets/threepidunbindservlet.py:54 body = json.loads(request.content.read().decode('UTF-8'))"
+          ]
+        },
+        {
+          "id": "src-112",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidunbindservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "body['threepid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidunbindservlet.py",
+            "line": 69
+          },
+          "rationale": "body['threepid'] - attacker-supplied medium/address dict; used for local association removal.",
+          "evidence": [
+            "sydent/http/servlets/threepidunbindservlet.py:69-72"
+          ]
+        },
+        {
+          "id": "src-113",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidunbindservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "body['mxid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidunbindservlet.py",
+            "line": 70
+          },
+          "rationale": "body['mxid'] - flows to removeBinding, which triggers only pusher.doLocalPush() (local DB copy, pusher.py:48-62); no outbound fetch on the unbind path. On the X-Matrix path it is additionally checked to end with ':'+origin_server_name (:158).",
+          "evidence": [
+            "sydent/http/servlets/threepidunbindservlet.py:164 removeBinding(threepid, mxid)",
+            "sydent/threepid/bind.py:110-121 removeBinding -> doLocalPush (local only)"
+          ]
+        },
+        {
+          "id": "src-114",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidunbindservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "body['sid']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidunbindservlet.py",
+            "line": 93
+          },
+          "rationale": "body['sid'] - session-based unbind auth material; local DB check only.",
+          "evidence": [
+            "sydent/http/servlets/threepidunbindservlet.py:93,108 getValidatedSession(sid, client_secret)"
+          ]
+        },
+        {
+          "id": "src-115",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.threepidunbindservlet",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "body['client_secret']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/http/servlets/threepidunbindservlet.py",
+            "line": 94
+          },
+          "rationale": "body['client_secret'] - session-based unbind auth material; local DB check only.",
+          "evidence": [
+            "sydent/http/servlets/threepidunbindservlet.py:94,96"
+          ]
+        },
+        {
+          "id": "src-116",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.v1_servlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.V1Servlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/v1_servlet.py",
+            "line": 32
+          },
+          "rationale": "Handler parameter for the public /_matrix/identity/api/v1 version endpoint; the handler only returns a static version dict and does not read request content, but the parameter is still the framework trust boundary.",
+          "evidence": [
+            "sydent/http/servlets/v1_servlet.py:32"
+          ]
+        },
+        {
+          "id": "src-117",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.v2_servlet",
+            "type": "twisted.web.resource.Resource",
+            "callable": "sydent.http.servlets.V2Servlet.render_GET",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/http/servlets/v2_servlet.py",
+            "line": 31
+          },
+          "rationale": "Handler parameter for the public v2 version endpoint; static response, boundary only.",
+          "evidence": [
+            "sydent/http/servlets/v2_servlet.py:31"
+          ]
+        },
+        {
+          "id": "src-118",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.hs_federation.verifier",
+            "type": "sydent.hs_federation.verifier.Verifier",
+            "callable": "sydent.hs_federation.verifier.Verifier._getKeysForServer.server_name",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/hs_federation/verifier.py",
+            "line": 63
+          },
+          "rationale": "Internal relay parameter, NOT a standalone external source (per boundary rules). _getKeysForServer(server_name) is called from verifyServerSignedJson (verifier.py:119) with server names taken from the signatures dict, and its argument is interpolated into 'matrix://%s/_matrix/key/v2/server/' (verifier.py:80). Taint must enter via the X-Matrix Authorization header (getRawHeaders at :194) / signed_json['signatures'] keys; labeling as summary so Phase 2 can add the param->URL flow step.",
+          "evidence": [
+            "sydent/hs_federation/verifier.py:63 signature; :119 call site; :80 'matrix://%s/_matrix/key/v2/server/' % server_name"
+          ]
+        },
+        {
+          "id": "src-119",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "sydent.hs_federation.verifier",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "signed_json['signatures']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/hs_federation/verifier.py",
+            "line": 114
+          },
+          "rationale": "signed_json['signatures'] subscript read in verifyServerSignedJson: the dict keys are server names that are passed one-by-one to _getKeysForServer -> matrix:// key fetch. On the reachable call path (authenticate_request, called from threepidunbindservlet.py:135) the signatures dict is built from the unauthenticated X-Matrix Authorization header origin (verifier.py:199-203). Second-order source: real attacker-controlled data, but reaching it requires the header parse chain, hence candidate.",
+          "evidence": [
+            "sydent/hs_federation/verifier.py:114 for server_name, sigs in signed_json['signatures'].items()",
+            "sydent/hs_federation/verifier.py:199-203 json_request['signatures'].setdefault(origin, {})[key] = sig  # origin from X-Matrix header"
+          ]
+        },
+        {
+          "id": "src-120",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.hs_federation.verifier",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "signed_json['signatures']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/hs_federation/verifier.py",
+            "line": 133
+          },
+          "rationale": "signed_json['signatures'] read inside a logger.warn at verifier.py:133 - same provenance as the :114 read (X-Matrix-derived signature keys); logging output only on this line, no fetch.",
+          "evidence": [
+            "sydent/hs_federation/verifier.py:131-134"
+          ]
+        },
+        {
+          "id": "src-121",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.hs_federation.verifier",
+            "type": "sydent.http.servlets.get_args-return",
+            "callable": "signed_json['signatures']",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "sydent/hs_federation/verifier.py",
+            "line": 137
+          },
+          "rationale": "signed_json['signatures'] read inside a logger.warn at verifier.py:137 - same provenance; logging only.",
+          "evidence": [
+            "sydent/hs_federation/verifier.py:135-138"
+          ]
+        },
+        {
+          "id": "src-122",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.hs_federation.verifier",
+            "type": "twisted.web.server.Request",
+            "callable": "sydent.hs_federation.verifier.Verifier.authenticate_request.request",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "sydent/hs_federation/verifier.py",
+            "line": 142
+          },
+          "rationale": "Internal relay parameter: authenticate_request(request, content) is invoked from ThreePidUnbindServlet._async_render_POST (threepidunbindservlet.py:135) with the servlet's request object. Not an external boundary itself - labeled summary so taint can propagate from the public render_POST request param through to getRawHeaders/parse_auth_header inside.",
+          "evidence": [
+            "sydent/hs_federation/verifier.py:142 def authenticate_request(self, request, content)",
+            "sydent/http/servlets/threepidunbindservlet.py:135 authenticate_request(request, body)"
+          ]
+        },
+        {
+          "id": "src-123",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.hs_federation.verifier",
+            "type": "twisted.web.server.Request.requestHeaders",
+            "callable": "twisted.web.http_headers.Headers.getRawHeaders",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "sydent/hs_federation/verifier.py",
+            "line": 194
+          },
+          "rationale": "KEY SSRF source: request.requestHeaders.getRawHeaders('Authorization') returns the client-supplied X-Matrix federation header. parse_auth_header extracts 'origin' (verifier.py:187), which is checked with is_valid_hostname (:208 - form check only, IP literals/localhost/private ranges/explicit port pass) and then used as the signature server name whose keys are fetched from 'matrix://%s/_matrix/key/v2/server/' (verifier.py:80) BEFORE the signature itself is verified (:211). The unauthenticated caller therefore chooses the key-fetch target.",
+          "evidence": [
+            "sydent/hs_federation/verifier.py:194 auth_headers = request.requestHeaders.getRawHeaders(u'Authorization')",
+            "sydent/hs_federation/verifier.py:187 origin = strip_quotes(param_dict['origin']); :208 is_valid_hostname(origin); :211 verifyServerSignedJson -> _getKeysForServer -> get_json"
+          ]
+        },
+        {
+          "id": "sink-2",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.threepid.bind",
+            "type": "sydent.http.httpclient.HTTPClient",
+            "callable": "sydent.http.httpclient.HTTPClient.post_json_get_nothing",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/threepid/bind.py",
+            "line": 162
+          },
+          "rationale": "post_json_get_nothing(post_url, assoc, {}) with post_url = 'matrix://%s/_matrix/federation/v1/3pid/onbind' % matrix_server, where matrix_server is the mxid server part supplied by the (v1: unauthenticated) bind APIs. Scheme and path are fixed; host (and optional port, and the SRV/.well-known routing it triggers) is attacker-influenced. is_valid_hostname at bind.py:146 is a form check, not a private-address/scheme allowlist.",
+          "evidence": [
+            "sydent/threepid/bind.py:153-162 post_url built from mxid_parts[1]; yield http_client.post_json_get_nothing(post_url, assoc, {})",
+            "sydent/http/httpclient.py:91-96 post_json_get_nothing -> self.agent.request(b'POST', uri.encode('utf8'), ...)",
+            "sydent/util/stringutils.py:39-70 is_valid_hostname allows IP literals, localhost, private ranges and explicit port"
+          ]
+        },
+        {
+          "id": "sink-3",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.util.emailutils",
+            "type": "smtplib",
+            "callable": "smtplib.SMTP_SSL",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/util/emailutils.py",
+            "line": 96
+          },
+          "rationale": "smtplib.SMTP_SSL(mailServer, mailPort, myHostname) - arg 0 is the SMTP host taken from operator config 'email.smtphost' (emailutils.py:88). Admin-configured connection target; the attacker-controlled email address is only the mailTo recipient of sendmail (:109), never the connection host. Also SMTP rather than an HTTP URL fetch.",
+          "evidence": [
+            "sydent/util/emailutils.py:88-96 mailServer = sydent.cfg.get('email','email.smtphost'); SMTP_SSL(mailServer, mailPort, ...)",
+            "sydent/util/emailutils.py:109 smtp.sendmail(mailFrom, mailTo, ...) - attacker data is recipient, not host"
+          ]
+        },
+        {
+          "id": "sink-4",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.util.emailutils",
+            "type": "smtplib",
+            "callable": "smtplib.SMTP",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/util/emailutils.py",
+            "line": 98
+          },
+          "rationale": "smtplib.SMTP(mailServer, ...) in the STARTTLS branch - same operator-config mailServer host as the SMTP_SSL row; arg 0 not attacker-controlled.",
+          "evidence": [
+            "sydent/util/emailutils.py:97-98"
+          ]
+        },
+        {
+          "id": "sink-5",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.util.emailutils",
+            "type": "smtplib",
+            "callable": "smtplib.SMTP",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/util/emailutils.py",
+            "line": 101
+          },
+          "rationale": "smtplib.SMTP(mailServer, ...) in the plain branch - same operator-config host; arg 0 not attacker-controlled.",
+          "evidence": [
+            "sydent/util/emailutils.py:100-101"
+          ]
+        },
+        {
+          "id": "sink-6",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.httpclient",
+            "type": "twisted.web.client.Agent.agent",
+            "callable": "twisted.web.client.Agent.request",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/http/httpclient.py",
+            "line": 52
+          },
+          "rationale": "self.agent.request(b'GET', uri.encode('utf8')) in HTTPClient.get_json: argument index 1 (index 0 is the method b'GET') is the request URI - the correct dangerous position. This is the egress point for all matrix:// federation GETs, including the request-derived hosts from registerservlet.py:59-64 and verifier.py:80.",
+          "evidence": [
+            "sydent/http/httpclient.py:52-55 response = yield self.agent.request(b'GET', uri.encode('utf8'))",
+            "callers: sydent/http/servlets/registerservlet.py:59, sydent/hs_federation/verifier.py:80 (matrix://%s URLs from request-derived server names)"
+          ]
+        },
+        {
+          "id": "sink-7",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.httpclient",
+            "type": "twisted.web.client.Agent.agent",
+            "callable": "twisted.web.client.Agent.request",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/http/httpclient.py",
+            "line": 91
+          },
+          "rationale": "self.agent.request(b'POST', uri.encode('utf8'), ...) in HTTPClient.post_json_get_nothing: argument index 1 is the URI - correct dangerous position. Egress for the bind callback chain (threepid/bind.py:162) and the OpenMarket SMS post (openmarket.py:101).",
+          "evidence": [
+            "sydent/http/httpclient.py:91-96",
+            "callers: sydent/threepid/bind.py:162 (attacker-influenced matrix:// host), sydent/sms/openmarket.py:101 (fixed constant URL)"
+          ]
+        },
+        {
+          "id": "sink-8",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.httpsclient",
+            "type": "twisted.web.client.Agent.agent",
+            "callable": "twisted.web.client.Agent.request",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/http/httpsclient.py",
+            "line": 70
+          },
+          "rationale": "ReplicationHttpsClient.postJson agent.request(b'POST', uri.encode('utf8'), ...): argument index 1 is the URI. The URI is self.replication_url, built in RemotePeer.__init__ from operator config ('peer.%s' base_replication_url) or DB-derived peer server_name/port (peers table, operator-managed, no runtime insert path). Connection target is trusted configuration, not request data.",
+          "evidence": [
+            "sydent/http/httpsclient.py:70 reqDeferred = self.agent.request(b'POST', uri.encode('utf8'), headers, ...)",
+            "sydent/replication/peer.py:125-139 replication_url from cfg/DB peers; sydent/db/peers.py:37+ peers table is operator-managed"
+          ]
+        },
+        {
+          "id": "sink-9",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.matrixfederationagent",
+            "type": "twisted.internet.endpoints.HostnameEndpoint",
+            "callable": "sydent.http.matrixfederationagent.LoggingHostnameEndpoint",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/http/matrixfederationagent.py",
+            "line": 168
+          },
+          "rationale": "LoggingHostnameEndpoint(self._reactor, res.target_host, res.target_port): argument index 1 is the TCP connect host. res.target_host comes from _route_matrix_uri of the requested matrix:// URI (request-derived host), after optional .well-known delegation and SRV resolution - i.e. the actual TCP dial target that attacker-chosen server names resolve to.",
+          "evidence": [
+            "sydent/http/matrixfederationagent.py:165-173 EndpointFactory.endpointForURI -> LoggingHostnameEndpoint(reactor, res.target_host, res.target_port)",
+            "sydent/http/matrixfederationagent.py:180-280 _route_matrix_uri derives target_host from parsed_uri.host / .well-known / SRV"
+          ]
+        },
+        {
+          "id": "sink-10",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.matrixfederationagent",
+            "type": "twisted.web.client.Agent.agent",
+            "callable": "twisted.web.client.Agent.request",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/http/matrixfederationagent.py",
+            "line": 176
+          },
+          "rationale": "agent.request(method, uri, headers, bodyProducer) in MatrixFederationAgent.request: argument index 1 is the absolute URI. This is the final federation egress for every matrix:// call, including the attacker-influenced hosts from /account/register (registerservlet) and X-Matrix key verification (verifier). The URI is routed (SRV + .well-known) before the connection is made but the destination derives from the requested host.",
+          "evidence": [
+            "sydent/http/matrixfederationagent.py:176 res = yield agent.request(method, uri, headers, bodyProducer)",
+            "sydent/http/matrixfederationagent.py:141-142 parsed_uri = URI.fromBytes(uri, defaultPort=-1); _route_matrix_uri(parsed_uri)"
+          ]
+        },
+        {
+          "id": "sink-11",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.matrixfederationagent",
+            "type": "twisted.web.client.Agent._well_known_agent",
+            "callable": "twisted.web.client.Agent.request",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/http/matrixfederationagent.py",
+            "line": 322
+          },
+          "rationale": "self._well_known_agent.request(b'GET', uri) with uri = b'https://%s/.well-known/matrix/server' % server_name: argument index 1 is the URI. server_name is the host of the requested matrix:// URI (request-derived via registerservlet/verifier chains). Uses RedirectAgent, so 3xx responses are followed server-side.",
+          "evidence": [
+            "sydent/http/matrixfederationagent.py:318-322 uri = b'https://%s/.well-known/matrix/server' % (server_name,); self._well_known_agent.request(b'GET', uri)",
+            "sydent/http/matrixfederationagent.py:105-107 _well_known_agent = RedirectAgent(Agent(...)) - redirects followed"
+          ]
+        },
+        {
+          "id": "sink-12",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.matrixfederationagent",
+            "type": "twisted.internet.endpoints.HostnameEndpoint",
+            "callable": "sydent.http.matrixfederationagent.HostnameEndpoint",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/http/matrixfederationagent.py",
+            "line": 366
+          },
+          "rationale": "HostnameEndpoint(reactor, host, port) inside LoggingHostnameEndpoint.__init__: argument index 1 is the TCP host. Same target_host routing result as the LoggingHostnameEndpoint wrapper - the concrete TCP dial target for attacker-influenced federation destinations.",
+          "evidence": [
+            "sydent/http/matrixfederationagent.py:366 self.ep = HostnameEndpoint(reactor, host, port, *args, **kwargs)",
+            "host/port originate from _RoutingResult.target_host/target_port (matrixfederationagent.py:275-280)"
+          ]
+        },
+        {
+          "id": "sink-13",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.sms.openmarket",
+            "type": "sydent.http.httpclient.HTTPClient",
+            "callable": "sydent.http.httpclient.HTTPClient.post_json_get_nothing",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/sms/openmarket.py",
+            "line": 101
+          },
+          "rationale": "post_json_get_nothing(API_BASE_URL, body, {'headers': headers}) - argument index 0 is the fixed module constant 'https://smsc.openmarket.com/sms/v4/mt' (openmarket.py:28). The attacker-controlled phone number only shapes the JSON body, never the target host. Fixed-destination request, per rubric distinct from attacker-chosen target.",
+          "evidence": [
+            "sydent/sms/openmarket.py:28 API_BASE_URL = 'https://smsc.openmarket.com/sms/v4/mt' (constant)",
+            "sydent/sms/openmarket.py:101-103 yield self.http_cli.post_json_get_nothing(API_BASE_URL, body, ...)"
+          ]
+        },
+        {
+          "id": "sink-14",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "sydent.replication.peer",
+            "type": "sydent.http.httpsclient.ReplicationHttpsClient",
+            "callable": "sydent.http.httpsclient.ReplicationHttpsClient.postJson",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/replication/peer.py",
+            "line": 200
+          },
+          "rationale": "ReplicationHttpsClient.postJson(self.replication_url, body): argument index 0 is the URI, which is RemotePeer.replication_url - operator config or the operator-managed peers table (no runtime peer insertion exists in the codebase). Trusted replication target, not attacker-controlled.",
+          "evidence": [
+            "sydent/replication/peer.py:198-202 reqDeferred = self.sydent.replicationHttpsClient.postJson(self.replication_url, body)",
+            "sydent/replication/peer.py:125-139 replication_url construction (config / DB peers)"
+          ]
+        },
+        {
+          "id": "sink-15",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.servlets.registerservlet",
+            "type": "sydent.http.httpclient.HTTPClient",
+            "callable": "sydent.http.httpclient.HTTPClient.get_json",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/http/servlets/registerservlet.py",
+            "line": 59
+          },
+          "rationale": "KEY SSRF sink: self.client.get_json('matrix://%s/_matrix/federation/v1/openid/userinfo?access_token=%s' % (matrix_server, urllib.parse.quote(args['access_token'])), 1024*5) - argument index 0 is the URI. matrix_server is args['matrix_server_name'] from the unauthenticated public v2 /account/register endpoint; is_valid_hostname (registerservlet.py:52) is a form-only check that admits IP literals, localhost, private ranges and explicit ports. Downstream the MatrixFederationAgent additionally performs SRV and .well-known lookups against the attacker-chosen name.",
+          "evidence": [
+            "sydent/http/servlets/registerservlet.py:59-66 get_json('matrix://%s/...' % (matrix_server, quote(access_token)))",
+            "sydent/http/servlets/registerservlet.py:48-52 get_args(request, ('matrix_server_name','access_token')); is_valid_hostname check",
+            "sydent/http/httpclient.py:52 agent.request; sydent/http/matrixfederationagent.py:176/322/366 downstream egress"
+          ]
+        },
+        {
+          "id": "sink-16",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sydent.http.srvresolver",
+            "type": "sydent.http.srvresolver.SrvResolver._dns_client",
+            "callable": "twisted.names.client.lookupService",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/http/srvresolver.py",
+            "line": 125
+          },
+          "rationale": "self._dns_client.lookupService(service_name) with service_name = b'_matrix._tcp.%s' % host: argument index 0 is the DNS query name, and host derives from the requested matrix:// URI (request-influenced). This is a DNS SRV lookup, not an HTTP URL fetch: the record type is fixed and the response is parsed into host/port candidates. Recorded as a network request to an attacker-influenced name (candidate), not a full CWE-918 HTTP sink; also relevant to DNS-rebinding style concerns in Phase 2 triage.",
+          "evidence": [
+            "sydent/http/srvresolver.py:125 answers, _, _ = yield self._dns_client.lookupService(service_name)",
+            "sydent/http/matrixfederationagent.py:258 service_name = b'_matrix._tcp.%s' % (parsed_uri.host,)"
+          ]
+        },
+        {
+          "id": "sink-17",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.sydent",
+            "type": "sentry_sdk",
+            "callable": "sentry_sdk.init",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "sydent/sydent.py",
+            "line": 210
+          },
+          "rationale": "sentry_sdk.init(dsn=self.cfg.get('general','sentry_dsn')) - the DSN is operator configuration (only set when the admin configures sentry_dsn, sydent.py:207). Admin-configured external endpoint; not reachable from request data. CSV recorded argIndex -1 with flowKind 'argument' which the labels schema forbids (argument requires arg_index >= 0); corrected to arg_index null / flow_kind 'unknown' since dsn is passed as a keyword argument.",
+          "evidence": [
+            "sydent/sydent.py:207-212 if self.cfg.has_option('general','sentry_dsn'): sentry_sdk.init(dsn=self.cfg.get('general','sentry_dsn'))",
+            "CSV row argIndex -1 -> schema correction: arg_index null, flow_kind 'unknown' (keyword argument dsn=)"
+          ]
+        },
+        {
+          "id": "sink-18",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sydent.hs_federation.verifier",
+            "type": "sydent.http.httpclient.HTTPClient",
+            "callable": "sydent.http.httpclient.HTTPClient.get_json",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "sydent/hs_federation/verifier.py",
+            "line": 80
+          },
+          "rationale": "client.get_json('matrix://%s/_matrix/key/v2/server/' % server_name, 1024*50) in Verifier._getKeysForServer - argument index 0 is the URI. server_name arrives from the unauthenticated X-Matrix Authorization header origin (verifier.py:194/:187/:208) or the signatures dict keys; the key fetch happens before signature verification completes, so the unauthenticated caller chooses the target. is_valid_hostname is form-only.",
+          "evidence": [
+            "sydent/hs_federation/verifier.py:80 result = yield client.get_json('matrix://%s/_matrix/key/v2/server/' % server_name, 1024*50)",
+            "sydent/hs_federation/verifier.py:194-211 X-Matrix origin -> is_valid_hostname -> verifyServerSignedJson -> _getKeysForServer (fetch precedes signature verification)"
+          ]
+        }
+      ]
+    }
+  ]
+}

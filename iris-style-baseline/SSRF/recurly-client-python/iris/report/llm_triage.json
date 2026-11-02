@@ -1,0 +1,354 @@
+{
+  "triage_run": {
+    "run_id": "recurly-client-python-ssrf-pass3-llm-triage-20261020",
+    "reviewer": "independent LLM path re-review (Claude/GLM)",
+    "target_rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+    "sarif": "results/pass3.sarif",
+    "sarif_status": "CodeQL 分析成功：SARIF 含且仅含 1 条正式规则 py/augur/recurly-client-python/pass3-ssrf 的 33 条正式告警（全部带 codeFlows）；无解析诊断、无 diagnostics 变体、无原生 CodeQL 基线规则混入。本轮不适用『没有命中正式 SSRF 污点路径』声明。",
+    "source_tree": "dataset/codeql_databases/ssrf_dbs/recurly-client-python_vuln (recurly-client-python 2.6.1, sha 9db2d1a)",
+    "inputs_read": [
+      "results/pass3.sarif",
+      "report/iris_report.md",
+      "labels/labels.json",
+      "report/query_generation_notes.md",
+      "libraries/MySources.qll",
+      "libraries/MySinks.qll",
+      "recurly/resource.py",
+      "recurly/__init__.py (全部告警行所在函数)",
+      "tests/test_resources.py (仅核对 codeFlow 中间节点)"
+    ],
+    "method": "逐条提取每条告警的全部 codeFlows，将每条 threadFlow 的 source/sink 节点与真实源码逐行核对；对 urljoin 语义用 CPython stdlib 实测验证（18 类载荷）。未修改 SARIF、labels、正式查询。"
+  },
+
+  "global_checklist_answers": {
+    "q1_source_attacker_control": "本仓库是客户端 SDK，无任何入站网络面（无路由/handler/框架，grep 验证）。33 条告警的 source 只有三类：(a) 嵌入应用的公开 API 参数（完整 URL，由集成方开发者决定）；(b) 二阶载体——Recurly 服务端响应中的 XML href / Location / Link 头（威胁模型=端点被攻破或 MITM，但通道受 TLS+API key 保护）；(c) GiftCard.redeem 的 self.redemption_code（构造 kwargs 或服务端解析，处于 urljoin 路径第一段）。仓库内不存在一阶攻击者可控输入；唯一真正外部的输入是 objects_for_push_notification 的 webhook body（labels src-28），但没有任何告警流从它出发。",
+    "q2_real_data_propagation": "是。抽查全部 33 条告警的 codeFlows 均与源码一致：href→self._url（resource.py:508-510）、Location→_url（resource.py:662、__init__.py:260/313）、_url→urljoin→post/put/http_request（如 __init__.py:239→240、797→801）、redemption_code→'%s/redeem'→urljoin→post（__init__.py:456→459/461→464）、param→funnel（如 resource.py:214→240→245/247/250/279）。传播关系均有真实源码支撑，无凭空边。",
+    "q3_urljoin_base_relative": "分两种模式实测（CPython urljoin）：(i) Resource.get 模式 urljoin(base, 'accounts/%s'%uuid)——固定前缀使路径永远无法变成绝对引用，18 类载荷（'http://evil.com/x'、'//evil.com/x'、'gopher://...'、'../../..' 等）全部保持 netloc=api.recurly.com，最坏仅同 host 路径穿越/查询注入；(ii) 第一段模式 urljoin(self._url, '%s/redeem'%code)（GiftCard.redeem:459、Account.charge:239、Coupon.generate:576、Coupon.restore:588、Invoice._create_refund_invoice:797、Plan.get_add_on:1176 等）——scheme 前缀值实测确实替换 scheme+host（'http://evil.com/adjustments'→netloc=evil.com）。二阶流的 base（self._url）本身就是服务端可控完整 URL，urljoin 不构成任何限制。注意 GiftCard.redeem 的 else 分支（:461）是字符串拼接 base+'gift_cards/'+code，前缀固定、不可伪造 host——该分支告警强度低于 if 分支。",
+    "q4_sink_is_real_network": "是。sink 分两类：(i) 33 条中的 5 条（resource.py:245/247/250/279/280）是真实网络执行点——HTTP(S)Connection(urlparts.netloc) 建立 socket 连接、connection.request(method,url,body,headers) 发出请求行、getresponse() 完成往返；(ii) 其余 28 条是 funnel 位（post/put/http_request/element_for_url/page_for_url/count_for_url/paginated/headers_for_url 的 arg 0）——核对确认每个 call site 均把参数原样传入 http_request 并最终发起请求，不是『仅构造 Request 对象/仅解析 URL』，但它们与 (i) 是同一污点的不同 hop，属于重复计数层面（同一底层流最多被 5+ 个 funnel 位各报一次）。无 file: sink、无纯 URL 解析 sink。",
+    "q5_control_scope": "二阶载体（href/Location/Link）：完整 URL（scheme/host/port/path 全控）；redemption_code：urljoin 路径第一段（可伪造 scheme+host，实测验证）；嵌入应用参数：完整 URL。可利用性：完整 URL/host 控制=可把带 Basic API key 的已认证请求发往任意主机（对应公告所述 'compromise of API keys'）；但三类 source 的攻击者前提都在仓库之外（需宿主应用传入攻击者数据，或端点已被攻破/MITM）。",
+    "q6_protections": "无任何有效防护。核对 resource.py:214-292：无 scheme/host 白名单（:244 只选择 http/https 传输、不拒绝任何 scheme）、无私网 IP 过滤（无 ipaddress/gethostbyname）、无重定向校验（Location/href 直接再请求）；TLS（create_default_context，仅 https 分支）只做服务器认证，API key 只做请求认证，均不限制目标。0 个 sanitizer（MySanitizers=none()），与源码一致。",
+    "q7_trusted_fixed_url": "固定目标请求（base_uri() 配置+静态路径：Resource.get/all/count/_create、Invoice.pdf、js.fetch、Plan.get_add_on 的固定前缀）确实存在且未被标为告警（labels 判 fp，正确）。33 条告警的目标均不是纯固定 URL。但二阶 source 的来源（Recurly API 本体）在常规威胁模型中是可信方——这是本组告警全部停留在 uncertain 而非 likely_tp 的核心原因。",
+    "q8_static_reachability": "二阶链路在库内真实可达（如 Account.billing_info 属性访问 → __init__.py:223→226；Resource.post 存 Location → _url → delete/put 再请求；Coupon.generate 直接跟随 Location）且是 SDK 的常规用法；但多条 codeFlow 的中间节点经过 tests/test_resources.py（:462/:471/:750/:753/:382/:399/:903 等）——CodeQL 用测试代码充当『嵌入应用调用上下文』。sink 与 source 均在 recurly/ 内、告警位置不在 tests/，故不是测试代码错误计数，但公开参数型告警的『真实入口』证据仅存在于测试，非生产入口。",
+    "q9_contamination": "无 file: 读取、无纯 URL 解析、无解析诊断、无原生基线混入；SARIF 仅 1 条正式规则 33 条结果。两点需记录：(a) result 25（getresponse receiver）是建模防御位，依赖构造参数→实例的传播，MySinks.qll 自己标注 'likely inert'，实际却触发，属于建模副产物；(b) result 12 的流（http_request url 参数→resp→Location→page_for_url）依赖 url→response 的合成传播，属于往返建模产物。"
+  },
+
+  "summary": {
+    "total_formal_alerts": 33,
+    "likely_tp": 0,
+    "likely_fp": 3,
+    "uncertain": 30,
+    "verdict_policy": "以最强 source 定级：任一流含二阶载体（服务端 href/Location/Link）或 redemption_code → uncertain（库内传播真实且无任何校验，但攻击者前提在仓库之外：端点被攻破/MITM 或宿主应用传入攻击者数据）；仅含嵌入应用公开 API 参数 source 且 sink 为 funnel 位 → likely_fp（SDK 的设计功能，本仓库内无攻击者边界）；本代码库内无一阶攻击者输入，故 likely_tp=0——与 IRIS 报告自身『0 Likely TP / 33 Candidate』一致。",
+    "deduplication_note": "33 条告警实为少数底层流在不同 hop 的重复报告：5 条网络执行点（resource.py:245/247/250/279/280）与其余 28 条 funnel 位共享同一污点；按 source→网络 去重后约 8 条独立链路（src-5、src-8、src-13、src-19、src-57、src-74、src-16、公开参数族）。",
+    "coverage_gaps": [
+      "resource.py:566/589（__getattr__ 的 actionator/relatitator href 跟随，labels src-64/src-67）未产生任何告警（闭包捕获传播未连接，query_generation_notes §7 已预告）",
+      "webhook body（src-28，objects_for_push_notification:1292）无任何告警流从它出发（链路在 href 边界截断）",
+      "Link 头分页链（src-39→parse_link_value→Page.next_url）在解析 dict 处截断"
+    ]
+  },
+
+  "alerts": [
+    {
+      "idx": 0, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 226, "call": "BillingInfo.element_for_url(billing_info_url) (Account.__getattr__ 'billing_info')"},
+      "sources": [{"loc": "recurly/__init__.py:223", "family": "serverHref", "label": "src-5"}],
+      "taint_path": "self._elem.find('billing_info').attrib['href'] (223) → billing_info_url → BillingInfo.element_for_url(226) → http_request(359→214) → urlsplit(240) → HTTP(S)Connection netloc(245/247/250) → request(279)",
+      "controllability": "完整 URL（服务端 XML href，二阶）",
+      "conditions": "宿主应用访问 account.billing_info 属性；攻击者需攻破/MITM Recurly 端点（通道 TLS+API key）",
+      "verdict": "uncertain", "confidence": 0.55,
+      "reasoning": "库内链路真实（属性访问是 SDK 最常见用法），element_for_url 对 href 零校验，服务端返回任意 href 即带 API key 重发请求。但 source 来自经 TLS 认证的可信端点，常规威胁模型下不成立，属二阶防御纵深问题。"
+    },
+    {
+      "idx": 1, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 240, "call": "charge.post(url) (Account.charge; url=urljoin(self._url, '%s/adjustments' % self.account_code) @239)"},
+      "sources": [{"loc": "recurly/resource.py:214", "family": "publicUrlParam", "label": "src-40"}, {"loc": "recurly/resource.py:508", "family": "serverHref", "label": "src-57"}, {"loc": "recurly/resource.py:655", "family": "publicUrlParam", "label": "src-73"}, {"loc": "recurly/resource.py:662", "family": "Location", "label": "src-74"}],
+      "taint_path": "4 条流：href@508→self._url→(tests 调用上下文)→urljoin(self._url,…)@239→post(240)；Location@662→self._url→…同路；post 参数@655 与 http_request 参数@214 直达",
+      "controllability": "二阶完整 URL（self._url 作 urljoin base，服务端全控）；account_code 占路径第一段（若宿主应用以用户输入为 account_code 可伪造 host，实测验证）",
+      "conditions": "宿主应用调用 Account.charge；二阶流需端点被攻破/MITM",
+      "verdict": "uncertain", "confidence": 0.5,
+      "reasoning": "urljoin 的 base 即服务端 href，攻击面成立时为完整 URL 控制；公开参数流为 SDK 设计功能。混合 source 中二阶流真实存在，故 uncertain。"
+    },
+    {"idx": 2, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 247, "call": "self.http_request(url, 'POST', Invoice(**kwargs), …) (Account.invoice; urljoin(self._url, '%s/invoices' % account_code) @244)"},
+      "sources": "同 result 1（src-40/src-57/src-73/src-74）",
+      "taint_path": "同 result 1，经 __init__.py:244 urljoin 入 http_request@247",
+      "controllability": "二阶完整 URL + account_code 第一段（同上）",
+      "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5,
+      "reasoning": "同 result 1。"
+    },
+    {"idx": 3, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 250, "call": "self.http_request(url, 'POST') (Account.invoice 无 kwargs 分支)"},
+      "sources": "同 result 1", "taint_path": "同 result 1（else 分支）",
+      "controllability": "同 result 1", "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 1。"
+    },
+    {"idx": 4, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 267, "call": "self.http_request(url, 'POST') (Account.build_invoice; urljoin(self._url, '%s/invoices/preview') @265)"},
+      "sources": "同 result 1", "taint_path": "同 result 1，经 :265 urljoin",
+      "controllability": "同 result 1", "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 1。"
+    },
+    {"idx": 5, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 281, "call": "Note.paginated(url) (Account.notes; urljoin(self._url, '%s/notes') @280)"},
+      "sources": "同 result 1", "taint_path": "同 result 1，经 :280 urljoin → paginated(487) → page_for_url(127) → element_for_url(130)",
+      "controllability": "同 result 1", "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 1。"
+    },
+    {"idx": 6, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 292, "call": "self.http_request(url, 'PUT') (Account.reopen; urljoin(self._url, '%s/reopen') @291)"},
+      "sources": "同 result 1", "taint_path": "同 result 1，经 :291 urljoin",
+      "controllability": "同 result 1", "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 1。"
+    },
+    {"idx": 7, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 303, "call": "subscription.post(url) (Account.subscribe; urljoin(self._url, '%s/subscriptions') @302)"},
+      "sources": "同 result 1", "taint_path": "同 result 1，经 :302 urljoin",
+      "controllability": "同 result 1", "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 1。"
+    },
+    {"idx": 8, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 308, "call": "billing_info.http_request(url, 'PUT', …) (Account.update_billing_info; urljoin(self._url, '%s/billing_info') @307)"},
+      "sources": "同 result 1", "taint_path": "同 result 1，经 :307 urljoin",
+      "controllability": "同 result 1", "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 1。"
+    },
+    {"idx": 9, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 326, "call": "shipping_address.post(url) (Account.create_shipping_address; urljoin(self._url, '%s/shipping_addresses') @325)"},
+      "sources": "同 result 1", "taint_path": "同 result 1，经 :325 urljoin",
+      "controllability": "同 result 1", "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 1。"
+    },
+    {
+      "idx": 10, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 448, "call": "self.post(url) (GiftCard.preview; url = self._url + '/preview' @447, 纯拼接无 urljoin)"},
+      "sources": [{"loc": "recurly/resource.py:508", "family": "serverHref", "label": "src-57"}],
+      "taint_path": "href@508→document_url→self._url@510→(经 Subscription.get 返回值与 tests:903-907 调用上下文)→self._url@447→post(448)→http_request(658→214)",
+      "controllability": "完整 URL（服务端 href 原样拼接 '/preview'，二阶）",
+      "conditions": "GiftCard/相关资源带 _url 时调用 preview；攻击者需控制服务端响应",
+      "verdict": "uncertain", "confidence": 0.55,
+      "reasoning": "self._url 是服务端 href 的原值，拼接不改变其 host——完整 URL 二阶控制，链路真实；威胁模型同 result 0。"
+    },
+    {
+      "idx": 11, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 464, "call": "self.post(url, recipient_account) (GiftCard.redeem)"},
+      "sources": [{"loc": "recurly/__init__.py:456", "family": "redeemCode", "label": "src-16"}],
+      "taint_path": "flow1: self.redemption_code@456 → redemption_path='%s/redeem' → urljoin(self._url, redemption_path)@459 → post(464)。flow0: 经 :461 else 分支（base_uri+collection_path 字符串拼接）",
+      "controllability": "urljoin 路径第一段——实测 scheme 前缀值（'http://evil.com/redeem'）使 urljoin 返回绝对 URL 并替换 scheme+host（flow1/if 分支）；else 分支（flow0）为固定前缀拼接、不可伪造 host",
+      "conditions": "redemption_code 由构造 kwargs（宿主应用）或服务端解析设置；礼券兑换码常为用户可输入字符串，宿主应用若以其构造 GiftCard 则用户可伪造目标",
+      "verdict": "uncertain", "confidence": 0.6,
+      "reasoning": "本组唯一经实测确认具备 host 伪造能力的源（第一段位置 + urljoin），且 post 携带 Basic API key——结构上是教科书式 SSRF；但攻击者控制需宿主应用把用户输入放进 redemption_code，仓库内无此入口。两个 flow 中仅 if 分支（459）真正可伪造 host，else 分支（461，字符串拼接）被同报为一条告警略有夸大。"
+    },
+    {
+      "idx": 12, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 585, "call": "Page.page_for_url(response.getheader('Location')) (Coupon.generate)"},
+      "sources": [{"loc": "recurly/resource.py:214", "family": "publicUrlParam", "label": "src-40"}],
+      "taint_path": "http_request 的 url 参数@214 → urlsplit@240 → resp@280/292 → response@579 → getheader('Location')@585 → page_for_url arg",
+      "controllability": "调用方（嵌入应用）自给的请求 URL 经『请求→响应→Location』往返传播",
+      "conditions": "嵌入应用调用 Coupon.generate 并控制其请求 URL",
+      "verdict": "likely_fp", "confidence": 0.7,
+      "reasoning": "url→resp 是合成传播（请求 URL 决定响应来源这一事实被建模成污点），follow-up 目标由响应方决定而非新增攻击者能力；source 本身是嵌入应用开发者边界，库内无攻击者。与 result 19（真实 src-19 Location 源）不同，此条的 Location 链起点即调用方自己的 URL，属往返建模产物。"
+    },
+    {"idx": 13, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 589, "call": "self.put(url) (Coupon.restore; urljoin(self._url, '%s/restore' % self.coupon_code) @588)"},
+      "sources": "同 result 1（src-40/src-57/src-73/src-74）",
+      "taint_path": "同 result 1，经 :588 urljoin（coupon_code 亦占第一段）",
+      "controllability": "二阶完整 URL（self._url base）+ coupon_code 第一段（宿主应用可设）",
+      "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 1，且 coupon_code 与 account_code 同为未标注的第一段残余风险（phase1 review §6.3 已记录）。"
+    },
+    {
+      "idx": 14, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 801, "call": "refund_invoice.post(url, body) (Invoice._create_refund_invoice; urljoin(self._url, '%s/refund' % self.invoice_number) @797)"},
+      "sources": [{"loc": "recurly/__init__.py:260", "family": "Location", "label": "src-8"}, {"loc": "recurly/resource.py:508", "family": "serverHref", "label": "src-57"}, {"loc": "recurly/resource.py:655", "family": "publicUrlParam", "label": "src-73"}, {"loc": "recurly/resource.py:214", "family": "publicUrlParam", "label": "src-40"}],
+      "taint_path": "流0: invoice._url=Location@260 → (tests:753/756 调用上下文) → self._url@763/765 → urljoin@797 → post(801)。流2: href@508→self._url→Account.invoice@244→…→Location@260→…同路（含两轮往返）",
+      "controllability": "二阶完整 URL（Location/href 作为 urljoin base）+ invoice_number 第一段（服务端值）",
+      "conditions": "宿主应用执行退款流程；攻击者需控制服务端响应",
+      "verdict": "uncertain", "confidence": 0.5,
+      "reasoning": "链路真实且含『Location 存储后再请求』的经典未校验重定向跟随模式；威胁模型为二阶（可信端点被攻破/MITM）。"
+    },
+    {
+      "idx": 15, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 942, "call": "self.post(url) (Subscription.preview; url = self._url + '/preview' @941)"},
+      "sources": [{"loc": "recurly/resource.py:508", "family": "serverHref", "label": "src-57"}],
+      "taint_path": "href@508 → self._url → (经 Subscription.get 返回值、tests:903-907) → self._url@939/941 → post(942)",
+      "controllability": "完整 URL（服务端 href 拼接 '/preview'，二阶）",
+      "conditions": "带 _url 的 Subscription 调用 preview",
+      "verdict": "uncertain", "confidence": 0.55, "reasoning": "同 result 10。"
+    },
+    {"idx": 16, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 970, "call": "usage.post(url) (Subscription.create_usage; urljoin(self._url, '%s/add_ons/%s/usage') @968)"},
+      "sources": [{"loc": "recurly/resource.py:508", "family": "serverHref", "label": "src-57"}],
+      "taint_path": "同 result 15，经 :968 urljoin（uuid 占第一段）",
+      "controllability": "二阶完整 URL（self._url base）",
+      "conditions": "同 result 15",
+      "verdict": "uncertain", "confidence": 0.55, "reasoning": "同 result 15。"
+    },
+    {"idx": 17, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 1177, "call": "AddOn.element_for_url(url) (Plan.get_add_on; urljoin(self._url, '%s/add_ons/%s') @1176)"},
+      "sources": "同 result 1", "taint_path": "同 result 1，经 :1176 urljoin → element_for_url(1177) → http_request",
+      "controllability": "二阶完整 URL（self._url base）+ plan_code 第一段（宿主应用可设）",
+      "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 1；plan_code 为未标注的第一段残余风险。"
+    },
+    {"idx": 18, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/__init__.py", "line": 1183, "call": "add_on.post(url) (Plan.create_add_on; urljoin(self._url, '%s/add_ons') @1182)"},
+      "sources": "同 result 1", "taint_path": "同 result 1，经 :1182 urljoin",
+      "controllability": "同 result 17", "conditions": "同 result 1",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 17。"
+    },
+    {
+      "idx": 19, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 130, "call": "Resource.element_for_url(url) (Page.page_for_url)"},
+      "sources": [{"loc": "recurly/__init__.py:585", "family": "Location", "label": "src-19"}, {"loc": "recurly/resource.py:214/127/487", "family": "publicUrlParam", "label": "src-40/36/56"}],
+      "taint_path": "流0: response.getheader('Location')@585 → page_for_url 参数@127 → element_for_url(130)。流1-3: 公开参数直达",
+      "controllability": "完整 URL（服务端 Location 头被直接跟随，无任何同源/白名单校验；二阶）",
+      "conditions": "Coupon.generate 调用（或宿主应用直接调用 page_for_url/paginated）",
+      "verdict": "uncertain", "confidence": 0.55,
+      "reasoning": "『直接跟随响应 Location 头』是本组最干净的二阶完整 URL 链路（585→127→130→355→359→214→网络），库内真实、零校验；攻击者模型仍需可信端点被攻破/MITM。公开参数流本身为 SDK 设计功能。"
+    },
+    {
+      "idx": 20, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 139, "call": "Resource.headers_for_url(url) (Page.count_for_url)"},
+      "sources": [{"loc": "recurly/resource.py:137", "family": "publicUrlParam", "label": "src-37"}],
+      "taint_path": "count_for_url 的 url 参数@137 → headers_for_url(139) → http_request(url, 'HEAD')",
+      "controllability": "完整 URL，由嵌入应用开发者提供",
+      "conditions": "宿主应用调用 Page.count_for_url(url)",
+      "verdict": "likely_fp", "confidence": 0.7,
+      "reasoning": "唯一 source 是公开 API 的 URL 参数——『按给定 URL 取资源计数』是该方法的文档化功能，等价于在库里标记 requests.get(url)。库内无攻击者入口，唯一可达性证据是测试代码；攻击需宿主应用自身把攻击者数据传入（超出本仓库范围）。"
+    },
+    {
+      "idx": 21, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 245, "call": "http_client.HTTPConnection(urlparts.netloc) (http_request 非 https 分支——明文 socket 连接)"},
+      "sources": [{"loc": "recurly/__init__.py:223", "family": "serverHref", "label": "src-5"}, {"loc": "recurly/__init__.py:260", "family": "Location", "label": "src-8"}, {"loc": "recurly/__init__.py:313", "family": "Location", "label": "src-13"}, {"loc": "recurly/__init__.py:456", "family": "redeemCode", "label": "src-16"}],
+      "taint_path": "流0: billing_info href@223→element_for_url(226)→http_request(359→214)→urlsplit(240)→netloc→HTTPConnection(245)。流1: invoice Location@260→…→urljoin@797→post(801)→http_request→245。流2: billing_info Location@313→delete(672)→245。流3: redemption_code@456→urljoin(459)→post(464)→http_request(658)→245",
+      "controllability": "netloc（host:port）完全由请求 URL 的 urlsplit 结果决定：二阶流=完整 URL；redemption_code 流=scheme+host 伪造（实测）",
+      "conditions": "URL 非 https 时走本明文分支（scheme 本身也被污点控制）；攻击前提同各源",
+      "verdict": "uncertain", "confidence": 0.6,
+      "reasoning": "真实 socket 级 sink + 零校验 + 实测可伪造 host 的 redemption_code 流 + 完整 URL 二阶流——本组最强的 5 条之一；但所有 source 的攻击者前提均在仓库之外，无法在本代码库内确证 likely_tp。"
+    },
+    {"idx": 22, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 247, "call": "http_client.HTTPSConnection(urlparts.netloc) (http_request 默认 TLS 分支)"},
+      "sources": "同 result 21", "taint_path": "同 result 21（TLS 分支）",
+      "controllability": "同 result 21（netloc 全控；TLS 只认证服务器不限制目标）",
+      "conditions": "URL 为 https（CA_CERTS_FILE 未设）",
+      "verdict": "uncertain", "confidence": 0.6, "reasoning": "同 result 21。"
+    },
+    {"idx": 23, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 250, "call": "http_client.HTTPSConnection(urlparts.netloc, context=…) (自定义 CA 分支)"},
+      "sources": "同 result 21", "taint_path": "同 result 21",
+      "controllability": "同 result 21", "conditions": "URL 为 https 且 CA_CERTS_FILE 已配置",
+      "verdict": "uncertain", "confidence": 0.6, "reasoning": "同 result 21；cafile 仅做服务器认证，对请求目标无限制（与 labels 的非 sanitizer 判定一致）。"
+    },
+    {
+      "idx": 24, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 279, "call": "connection.request(method, url, body, headers) (请求行发出完整 URL)"},
+      "sources": "同 result 21", "taint_path": "同 result 21，终点为请求行 URL（arg 1）",
+      "controllability": "完整请求 URL（scheme/host/port/path）",
+      "conditions": "同 result 21",
+      "verdict": "uncertain", "confidence": 0.6,
+      "reasoning": "同 result 21——请求行级 sink；body 携带 Basic API key 头，目标主机完全随污点 URL。"
+    },
+    {
+      "idx": 25, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 280, "call": "connection.getresponse() (receiver 型防御位)"},
+      "sources": "同 result 21", "taint_path": "同 result 21，污点到达 getresponse 的 receiver（connection 对象）",
+      "controllability": "语义上同 result 21（connection 已连接到污点目标）",
+      "conditions": "同 result 21",
+      "verdict": "uncertain", "confidence": 0.45,
+      "reasoning": "MySinks.qll 自注 'likely inert'（构造参数→实例传播默认不跟踪）但实际触发——污点到 connection 对象的传播是建模副产物；语义上与 21-24 同一底层流，不构成独立漏洞证据。维持 uncertain 以与同源告警一致，并标注建模瑕疵。"
+    },
+    {
+      "idx": 26, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 348, "call": "cls.http_request(url, method='HEAD') (headers_for_url)"},
+      "sources": [{"loc": "recurly/resource.py:137", "family": "publicUrlParam", "label": "src-37"}, {"loc": "recurly/resource.py:346", "family": "publicUrlParam", "label": "src-45"}],
+      "taint_path": "count_for_url 参数@137 / headers_for_url 参数@346 → http_request(348)",
+      "controllability": "完整 URL，嵌入应用开发者提供",
+      "conditions": "宿主应用调用这两个公开 classmethod",
+      "verdict": "likely_fp", "confidence": 0.7,
+      "reasoning": "同 result 20——公开 API 的 URL 参数是该方法的文档化功能（『取给定 URL 的响应头』），库内无攻击者边界。"
+    },
+    {
+      "idx": 27, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 359, "call": "cls.http_request(url) (element_for_url)"},
+      "sources": [{"loc": "recurly/__init__.py:223", "family": "serverHref", "label": "src-5"}, {"loc": "recurly/__init__.py:585", "family": "Location", "label": "src-19"}, {"loc": "recurly/resource.py:214/127", "family": "publicUrlParam", "label": "src-40/36"}],
+      "taint_path": "流0: billing_info href@223→element_for_url 参数@355→http_request(359)。流1: Location@585→page_for_url@127→130→355→359。流2/3: 公开参数直达",
+      "controllability": "完整 URL（二阶 href/Location 或嵌入应用参数）",
+      "conditions": "任意 element_for_url 调用方",
+      "verdict": "uncertain", "confidence": 0.55,
+      "reasoning": "element_for_url 是二阶 href/Location 的直接落点，链路真实；混合参数流为设计功能。"
+    },
+    {
+      "idx": 28, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 489, "call": "Page.page_for_url(url) (Resource.paginated)"},
+      "sources": [{"loc": "recurly/resource.py:508", "family": "serverHref", "label": "src-57"}, {"loc": "recurly/resource.py:214/487/655", "family": "publicUrlParam", "label": "src-40/56/73"}],
+      "taint_path": "href@508→self._url→(tests 调用上下文)→paginated 参数@487→page_for_url(489)→element_for_url(130)→http_request",
+      "controllability": "完整 URL（二阶或嵌入应用）",
+      "conditions": "宿主应用调用 paginated(url)（如 Note.paginated @__init__.py:281）",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 19 的混合结构：二阶流真实、参数流为设计功能。"
+    },
+    {
+      "idx": 29, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 638, "call": "self.put(self._url) (Resource._update→save)"},
+      "sources": "同 result 1", "taint_path": "href@508/Location@662 → self._url → _update(638) → put(647) → http_request",
+      "controllability": "完整 URL（self._url，二阶）",
+      "conditions": "对已获取资源调用 save()",
+      "verdict": "uncertain", "confidence": 0.55,
+      "reasoning": "服务端 href 存入 _url 后被 save() 原样重发——典型未校验二阶再请求；威胁模型同前。"
+    },
+    {
+      "idx": 30, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 647, "call": "self.http_request(url, 'PUT', self, …) (Resource.put)"},
+      "sources": [{"loc": "recurly/resource.py:508", "family": "serverHref", "label": "src-57"}, {"loc": "recurly/resource.py:214/655/644", "family": "publicUrlParam", "label": "src-40/73/70"}],
+      "taint_path": "同 result 29，sink 为 put 内部 http_request 位",
+      "controllability": "完整 URL（二阶或嵌入应用参数）",
+      "conditions": "同 result 29",
+      "verdict": "uncertain", "confidence": 0.5, "reasoning": "同 result 29。"
+    },
+    {
+      "idx": 31, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 658, "call": "self.http_request(url, 'POST', body or self, …) (Resource.post)"},
+      "sources": [{"loc": "recurly/__init__.py:260", "family": "Location", "label": "src-8"}, {"loc": "recurly/__init__.py:456", "family": "redeemCode", "label": "src-16"}, {"loc": "recurly/resource.py:508", "family": "serverHref", "label": "src-57"}, {"loc": "recurly/resource.py:214", "family": "publicUrlParam", "label": "src-40"}],
+      "taint_path": "含 redemption_code@456→urljoin(459)→post(464)→http_request(658)（host 伪造实测可行）与 Location@260→…→post 链",
+      "controllability": "完整 URL（含可伪造 scheme+host 的 redemption_code 流）",
+      "conditions": "同各源",
+      "verdict": "uncertain", "confidence": 0.6,
+      "reasoning": "post 是 funnel 主干，二阶与 redemption_code 流均经此入网；判定同 result 21。"
+    },
+    {
+      "idx": 32, "rule_id": "py/augur/recurly-client-python/pass3-ssrf",
+      "sink": {"file": "recurly/resource.py", "line": 672, "call": "self.http_request(self._url, 'DELETE') (Resource.delete)"},
+      "sources": [{"loc": "recurly/__init__.py:313", "family": "Location", "label": "src-13"}, {"loc": "recurly/resource.py:508", "family": "serverHref", "label": "src-57"}, {"loc": "recurly/resource.py:214/655", "family": "publicUrlParam", "label": "src-40/73"}],
+      "taint_path": "billing_info Location@313 → self._url → delete(672) → http_request；href@508 同路",
+      "controllability": "完整 URL（self._url，二阶）",
+      "conditions": "对带 _url 的资源调用 delete()",
+      "verdict": "uncertain", "confidence": 0.55,
+      "reasoning": "存储的 Location/href 原样作为 DELETE 目标重发，无校验；威胁模型为二阶。"
+    }
+  ],
+
+  "ground_truth_hit_analysis": {
+    "vulnerability": {
+      "commit": "https://github.com/recurly/recurly-client-python/commit/049c74699ce93cf126feff06d632ea63fba36742",
+      "cwe": "CWE-918",
+      "function": "Resource.get (recurly/resource.py:333-343, 本快照)",
+      "vulnerable_code": "url = urljoin(recurly.base_uri(), cls.member_path % (uuid,)); resp, elem = cls.element_for_url(url)",
+      "fixed_code": "uuid = quote(str(uuid)); url = recurly.base_uri() + (cls.member_path % (uuid,))"
+    },
+    "hit": false,
+    "verdict": "未命中（false negative）：正式告警集中没有任何一条覆盖 Resource.get 的 uuid→urljoin→element_for_url→http_request→HTTPConnection 路径。",
+    "evidence": [
+      "33 条告警的 sink 位置不含 resource.py:341/342（get() 内的 urljoin 与 element_for_url 调用）；resource.py 的告警行仅有 130/139/245/247/250/279/280/348/359/489/638/647/658/672。",
+      "程序化核对全部 33×codeFlows：没有任何一条 threadFlow 经过 resource.py:341 或 342。唯一出现于 333-343 区间的节点是 :343 的 cls.from_element(elem) 返回值——那是二阶 _url 载体流经 get() 的返回对象，与 uuid 输入无关。",
+      "MySinks.qll 的 funnelSink 谓词按『recurly/ 模块内任意 element_for_url 调用』匹配（并非仅注释枚举的 call site），故 resource.py:342 本可成为 sink——没有告警的原因是没有任何 source 流入该调用：uuid 被标注为 fp（labels src-44：『固定前缀 member_path，路径级控制，非 host 伪造』，未渲染为 source），base_uri() 为管理员配置，member_path 为静态字符串。",
+      "同构的 Invoice.pdf（__init__.py:759，urljoin(base_uri(), cls.member_path % (uuid,))）同样未产生告警。"
+    ],
+    "technical_assessment_of_the_missed_path": "对本快照实证核查：所有 member_path 均为固定前缀形式（'accounts/%s'、'gift_cards/%s' 等，grep 验证），BASE_URI='https://%s.recurly.com/v2/'；用 CPython urljoin 对 18 类 uuid 载荷实测，netloc 全部保持 api.recurly.com——固定前缀使 urljoin 永远返回相对解析结果，uuid 无法替换 scheme/host/port，最坏情况是同 host 的 dot-segment 路径穿越（'x/../../../../../evil'→'https://api.recurly.com/evil'）与查询/片段注入。因此 pass-3 标注把 Resource.get 判为 fp 的技术理由在本快照成立（攻击面是同 host 路径混淆，而非标准意义的 host 伪造 SSRF）；但 PyVul 真值将 commit 049c746 记为该函数上的 CWE-918 修复，按真值口径本函数即为指定漏洞。结论：按 PyVul 真值计为漏报；漏报根源是标注阶段对路径级参数的系统性排除（防御性建模选择），而非查询生成缺陷。",
+    "adjacent_coverage": "告警集确实覆盖了同一漏斗（http_request→HTTPConnection）上的 30 条二阶/参数链路，其中包括结构上比 Resource.get 更强的第一段 host 伪造模式（GiftCard.redeem 的 redemption_code，result 11 与 results 21-25 flow3，实测可替换 scheme+host）——但这些均不是真值指定的 Resource.get uuid 路径，且各 source 均非 uuid。"
+  },
+
+  "conclusion": {
+    "formal_alerts": "33 条正式 CWE-918 告警（ruleId py/augur/recurly-client-python/pass3-ssrf），逐条复核完成：likely_tp 0 / likely_fp 3 / uncertain 30。库内污点传播与 sink 均真实且全程无校验，但该目标是客户端 SDK，仓库内不存在一阶攻击者输入边界，全部 source 的攻击者前提（端点被攻破/MITM，或宿主应用传入攻击者数据）都在仓库之外——与 IRIS 报告『0 Likely TP / 33 Candidate』的自身定级一致。",
+    "pyvul_ground_truth": "修复提交 049c746 针对的 Resource.get uuid→urljoin 路径未被任何告警覆盖（漏报）；且实证表明本快照中该函数因 member_path 固定前缀而不具备 host 伪造能力，漏报源于标注阶段对路径级参数的合理排除。",
+    "integrity": "未修改 results/pass3.sarif、labels/labels.json、正式查询与 QLL 库；未读取 PyVul 真值、修复提交内容或 CVE 公告（仅使用用户在本轮指令中提供的提交元数据）。"
+  }
+}

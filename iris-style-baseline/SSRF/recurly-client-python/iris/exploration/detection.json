@@ -1,0 +1,170 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": [
+      "Step 1: explore and detect",
+      "Step 2: extraction query generation"
+    ],
+    "generated": "2026-10-20",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SSRF\\recurly-client-python\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (exploration + candidate extraction query generation) against the recurly-client-python_vuln source tree (recurly-client-python 2.6.1, the snapshot the database was created from, creation sha 9db2d1a). The CodeQL database recurly-client-python-db sits nested inside the source root and is excluded from all exploration, scanning and evidence. The pre-existing root-level SSRF analysis artifacts (SSRF_AUDIT_REPORT.md, recurly-client-python_ssrf_vulnerability_audit_report.md, ssrf_sinks.csv, ssrf_sinks.json) were deliberately NOT opened: they are prior analysis outputs that may embed pre-located vulnerability information, and this phase must not read vulnerability ground truth, CVE descriptions, fix diffs or pre-located vulnerability lines. Per operator instruction, this step only generates exploration/detection.json and extraction/sources.ql + extraction/sinks.ql; codeql query run / bqrs decode, LLM labeling and all Phase 2 stages are deferred."
+  },
+  "target": {
+    "project": "recurly-client-python 2.6.1",
+    "projectDescription": "Official Recurly REST API client SDK - a library, not a service. The shipped package recurly/ (5 modules, 2506 lines: __init__.py 1306, errors.py 334, js.py 56, link_header.py 94, resource.py 706) defines ~30 Resource classes (Account, Invoice, Subscription, Transaction, Coupon, GiftCard, Plan, ...) whose methods issue XML-over-HTTP calls to https://<subdomain>.recurly.com/v2/ on behalf of the embedding application. It has no inbound network surface of its own: no routes, no request handlers, no framework. Attacker-relevant input surfaces: (1) arguments the host application passes into the public API - Resource.get(uuid), js.fetch(token), Resource.http_request(url, ...), Resource.post/put(url), Page.page_for_url(url), Resource.paginated(url), Resource.all/count(**kwargs) query filters, Plan.get_add_on(add_on_code); (2) module-level configuration the host sets - recurly.SUBDOMAIN / BASE_URI / API_KEY / CA_CERTS_FILE / SOCKET_TIMEOUT_SECONDS (recurly/__init__.py:35-56, base_uri() at :58); (3) values controlled by the remote Recurly API - XML href attributes (resource.py:508/:566/:573/:589, __init__.py:223/:1122), Location response headers (resource.py:662, __init__.py:260/:313/:585/:1084) and Link pagination headers (resource.py:153 via parse_link_value) - stored as self._url / start_url / next_url and re-fed into subsequent requests (second-order SSRF carriers); (4) Recurly push-notification webhook XML decoded by objects_for_push_notification (__init__.py:1292). All outbound network access funnels through a single function: Resource.http_request (resource.py:214) -> urlsplit(url) (resource.py:240) -> six.moves.http_client HTTPConnection/HTTPSConnection on urlparts.netloc (resource.py:245/:247/:250) -> connection.request(method, url, body, headers) (resource.py:279) -> connection.getresponse() (resource.py:280). No URL scheme or host allowlist exists: any non-https scheme falls to plain HTTPConnection (resource.py:244-245), and HTTPResponse Location/Link values are followed by explicit re-requests, not by automatic redirect handling.",
+    "pass": 3,
+    "cwes": [
+      "CWE-918"
+    ],
+    "focus": "Server-Side Request Forgery (SSRF)",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\recurly-client-python_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (recurly-client-python-db/codeql-database.yml)",
+      "recurly/ package with 5 modules (resource.py, __init__.py, errors.py, js.py, link_header.py) plus setup.py and tests/",
+      "setup.py install_requires: six, iso8601; runtime imports logging, ssl, xml.etree.ElementTree, six.moves.http_client, six.moves.urllib.parse"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\recurly-client-python_vuln\\recurly-client-python-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\recurly-client-python_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "9db2d1a0268201571a567d73481d0d16c6fbc5e1",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T14:02:32.647798800Z"
+    },
+    "baselineLinesOfCode": 3816,
+    "finalised": true,
+    "scopeNotes": "The DB covers the repository including the tests/ tree and setup.py. The nested recurly-client-python-db/ directory and the pre-existing root-level SSRF analysis artifacts are NOT used for evidence and were not opened. Row generation filters tests/, test_*.py, conftest.py and recurly-client-python-db paths, and restricts candidates to the shipped recurly/ package (the SDK surface consumed by host applications)."
+  },
+  "toolchain": {
+    "qlpack": "iris/recurly-client-python-cwe918 (dependencies: codeql/python-all: \"*\")",
+    "packResolutionExpected": "codeql/python-all resolved from the local pack cache at C:\\Users\\lzh\\.codeql\\packages (7.1.1 and 7.1.2 present; the API surface used by both queries - AstNode.getLocation().getFile().getAbsolutePath()/getStartLine(), AstNode.getScope().getEnclosingModule(), Attribute.getName()/getObject(), Call.getFunc()/getArg(int), Function.getEnclosingScope()/getName(), Class.getName(), Name.getId(), Assign.getATarget() - was verified against 7.1.2)",
+    "codeqlCli": "2.25.1"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "flask",
+          "confidence": 0.0,
+          "evidence": []
+        },
+        {
+          "name": "django",
+          "confidence": 0.0,
+          "evidence": []
+        },
+        {
+          "name": "fastapi",
+          "confidence": 0.0,
+          "evidence": []
+        },
+        {
+          "name": "tornado",
+          "confidence": 0.0,
+          "evidence": []
+        },
+        {
+          "name": "aiohttp (server)",
+          "confidence": 0.0,
+          "evidence": []
+        },
+        {
+          "name": "bottle",
+          "confidence": 0.0,
+          "evidence": []
+        }
+      ]
+    },
+    "conclusion": "No web framework. recurly-client-python is a pure client SDK: zero framework imports, zero route registrations, zero handlers. Per WORKFLOW.md 4.2.3 the language reference (references/python.md) is used to derive source/sink shapes from repository code; no framework reference was loaded."
+  },
+  "referencesLoaded": [
+    "references/patterns.md",
+    "references/python.md"
+  ],
+  "inputSurfaceCharacterization": {
+    "externalCallers": "The untrusted boundary of a client SDK is the host application calling the public API. URL-relevant parameters: Resource.http_request(url,...) (resource.py:214), Resource.element_for_url(url) (:355), Resource.headers_for_url(url) (:346), Page.page_for_url(url) (:127), Page.count_for_url(url) (:137), Resource.paginated(url) (:487), Resource.post(url) (:655), Resource.put(url) (:644), Resource.get(uuid) (:333, uuid interpolated into member_path), js.fetch(token) (js.py:41, token interpolated into 'recurly_js/result/%s'), Plan.get_add_on(add_on_code) (__init__.py:1174), Resource.all/count(**kwargs) (resource.py:599/:615, kwargs urlencoded into the query string only).",
+    "remoteServerControlled": "Second-order SSRF carriers from Recurly API responses: elem.attrib['href'] (resource.py:508 -> self._url, :566/:589, __init__.py:223), response.getheader('Location') (resource.py:662, __init__.py:260/:313/:1084), Link header pagination URLs (resource.py:153 parse_link_value -> Page.start_url/next_url at :155-158, followed by next_page/first_page at :98/:112). The follow-the-href closures actionator (resource.py:515) and relatitator (resource.py:574) issue the re-requests.",
+    "webhookXml": "objects_for_push_notification(notification) (__init__.py:1292) parses an externally delivered push-notification XML body; decoded Resource elements carry href attributes re-requested on attribute access.",
+    "config": "recurly.SUBDOMAIN and recurly.BASE_URI (__init__.py:35/:38, combined in base_uri() at :58-62) determine every request host; recurly.CA_CERTS_FILE (__init__.py:47, used at resource.py:246/:249) gates TLS validation; recurly.API_KEY and SOCKET_TIMEOUT_SECONDS never reach a URL."
+  },
+  "outboundNetworkSurface": "Single funnel: Resource.http_request (resource.py:214) builds http_client.HTTPConnection/HTTPSConnection on urlsplit(url).netloc (resource.py:245/:247/:250) and calls connection.request(method, url, body, headers) (resource.py:279) + connection.getresponse() (resource.py:280). http_client is six.moves.http_client (resource.py:14 import).",
+  "extraction": {
+    "sourcesPath": "iris/extraction/sources.ql",
+    "sinksPath": "iris/extraction/sinks.ql",
+    "columnContract": [
+      "node",
+      "col1 (role: source_candidate / sink_candidate)",
+      "callableName",
+      "flowKind",
+      "receiver",
+      "moduleHint",
+      "argIndex (0-based positional index of the URL-bearing argument, -1 when not applicable)",
+      "file (absolute path via the Location API)",
+      "line (1-based start line)",
+      "matchKind (ast for all rows in this project)",
+      "evidence (per-row summary)"
+    ],
+    "sourceFamilies": [
+      "family 1: public-API parameter boundaries, 15 Function rows (param_url / param_path_component / param_xml_webhook / param_kwargs_query / param_attribute_url)",
+      "family 2: response header reads resp/response.getheader(...), 7 rows (response_header)",
+      "family 3: response body reads <response>.read(), 12 rows (response_body)",
+      "family 4: server XML attribute maps <elem>.attrib, 23 Attribute rows (xml_attribute)",
+      "family 5: remote XML parse entries ElementTree.fromstring(...), 12 rows (xml_parse)",
+      "family 6: configuration reads BASE_URI/SUBDOMAIN/CA_CERTS_FILE, 6 rows, assignment targets excluded via Assign.getATarget() (config)",
+      "family 7: Link-header parsing parse_link_value(...), 1 row (link_header_parse)"
+    ],
+    "sinkFamilies": [
+      "family 1: final network I/O, 5 rows (http_client.HTTPConnection/HTTPSConnection ctor on netloc, connection.request with URL at arg 1, connection.getresponse)",
+      "family 2: URL-argument funnel table, 13 Function rows (internal_request_funnel / internal_fetch_wrapper)",
+      "family 3: internal wrappers whose body directly contains a funnel-family call, 28 Function rows incl. the actionator/relatitator follow-the-href closures (internal_fetch_wrapper)",
+      "family 4: URL construction/parsing auxiliaries, 33 rows (urljoin 28, urlsplit 1, urlencode 4) - explicitly NOT final sinks, candidates for summary labeling"
+    ],
+    "expectedRowCounts": {
+      "sources": "approx 76",
+      "sinks": "approx 79"
+    },
+    "matchStrategy": "AST-level matching only (matchKind=ast for every row). Rationale: the network stack is reached through six.moves aliases (http_client from six.moves, urljoin/urlsplit/urlencode from six.moves.urllib.parse) whose API-graph resolution is less reliable than the uniform local aliases actually spelled at every call site (http_client.HTTPConnection, connection.request, ElementTree.fromstring, urljoin, ...). Internal helpers are matched by function name - each name in the extraction tables is unique within the recurly/ package (verified by grep). Both queries are plain multi-column select queries without @kind metadata: they are meant for codeql query run + codeql bqrs decode, not database analyze/SARIF; @kind problem would be the wrong shape for candidate tables and @kind table is not assumed to exist."
+  },
+  "absentApis": {
+    "requests": "0 call sites",
+    "httpx": "0 call sites",
+    "aiohttp": "0 call sites",
+    "urllib.request.urlopen": "0 call sites",
+    "urllib.request.urlretrieve": "0 call sites",
+    "socket": "0 call sites",
+    "verification": "grep over recurly/, tests/ and setup.py; the only network I/O in the tree is six.moves.http_client (http.client) in resource.py",
+    "nonHttpSchemes": "No file:, data: or other non-HTTP scheme loading anywhere in the tree; http.client only issues http(s). No automatic redirect following: Location headers are stored as _url and re-fetched by explicit follow-up calls (resource.py:662 -> delete/put, resource.py:581 relatitator)."
+  },
+  "sanitizerEvidence": [
+    {
+      "site": "recurly/resource.py:244-250",
+      "description": "Scheme branch inside http_request: non-https schemes fall to plain HTTPConnection; https uses HTTPSConnection, optionally with ssl.create_default_context(cafile=recurly.CA_CERTS_FILE) at :249. There is NO scheme/host allowlist and no private-IP blocking - this is a partial structural control only, and the CA-file gate is configuration-dependent (None by default)."
+    },
+    {
+      "site": "recurly/resource.py:242-243",
+      "description": "SOCKET_TIMEOUT_SECONDS only sets the connection timeout; no URL validation."
+    }
+  ],
+  "coverageGaps": [
+    "recurly.API_KEY and recurly.SOCKET_TIMEOUT_SECONDS reads are not extracted as source candidates: they only reach the Authorization header (resource.py:258) and the socket timeout (resource.py:242-243), never a request URL.",
+    "Resource.headers_as_dict (resource.py:295) and the X-Records count read in Page.count_for_url (resource.py:140) are not extracted: they carry header dictionaries/counts, not URLs.",
+    "Resource.__getattr__ (resource.py:545) constructs follow-the-href closures dynamically (_make_actionator at :514, make_relatitator at :574). The closures themselves are extracted as sink-side wrapper functions and the href reads as source rows, but taint propagation through the closures and through Resource attribute access will need summary modeling in Step 4 (MySummaries).",
+    "The ~20 __init__.py resource methods that build URLs as urljoin(self._url, '%s/...' % self.account_code) (Account.charge/subscribe/..., Coupon.generate, Subscription.create_usage, ...) are covered generically by the urljoin auxiliary rows and the family-3 wrapper discovery rather than one row per method; their account_code/coupon_code components are attributes that may be caller-set or server-parsed.",
+    "No API-model (API graph) rows are emitted: everything is ast-matched (see matchStrategy). If six.moves modeling in codeql/python-all resolves http_client to http.client in a future run, family 1 could additionally be expressed as API rows, but this is not assumed here."
+  ],
+  "exclusions": [
+    "tests/ tree and tests/fixtures (mocked HTTP; test files are FP per Augur heuristics)",
+    "nested recurly-client-python-db/ CodeQL database directory inside the source root",
+    "pre-existing root-level SSRF analysis artifacts (SSRF_AUDIT_REPORT.md, recurly-client-python_ssrf_vulnerability_audit_report.md, ssrf_sinks.csv, ssrf_sinks.json) - not opened, not used as evidence",
+    "setup.py (packaging metadata only, no request logic)"
+  ]
+}

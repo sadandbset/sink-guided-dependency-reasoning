@@ -1,0 +1,199 @@
+{
+  "step": "Step 1 - Explore and detect",
+  "target": "scout (Clinical-Genomics/scout, variant-analysis and rare-disease collaboration web tool; vulnerable snapshot used for this SSRF pass; DB creation sha 51a838dd1df58dbb965cd39f6f146a5243ba207a)",
+  "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\scout_vuln\\scout-db",
+  "source_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\scout_vuln",
+  "timestamp": "2026-10-20",
+  "language": "python",
+  "language_evidence": [
+    "scout-db/codeql-database.yml: primaryLanguage: python, creationMetadata.cliVersion: 2.25.1, baselineLinesOfCode: 50800, sourceLocationPrefix = scout_vuln repo root (relative paths therefore look like scout/server/blueprints/alignviewers/views.py)",
+    "repository layout: single application package scout/ (296 .py files) with subpackages adapter/, build/, commands/, constants/, demo/, exceptions/, export/, load/, models/, parse/, resources/, server/, update/, utils/; plus requirements.txt, setup.py-style packaging metadata, Makefile, docker-compose at repo root",
+    "scout/server/app.py:52 create_app(config_file=None, config=None) Flask application factory; entry points are the scout CLI (scout/commands/serve.py) and docker containers (scout-web, port 8000)"
+  ],
+  "codeql_environment": {
+    "cli_version": "2.25.1 (recorded in scout-db/codeql-database.yml creationMetadata; not re-invoked this session - Step 1-2 only generates artifacts and does not run CodeQL)",
+    "python_query_library": "codeql/python-all \"*\" declared by the pre-existing workspace qlpack.yml (iris/qlpack.yml, name: iris/scout-cwe918); the same AST surface was validated on the earlier django / calibre-web / core / label-studio / fides SSRF runs with locally cached python-all packs",
+    "api_surface_note": "Extraction queries use only `import python` AST APIs validated on the earlier SSRF runs of this toolchain: AstNode.getLocation()/getScope()/toString(), Location.getFile()/getStartLine(), File.getRelativePath(), Call.getFunc()/getArg(int)/getAKeyword(), Keyword.getArg()/getValue(), Attribute.getName()/getObject(), Name.getId(), Parameter.asName().getId(), Function.getName()/getArg(int), StringLiteral.getText(), Assign.getATarget(). No AstNode.getFile(), no API::Node vs DataFlow::Node mixing, no QL classes defined in extraction queries, no @kind declared (plain multi-column select for `codeql query run` + `codeql bqrs decode --format=csv`)."
+  },
+  "scope": {
+    "passes": [3],
+    "cwes": ["918", "099", "610"],
+    "focus": "Server-Side Request Forgery (CWE-918 primary, per user instruction)"
+  },
+  "project_purpose": "Scout is an open-source clinical-genomics web tool: it stores patient cases, VCF variant data and gene panels in MongoDB, and serves a Flask web interface (scout-web) plus a CLI (scout-cli) for loading/analyzing data. Collaborators browse cases/variants, annotate HPO phenotypes, share cases between institutes, and integrate external services: IGV.js alignment viewers (including a remote-URL CORS proxy), MatchMaker Exchange patient matching, cgbeacon2 Beacon submission, Chanjo coverage reports, a Rerunner re-analysis API, LoqusDB, Gens, OMIM/HPO/Ensembl/PanelApp data downloads, and a Phenomizer disease query. Several of these features cause the server to issue outbound HTTP requests whose URLs or request contents derive from request data (the CORS proxy route, the Host-header-derived coverage report URL) or from admin configuration (MatchMaker/Beacon/Rerunner/rank-model endpoints). These are the surfaces examined for CWE-918.",
+  "framework_candidates": [
+    {
+      "framework": "flask",
+      "kind": "web-framework",
+      "confidence": 1.0,
+      "classification": "primary",
+      "evidence": {
+        "import_evidence": {
+          "score": 0.45,
+          "snippets": [
+            "scout/server/app.py:10-23 `from flask import Flask, current_app, redirect, request, url_for`, flask_babel.Babel, flask_cors.CORS, flask_login.current_user, flaskext.markdown.Markdown",
+            "blueprint modules import Flask, Blueprint, request, render_template, url_for throughout scout/server/blueprints/* (e.g. cases/views.py:10-22, alignviewers/views.py:5-13)"
+          ]
+        },
+        "route_evidence": {
+          "score": 0.3,
+          "snippets": [
+            "134 route-decorated handler functions via @<bp>.route(...) across scout/server/blueprints/{alignviewers,api,cases,dashboard,diagnoses,genes,institutes,login,managed_variants,panels,phenotypes,public,variant,variants}",
+            "scout/server/blueprints/alignviewers/views.py:33 @alignviewers_bp.route(\"/remote/cors/<path:remote_url>\", methods=[\"OPTIONS\", \"GET\"]) - the URL-capturing path-converter route"
+          ]
+        },
+        "runtime_bootstrap_evidence": {
+          "score": 0.2,
+          "snippets": [
+            "scout/server/app.py:52 create_app() factory: config loading, configure_extensions(app), register_blueprints(app), @app.before_request check_user global auth hook (app.py:82-97)",
+            "scout/commands/serve.py CLI serves the app (scout-web container, port 8000 per README/docker-compose)"
+          ]
+        },
+        "layout_evidence": {
+          "score": 0.05,
+          "snippets": [
+            "standard Flask layout: scout/server/ with blueprints/, extensions/, app.py, utils.py, links.py, filters.py"
+          ]
+        }
+      }
+    },
+    {
+      "framework": "flask-login + flask-cors",
+      "kind": "auth/cors-middleware",
+      "confidence": 0.8,
+      "classification": "secondary (authentication model relevant to endpoint reachability)",
+      "evidence": [
+        "scout/server/app.py:53 CORS(app) applied globally (all routes CORS-enabled)",
+        "scout/server/app.py:82-97 before_request check_user: every endpoint with a view function requires an authenticated session unless the endpoint is static, is 'report.report'/'report.json_chrom_coverage' (chanjo report blueprint), or is explicitly public (is_public attribute). Therefore /remote/cors/<path:remote_url> (alignviewers.remote_cors) is reachable by any AUTHENTICATED user; no role/permission check exists on it."
+      ]
+    },
+    {
+      "framework": "requests (python-requests)",
+      "kind": "http-client-library",
+      "confidence": 1.0,
+      "classification": "secondary (the only outbound HTTP client used by application code, plus one urllib.request.urlopen call for ftp URLs)",
+      "evidence": [
+        "scout/server/blueprints/alignviewers/views.py:42 requests.request(method=..., url=remote_url, ...) - remote CORS proxy transport",
+        "scout/server/blueprints/cases/controllers.py:94 requests.post(base_url + \"reports/report\"...), :548/:554 requests.post(cov_calc_url, json=data), :894 requests.post(url, params=payload, json=metadata, auth=...) - coverage report, chanjo MT stats, rerunner",
+        "scout/utils/scout_requests.py:34/:36 requests.post, :59/:61/:110 requests.get, :85/:87/:89 requests.delete - the shared HTTP wrapper module; :141 urllib.request.urlopen(url) for ftp resources",
+        "scout/adapter/mongo/rank_model.py:23 requests.get(rank_model_url); scout/utils/ensembl_rest_clients.py:81/:188 requests.get(url) - rank model and Ensembl REST/Biomart clients"
+      ]
+    },
+    {
+      "framework": "click (scout CLI)",
+      "kind": "cli-framework",
+      "confidence": 0.75,
+      "classification": "secondary (operator CLI boundary; commands/ tree uses click)",
+      "evidence": [
+        "scout/commands/* click command groups (download, load, setup, export, view, update, serve)",
+        "CLI download commands call fetch_resource()/Ensembl clients with fixed constant URLs (HPO/OMIM/Ensembl/PanelApp/HGNC/ExAC) - operator-invoked, fixed endpoints; not attacker-facing input"
+      ]
+    }
+  ],
+  "primary_framework": "flask",
+  "framework_notes": [
+    "Authentication: the global before_request hook (scout/server/app.py:82-97) enforces login for alignviewers.remote_cors and all cases/panels/variant endpoints; the chanjo report endpoints report.report and report.json_chrom_coverage are explicitly EXEMPT (registered from the external chanjo_report package when SQLALCHEMY_DATABASE_URI is set). LOGIN_DISABLED config can disable auth entirely.",
+    "No per-route authorization decorators are used; access control is coarse (logged-in + institute/case ownership checks inside controllers via institute_and_case). alignviewers.remote_cors has NO institute/case binding - any authenticated user can proxy any URL.",
+    "CORS is enabled globally by flask_cors.CORS(app) (app.py:53), which matters for the /remote/cors proxy reachability from browser origins.",
+    "Jinja templates (scout/server/blueprints/alignviewers/templates/alignviewers/igv_viewer.html:71-72) render cloud public track URLs through url_for('alignviewers.remote_cors', remote_url=...) - the app itself feeds remote_cors with admin-configured CLOUD_IGV_TRACKS URLs, but the route parameter accepts arbitrary URLs from any authenticated client.",
+    "Secondary integrations reach the network through wrappers: MatchMaker (scout/server/extensions/matchmaker_extension.py) and Beacon (scout/server/extensions/beacon_extension.py) call scout.utils.scout_requests helpers with URLs built from MME_URL / BEACON_URL config; Rerunner entrypoint from RERUNNER_API_ENTRYPOINT config; LoqusDB api instances from LOQUSDB_SETTINGS config; rank-model link prefix from RANK_MODEL_LINK_PREFIX / SV_RANK_MODEL_LINK_PREFIX config."
+  ],
+  "references_loaded": [
+    "iris_tools/augur-0.3.0/WORKFLOW.md",
+    "iris_tools/augur-0.3.0/references/patterns.md",
+    "iris_tools/augur-0.3.0/references/python.md",
+    "iris_tools/augur-0.3.0/references/flask.md",
+    "iris_tools/augur-0.3.0/assets/extraction/README.md",
+    "iris_tools/augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "repo_survey": {
+    "http_entry_points": [
+      "Flask app factory scout/server/app.py:52 create_app() registers 13 blueprints; 134 @<bp>.route-decorated handlers under scout/server/blueprints/",
+      "alignviewers views: /remote/cors/<path:remote_url> (GET/OPTIONS, authenticated) - arbitrary-URL proxy; /remote/static (GET/OPTIONS, authenticated + session igv_tracks membership check) - local file streaming; /<institute_id>/<case_name>/igv and .../igv-splice-junctions viewers",
+      "cases views: case pages, /beacon_add_variants/<institute>/<case> (POST, request.form), /reanalysis/<institute>/<case> (POST, request.form sample_metadata JSON), /mme_add /mme_delete /mme_matches /mme_match/<target> (MatchMaker operations), /pdf_case_report (GET, uses request.url_root), /rerun, /share, /monitor, /research",
+      "institutes/panels/managed_variants/variant/variants/genes/phenotypes/diagnoses/dashboard views: form-driven POST handlers reading request.form/request.args/request.files",
+      "api blueprint: /api/<institute_id>/<case_name>[/<variant_id>] read-only case data",
+      "chanjo report blueprint (external chanjo_report package, mounted when SQLALCHEMY_DATABASE_URI configured): report.report and report.json_chrom_coverage are the only AUTH-EXEMPT endpoints (app.py:87-89)"
+    ],
+    "request_input_surfaces": [
+      "route path variables, including the URL-capturing <path:remote_url> converter at alignviewers/views.py:33 and <target> (MatchMaker external node id) at cases/views.py:116",
+      "request.form / request.args / request.files reads across blueprint views (e.g. cases/views.py:93 beacon.add_variants(store, case_obj, request.form); :839 json.loads(request.form.get(\"sample_metadata\"))); managed_variants/views.py:30 request.files[\"csv_file\"]",
+      "request.headers / request.cookies / request.get_data() / request.method consumed inside remote_cors and forwarded verbatim into the outgoing proxied request (alignviewers/views.py:42-49)",
+      "Host-header-derived URLs: request.url_root (cases/views.py:225, passed as base_url into coverage_report_contents -> requests.post at controllers.py:94) and url_for(\"report.json_chrom_coverage\", _external=True) (controllers.py:544 -> requests.post at :548/:554)",
+      "case/DB content reused into outbound requests: case_obj rank_model_version / sv_rank_model_version (variant/controllers.py:401/405, concatenated into rank model URL), MatchMaker patient objects and case phenotype HPO terms (query_phenomizer)"
+    ],
+    "outbound_network_surfaces": [
+      "scout/server/blueprints/alignviewers/views.py:42 requests.request(...) - remote CORS proxy (url = route variable remote_url; forwards client headers minus Host, body and cookies; allow_redirects=True)",
+      "scout/server/blueprints/cases/controllers.py:94 requests.post(base_url + \"reports/report\") - chanjo coverage report fetch (base_url = request.url_root); :548/:554 requests.post(cov_calc_url) - chanjo MT coverage stats (url_for _external); :894 requests.post(url, params, json=metadata, auth=HTTPBasicAuth) - Rerunner re-analysis API (url = config entrypoint)",
+      "scout/utils/scout_requests.py - shared wrappers post_request_json/get_request_json/delete_request_json/get_request/fetch_resource; final I/O at requests.post :34/:36, requests.get :59/:61/:110, requests.delete :85/:87/:89, urllib.request.urlopen :141 (ftp scheme)",
+      "scout/server/extensions/matchmaker_extension.py:59/:61/:63 -> scout_requests.* with MME host URLs (nodes, patient add/delete/matches, internal and external match)",
+      "scout/server/extensions/beacon_extension.py:39/:131/:180 -> scout_requests.* with BEACON_URL-derived URLs (datasets, add/delete variants); add_variants body is built from request.form data",
+      "scout/server/extensions/loqus_extension.py:133/:183/:242 api_get(...) with LOQUSDB_SETTINGS api_url",
+      "scout/adapter/mongo/rank_model.py:23 requests.get(rank_model_url) - rank model ini download (config prefix + case version)",
+      "scout/utils/ensembl_rest_clients.py:81/:188 requests.get(url) - Ensembl REST and Biomart clients (fixed hosts, data-derived query parts)",
+      "scout/load/panel.py:126/:131 fetch_resource(...) - PanelApp panel download (fixed https host)",
+      "scout/server/blueprints/cases/controllers.py:837 query_phenomizer.query(username, password, *hpo_ids) - network I/O inside the external query-phenomizer package (not in DB)"
+    ],
+    "url_construction_surfaces": [
+      "remote_cors: URL is the route path variable itself - no parsing/concatenation, directly forwarded (alignviewers/views.py:33-49)",
+      "coverage_report_contents: base_url + \"reports/report\" (cases/controllers.py:94); mt_coverage_stats: url_for(\"report.json_chrom_coverage\", _external=True) (controllers.py:544)",
+      "RankModelHandler.rank_model_from_url: \"\".join([rank_model_link_prefix, version, file_extension]) (scout/adapter/mongo/rank_model.py:84-91); prefix/postfix from app config",
+      "MatchMaker: \"\".join([self.host, path...]) including patient_id and \"?node=\" + node_id (matchmaker_extension.py:76-150); Beacon: \"/\".join([self.beacon_url, \"add\"/\"delete\"]) and f\"{self.beacon_url}/\"; Rerunner: cnf.get(\"entrypoint\")",
+      "Ensembl clients: self.server + endpoint (+ urlencode params / biomart XML); scout_requests.fetch_mim_files: \"https://data.omim.org/downloads/{api_key}/...\".format(api_key); fetch_refseq_version: base_url.format(refseq_acc)",
+      "urllib.parse/urljoin usage in scout/adapter/client.py, scout/export/variant.py, scout/server/app.py is parse/quote-only (no network I/O)"
+    ],
+    "excluded_from_extraction": [
+      "scout-db/ nested CodeQL database directory (excluded by the path scope predicate 'scout/%': 'scout-db/...' does not match because of the '-' after 'scout')",
+      "tests/ fixture and harness trees at repo root (outside scout/ package scope)",
+      "scripts/, docs/, containers/, .github/ (non-Python or non-application)",
+      "scout/commands/ CLI download/setup flows: operator-invoked, fixed-constant URLs (HPO_URL, HPOTERMS_URL, Ensembl, PanelApp, HGNC, ExAC, OMIM with CLI api key); no untrusted web input reaches them; their final network I/O sites are still captured by the requests.*/urlopen sink families wherever they occur inside scout/utils/",
+      "scout/server/blueprints/alignviewers/views.py remote_static (request.args 'file' -> send_file_partial local file streaming): local file read, path-constrained by session igv_tracks membership; a path-traversal concern, NOT CWE-918; recorded here as a deliberate exclusion",
+      "scout/server/links.py external URL link builders (rendered into HTML): display links, no server-side fetch",
+      "SMTP email sending (flask_mail) and gens/loqusdb exec-instance subprocess calls: not HTTP request forgery"
+    ]
+  },
+  "extraction_plan": {
+    "pass_key": "ssrf",
+    "source_families": [
+      "remote_cors(remote_url) route handler parameter at index 0 in scout/server/blueprints/alignviewers/views.py - Flask <path:remote_url> converter captures an arbitrary client-supplied URL and passes it straight to requests.request(url=remote_url) (flow kind param)",
+      "request.url_root attribute read in scout/server/blueprints/cases/views.py pdf_case_report - Host-header-derived base URL forwarded into coverage_report_contents -> requests.post (flow kind field)",
+      "url_for(\"report.json_chrom_coverage\", _external=True) call in cases/controllers.py mt_coverage_stats - Host/SERVER_NAME-derived absolute URL forwarded into requests.post (flow kind return; detected via the _external keyword, no string-literal parsing)",
+      "request.headers / request.cookies attribute reads and request.get_data() call in alignviewers/views.py remote_cors - client-controlled data forwarded verbatim into the outgoing proxied request (flow kinds field/return)",
+      "request.form pass-through at cases/views.py beacon_add_variants (beacon.add_variants(store, case_obj, request.form)) and request.form.get(\"sample_metadata\") at reanalysis - form payloads that reach outbound POST bodies (flow kinds field/return)",
+      "case_obj.get(\"sv_rank_model_version\")/case_obj.get(\"rank_model_version\") in variant/controllers.py - DB/case content concatenated into the rank model URL (flow kind return; matched via StringLiteral arg)",
+      "matchmaker_match(request, target, institute_id, case_name) `target` parameter at index 1 in cases/controllers.py - route path variable used as external node id in the MME match URL (constrained to ids of connected nodes; flow kind param)",
+      "admin-config URL provenance reads kept for labeling recall (expected FP under the SSRF admin-config heuristic): self.host reads in matchmaker_extension.py (MME_URL), self.beacon_url reads in beacon_extension.py (BEACON_URL), cnf.get(\"entrypoint\") in cases/controllers.py (RERUNNER_API_ENTRYPOINT), current_app.config.get(\"RANK_MODEL_LINK_PREFIX\"/\"SV_RANK_MODEL_LINK_PREFIX\") in variant/controllers.py, loqus_instance/instance_settings.get(API_URL) in loqus_extension.py (LOQUSDB_SETTINGS)"
+    ],
+    "sink_families": [
+      "requests.get/post/delete/request(...) module-level calls (func = Attribute on Name 'requests'); URL at positional argument 0 or at the url= keyword (argIndex 0 / -1). Sites: alignviewers/views.py:42 (url kw), cases/controllers.py:94/:548/:554/:894, rank_model.py:23, ensembl_rest_clients.py:81/:188, scout_requests.py:34/:36/:59/:61/:110/:85/:87/:89",
+      "urllib.request.urlopen(url, timeout=...) in scout_requests.py:141 (func = Attribute 'urlopen' on Attribute 'request' on Name 'urllib'); URL at positional argument 0; handles ftp:// resources",
+      "scout.utils.scout_requests wrapper invocations - bare-name calls get_request_json/post_request_json/delete_request_json/get_request/fetch_resource/api_get (beacon_extension.py:39/:131/:180, loqus_extension.py:133/:183/:242, load/panel.py:126/:131, scout_requests.py:147) and attribute calls scout_requests.<wrapper> (matchmaker_extension.py:59/:61/:63); URL at positional 0 or url= keyword",
+      "MatchMaker/Beacon extension wrapper invocations from web handlers: matchmaker.patient_submit/patient_delete/patient_matches/match_internal/match_external calls (cases/controllers.py:1124/:1163/:1206/:1241/:1257) and beacon.add_variants (cases/views.py:93); URL built inside the wrapper from admin config, request-derived data lands in the POST body / URL path parts",
+      "query_phenomizer.query(username, password, *hpo_ids) at cases/controllers.py:837 - external-library network call; final I/O is inside the query-phenomizer package (not in this DB), kept as a wrapper-level sink with argIndex -1"
+    ],
+    "csv_columns": [
+      "node (AST node)",
+      "candidate_type (source_candidate / sink_candidate)",
+      "callable (dotted signature hint)",
+      "flow_kind (param | return | field | argument)",
+      "receiver (receiver/type hint)",
+      "moduleHint (dotted module path; QL variable named moduleHint, 'module' is a QL keyword)",
+      "arg_index (-1 when not applicable)",
+      "line (start line)",
+      "location (file:line)",
+      "expression text (node.toString())"
+    ]
+  },
+  "coverage_gaps": [
+    "requests / urllib / flask / query_phenomizer library internals are NOT in this database (only the scout application package, ~50.8k LOC). The final network socket I/O of requests lives in the external library; sinks are therefore anchored at the application call sites (requests.request/post/get/delete, urllib.request.urlopen, and scout's own scout_requests wrappers), and taint must reach those call sites' URL arguments to be reported.",
+    "query_phenomizer: cases/controllers.py:837 calls query_phenomizer.query(username, password, *hpo_ids); the package performs HTTP POST to a phenomizer server internally (endpoint fixed inside the library, not visible in this source). It is included as a wrapper sink candidate, but URL-level taint cannot be proven or disproven from this DB.",
+    "chanjo report blueprint: scout/server/app.py:36-46 optionally mounts the external chanjo_report package (report.report, report.json_chrom_coverage). Those endpoints are auth-exempt and are the target of mt_coverage_stats' requests.post(cov_calc_url), but their implementation is not in this DB.",
+    "Jinja templates are not part of the Python CodeQL DB: igv_viewer.html:71-72 routes admin-configured cloud track URLs through url_for('alignviewers.remote_cors', remote_url=...). The remote_cors route parameter itself is extracted directly from the Python route handler, so this template-side path does not create a gap for the route-parameter source, but template-only URL flows cannot be traced.",
+    "flask_mail SMTP sends (rerun/verification emails) and subprocess-based LoqusDB 'exec' instances are non-HTTP network/process surfaces and are out of CWE-918 scope.",
+    "The alignviewers remote_static endpoint (request.args 'file' -> send_file_partial) reads local files guarded by session igv_tracks membership; this is a potential path-traversal surface, deliberately NOT recorded as a CWE-918 source/sink.",
+    "Verification of URL schemes: only http/https (requests.*) and ftp (urlopen in fetch_resource) outbound schemes exist in application code; no file:/data: outbound fetch was found in scout/."
+  ]
+}

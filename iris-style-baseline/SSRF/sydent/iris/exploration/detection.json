@@ -1,0 +1,123 @@
+{
+  "run": {
+    "timestamp": "2026-10-20",
+    "tool": "Augur 0.3.0 (IRIS pipeline, agent-agnostic)",
+    "phase": "1",
+    "step": "1-2 (explore + extraction query generation)",
+    "pass": 3,
+    "cwes": ["CWE-918", "CWE-099", "CWE-610"],
+    "focus": "SSRF",
+    "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\sydent_vuln\\sydent-db",
+    "source_root": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\sydent_vuln",
+    "project": "matrix-sydent (Matrix Identity Server, vulnerable snapshot)",
+    "baseline_lines_of_code": 5255,
+    "codeql_cli": "2.25.1 (E:\\codeql)",
+    "python_all_pack": "codeql/python-all 7.1.2 (cached under C:\\Users\\lzh\\.codeql\\packages, same surface as 7.1.1; identical to the earlier label-studio/django/calibre-web/core/mlflow SSRF runs)",
+    "note": "Step 0 pre-flight artifacts (qlpack.yml, codeql pack install, run_manifest.json) are intentionally deferred; this run only emits detection.json, sources.ql and sinks.ql per the task contract."
+  },
+  "language": {
+    "detected": "python",
+    "detection_order": [
+      "codeql-database.yml primaryLanguage: python",
+      "repository layout: sydent/ package with 70 .py files, setup.py, pyproject.toml",
+      "build manifests: setup.py + pyproject.toml (setuptools)"
+    ]
+  },
+  "framework": {
+    "primary": "twisted.web",
+    "confidence": 0.95,
+    "score_breakdown": {
+      "import_evidence": 0.45,
+      "route_registration_evidence": 0.30,
+      "runtime_bootstrap_evidence": 0.20,
+      "directory_layout_evidence": 0.0
+    },
+    "evidence": [
+      "sydent/http/httpserver.py:20-21 imports twisted.web.server.Site and twisted.web.resource.Resource",
+      "sydent/http/httpserver.py:61-129 route table built exclusively with root.putChild / matrix.putChild / identity.putChild / v1.putChild / v2.putChild registrations for /_matrix/identity/* endpoints",
+      "sydent/http/httpserver.py:131 self.factory = Site(root); :138 self.sydent.reactor.listenTCP(...)",
+      "sydent/sydent.py:356 self.reactor.run() - twisted reactor bootstrap",
+      "All servlets extend twisted.web.resource.Resource and implement render_POST/render_GET(self, request) (28 handler methods under sydent/http/servlets/)",
+      "Async style is twisted.internet.defer.inlineCallbacks / deferjsonwrap (sydent/http/servlets/__init__.py:160-213)"
+    ],
+    "framework_reference_available": false,
+    "framework_reference_note": "No twisted reference exists in augur-0.3.0/references/ (django.md, flask.md, fastapi.md do not match this codebase). Per WORKFLOW.md 4.2.3 the language reference plus repository-derived source/sink shapes were used instead.",
+    "secondary_candidates": []
+  },
+  "reference_files_loaded": [
+    "references/patterns.md",
+    "references/python.md"
+  ],
+  "project_purpose": {
+    "description": "Sydent is the reference Matrix Identity Server: it validates third-party identifiers (email / msisdn), stores 3pid->mxid associations, signs them, and replicates associations between identity-server peers. It contacts remote homeservers over the custom 'matrix://' federation scheme to verify signed JSON and deliver bind callbacks.",
+    "entry_points": {
+      "client_api_http": "ClientApiHttpServer (sydent/http/httpserver.py:36) - public /_matrix/identity/api/v1 and /v2 endpoints on clientapi.http.port (default 8090), e.g. validate/email/requestToken, 3pid/bind, store-invite, account/register, lookup, hash_details, sign-ed25519, terms",
+      "internal_api_http": "InternalApiHttpServer (sydent/http/httpserver.py:143) - /_matrix/identity/internal/bind|unbind, bound to ::1 by default, 'assumed authenticated out of band' (authenticated_bind_threepid_servlet.py:23-26)",
+      "replication_https": "ReplicationHttpsServer (sydent/http/httpserver.py:171) - /_matrix/identity/replicate/v1/push, authenticated by client TLS certificate CN matched against the peers table (replication.py:42-51)",
+      "outbound": "FederationHttpClient / MatrixFederationAgent (matrix:// scheme, SRV + .well-known routing), ReplicationHttpsClient (peer replication push), SimpleHttpClient (OpenMarket SMS gateway), smtplib (verification email)"
+    }
+  },
+  "source_families": {
+    "request_body_and_query_args": "get_args(request, ...) (sydent/http/servlets/__init__.py:41-123) materializes the untrusted dict from json.loads(request.content.read()) (POST/PUT JSON) or request.args (query string / form, v1 + GET fallback). 22 call sites across the servlets plus sydent/http/auth.py:45.",
+    "direct_json_body_reads": "json.loads(request.content.read()) outside get_args: sydent/http/servlets/threepidunbindservlet.py:54 and sydent/http/servlets/replication.py:63 (peer-authenticated).",
+    "request_field_reads": "request.args attribute reads (sydent/sydent.py:374-375 brand hint, sydent/http/servlets/__init__.py:87), request.getHeader('Authorization') (sydent/http/auth.py:41), request.requestHeaders.getRawHeaders('Authorization') X-Matrix federation header (sydent/hs_federation/verifier.py:194), getRawHeaders('X-Forwarded-For') (sydent/sydent.py:361).",
+    "field_level_subscripts": "args[...] / body[...] / inJson.get(...) / signed_json['signatures'] reads on the parsed request dicts, restricted to the field names actually read in the servlets (matrix_server_name, mxid, threepid, next_link, email, phone_number, medium, address, room_id, sender, token, sid, client_secret, access_token, addresses, algorithm, pepper, threepids, public_key, private_key, user_accepts, send_attempt, country, sgAssocs, signatures).",
+    "handler_boundary_functions": "render_POST / render_GET(self, request) methods of Resource subclasses under sydent/http/servlets/ (28 methods) - the twisted equivalent of framework route handlers; the request parameter is at index 1.",
+    "network_target_parameters": "Verifier._getKeysForServer(server_name) (sydent/hs_federation/verifier.py:63) whose argument is interpolated into 'matrix://%s/_matrix/key/v2/server/'; RemotePeer.__init__(sydent, server_name, port, ...) (sydent/replication/peer.py:107) whose server_name/port are DB-derived replication push targets.",
+    "config_and_environment": "os.environ.get (sydent/sydent.py:81, :84, :112, :508 - SYDENT_SERVER_NAME / SYDENT_PID_FILE / SYDENT_DB_PATH / SYDENT_CONF), sydent.cfg.get('email', 'email.smtphost') (sydent/util/emailutils.py:88) and sydent.cfg.get(\"peer.%s\", 'base_replication_url') (sydent/replication/peer.py:127) - operator configuration, expected FP material for remote SSRF, kept for labeling recall."
+  },
+  "sink_families": {
+    "final_network_io": "twisted.web.client Agent.request call sites: HTTPClient.get_json self.agent.request (sydent/http/httpclient.py:52), HTTPClient.post_json_get_nothing self.agent.request (:91), ReplicationHttpsClient.postJson self.agent.request (sydent/http/httpsclient.py:70), MatrixFederationAgent.request agent.request (sydent/http/matrixfederationagent.py:176), .well-known fetch self._well_known_agent.request (:322). HostnameEndpoint(reactor, host, port) TCP endpoint construction (matrixfederationagent.py:366) and LoggingHostnameEndpoint wrapper (:168).",
+    "internal_http_wrappers": "get_json call sites (sydent/hs_federation/verifier.py:80 'matrix://%s/_matrix/key/v2/server/', sydent/http/servlets/registerservlet.py:59 'matrix://%s/_matrix/federation/v1/openid/userinfo?...'), post_json_get_nothing call sites (sydent/threepid/bind.py:162 post_url 'matrix://%s/_matrix/federation/v1/3pid/onbind', sydent/sms/openmarket.py:101 API_BASE_URL), ReplicationHttpsClient.postJson call site (sydent/replication/peer.py:200 self.replication_url).",
+    "non_http_network": "DNS SRV lookup self._dns_client.lookupService(service_name) (sydent/http/srvresolver.py:125); smtplib.SMTP / SMTP_SSL (sydent/util/emailutils.py:96/:98/:101, mailServer from config).",
+    "external_sdk": "sentry_sdk.init(dsn=...) (sydent/sydent.py:210, dsn keyword argument from config)."
+  },
+  "observed_guards": {
+    "note": "Guards observed in the current source (context for Step 3 sanitizer labeling; not extracted as candidates in Step 2):",
+    "hostname_validation": "is_valid_hostname (sydent/util/stringutils.py:39) applied to matrix_server_name (registerservlet.py:52), MXID server part (threepid/bind.py:146) and X-Matrix origin (verifier.py:208)",
+    "client_secret_validation": "is_valid_client_secret (sydent/util/stringutils.py:23) in email/msisdn/bind/unbind servlets",
+    "file_scheme_check": "next_link startswith('file:///') rejection (emailservlet.py:65/:106) - open-redirect guard, Pass 9 territory",
+    "authentication": "authV2 bearer-token auth for v2 endpoints (sydent/http/auth.py:37); X-Matrix signature verification (verifier.authenticate_request); TLS certificate CN peer authentication for replication push (replication.py:42-51); internal API 'authenticated out of band' assumption with default ::1 bind"
+  },
+  "coverage_gaps": [
+    "No urllib.request.urlopen / urllib.request.urlretrieve / requests / httpx call sites exist anywhere in the indexed sydent source; the python.md Pass-3 sink list therefore only maps to the twisted Agent request sites extracted here.",
+    "Twisted internals (twisted.web.client.Agent, twisted.internet.endpoints.HostnameEndpoint, twisted.names.client, smtplib) are external to the database (only six.moves stubs are present), so sink matching is AST call-site based (module-qualified name + object name + argument index), not resolved-API based.",
+    "signedjson / nacl / unpaddedbase64 / phonenumbers / netaddr / attr / sentry_sdk / prometheus_client are external dependencies; only call sites in sydent code are extractable.",
+    "The v1/v2 servlet render_OPTIONS methods, v1_servlet/v2_servlet version endpoints and the prometheus start_http_server listener are request metadata / server-side listeners, not client egress; excluded.",
+    "URL construction and parsing (urllib.parse.quote in verifier/registerservlet/emailvalidator, URI.fromBytes in matrixfederationagent.py:141, 'matrix://%s' % ... string formatting) is deliberately NOT extracted as sinks; per the extraction contract they are flow intermediates, tracked to the actual Agent.request sites.",
+    "request.setHeader('Location', next_link) redirects (emailservlet.py:108, msisdnservlet.py:129) are open-redirect (Pass 9), not CWE-918; documented here, excluded from extraction.",
+    "Local file opens (templates, config, pidfile, sqlite scripts) are Pass 1 territory; excluded.",
+    "scripts/sydent-bind and scripts/generate-key are bash; matrix_is_test/ and tests/ are test harnesses; setup.py is packaging metadata - all excluded from candidate scope."
+  ],
+  "scope_filter": {
+    "predicate": "file relative path matches 'sydent/%'",
+    "excludes": [
+      "sydent-db/ (nested CodeQL database directory; 'sydent/%' cannot match 'sydent-db/...' because '-' != '/' at position 7)",
+      "tests/ (test harness)",
+      "matrix_is_test/ (test launcher)",
+      "setup.py (packaging)",
+      "C_/codeql/... (extractor-provided six stubs, outside the source root prefix)"
+    ]
+  },
+  "extraction_contract": {
+    "query_usage": "codeql query run + codeql bqrs decode --format=csv; plain multi-column selects with NO @kind metadata (not for database analyze SARIF)",
+    "csv_columns": [
+      "n (AST node)",
+      "candidate type ('source_candidate' / 'sink_candidate')",
+      "callableName (dotted signature hint)",
+      "flowKind (param | return | field | argument)",
+      "receiverHint (receiver/type hint)",
+      "moduleHint (dotted module path; QL variable named moduleHint because 'module' is a QL keyword)",
+      "argIndex (-1 when not applicable)",
+      "line (start line)",
+      "location (file:line)",
+      "expression text (node.toString())"
+    ],
+    "column_order_note": "Identical to the earlier label-studio/django/calibre-web/core/mlflow SSRF runs (sources.csv / sinks.csv headers: n, col1, callableName, flowKind, receiverHint, moduleHint, argIndex, col7, col8, col9)."
+  },
+  "next_steps": [
+    "Step 2 execution (deferred): codeql query run extraction/sources.ql and extraction/sinks.ql sequentially against sydent-db, then bqrs decode to CSV",
+    "Step 3: LLM labeling of candidates for Pass 3 only (CWE-918/099/610)",
+    "Constraint honored: no PyVul ground truth, CVE descriptions, fix diffs or pre-located vulnerability lines were consulted; the pre-existing SSRF analysis reports and ssrf_sinks.csv in the source root were deliberately not read"
+  ]
+}

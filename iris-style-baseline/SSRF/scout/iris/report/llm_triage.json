@@ -1,0 +1,214 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "scout-iris-pass3-llm-triage-20261020",
+    "task": "Independent LLM path re-review of the formal IRIS/Augur Pass 3 CWE-918 (SSRF) analysis results",
+    "rule_id": "py/augur/scout/pass3-ssrf",
+    "sarif": "results/pass3.sarif",
+    "source_tree": "dataset/codeql_databases/ssrf_dbs/scout_vuln (scout-db, CodeQL 2.25.1)",
+    "formal_alert_count": 4,
+    "diagnostic_alert_count": 0,
+    "notes": [
+      "SARIF contains 4 results, all with ruleId py/augur/scout/pass3-ssrf and complete codeFlows; no diagnostic/diagnostics-query results and no native CodeQL baseline results are present or counted.",
+      "Each alert's codeFlow was traced against the real Python source in scout_vuln; all four taint paths reproduce in the source tree.",
+      "No test files, file:// local reads, URL-parsing-only flows, or diagnostics are mixed into the formal count.",
+      "Ground truth, fix commits and CVE bulletins were NOT read; the real-vulnerability match assessment at the end uses only the commit metadata supplied by the operator in this session's prompt plus the source tree."
+    ]
+  },
+  "alerts": [
+    {
+      "alert_index": 0,
+      "rule_id": "py/augur/scout/pass3-ssrf",
+      "sarif_location": "scout/server/blueprints/cases/controllers.py:95 (requests.post URL argument)",
+      "message_summary": "SSRF (host control via Host header): request.url_root concatenated with 'reports/report' and POSTed server-side.",
+      "codeflow": [
+        "scout/server/blueprints/cases/views.py:225 — Attribute request.url_root (source)",
+        "scout/server/blueprints/cases/controllers.py:59 — base_url parameter of coverage_report_contents",
+        "scout/server/blueprints/cases/controllers.py:95 — BinaryExpr base_url + 'reports/report' into requests.post arg 0 (sink)"
+      ],
+      "verdict": "likely_tp",
+      "confidence": 0.65,
+      "source": {
+        "location": "scout/server/blueprints/cases/views.py:225",
+        "kind": "request.url_root (Flask/Werkzeug: scheme+host+port derived from the incoming Host header)",
+        "attacker_controlled": true,
+        "threat_model": "Authenticated scout user with access to the specific institute/case. Werkzeug derives request.url_root from the client-supplied Host header, so the outbound POST host (and port) is attacker-steerable."
+      },
+      "sink": {
+        "location": "scout/server/blueprints/cases/controllers.py:94-96",
+        "kind": "requests.post(base_url + 'reports/report', timeout=COVERAGE_REPORT_TIMEOUT, data=request_data)",
+        "performs_network_request": true
+      },
+      "taint_path_verified": "Verified in source: pdf_case_report (views.py:212-226) passes request.url_root as base_url -> coverage_report_contents (controllers.py:59) -> base_url + 'reports/report' (controllers.py:95) -> requests.post arg 0. Direct interprocedural flow, no sanitizer.",
+      "attacker_control_scope": "Host and port only (via Host header). Path is the fixed constant 'reports/report'. Not the full URL, not arbitrary scheme.",
+      "url_processing": "Simple string concatenation; no urljoin, no base-URL restriction, no host allowlist, no scheme validation, no private-IP check, no redirect re-validation. The concatenation preserves the attacker-chosen host verbatim.",
+      "reachability": "Conditional but real: (1) global before_request check_user (app.py:83-98) requires an authenticated session; (2) institute_and_case (views.py:216) requires access to the specific institute/case; (3) the chanjo coverage integration must be enabled — controllers.coverage_report_contents is only invoked when current_app.config.get('SQLALCHEMY_DATABASE_URI') is set and case track != 'cancer' (views.py:220-223), and configure_coverage/app-level gating is at app.py:114-116.",
+      "protections": "None on the URL itself. Authentication and case-access checks gate reachability only; they do not constrain the outbound host. SQLALCHEMY_DATABASE_URI / SERVER_NAME deployment settings could pin or effectively neutralize the flow (SERVER_NAME does not affect request.url_root itself, but a reverse proxy that normalizes Host would).",
+      "impact": "An authenticated user can direct the server's coverage-report POST (body contains sample_id, gene_ids, panel_name, coverage level — patient/genomic metadata) to an attacker-chosen host, and resp.text is parsed back into the report page, giving a two-way content-injection surface.",
+      "rationale": "The source is genuinely request-derived (Host header), the propagation is a real source-supported data flow, the sink performs a real network request, and no validation exists anywhere on the path. Downgraded from the remote_cors tier only because control is host-only and the flow requires the optional chanjo integration plus authenticated case access; in the default config (no SERVER_NAME, no forced Host normalization) the attack stands.",
+      "checks": {
+        "source_is_request_boundary": true,
+        "real_data_propagation": true,
+        "url_processing_changes_target": true,
+        "sink_performs_network_request": true,
+        "effective_whitelist_or_scheme_check": false,
+        "trusted_fixed_url_only": false,
+        "static_path_reachable": "conditional: chanjo integration (SQLALCHEMY_DATABASE_URI) + authenticated user with case access",
+        "mixed_in_file_or_parse_or_test_or_diagnostic": false
+      }
+    },
+    {
+      "alert_index": 1,
+      "rule_id": "py/augur/scout/pass3-ssrf",
+      "sarif_location": "scout/server/blueprints/cases/controllers.py:548 (requests.post URL argument)",
+      "message_summary": "SSRF (host control via Host header / SERVER_NAME): url_for('report.json_chrom_coverage', _external=True) POSTed server-side (MT coverage POST #1).",
+      "codeflow": [
+        "scout/server/blueprints/cases/controllers.py:544 — url_for(_external=True) call (source)",
+        "scout/server/blueprints/cases/controllers.py:544 — cov_calc_url variable",
+        "scout/server/blueprints/cases/controllers.py:548 — cov_calc_url into requests.post arg 0 (sink)"
+      ],
+      "verdict": "likely_tp",
+      "confidence": 0.6,
+      "source": {
+        "location": "scout/server/blueprints/cases/controllers.py:544",
+        "kind": "url_for('report.json_chrom_coverage', _external=True) — with SERVER_NAME unset (no SERVER_NAME key exists anywhere in scout/, grep verified), Flask binds the external URL host to the incoming request's Host header",
+        "attacker_controlled": true,
+        "threat_model": "Authenticated scout user with access to the case's institute; Host header steers the POST target host."
+      },
+      "sink": {
+        "location": "scout/server/blueprints/cases/controllers.py:548",
+        "kind": "requests.post(cov_calc_url, json=data) — MT coverage POST",
+        "performs_network_request": true
+      },
+      "taint_path_verified": "Verified: cov_calc_url = url_for('report.json_chrom_coverage', _external=True) (controllers.py:544) -> requests.post(cov_calc_url, json=data) (controllers.py:548). Plain local flow.",
+      "attacker_control_scope": "Host (and port) only via Host header. The path is pinned to the app's own chanjo endpoint /reports/<json_chrom_coverage route>; scheme is http/https as reflected by the request.",
+      "url_processing": "url_for with _external=True builds an absolute URL from the request Host when SERVER_NAME is unset; the resulting host is not re-validated before the POST. No allowlist, no scheme check, no IP filtering.",
+      "reachability": "mt_coverage_stats (controllers.py:528) is called from mt_excel_files (controllers.py:590) only when current_app.config.get('SQLALCHEMY_DATABASE_URI') is set, which is also the gate for registering the chanjo report blueprint (app.py:282-290) that the url_for references. Entry route: cases/views.py:257 /<institute_id>/<case_name>/mt_report -> mt_excel_files (views.py:265); before_request check_user requires authentication and institute_and_case (views.py:259) requires case access. So the flow is fully wired end-to-end whenever the chanjo integration is configured.",
+      "protections": "None on the URL. Auth/case-access gate reachability only. Setting SERVER_NAME in deployment would pin the host (scout default config does not set it, grep-verified).",
+      "impact": "Server-side POST (sample_ids + chromosome in JSON body) to an attacker-chosen host; response text is parsed and the derived MT coverage numbers flow into the exported MT report.",
+      "rationale": "Real source (Host-header-derived external URL), real propagation, real network sink, no sanitization. Slightly weaker than alert 0 in that Flask deployments behind a correctly-configured proxy often fix Host, and the exploit window requires the optional chanjo integration; kept likely_tp conditional.",
+      "checks": {
+        "source_is_request_boundary": true,
+        "real_data_propagation": true,
+        "url_processing_changes_target": true,
+        "sink_performs_network_request": true,
+        "effective_whitelist_or_scheme_check": false,
+        "trusted_fixed_url_only": false,
+        "static_path_reachable": "conditional: chanjo integration (SQLALCHEMY_DATABASE_URI) + authenticated user with case access via /<institute_id>/<case_name>/mt_report",
+        "mixed_in_file_or_parse_or_test_or_diagnostic": false
+      }
+    },
+    {
+      "alert_index": 2,
+      "rule_id": "py/augur/scout/pass3-ssrf",
+      "sarif_location": "scout/server/blueprints/cases/controllers.py:554 (requests.post URL argument)",
+      "message_summary": "SSRF (host control via Host header / SERVER_NAME): same url_for-derived cov_calc_url POSTed a second time (autosome coverage POST).",
+      "codeflow": [
+        "scout/server/blueprints/cases/controllers.py:544 — url_for(_external=True) call (source)",
+        "scout/server/blueprints/cases/controllers.py:544 — cov_calc_url variable",
+        "scout/server/blueprints/cases/controllers.py:554 — cov_calc_url into requests.post arg 0 (sink)"
+      ],
+      "verdict": "likely_tp",
+      "confidence": 0.6,
+      "source": {
+        "location": "scout/server/blueprints/cases/controllers.py:544",
+        "kind": "url_for('report.json_chrom_coverage', _external=True) — Host-header-derived when SERVER_NAME unset (scout default)",
+        "attacker_controlled": true
+      },
+      "sink": {
+        "location": "scout/server/blueprints/cases/controllers.py:554",
+        "kind": "requests.post(cov_calc_url, json=data) — autosome (ref_chrom) coverage POST",
+        "performs_network_request": true
+      },
+      "taint_path_verified": "Verified: same cov_calc_url reused for the second POST after data['chrom'] = str(ref_chrom) (controllers.py:552-554).",
+      "attacker_control_scope": "Host/port only via Host header; path fixed to the app's own chanjo chrom-coverage endpoint.",
+      "url_processing": "None beyond the external-URL construction; no validation of the resulting host.",
+      "reachability": "Identical to alert 1 (same function, same route entry, same SQLALCHEMY_DATABASE_URI gate at controllers.py:589 and chanjo blueprint registration at app.py:282-290).",
+      "protections": "None on the URL; auth and case access gate reachability only; SERVER_NAME unset by default.",
+      "impact": "Second outbound POST of the same class (sample_ids + autosome chromosome) to the attacker-steerable host; parsed response feeds the exported report.",
+      "rationale": "Same flow as alert 1, second sink site; SARIF branch positions are mutually exclusive (548 vs 554) so this is a distinct alert, not a double count of one site. Same conditional-TP verdict.",
+      "checks": {
+        "source_is_request_boundary": true,
+        "real_data_propagation": true,
+        "url_processing_changes_target": true,
+        "sink_performs_network_request": true,
+        "effective_whitelist_or_scheme_check": false,
+        "trusted_fixed_url_only": false,
+        "static_path_reachable": "conditional: same as alert 1",
+        "mixed_in_file_or_parse_or_test_or_diagnostic": false
+      }
+    },
+    {
+      "alert_index": 3,
+      "rule_id": "py/augur/scout/pass3-ssrf",
+      "sarif_location": "scout/server/blueprints/alignviewers/views.py:44 (requests.request url= argument)",
+      "message_summary": "SSRF (full target control): client-supplied /remote/cors/<path:remote_url> route variable forwarded verbatim as url of requests.request with allow_redirects=True.",
+      "codeflow": [
+        "scout/server/blueprints/alignviewers/views.py:34 — remote_url route-parameter of remote_cors (source)",
+        "scout/server/blueprints/alignviewers/views.py:44 — remote_url into requests.request url= (sink)"
+      ],
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "source": {
+        "location": "scout/server/blueprints/alignviewers/views.py:33-34",
+        "kind": "Flask route path variable: @alignviewers_bp.route('/remote/cors/<path:remote_url>', methods=['OPTIONS','GET']) def remote_cors(remote_url) — the <path:> converter captures an arbitrary attacker-supplied URL string",
+        "attacker_controlled": true,
+        "threat_model": "Any authenticated scout user (global before_request check_user, app.py:83-98). The endpoint has no institute/case binding, no role requirement, no additional decorator — the weakest gate of the four alerts. The view code contains no session-track or file-extension check in this tree (that check is the later upstream fix and is absent here)."
+      },
+      "sink": {
+        "location": "scout/server/blueprints/alignviewers/views.py:42-49",
+        "kind": "requests.request(method=request.method, url=remote_url, headers={inbound headers minus Host}, data=request.get_data(), cookies=request.cookies, allow_redirects=True)",
+        "performs_network_request": true
+      },
+      "taint_path_verified": "Verified: the route variable remote_url is referenced verbatim as the url= keyword of requests.request within the same function — direct local flow, no intermediate transformation, no sanitizer.",
+      "attacker_control_scope": "Full URL: scheme, host, port and path are all attacker-chosen. Beyond the destination, inbound headers (minus Host), the raw request body and the user's scout session cookies are forwarded to the attacker-chosen target, and the fetched response body/status/headers are returned to the caller — a fully open forward/reverse proxy.",
+      "url_processing": "None. No urljoin, no base-URL anchoring, no scheme allowlist, no host allowlist, no DNS/IP restriction; allow_redirects=True additionally follows redirects (so even a host-check could be bypassed, but none exists).",
+      "reachability": "Directly reachable: single route, authenticated session only. CORS(app) is enabled globally (noted in labels), but direct HTTP calls (e.g. the documented GET /remote/cors/http://<host>:<port> PoC pattern) work for any logged-in user; the docs themselves advertise the proxy for IGV.js cloud tracks.",
+      "protections": "None. check_user only requires login; LOGIN_DISABLED would even remove that. No scheme/host/port validation anywhere between route and requests.request.",
+      "impact": "Classic full-control SSRF: internal network scanning/interaction (cloud metadata endpoints, internal services), data exfiltration of session cookies and forwarded headers, and use of the server as an open proxy returning remote content.",
+      "rationale": "Source is a request boundary with complete attacker control of the outbound URL; propagation is a verbatim same-function reference; the sink performs the network request; no effective protection exists. The vulnerable code in this tree matches the pre-fix shape of the remote_cors function (no check_session_tracks guard). Highest-confidence TP of the run.",
+      "checks": {
+        "source_is_request_boundary": true,
+        "real_data_propagation": true,
+        "url_processing_changes_target": false,
+        "sink_performs_network_request": true,
+        "effective_whitelist_or_scheme_check": false,
+        "trusted_fixed_url_only": false,
+        "static_path_reachable": true,
+        "mixed_in_file_or_parse_or_test_or_diagnostic": false
+      }
+    }
+  ],
+  "summary": {
+    "formal_alerts_reviewed": 4,
+    "likely_tp": 4,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "diagnostic_or_baseline_results_counted": 0,
+    "sarif_has_only_diagnostics": false,
+    "statement": "CodeQL 分析成功，本轮命中 4 条正式 CWE-918 (py/augur/scout/pass3-ssrf) 污点路径告警，全部经源码复核判定为 likely_tp；无解析诊断或基线结果混入。",
+    "tiering": {
+      "full_target_control": ["alert 3 (remote_cors, alignviewers/views.py:44)"],
+      "host_only_control_conditional": [
+        "alert 0 (request.url_root -> requests.post, cases/controllers.py:95)",
+        "alert 1 (url_for _external -> requests.post, cases/controllers.py:548)",
+        "alert 2 (url_for _external -> requests.post, cases/controllers.py:554)"
+      ]
+    }
+  },
+  "real_vulnerability_match": {
+    "commit": "https://github.com/clinical-genomics/scout/commit/b0ef15f4737d0c801154c1991b52ff5cab4f5c83",
+    "cwe": "CWE-918",
+    "vulnerable_function": "remote_cors",
+    "hit": true,
+    "matched_alert_index": 3,
+    "evidence": [
+      "The vulnerable function in the analyzed tree (scout/server/blueprints/alignviewers/views.py:34) is byte-for-byte the code_before of the fix: def remote_cors(remote_url) immediately issues requests.request(method=request.method, url=remote_url, headers=..., data=request.get_data(), cookies=request.cookies, allow_redirects=True) with no controllers.check_session_tracks(remote_url) guard — the guard added by commit b0ef15f is absent in this database, confirming the source snapshot is the pre-fix vulnerable version.",
+      "SARIF alert 3 (ruleId py/augur/scout/pass3-ssrf, sink at alignviewers/views.py:44) traces exactly this flow: /remote/cors/<path:remote_url> route variable -> url= of requests.request. Source and sink both sit inside the vulnerable function named in the advisory.",
+      "The documented PoC shape (GET /remote/cors/http://<my-vps>:8888) is precisely the attacker input captured by the <path:remote_url> converter that alert 3 models; full scheme/host/port/path control, allow_redirects=True, cookie/header forwarding — all confirmed present in the source.",
+      "The fix's PoC rationale (proxying to an attacker-chosen server, leaking forwarded cookies/headers) corresponds to the impact recorded for alert 3."
+    ],
+    "conclusion": "命中。正式告警 alert 3 精确覆盖了 commit b0ef15f 所修复的 remote_cors SSRF 漏洞（同一函数、同一污点路径、同一可控范围），且修复提交新增的 check_session_tracks 校验在分析快照中不存在，说明数据库处于漏洞修复前状态。其余 3 条告警（Host 头派生的 chanjo coverage POST 流）是独立于该提交的真实条件性 SSRF 流，不影响本命中判定。",
+    "not_counted": "本判定未读取 PyVul 真值文件、修复提交差异或 CVE 公告；仅使用操作者在本轮提示中直接提供的提交元数据与分析树源码比对。"
+  }
+}

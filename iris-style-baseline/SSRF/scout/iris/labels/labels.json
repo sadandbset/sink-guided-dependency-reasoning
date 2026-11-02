@@ -1,0 +1,1715 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "scout-iris-pass3-step3-20261020",
+    "generated_at": "2026-10-20T10:30:00Z",
+    "language": "python",
+    "framework": "flask",
+    "model": "glm-5.3 (Z.ai GLM), labeled in-session via Claude Code CLI; 4 batches (source batch S1: CSV rows 1-15, source batch S2: rows 16-29, sink batch K1: rows 1-22, sink batch K2: rows 23-44); single labeling pass, no re-ask needed (no entry below the 0.55 confidence threshold); temperature unset (harness default)",
+    "project": "scout",
+    "notes": [
+      "Scope: Pass 3 only (CWE-918/099/610, CWE-918 primary); the Pass 1 block is an empty placeholder required by the schema 'contains pass_id 1' constraint (same convention as the earlier django / calibre-web / core / label-studio / fides SSRF runs).",
+      "All 29 sources.csv rows and all 44 sinks.csv rows are labeled (73 entries, full row parity); every CSV location is unique, so no deduplication or exclusion was applied.",
+      "classification 'tp' asserts only that the labeled role is genuinely played by the API for pass 3 (e.g. requests.request at alignviewers/views.py:42 really fetches the client-supplied remote_url); it never denotes a confirmed vulnerability and no end-to-end SSRF verdict is claimed at this stage.",
+      "Primary CWE-918-shaped flows: (1) alignviewers remote_cors arbitrary-URL proxy - /remote/cors/<path:remote_url> forwards the full client URL to requests.request with allow_redirects=True, no scheme/host validation, forwarding inbound headers/body/cookies, reachable by any authenticated user with no institute/case binding; (2) Host-header-derived chanjo coverage POST - request.url_root (cases/views.py:225) -> requests.post(base_url + 'reports/report') (cases/controllers.py:94).",
+      "Secondary candidate flow: url_for('report.json_chrom_coverage', _external=True) (cases/controllers.py:544) -> requests.post at :548/:554 - the external URL host derives from the request Host header when SERVER_NAME is unset (scout default); requires the optional SQLALCHEMY_DATABASE_URI chanjo integration. Kept candidate pending deployment-config verification.",
+      "No sanitizer entries: no scheme allowlist, host whitelist, redirect control, DNS-resolution or private-IP blocking exists on any audited outbound path; the only scheme check found (url.startswith('ftp') in fetch_resource) is a transport dispatch, not a barrier, and login/role checks (beacon_submitter, institute_and_case) do not constrain outbound URLs.",
+      "No summary entries: both tp flows propagate by direct parameter passing and standard interprocedural taint steps (route param -> requests.request url kwarg; request.url_root -> function param -> string concat -> requests.post arg 0); no wrapper-return modeling is needed for Phase 2.",
+      "Schema normalizations recorded in labels_raw_pass3.json deviations: url-keyword call sites recorded by the CSV with argIndex -1 normalized to their positional URL index (requests.request url kw -> 1; scout_requests wrapper url kw -> 0); query_phenomizer.query flow_kind 'argument'/argIndex -1 -> flow_kind 'unknown'/arg_index null; sources.csv callableName 'flask.url_for_external' normalized to 'flask.url_for' (no such attribute exists in flask; the site is url_for(..., _external=True)); source argIndex -1 -> arg_index null for non-argument flow kinds.",
+      "query_phenomizer.query (cases/controllers.py:837) kept as sink/unknown for human review: its HTTP request happens inside the external query-phenomizer package that is not part of this CodeQL database, so URL-level control cannot be proven or disproven from this source tree.",
+      "file: and data: outbound schemes were searched for and not found in scout/ (detection.json coverage_gaps); the only cross-protocol outbound fetch is the ftp branch of fetch_resource (urlopen at scout_requests.py:141), which receives constant ftp URLs only. Local-file concerns (remote_static) are path-traversal territory and were deliberately kept out of CWE-918 labels.",
+      "Vulnerability ground truth, fix commits and external CVE descriptions were not consulted; labeling is based only on the scout source tree, the extraction CSVs and exploration/detection.json."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 3,
+      "focus": "Server-Side Request Forgery (SSRF)",
+      "cwes": [
+        "918",
+        "099",
+        "610"
+      ],
+      "entries": [
+        {
+          "id": "src-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.beacon_extension",
+            "type": "scout.server.extensions.Beacon",
+            "callable": "Beacon.beacon_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/extensions/beacon_extension.py",
+            "line": 30
+          },
+          "rationale": "init_app reads self.beacon_url from app.config['BEACON_URL'] and joins 'add'/'delete' onto it. This is operator-controlled deployment configuration loaded once at startup; it never crosses a web-request boundary, so it is not an attacker-influenced source (admin-config FP class).",
+          "evidence": [
+            "scout/server/extensions/beacon_extension.py:26-31 init_app: self.beacon_url = app.config.get('BEACON_URL'); add/delete URLs joined from it",
+            "scout/server/app.py:137-144 Beacon extension enabled only when BEACON_URL + BEACON_TOKEN are present in admin config"
+          ]
+        },
+        {
+          "id": "src-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.beacon_extension",
+            "type": "scout.server.extensions.Beacon",
+            "callable": "Beacon.beacon_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/extensions/beacon_extension.py",
+            "line": 31
+          },
+          "rationale": "Same field read as src-001 at the delete-URL join: BEACON_URL is admin deployment config; fixed per deployment and unreachable from request data.",
+          "evidence": [
+            "scout/server/extensions/beacon_extension.py:30-31 self.add_variants_url/delete_variants_url = '/'.join([self.beacon_url, ...])"
+          ]
+        },
+        {
+          "id": "src-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.beacon_extension",
+            "type": "scout.server.extensions.Beacon",
+            "callable": "Beacon.beacon_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/extensions/beacon_extension.py",
+            "line": 39
+          },
+          "rationale": "get_datasets builds the URL as f'{self.beacon_url}/' - the beacon info endpoint of the admin-configured cgbeacon2 server. No request-derived component enters the URL.",
+          "evidence": [
+            "scout/server/extensions/beacon_extension.py:39 get_request_json(url=f\"{self.beacon_url}/\")",
+            "scout/server/app.py:137-144 BEACON_URL admin config gate"
+          ]
+        },
+        {
+          "id": "src-004",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "scout.server.blueprints.cases.controllers",
+            "type": "flask",
+            "callable": "flask.url_for",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 544
+          },
+          "rationale": "url_for('report.json_chrom_coverage', _external=True) returns an absolute URL whose host is derived from the incoming request (Host header) whenever Flask SERVER_NAME is unset - which is the case in the default scout/server/config.py. The value is POSTed verbatim at controllers.py:548/554, so an authenticated user could steer the outbound host. Host-only control (path is the app's own chanjo endpoint), requires the optional SQLALCHEMY_DATABASE_URI chanjo integration, and setting SERVER_NAME in deployment would pin it - kept candidate pending that config check.",
+          "evidence": [
+            "scout/server/blueprints/cases/controllers.py:544 cov_calc_url = url_for('report.json_chrom_coverage', _external=True)",
+            "scout/server/blueprints/cases/controllers.py:548/554 requests.post(cov_calc_url, json=data)",
+            "scout/server/config.py: no SERVER_NAME defined; SQLALCHEMY_DATABASE_URI commented out (optional)",
+            "web reachability: mt_excel_files (controllers.py:590) -> mt_coverage_stats, from the cases MT-report routes; chanjo blueprint mounted only when SQLALCHEMY_DATABASE_URI is set (app.py:114-116, 282-291)"
+          ]
+        },
+        {
+          "id": "src-005",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "scout.server.blueprints.cases.controllers",
+            "type": "flask.route_handler.path_variable",
+            "callable": "matchmaker_match.target",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 1223
+          },
+          "rationale": "Route path variable <target> of /mme_match/<target> is used only as the 'internal' sentinel or compared with node != target against matchmaker.connected_nodes (node ids listed by the admin-configured MME server). Only a server-listed node id can reach the outbound URL, whose host is the admin-config MME_URL - the parameter cannot alter scheme, host or port, and unknown targets trigger no request at all.",
+          "evidence": [
+            "scout/server/blueprints/cases/views.py:116-121 route mme_match/<target> -> controllers.matchmaker_match(request, target, institute_id, case_name)",
+            "scout/server/blueprints/cases/controllers.py:1240-1257 target == 'internal' branch, else node-membership filter over matchmaker.connected_nodes",
+            "scout/server/extensions/matchmaker_extension.py:150 url = ''.join([self.host, '/match/external/', patient_id, '?node=', node_id]) with self.host = MME_URL admin config"
+          ]
+        },
+        {
+          "id": "src-006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.loqus_extension",
+            "type": "scout.server.extensions.LoqusDB",
+            "callable": "loqus_settings.get_api_url",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "scout/server/extensions/loqus_extension.py",
+            "line": 122
+          },
+          "rationale": "get_instance_version passes instance_settings.get(API_URL) into get_api_loqus_version; the api_url originates from LOQUSDB_SETTINGS admin deployment config and is never influenced by web-request data.",
+          "evidence": [
+            "scout/server/extensions/loqus_extension.py:122 version = self.get_api_loqus_version(api_url=instance_settings.get(API_URL))",
+            "scout/server/extensions/loqus_extension.py:68 cfg = app.config['LOQUSDB_SETTINGS']"
+          ]
+        },
+        {
+          "id": "src-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.loqus_extension",
+            "type": "scout.server.extensions.LoqusDB",
+            "callable": "loqus_settings.get_api_url",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "scout/server/extensions/loqus_extension.py",
+            "line": 124
+          },
+          "rationale": "CSV row names the API-url family, but the node at line 124 is the exec-instance branch (get_exec_loqus_version) of get_instance_version: local subprocess version call with admin-config binary path, no URL and no web input. Either way no untrusted input crosses this boundary.",
+          "evidence": [
+            "scout/server/extensions/loqus_extension.py:120-124 instance_type dispatch: 'api' -> get_api_loqus_version, else get_exec_loqus_version",
+            "scout/server/extensions/loqus_extension.py:137-149 execute_command subprocess path (CWE-78 territory, not CWE-918)"
+          ]
+        },
+        {
+          "id": "src-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout/server.extensions.loqus_extension",
+            "type": "scout.server.extensions.LoqusDB",
+            "callable": "loqus_settings.get_api_url",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "scout/server/extensions/loqus_extension.py",
+            "line": 167
+          },
+          "rationale": "case_count exec-vs-api instance-type branch check; no URL material and no request-derived value (the surrounding API branch uses only admin-config api_url).",
+          "evidence": [
+            "scout/server/extensions/loqus_extension.py:166-183 case_count instance_type dispatch; API branch builds search_url from loqus_instance.get(API_URL) (admin config)"
+          ]
+        },
+        {
+          "id": "src-009",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.loqus_extension",
+            "type": "scout.server.extensions.LoqusDB",
+            "callable": "loqus_settings.get_api_url",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "scout/server/extensions/loqus_extension.py",
+            "line": 182
+          },
+          "rationale": "search_url = f\"{loqus_instance.get(API_URL)}/cases\" - admin-configured LoqusDB REST base URL plus a constant path; case counts are fetched from the configured instance, no request input in the URL.",
+          "evidence": [
+            "scout/server/extensions/loqus_extension.py:182 search_url = f\"{loqus_instance.get(API_URL)}/cases\"",
+            "scout/server/config.py:64-70 LOQUSDB_SETTINGS example (admin file)"
+          ]
+        },
+        {
+          "id": "src-010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.loqus_extension",
+            "type": "scout.server.extensions.LoqusDB",
+            "callable": "loqus_settings.get_api_url",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "scout/server/extensions/loqus_extension.py",
+            "line": 208
+          },
+          "rationale": "get_variant exec-vs-api dispatch line; the API branch on line 212 uses only admin-config api_url as base. No untrusted input here.",
+          "evidence": [
+            "scout/server/extensions/loqus_extension.py:208-212 get_variant dispatch; return self.get_api_loqus_variant(loqus_instance.get(API_URL), variant_info)"
+          ]
+        },
+        {
+          "id": "src-011",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.loqus_extension",
+            "type": "scout.server.extensions.LoqusDB",
+            "callable": "loqus_settings.get_api_url",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "scout/server/extensions/loqus_extension.py",
+            "line": 212
+          },
+          "rationale": "get_api_loqus_variant receives loqus_instance.get(API_URL) - the admin-configured REST base; only variant coordinates from the database are appended as path/query.",
+          "evidence": [
+            "scout/server/extensions/loqus_extension.py:212 return self.get_api_loqus_variant(loqus_instance.get(API_URL), variant_info)",
+            "scout/server/extensions/loqus_extension.py:228-240 URL path parts are variant_info DB content, host is admin config"
+          ]
+        },
+        {
+          "id": "src-012",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.loqus_extension",
+            "type": "scout.server.extensions.LoqusDB",
+            "callable": "loqus_settings.get_api_url",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "scout/server/extensions/loqus_extension.py",
+            "line": 262
+          },
+          "rationale": "Line 262 is inside get_exec_loqus_variant: command construction for the local loqusdb binary (admin-config binary_path), not an API URL. No web input; subprocess concerns belong to command injection, not CWE-918.",
+          "evidence": [
+            "scout/server/extensions/loqus_extension.py:261-263 cmd = self.get_command(...); cmd.extend(['variants', '--to-json', ...])"
+          ]
+        },
+        {
+          "id": "src-013",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.matchmaker_extension",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.host",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/extensions/matchmaker_extension.py",
+            "line": 76
+          },
+          "rationale": "nodes() builds url = ''.join([self.host, '/nodes']) where self.host = app.config['MME_URL'] - admin-configured MatchMaker Exchange server, loaded at startup. Fixed host per deployment; not attacker-influenced.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:26 self.host = app.config.get('MME_URL')",
+            "scout/server/extensions/matchmaker_extension.py:76 url = ''.join([self.host, '/nodes'])",
+            "scout/server/app.py:127-135 MatchMaker extension enabled only when MME_URL/MME_ACCEPTS/MME_TOKEN config present"
+          ]
+        },
+        {
+          "id": "src-014",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.matchmaker_extension",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.host",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/extensions/matchmaker_extension.py",
+            "line": 90
+          },
+          "rationale": "patient_delete URL = self.host + '/patient/delete/' + patient_id: host pinned to admin-config MME_URL; the only variable part is a patient id previously issued by the MME server itself and stored in the case document. No scheme/host/port control.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:90 url = ''.join([self.host, '/patient/delete/', patient_id])",
+            "scout/server/blueprints/cases/controllers.py:1160-1163 patient_id taken from case_obj mme_submission patients (DB)"
+          ]
+        },
+        {
+          "id": "src-015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.matchmaker_extension",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.host",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/extensions/matchmaker_extension.py",
+            "line": 103
+          },
+          "rationale": "patient_submit URL = self.host + '/patient/add' - fully admin-config host plus constant path; the patient object is sent as JSON body, never in the URL.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:103 url = ''.join([self.host, '/patient/add'])"
+          ]
+        },
+        {
+          "id": "src-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.matchmaker_extension",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.host",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/extensions/matchmaker_extension.py",
+            "line": 122
+          },
+          "rationale": "patient_matches URL = self.host + '/matches/' + patient_id: admin-config host, server-issued patient id from the DB. No attacker control of the destination.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:122 url = ''.join([self.host, '/matches/', patient_id])"
+          ]
+        },
+        {
+          "id": "src-017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.matchmaker_extension",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.host",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/extensions/matchmaker_extension.py",
+            "line": 133
+          },
+          "rationale": "match_internal URL = self.host + '/match' - entirely admin-config host plus constant path; the patient object travels in the POST body.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:133 url = ''.join([self.host, '/match'])"
+          ]
+        },
+        {
+          "id": "src-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.matchmaker_extension",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.host",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/extensions/matchmaker_extension.py",
+            "line": 150
+          },
+          "rationale": "match_external URL = self.host + '/match/external/' + patient_id + '?node=' + node_id: host pinned to MME_URL admin config; patient_id is server-issued (DB) and node_id is filtered against the connected_nodes list returned by the MME server. No attacker influence on scheme/host/port.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:150 url = ''.join([self.host, '/match/external/', patient_id, '?node=', node_id])",
+            "scout/server/blueprints/cases/controllers.py:1253-1257 nodes = [node['id'] for node in matchmaker.connected_nodes]; node-membership filter"
+          ]
+        },
+        {
+          "id": "src-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "scout.server.blueprints.cases.views",
+            "type": "flask.request",
+            "callable": "request.form",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/views.py",
+            "line": 93
+          },
+          "rationale": "beacon_add_variants passes request.form into beacon.add_variants, but the form values (samples/panels/vcf_files selections) only shape the JSON POST body; the destination URL is BEACON_URL + '/add' from admin config. Body-only control with the host fixed is not CWE-918 URL forgery; additionally gated by the beacon_submitter user role.",
+          "evidence": [
+            "scout/server/blueprints/cases/views.py:87-94 beacon.add_variants(store, case_obj, request.form)",
+            "scout/server/extensions/beacon_extension.py:125-133 post_request_json(url=self.add_variants_url, ..., data=base_data) - admin-config URL, form data only in body",
+            "scout/server/extensions/beacon_extension.py:98-106 beacon_submitter role check"
+          ]
+        },
+        {
+          "id": "src-020",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "scout/server.blueprints.cases.views",
+            "type": "flask.request",
+            "callable": "request.url_root",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/views.py",
+            "line": 225
+          },
+          "rationale": "pdf_case_report passes request.url_root - derived from the incoming request Host header - as base_url into coverage_report_contents, which POSTs to base_url + 'reports/report'. An authenticated user with access to the case therefore controls the outbound host whenever the chanjo coverage integration is enabled (SQLALCHEMY_DATABASE_URI set). This is a genuine CWE-918 host-control boundary; not a confirmed vulnerability.",
+          "evidence": [
+            "scout/server/blueprints/cases/views.py:212-226 pdf_case_report route; controllers.coverage_report_contents(request.url_root, institute_obj, case_obj)",
+            "scout/server/blueprints/cases/controllers.py:59-96 requests.post(base_url + 'reports/report', timeout=..., data=request_data)",
+            "scout/server/app.py:83-98 before_request: route requires an authenticated session; institute_and_case checks case access",
+            "scout/server/app.py:114-116 chanjo coverage enabled only when SQLALCHEMY_DATABASE_URI is configured"
+          ]
+        },
+        {
+          "id": "src-021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "flask",
+            "module": "scout/server.blueprints.cases.views",
+            "type": "flask.request",
+            "callable": "request.form",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/views.py",
+            "line": 469
+          },
+          "rationale": "'remove' membership test on request.form in the events handler; the branch only calls store.delete_event - a MongoDB operation. No path from this value into any outbound request URL.",
+          "evidence": [
+            "scout/server/blueprints/cases/views.py:459-472 events handler; if 'remove' in request.form: store.delete_event(event_id)",
+            "outbound fetch sites audited: alignviewers/views.py:42, cases/controllers.py:94/548/554/894, scout/utils/scout_requests.py, extensions"
+          ]
+        },
+        {
+          "id": "src-022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "flask",
+            "module": "scout/server.blueprints.cases.views",
+            "type": "flask.request",
+            "callable": "request.form",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/views.py",
+            "line": 472
+          },
+          "rationale": "'edit' membership test on request.form in the events handler; the branch only calls store.update_comment (MongoDB). No outbound request is influenced.",
+          "evidence": [
+            "scout/server/blueprints/cases/views.py:472-478 elif 'edit' in request.form: store.update_comment(...)"
+          ]
+        },
+        {
+          "id": "src-023",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "flask",
+            "module": "scout/server.blueprints.cases.views",
+            "type": "flask.request",
+            "callable": "request.form",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/views.py",
+            "line": 631
+          },
+          "rationale": "'partial_causative' membership test in mark_causative; drives only store.mark_partial_causative / mark_causative database writes. No network request involved.",
+          "evidence": [
+            "scout/server/blueprints/cases/views.py:630-644 if 'partial_causative' in request.form: store.mark_partial_causative(...)"
+          ]
+        },
+        {
+          "id": "src-024",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "flask",
+            "module": "scout/server.blueprints.cases.views",
+            "type": "flask.request",
+            "callable": "request.form",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/views.py",
+            "line": 796
+          },
+          "rationale": "'revoke' membership test in the share handler; drives only store.unshare / store.share (MongoDB). No outbound request is influenced.",
+          "evidence": [
+            "scout/server/blueprints/cases/views.py:790-807 share handler; revoke_access = 'revoke' in request.form; store.unshare/share"
+          ]
+        },
+        {
+          "id": "src-025",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "flask",
+            "module": "scout.server.blueprints.alignviewers.views",
+            "type": "flask.route_handler.path_variable",
+            "callable": "remote_cors.remote_url",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "scout/server/blueprints/alignviewers/views.py",
+            "line": 34
+          },
+          "rationale": "The <path:remote_url> route converter captures an arbitrary client-supplied URL and the handler forwards it verbatim as the url of requests.request in the same function. There is no scheme validation, no host allowlist and allow_redirects=True; the endpoint requires only an authenticated session (global before_request) with no institute/case binding and no role requirement, so any logged-in user controls the full outbound target. Genuine CWE-918 source boundary.",
+          "evidence": [
+            "scout/server/blueprints/alignviewers/views.py:33-34 @alignviewers_bp.route('/remote/cors/<path:remote_url>', methods=['OPTIONS','GET']) def remote_cors(remote_url)",
+            "scout/server/blueprints/alignviewers/views.py:42-49 requests.request(method=request.method, url=remote_url, ..., allow_redirects=True)",
+            "scout/server/app.py:83-98 check_user before_request: login is the only gate on this endpoint",
+            "scout/server/app.py:54 CORS(app) global - browser origins can call the proxy cross-site"
+          ]
+        },
+        {
+          "id": "src-026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "scout.server.blueprints.alignviewers.views",
+            "type": "flask.request",
+            "callable": "request.headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/blueprints/alignviewers/views.py",
+            "line": 45
+          },
+          "rationale": "Inbound headers (minus Host) are forwarded verbatim into the proxied request's headers= argument - not into the URL. They do not control the outbound destination, so they are not a CWE-918 URL source; they are an impact amplifier of the remote_url flow (see src-025) and borderline for header-injection (pass 10), documented here but not labeled for pass 3.",
+          "evidence": [
+            "scout/server/blueprints/alignviewers/views.py:45 headers={key: value for (key, value) in request.headers if key != 'Host'}",
+            "URL argument of the same call is remote_url (src-025), not any header value"
+          ]
+        },
+        {
+          "id": "src-027",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "scout/server.blueprints.alignviewers.views",
+            "type": "flask.request",
+            "callable": "request.get_data",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "scout/server/blueprints/alignviewers/views.py",
+            "line": 46
+          },
+          "rationale": "request.get_data() is forwarded as the data= (body) argument of the proxied request. Body forwarding never controls the outbound URL; not a CWE-918 source. Companion of the remote_url flow only.",
+          "evidence": [
+            "scout/server/blueprints/alignviewers/views.py:46 data=request.get_data()"
+          ]
+        },
+        {
+          "id": "src-028",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "scout/server.blueprints.alignviewers.views",
+            "type": "flask.request",
+            "callable": "request.cookies",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/blueprints/alignviewers/views.py",
+            "line": 47
+          },
+          "rationale": "Inbound cookies are forwarded to the attacker-chosen remote target (cookies=request.cookies), which materially amplifies the remote_url SSRF (session-credential exposure). However the cookies never control the destination URL, so for pass 3 URL-forgery labeling they are not a source; recorded as an impact note on the src-025 flow.",
+          "evidence": [
+            "scout/server/blueprints/alignviewers/views.py:47 cookies=request.cookies",
+            "destination control lives exclusively in remote_url (src-025)"
+          ]
+        },
+        {
+          "id": "src-029",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "flask",
+            "module": "scout.server.blueprints.alignviewers.views",
+            "type": "flask.request",
+            "callable": "request.headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "scout/server/blueprints/alignviewers/views.py",
+            "line": 77
+          },
+          "rationale": "Range header read in remote_static for local partial file streaming (send_file_partial); the endpoint performs no outbound network request. Local-file behavior is out of CWE-918 scope (path-traversal concern at most, already excluded in detection.json).",
+          "evidence": [
+            "scout/server/blueprints/alignviewers/views.py:67-82 remote_static: request.args 'file' + Range header -> send_file_partial (local file)"
+          ]
+        },
+        {
+          "id": "snk-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.beacon_extension",
+            "type": "scout.utils.scout_requests",
+            "callable": "get_request_json",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/extensions/beacon_extension.py",
+            "line": 39
+          },
+          "rationale": "get_request_json(url=f\"{self.beacon_url}/\") fetches the Beacon info endpoint of the admin-configured cgbeacon2 server. The network call is real and arg 0 is the URL position (CSV recorded the url= keyword with argIndex -1, normalized to 0), but the target is deployment configuration - not attacker-controllable, so the SSRF sink role is not genuinely played.",
+          "evidence": [
+            "scout/server/extensions/beacon_extension.py:39 get_request_json(url=f\"{self.beacon_url}/\")",
+            "scout/server/utils/scout_requests.py:59/61 underlying requests.get(url, ...)"
+          ]
+        },
+        {
+          "id": "snk-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.beacon_extension",
+            "type": "scout.utils.scout_requests",
+            "callable": "post_request_json",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/extensions/beacon_extension.py",
+            "line": 131
+          },
+          "rationale": "post_request_json(url=self.add_variants_url, ...) - the add-variants endpoint of the admin-configured Beacon URL; the request.form-derived data travels only in the JSON body. URL fixed per deployment.",
+          "evidence": [
+            "scout/server/extensions/beacon_extension.py:119-133 post_request_json(url=self.add_variants_url, headers=..., data=base_data)",
+            "scout/server/extensions/beacon_extension.py:30 self.add_variants_url = '/'.join([self.beacon_url, 'add'])"
+          ]
+        },
+        {
+          "id": "snk-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.beacon_extension",
+            "type": "scout.utils.scout_requests",
+            "callable": "delete_request_json",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/extensions/beacon_extension.py",
+            "line": 180
+          },
+          "rationale": "delete_request_json(url=self.delete_variants_url, ...) - admin-config Beacon delete endpoint; req_data comes from the case document (DB) and is sent as body. No URL influence.",
+          "evidence": [
+            "scout/server/extensions/beacon_extension.py:180-182 delete_request_json(url=self.delete_variants_url, headers=..., data=req_data)",
+            "scout/server/extensions/beacon_extension.py:31 self.delete_variants_url = '/'.join([self.beacon_url, 'delete'])"
+          ]
+        },
+        {
+          "id": "snk-004",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "requests",
+            "module": "scout.server.blueprints.cases.controllers",
+            "type": "requests",
+            "callable": "requests.post",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 94
+          },
+          "rationale": "coverage_report_contents POSTs to base_url + 'reports/report' where base_url is request.url_root passed from pdf_case_report - an authenticated user with case access controls the outbound host via the Host header (when the chanjo integration is enabled). Arg 0 is the exact URL position. Sink role genuinely played for CWE-918 host control; not by itself a confirmed vulnerability.",
+          "evidence": [
+            "scout/server/blueprints/cases/controllers.py:94 requests.post(base_url + 'reports/report', timeout=COVERAGE_REPORT_TIMEOUT, data=request_data)",
+            "scout/server/blueprints/cases/views.py:224-226 controllers.coverage_report_contents(request.url_root, institute_obj, case_obj)",
+            "scout/server/app.py:114-116 gate: SQLALCHEMY_DATABASE_URI must be configured"
+          ]
+        },
+        {
+          "id": "snk-005",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "requests",
+            "module": "scout.server.blueprints.cases.controllers",
+            "type": "requests",
+            "callable": "requests.post",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 548
+          },
+          "rationale": "mt_coverage_stats POSTs to cov_calc_url = url_for('report.json_chrom_coverage', _external=True). With SERVER_NAME unset (scout default) the external URL host derives from the request Host header, giving host control to an authenticated user; with SERVER_NAME set in deployment the target is pinned. Paired with source candidate src-004; kept candidate pending deployment-config verification.",
+          "evidence": [
+            "scout/server/blueprints/cases/controllers.py:544-548 cov_calc_url = url_for(...); requests.post(cov_calc_url, json=data)",
+            "scout/server/config.py: no SERVER_NAME key",
+            "reachability: controllers.py:590 mt_excel_files -> mt_coverage_stats from cases MT-report web routes"
+          ]
+        },
+        {
+          "id": "snk-006",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "requests",
+            "module": "scout.server.blueprints.cases.controllers",
+            "type": "requests",
+            "callable": "requests.post",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 554
+          },
+          "rationale": "Second requests.post of mt_coverage_stats (autosomal coverage query) using the same Host/SERVER_NAME-derived cov_calc_url as snk-005. Same conditions and same candidate status.",
+          "evidence": [
+            "scout/server/blueprints/cases/controllers.py:551-554 data['chrom'] = str(ref_chrom); requests.post(cov_calc_url, json=data)"
+          ]
+        },
+        {
+          "id": "snk-007",
+          "role": "sink",
+          "classification": "unknown",
+          "confidence": 0.5,
+          "signature": {
+            "package": "query-phenomizer (external library)",
+            "module": null,
+            "type": "query_phenomizer",
+            "callable": "query_phenomizer.query",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 837
+          },
+          "rationale": "hpo_diseases calls query_phenomizer.query(username, password, *hpo_ids); the HTTP request to the Phenomizer server happens inside the external query-phenomizer package, which is not part of this CodeQL database, so the URL construction and its argument positions cannot be verified here. Username/password come from admin config (PHENOMIZER_*), hpo_ids from case phenotype terms. No evidence of URL control by request data, but it cannot be disproven from this source tree - retained as unknown for human review.",
+          "evidence": [
+            "scout/server/blueprints/cases/controllers.py:835-838 results = query_phenomizer.query(username, password, *hpo_ids)",
+            "scout/server/blueprints/cases/controllers.py:9 import query_phenomizer (external package, not in DB)",
+            "CSV argIndex -1 with flowKind 'argument' normalized to flow_kind 'unknown' / arg_index null (hpo_ids are varargs; no single dangerous positional)"
+          ]
+        },
+        {
+          "id": "snk-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "requests",
+            "module": "scout.server.blueprints.cases.controllers",
+            "type": "requests",
+            "callable": "requests.post",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 894
+          },
+          "rationale": "call_rerunner POSTs to url = rerunner.connection_settings entrypoint - the RERUNNER_API_ENTRYPOINT admin config. The user-edited sample_metadata (reanalysis POST form, json.loads) travels in params/json body only. Destination fixed by admin configuration.",
+          "evidence": [
+            "scout/server/blueprints/cases/controllers.py:888-901 url = cnf.get('entrypoint'); requests.post(url, params=payload, json=metadata, ...)",
+            "scout/server/app.py:146-149 Rerunner enabled only when RERUNNER_API_ENTRYPOINT + RERUNNER_API_KEY configured",
+            "scout/server/blueprints/cases/views.py:835-841 reanalysis route: json.loads(request.form.get('sample_metadata')) -> body"
+          ]
+        },
+        {
+          "id": "snk-009",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.blueprints.cases.controllers",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.patient_submit",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 1124
+          },
+          "rationale": "patient_submit receives the patient object built from case data, but the URL inside the wrapper is self.host + '/patient/add' - admin-config MME_URL with a constant path; the patient object is the JSON POST body. Arg 0 does not reach the URL, so the sink role is not played for CWE-918.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:103-110 url = ''.join([self.host, '/patient/add']); data={'patient': patient_obj}",
+            "scout/server/blueprints/cases/controllers.py:1104-1124 patient dict built from case_obj DB content"
+          ]
+        },
+        {
+          "id": "snk-010",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "internal",
+            "module": "scout/server.blueprints.cases.controllers",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.patient_delete",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 1163
+          },
+          "rationale": "patient_delete builds url = MME_URL_host + '/patient/delete/' + patient_id where patient_id comes from the case's mme_submission (an id issued by the MME server itself and stored in the DB). Host is admin-pinned and the path component is server-issued second-order data - no attacker control of scheme/host/port, but a non-constant path part exists, so it is kept as a low-confidence recall candidate for triage.",
+          "evidence": [
+            "scout/server/blueprints/cases/controllers.py:1160-1163 patient_id = patient['id'] from case_obj mme_submission (DB); matchmaker.patient_delete(patient_id)",
+            "scout/server/extensions/matchmaker_extension.py:90 url = ''.join([self.host, '/patient/delete/', patient_id])"
+          ]
+        },
+        {
+          "id": "snk-011",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "internal",
+            "module": "scout/server.blueprints.cases.controllers",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.patient_matches",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 1206
+          },
+          "rationale": "patient_matches builds url = MME_URL_host + '/matches/' + patient_id with the same server-issued second-order patient id as snk-010; host admin-pinned. Web-reachable via /mme_matches. Kept as low-confidence candidate for recall; expected FP at triage.",
+          "evidence": [
+            "scout/server/blueprints/cases/controllers.py:1203-1206 patient_id from case mme_submission; matchmaker.patient_matches(patient_id)",
+            "scout/server/extensions/matchmaker_extension.py:122 url = ''.join([self.host, '/matches/', patient_id])"
+          ]
+        },
+        {
+          "id": "snk-012",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.blueprints.cases.controllers",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.match_internal",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 1241
+          },
+          "rationale": "match_internal sends to self.host + '/match' - admin-config host plus a constant path; the patient object is the POST body. No URL influence from any argument.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:133-140 url = ''.join([self.host, '/match']); data={'patient': patient_obj}"
+          ]
+        },
+        {
+          "id": "snk-013",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "internal",
+            "module": "scout/server.blueprints.cases.controllers",
+            "type": "scout.server.extensions.MatchMaker",
+            "callable": "MatchMaker.match_external",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/controllers.py",
+            "line": 1257
+          },
+          "rationale": "match_external builds url = MME_URL_host + '/match/external/' + patient_id + '?node=' + node_id: host admin-pinned, patient_id server-issued (DB), node_id filtered to ids listed by the connected MME nodes (controllers.py:1253-1256). No attacker control of scheme/host/port; non-constant path/query parts are server-constrained. Kept as candidate for recall.",
+          "evidence": [
+            "scout/server/blueprints/cases/controllers.py:1249-1257 nodes = [node['id'] for node in matchmaker.connected_nodes]; node-membership filter; matchmaker.match_external(patient_id, node)",
+            "scout/server/extensions/matchmaker_extension.py:150 url = ''.join([self.host, '/match/external/', patient_id, '?node=', node_id])"
+          ]
+        },
+        {
+          "id": "snk-014",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "scout.utils.ensembl_rest_clients",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/ensembl_rest_clients.py",
+            "line": 81
+          },
+          "rationale": "EnsemblRestApiClient.send_request performs requests.get(url, headers=HEADERS) with url = self.server (hard constants grch37.rest.ensembl.org / rest.ensembl.org) + endpoint + urlencode(params) or liftover coordinates. Host/scheme are pinned by module constants; the path/query parts are genomic coordinates (chrom/start/end) from case/variant DB content, reached from web requests via variant liftover (variant/views.py:352, alignviewers/controllers.py:118). Second-order path control only - kept as candidate; expected FP at triage.",
+          "evidence": [
+            "scout/utils/ensembl_rest_clients.py:81 response = requests.get(url, headers=HEADERS)",
+            "scout/utils/ensembl_rest_clients.py:10-11 RESTAPI_37/38 constant hosts; :42-47 build_url joins self.server + endpoint",
+            "web reachability: scout/server/blueprints/variant/views.py:352 and alignviewers/controllers.py:118 client.liftover(build, chrom, start, end)"
+          ]
+        },
+        {
+          "id": "snk-015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.65,
+          "signature": {
+            "package": "requests",
+            "module": "scout.utils.ensembl_rest_clients",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/ensembl_rest_clients.py",
+            "line": 188
+          },
+          "rationale": "EnsemblBiomartClient queries url = BIOMART_37/38 constant host + an XML query built from code-side attribute/filter lists (fetch_ensembl_genes/transcripts/exons). Only reachable from CLI download/setup commands; no web-request data reaches this site and the host is a hard constant.",
+          "evidence": [
+            "scout/utils/ensembl_rest_clients.py:186-190 url = self.build_url(xml); requests.get(url, stream=True)",
+            "scout/utils/ensembl_rest_clients.py:14-15 BIOMART_37/38 constants",
+            "callers: scout/utils/scout_requests.py fetch_ensembl_* (CLI download flows), no server route"
+          ]
+        },
+        {
+          "id": "snk-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.loqus_extension",
+            "type": "scout.utils.scout_requests",
+            "callable": "api_get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/extensions/loqus_extension.py",
+            "line": 133
+          },
+          "rationale": "get_api_loqus_version calls api_get(''.join([api_url, '/'])) - the root endpoint of the admin-configured LoqusDB REST instance. URL fully determined by LOQUSDB_SETTINGS at startup.",
+          "evidence": [
+            "scout/server/extensions/loqus_extension.py:133 json_resp = api_get(''.join([api_url, '/']))",
+            "scout/server/extensions/loqus_extension.py:13 get_request_json imported as api_get"
+          ]
+        },
+        {
+          "id": "snk-017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.loqus_extension",
+            "type": "scout.utils.scout_requests",
+            "callable": "api_get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/extensions/loqus_extension.py",
+            "line": 183
+          },
+          "rationale": "case_count (API instance) queries search_url = admin api_url + '/cases' - constant path on the admin-configured host. No request-derived component in the URL.",
+          "evidence": [
+            "scout/server/extensions/loqus_extension.py:182-183 search_url = f\"{loqus_instance.get(API_URL)}/cases\"; api_get(search_url)"
+          ]
+        },
+        {
+          "id": "snk-018",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.loqus_extension",
+            "type": "scout.utils.scout_requests",
+            "callable": "api_get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/extensions/loqus_extension.py",
+            "line": 242
+          },
+          "rationale": "get_api_loqus_variant builds search_url = admin api_url + category + variant _id or SV coordinates (f-string query). The host is admin-pinned, but the path/query parts are DB variant content reached from web variant pages; a crafted variant id could at most inject additional path/query segments on the fixed host. Kept as candidate for recall; expected FP at triage.",
+          "evidence": [
+            "scout/server/extensions/loqus_extension.py:228-242 search_url built from variant_info (DB) coordinates/ids; api_get(search_url)",
+            "web reachability: variant controllers call loqus get_variant during variant page rendering"
+          ]
+        },
+        {
+          "id": "snk-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.matchmaker_extension",
+            "type": "scout.utils.scout_requests",
+            "callable": "get_request_json",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/extensions/matchmaker_extension.py",
+            "line": 59
+          },
+          "rationale": "MatchMaker.request dispatches GET to get_request_json(url=url, ...) where url was built by the calling method as self.host (admin MME_URL) + a fixed path or a server-issued patient id. The URL never contains web-request data. CSV argIndex -1 (url= keyword) normalized to 0.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:58-59 json_response = scout_requests.get_request_json(url=url, headers=headers)",
+            "URL builders: matchmaker_extension.py:76/90/103/122/133/150 - all self.host + constant/server-issued parts"
+          ]
+        },
+        {
+          "id": "snk-020",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.matchmaker_extension",
+            "type": "scout.utils.scout_requests",
+            "callable": "delete_request_json",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/extensions/matchmaker_extension.py",
+            "line": 61
+          },
+          "rationale": "DELETE dispatch of MatchMaker.request with the same admin-host + server-issued-id URL shapes as snk-019. No web-request data in the URL.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:60-61 scout_requests.delete_request_json(url=url, headers=headers)"
+          ]
+        },
+        {
+          "id": "snk-021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.extensions.matchmaker_extension",
+            "type": "scout.utils.scout_requests",
+            "callable": "post_request_json",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/extensions/matchmaker_extension.py",
+            "line": 63
+          },
+          "rationale": "POST dispatch of MatchMaker.request; patient objects travel in the JSON body, the URL is admin-host + constant path. No URL influence.",
+          "evidence": [
+            "scout/server/extensions/matchmaker_extension.py:62-65 scout_requests.post_request_json(url=url, headers=headers, data=req_data)"
+          ]
+        },
+        {
+          "id": "snk-022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "internal",
+            "module": "scout.load.panel",
+            "type": "scout.utils.scout_requests",
+            "callable": "fetch_resource",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/load/panel.py",
+            "line": 126
+          },
+          "rationale": "load_panel_app fetches PanelApp's list_panels endpoint: base_url is the hard constant https://panelapp.genomicsengland.co.uk/WebServices/... and the call is CLI-only (scout load panel-app operator command). Fixed host, operator-invoked, no web input.",
+          "evidence": [
+            "scout/load/panel.py:117 base_url = 'https://panelapp.genomicsengland.co.uk/WebServices/{0}/'",
+            "scout/load/panel.py:126 fetch_resource(base_url.format('list_panels'), json=True) - CLI load command context"
+          ]
+        },
+        {
+          "id": "snk-023",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "internal",
+            "module": "scout.load.panel",
+            "type": "scout.utils.scout_requests",
+            "callable": "fetch_resource",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/load/panel.py",
+            "line": 131
+          },
+          "rationale": "PanelApp get_panel fetch: same hard-coded https host with a CLI panel-id path suffix (operator argument). Host and scheme pinned by a string constant; not reachable from any web route.",
+          "evidence": [
+            "scout/load/panel.py:131 fetch_resource(base_url.format('get_panel') + _panel_id, json=True) with _panel_id from the CLI"
+          ]
+        },
+        {
+          "id": "snk-024",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "requests",
+            "module": "scout.adapter.mongo.rank_model",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/adapter/mongo/rank_model.py",
+            "line": 23
+          },
+          "rationale": "RankModelHandler.fetch_rank_model performs requests.get(rank_model_url) where the URL = RANK_MODEL_LINK_PREFIX (admin config, default pinned to raw.githubusercontent.com Clinical-Genomics reference-files) + case rank_model_version + config postfix. Web-reachable from variant pages; host is config-pinned and only the version path segment comes from DB case content. Kept as candidate for recall; expected FP at triage.",
+          "evidence": [
+            "scout/adapter/mongo/rank_model.py:23 response = requests.get(rank_model_url, timeout=TIMEOUT)",
+            "scout/adapter/mongo/rank_model.py:75-77 rank_model_url = prefix + version + extension",
+            "scout/server/blueprints/variant/controllers.py:412 store.rank_model_from_url(...) from variant page rendering; scout/server/config.py:112-115 default prefixes"
+          ]
+        },
+        {
+          "id": "snk-025",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "scout.utils.scout_requests",
+            "type": "requests",
+            "callable": "requests.post",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 34
+          },
+          "rationale": "Final I/O site of post_request_json (headers branch). Arg 0 is the exact URL position and the call genuinely performs the POST, but every audited caller passes an admin-config URL (BEACON_URL, MME_URL derived) - no labeled source reaches it today. Kept as candidate sink for recall in case an unmodeled wrapper caller exists.",
+          "evidence": [
+            "scout/utils/scout_requests.py:34 resp = requests.post(url, headers=headers, json=data)",
+            "callers audited: beacon_extension.py:131, matchmaker_extension.py:63 - both admin-config URLs"
+          ]
+        },
+        {
+          "id": "snk-026",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "scout.utils.scout_requests",
+            "type": "requests",
+            "callable": "requests.post",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 36
+          },
+          "rationale": "Final I/O site of post_request_json (no-headers branch), same semantics as snk-025: accurate URL argument position, currently only admin-config URLs reach it.",
+          "evidence": [
+            "scout/utils/scout_requests.py:36 resp = requests.post(url, json=data)"
+          ]
+        },
+        {
+          "id": "snk-027",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "scout.utils.scout_requests",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 59
+          },
+          "rationale": "Final I/O site of get_request_json (headers branch). Arg 0 is the URL position; audited callers (beacon_extension.py:39, matchmaker_extension.py:59, loqus_extension.py:133/183/242) all pass admin-config-derived URLs. Candidate for recall only.",
+          "evidence": [
+            "scout/utils/scout_requests.py:59 resp = requests.get(url, timeout=TIMEOUT, headers=headers)"
+          ]
+        },
+        {
+          "id": "snk-028",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "scout.utils.scout_requests",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 61
+          },
+          "rationale": "Final I/O site of get_request_json (no-headers branch); same semantics as snk-027.",
+          "evidence": [
+            "scout/utils/scout_requests.py:61 resp = requests.get(url, timeout=TIMEOUT)"
+          ]
+        },
+        {
+          "id": "snk-029",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "scout.utils.scout_requests",
+            "type": "requests",
+            "callable": "requests.delete",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 85
+          },
+          "rationale": "Final I/O site of delete_request_json (headers+data branch). Arg 0 is the URL position; audited callers (beacon_extension.py:180, matchmaker_extension.py:61) pass admin-config URLs. Candidate for recall only.",
+          "evidence": [
+            "scout/utils/scout_requests.py:85 resp = requests.delete(url, headers=headers, json=data)"
+          ]
+        },
+        {
+          "id": "snk-030",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "scout.utils.scout_requests",
+            "type": "requests",
+            "callable": "requests.delete",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 87
+          },
+          "rationale": "delete_request_json headers-only branch; same semantics as snk-029.",
+          "evidence": [
+            "scout/utils/scout_requests.py:87 resp = requests.delete(url, headers=headers)"
+          ]
+        },
+        {
+          "id": "snk-031",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "scout.utils.scout_requests",
+            "type": "requests",
+            "callable": "requests.delete",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 89
+          },
+          "rationale": "delete_request_json bare branch; same semantics as snk-029.",
+          "evidence": [
+            "scout/utils/scout_requests.py:89 resp = requests.delete(url)"
+          ]
+        },
+        {
+          "id": "snk-032",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "requests",
+            "module": "scout.utils.scout_requests",
+            "type": "requests",
+            "callable": "requests.get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 110
+          },
+          "rationale": "Final I/O site of get_request (the plain GET wrapper). Arg 0 is the URL position; callers are fetch_resource and fetch_refseq_version, whose URLs are constants or host-pinned DB-derived values. Candidate for recall.",
+          "evidence": [
+            "scout/utils/scout_requests.py:110 response = requests.get(url, timeout=TIMEOUT)",
+            "callers: scout_requests.py:147 (fetch_resource), :438 (fetch_refseq_version)"
+          ]
+        },
+        {
+          "id": "snk-033",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "python-stdlib",
+            "module": "scout.utils.scout_requests",
+            "type": "urllib.request",
+            "callable": "urllib.request.urlopen",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 141
+          },
+          "rationale": "urlopen(url, timeout=TIMEOUT) is the ftp branch of fetch_resource (url.startswith('ftp')). Arg 0 is the URL position and urlopen is a canonical CWE-918 sink, but the only URLs reaching it today are hard-coded ftp:// constants (HGNC, ExAC) from CLI download flows. Note: urlopen would also honor file:/data: schemes, but no such value reaches this site - no file:/data: outbound fetch exists anywhere in scout/. Kept as low-confidence candidate.",
+          "evidence": [
+            "scout/utils/scout_requests.py:139-145 if url.startswith('ftp'): urllib.request.urlopen(url, ...)",
+            "ftp URL sources: scout_requests.py:383 (ftp.ebi.ac.uk), :399 (ftp.broadinstitute.org) - constants",
+            "detection.json coverage_gaps: only http/https/ftp outbound schemes found in scout/"
+          ]
+        },
+        {
+          "id": "snk-034",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.65,
+          "signature": {
+            "package": "internal",
+            "module": "scout.utils.scout_requests",
+            "type": "scout.utils.scout_requests",
+            "callable": "get_request",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 147
+          },
+          "rationale": "Internal delegation of fetch_resource's url parameter to get_request. Every fetch_resource call site (scout_requests.py:172/187/205/264/386/407/417, load/panel.py:126/131) passes a constant or CLI-derived URL, so no web-request data reaches this site.",
+          "evidence": [
+            "scout/utils/scout_requests.py:147 response = get_request(url) inside fetch_resource",
+            "fetch_resource callers audited: all constant URLs (HPOTERMS_URL, HPO_URL, OMIM, HGNC ftp, ExAC) or CLI (PanelApp)"
+          ]
+        },
+        {
+          "id": "snk-035",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.utils.scout_requests",
+            "type": "scout.utils.scout_requests",
+            "callable": "fetch_resource",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 172
+          },
+          "rationale": "fetch_hpo_terms fetches the constant HPOTERMS_URL (scout/constants.py); CLI/setup context, no web input, fixed host.",
+          "evidence": [
+            "scout/utils/scout_requests.py:170-172 url = HPOTERMS_URL; return fetch_resource(url)"
+          ]
+        },
+        {
+          "id": "snk-036",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.utils.scout_requests",
+            "type": "scout.utils.scout_requests",
+            "callable": "fetch_resource",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 187
+          },
+          "rationale": "fetch_genes_to_hpo_to_disease fetches HPO_URL.format('genes_to_phenotype.txt') - constant URL from scout/constants.py; CLI context.",
+          "evidence": [
+            "scout/utils/scout_requests.py:186-187 url = HPO_URL.format('genes_to_phenotype.txt'); return fetch_resource(url)"
+          ]
+        },
+        {
+          "id": "snk-037",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.utils.scout_requests",
+            "type": "scout.utils.scout_requests",
+            "callable": "fetch_resource",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 205
+          },
+          "rationale": "fetch_hpo_to_genes_to_disease fetches HPO_URL.format('phenotype_to_genes.txt') - constant URL; CLI context.",
+          "evidence": [
+            "scout/utils/scout_requests.py:204-205 url = HPO_URL.format('phenotype_to_genes.txt'); return fetch_resource(url)"
+          ]
+        },
+        {
+          "id": "snk-038",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "internal",
+            "module": "scout.utils.scout_requests",
+            "type": "scout.utils.scout_requests",
+            "callable": "fetch_resource",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 264
+          },
+          "rationale": "fetch_mim_files fetches https://data.omim.org/downloads/{api_key}/... - fixed omim.org host with the operator-supplied CLI OMIM api key in the path. CLI-only, host pinned by string constant.",
+          "evidence": [
+            "scout/utils/scout_requests.py:245-248 mim URLs built from constants + api_key; :264 fetch_resource(url)",
+            "scout/commands CLI download context (api_key from CLI/config)"
+          ]
+        },
+        {
+          "id": "snk-039",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.utils.scout_requests",
+            "type": "scout.utils.scout_requests",
+            "callable": "fetch_resource",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 386
+          },
+          "rationale": "fetch_hgnc fetches the constant ftp://ftp.ebi.ac.uk/... URL; CLI context, fixed host.",
+          "evidence": [
+            "scout/utils/scout_requests.py:383-386 url = 'ftp://ftp.ebi.ac.uk/...'; fetch_resource(url)"
+          ]
+        },
+        {
+          "id": "snk-040",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.utils.scout_requests",
+            "type": "scout.utils.scout_requests",
+            "callable": "fetch_resource",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 407
+          },
+          "rationale": "fetch_exac_constraint first fetch: constant ftp://ftp.broadinstitute.org/... URL; CLI context.",
+          "evidence": [
+            "scout/utils/scout_requests.py:398-407 url = 'ftp://ftp.broadinstitute.org/...'; fetch_resource(url)"
+          ]
+        },
+        {
+          "id": "snk-041",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.utils.scout_requests",
+            "type": "scout.utils.scout_requests",
+            "callable": "fetch_resource",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 417
+          },
+          "rationale": "fetch_exac_constraint fallback fetch: constant https://storage.googleapis.com/... URL; CLI context.",
+          "evidence": [
+            "scout/utils/scout_requests.py:411-417 url = 'https://storage.googleapis.com/...'; fetch_resource(url)"
+          ]
+        },
+        {
+          "id": "snk-042",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "internal",
+            "module": "scout.utils.scout_requests",
+            "type": "scout.utils.scout_requests",
+            "callable": "get_request",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/utils/scout_requests.py",
+            "line": 438
+          },
+          "rationale": "fetch_refseq_version calls get_request(base_url.format(refseq_acc)) with base_url pinned to https://eutils.ncbi.nlm.nih.gov and refseq_acc being a transcript refseq id from case/variant DB content. This site is web-reachable (variant/controllers.py:659 calls fetch_refseq_version(refseq_id) during variant page rendering), so second-order query control on a fixed host exists. Kept as candidate; expected FP at triage.",
+          "evidence": [
+            "scout/utils/scout_requests.py:432-438 base_url constant eutils.ncbi.nlm.nih.gov; get_request(base_url.format(refseq_acc))",
+            "scout/server/blueprints/variant/controllers.py:659 transcript['refseq_id'] = fetch_refseq_version(refseq_id) - web-reachable"
+          ]
+        },
+        {
+          "id": "snk-043",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "internal",
+            "module": "scout.server.blueprints.cases.views",
+            "type": "scout.server.extensions.Beacon",
+            "callable": "Beacon.add_variants",
+            "arg_index": 2,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/cases/views.py",
+            "line": 93
+          },
+          "rationale": "beacon.add_variants(store, case_obj, request.form): the form (arg 2) only shapes the JSON POST body (samples/panels/vcf file selection) while the URL is BEACON_URL + '/add' from admin config; additionally gated by the beacon_submitter role. Body control on a fixed host is not CWE-918.",
+          "evidence": [
+            "scout/server/blueprints/cases/views.py:93 beacon.add_variants(store, case_obj, request.form)",
+            "scout/server/extensions/beacon_extension.py:125-133 URL = self.add_variants_url (admin config); form data into body only"
+          ]
+        },
+        {
+          "id": "snk-044",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "requests",
+            "module": "scout.server.blueprints.alignviewers.views",
+            "type": "requests",
+            "callable": "requests.request",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "scout/server/blueprints/alignviewers/views.py",
+            "line": 42
+          },
+          "rationale": "The remote CORS proxy transport: requests.request(method=request.method, url=remote_url, headers=..., data=..., cookies=..., allow_redirects=True) where remote_url is the full client-supplied route path variable (src-025). No scheme/host validation, redirects followed, inbound headers/body/cookies forwarded. The URL argument position is the url= keyword, i.e. positional argument 1 of requests.request (CSV argIndex -1 normalized to 1). Sink role genuinely played: the outbound target is fully attacker-chosen by any authenticated user.",
+          "evidence": [
+            "scout/server/blueprints/alignviewers/views.py:42-49 requests.request(method=request.method, url=remote_url, ...allow_redirects=True)",
+            "scout/server/blueprints/alignviewers/views.py:33-34 route captures <path:remote_url>",
+            "no validation between route and call: scheme, host and port are unchecked"
+          ]
+        }
+      ]
+    }
+  ]
+}

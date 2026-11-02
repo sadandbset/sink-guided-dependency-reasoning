@@ -1,0 +1,138 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "sydent-ssrf-pass3-20261020",
+    "task": "独立 LLM 路径复核 (independent LLM path re-review) of Augur IRIS Pass 3 CWE-918 formal alerts",
+    "reviewed_at": "2026-10-20",
+    "model": "glm-5.3",
+    "sarif": "results/pass3.sarif",
+    "rule_ids_reviewed": ["py/augur/sydent/pass3-ssrf"],
+    "source_root": "dataset/codeql_databases/ssrf_dbs/sydent_vuln",
+    "formal_result_count": 1,
+    "diagnostic_or_baseline_results_counted": 0,
+    "notes": [
+      "The SARIF contains exactly one formal CWE-918 result for ruleId py/augur/sydent/pass3-ssrf; the invocation's toolExecutionNotifications are file-coverage/platform telemetry only (no diagnostic alerts), so no diagnostics or native-baseline results are mixed into this count.",
+      "CodeQL 分析成功，且本轮命中 1 条正式 SSRF 污点路径（无需声明无命中）。",
+      "No PyVul ground truth, fix commits, or CVE advisories were consulted for the triage itself; the ground-truth comparison in section 'post_review_vulnerability_match' uses only the commit data supplied by the user AFTER the independent review was complete.",
+      "Original SARIF, labels.json, and formal queries were not modified."
+    ]
+  },
+  "summary": {
+    "total_formal_alerts": 1,
+    "likely_tp": 1,
+    "likely_fp": 0,
+    "uncertain": 0
+  },
+  "results": [
+    {
+      "alert_index": 0,
+      "ruleId": "py/augur/sydent/pass3-ssrf",
+      "alert_location": {
+        "file": "sydent/http/servlets/registerservlet.py",
+        "line": 60,
+        "endLine": 64,
+        "description": "URL construction BinaryExpr 'matrix://%s/...' % (matrix_server, quote(access_token)) passed as arg 0 of FederationHttpClient.get_json"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "source": {
+        "entry_point": "POST /_matrix/identity/v2/account/register (RegisterServlet.render_POST, registerservlet.py:42)",
+        "mount_evidence": "httpserver.py:119 account.putChild(b'register', self.sydent.servlets.registerServlet); instantiated at sydent.py:307",
+        "reachability": "ClientApiHttpServer binds clientapi.http.bind_address '::' port 8090 by default (sydent.py:115-116, httpserver.py:135-140) - publicly reachable network interface",
+        "authentication": "None. render_POST calls send_cors + get_args directly; there is no authV2 call in registerservlet.py (unlike accountservlet.py:38). The endpoint is unauthenticated.",
+        "threat_model_valid": true,
+        "source_locations": [
+          "sydent/http/servlets/__init__.py:79 request_args = json.loads(request.content.read().decode('UTF-8')) - raw attacker POST body",
+          "sydent/http/servlets/__init__.py:87 request_args_bytes = copy.copy(request.args) - attacker query/form fallback",
+          "sydent/http/servlets/registerservlet.py:48 args = get_args(request, ('matrix_server_name', 'access_token'))",
+          "sydent/http/servlets/registerservlet.py:50 matrix_server = args['matrix_server_name'].lower()"
+        ]
+      },
+      "sink": {
+        "primary": "FederationHttpClient.get_json(uri) arg 0, registerservlet.py:59-66",
+        "network_io_evidence": [
+          "sydent/http/httpclient.py:52-55 response = yield self.agent.request(b'GET', uri.encode('utf8')) - real HTTP egress",
+          "sydent/http/httpclient.py:127-132 FederationHttpClient uses MatrixFederationAgent",
+          "sydent/http/matrixfederationagent.py:141-176 MatrixFederationAgent.request -> _route_matrix_uri -> Agent.usingEndpointFactory -> agent.request(method, uri, ...) - the request IS executed",
+          "sydent/http/matrixfederationagent.py:168-170 / :366 LoggingHostnameEndpoint(reactor, res.target_host, res.target_port) -> HostnameEndpoint(reactor, host, port) - concrete TCP dial to attacker-chosen host/port",
+          "sydent/http/matrixfederationagent.py:318-322 secondary egress triggered by the same attacker-chosen host: b'https://%s/.well-known/matrix/server' fetched via RedirectAgent"
+        ],
+        "is_real_network_request": true,
+        "not merely Request-object-construction / URL-parsing / local-file": true
+      },
+      "taint_path": [
+        "servlets/__init__.py:79 request.content.read() [attacker POST body]",
+        "-> request_args (json.loads dict)",
+        "-> get_args() return (registerservlet.py:48)",
+        "-> args['matrix_server_name'] subscript (registerservlet.py:50)",
+        "-> .lower() -> matrix_server",
+        "-> is_valid_hostname(matrix_server) form check at :52 (passes; NOT a barrier)",
+        "-> \"matrix://%s/_matrix/federation/v1/openid/userinfo?access_token=%s\" % (matrix_server, urllib.parse.quote(args['access_token'])) (registerservlet.py:60-64)",
+        "-> FederationHttpClient.get_json arg 0 (registerservlet.py:59)",
+        "-> self.agent.request(b'GET', uri.encode('utf8')) (httpclient.py:52)",
+        "-> MatrixFederationAgent.request -> _route_matrix_uri -> HostnameEndpoint TCP dial (matrixfederationagent.py:141-176, :366)"
+      ],
+      "attacker_control": {
+        "full_url": false,
+        "host": true,
+        "port": "optional explicit port accepted (is_valid_hostname allows host:port with port 1-65535; _route_matrix_uri honors explicit ports at matrixfederationagent.py:212-219; default federation port 8448)",
+        "scheme": "fixed 'matrix://' (routed as TLS federation traffic by MatrixFederationAgent); the .well-known secondary fetch is fixed 'https://'",
+        "path": "fixed /_matrix/federation/v1/openid/userinfo",
+        "query": "args['access_token'] is URL-encoded (urllib.parse.quote) into the query string - encoded, cannot break out of the query component",
+        "exploitability": "攻击者可完全控制出站请求的目的 host（含 127.0.0.1、localhost、10.x/192.168.x/172.16.x 等私网 IPv4 字面量，数字标签可通过 hostname_regex）及可选端口（1-65535），scheme 与 path 固定。可用于内部端口枚举与内网 HTTP 资源探测；响应体不直接回显给攻击者（'sub' 需为合法 MXID 且 server 部分必须等于 matrix_server），数据外传受限 - 与『可诱导向内部系统发送请求、无法控制请求头/外传数据、可用于端口枚举』的影响类别一致。"
+      },
+      "url_processing": {
+        "urljoin_or_base_url": false,
+        "detail": "No urljoin / base-URL / relative-URL handling. The attacker-controlled host is directly %-interpolated into the full URL string; the destination host (and optional port) is wholly replaced by the attacker value. No parsing step re-derives or constrains the target."
+      },
+      "protections_audit": {
+        "is_valid_hostname (sydent/util/stringutils.py:39-70)": "Form validation only: hostname_regex (alnum/hyphen labels, digits allowed so IPv4 literals pass) + optional port range 1-65536. It ACCEPTS IP literals, 'localhost', RFC1918/private ranges and explicit ports. It is NOT a scheme check, allow-list, or IP restriction.",
+        "allow_list": "none",
+        "scheme_validation": "none beyond the fixed 'matrix://' literal in the format string",
+        "private_ip_or_localhost_blocking": "none anywhere on the path (matrixfederationagent.py:194-199 explicitly checks for IP literals only to route them directly, not to block them)",
+        "redirect_revalidation": "none - RedirectAgent (matrixfederationagent.py:105-107) follows 3xx on the .well-known path without target re-validation",
+        "network_isolation": "none in code (firewall is the documented operator workaround)",
+        "authentication_gating": "endpoint is unauthenticated; even authenticated callers would retain host control (auth != SSRF sanitizer)",
+        "conclusion": "No effective CWE-918 defense exists on this path in the analyzed snapshot."
+      },
+      "fixed_destination_check": "Not a trusted/fixed/admin-configured URL: the destination host is chosen per-request by the unauthenticated caller's matrix_server_name parameter. (Admin-configured destinations elsewhere - SMTP smtphost, OpenMarket API_BASE_URL, replication base_replication_url/peers, sentry DSN - were correctly excluded from this alert set.)",
+      "static_reachability_check": "Real and full: twisted putChild route registration (httpserver.py:113/118/119) is invisible to dataflow but the servlet is instantiated (sydent.py:307), the handler reads the request body itself (servlets/__init__.py:79), the client API listens on '::':8090 (sydent.py:115-116, httpserver.py:135-140), and render_POST performs no authentication. The internal-function-only concern does not apply: this is an end-to-end public-entry chain, not a local path judgment on an internal function.",
+      "contamination_check": "Clean: no file: local read, no URL-parsing-only sink, no test code (registerservlet.py is production code), no diagnostics query results in this alert. The single SARIF result is the formal path-problem alert.",
+      "codeflow_audit": {
+        "threadflow_1": "request.content.read() (servlets/__init__.py:79) -> request_args -> get_args return -> args -> matrix_server -> BinaryExpr: matches the real source->sink propagation.",
+        "threadflow_2": "get_args() -> args -> matrix_server -> BinaryExpr: consistent shorthand of the same chain.",
+        "threadflow_3": "args['matrix_server_name'] subscript (registerservlet.py:50) -> matrix_server -> BinaryExpr: the load-bearing host-control edge, confirmed at source.",
+        "threadflow_4": "args['access_token'] (registerservlet.py:63) -> urllib.parse.quote -> BinaryExpr: real flow but only into the query component (encoded); corroborates the alert while the host edge is the decisive one."
+      },
+      "checklist_answers": {
+        "1_source_is_attacker_influenced": "是 - 未认证公共端点 POST body 的 matrix_server_name 字段（servlets/__init__.py:79 + registerservlet.py:50），入口真实可达。",
+        "2_real_data_propagation_to_network_url": "是 - %-格式化直接将 matrix_server 插入 matrix:// URL 的 host 位置（registerservlet.py:60-64）并传给 get_json。",
+        "3_urljoin_base_url_processing": "否 - 无 urljoin/base URL/相对 URL 处理；攻击者值直接整体替换目的主机（及可选端口）。",
+        "4_sink_is_real_network_request": "是 - get_json -> twisted Agent.request(b'GET', uri) -> HostnameEndpoint TCP 拨号（httpclient.py:52, matrixfederationagent.py:176/:366），真实 HTTP(S) 出站；非仅构造 Request 对象或解析 URL。",
+        "5_attacker_control_scope": "host + 可选 port 完全可控；scheme/path 固定；query 仅携带编码后的 access_token。可用于内网探测与端口枚举，数据外传受限。",
+        "6_effective_protections": "无 - is_valid_hostname 仅校验形式（放行 IPv4 字面量、localhost、私网段、显式端口）；无白名单、无私网 IP 拦截、无重定向重校验、无网络隔离。",
+        "7_fixed_trusted_url": "否 - 目的地由未认证调用者逐请求指定，非管理员配置地址。",
+        "8_static_path_really_reachable": "是 - 完整端到端公共入口链（路由挂载 httpserver.py:119、默认 '::':8090 监听、render_POST 无鉴权），非仅内部函数局部路径。",
+        "9_contamination_by_file_or_diag_or_test": "否 - 该告警为唯一正式结果，无诊断查询/测试代码/file: 读取混入。"
+      },
+      "final_reasoning": "The single formal alert is a genuine, end-to-end, unauthenticated SSRF path: attacker POSTs matrix_server_name to /_matrix/identity/v2/account/register, the value (form-checked only by is_valid_hostname, which accepts private IPv4 literals, localhost and explicit ports) becomes the host of a matrix:// URL that FederationHttpClient.get_json actually fetches via twisted Agent/HostnameEndpoint TCP dial, with default port 8448 or an attacker-specified port, and additionally triggers an https:// .well-known fetch to the same attacker-chosen host. No sanitizer, allow-list, or private-address blocking exists. Verdict: likely_tp, confidence 0.95."
+    }
+  ],
+  "post_review_vulnerability_match": {
+    "task": "在独立复核完成后，判断本轮分析是否命中用户提供的该项目真实漏洞（commit 0f00412017f25619bc36c264b29ea96808bf310a, CWE-918 SSRF）",
+    "ground_truth_functions": ["authenticate_request (verifier)", "render_POST (RegisterServlet/registerservlet)", "_notify (threepid/bind)", "is_valid_hostname (stringutils)"],
+    "match_verdict": "hit",
+    "confidence": 0.95,
+    "matched_chain": {
+      "vuln_function": "render_POST (sydent/http/servlets/registerservlet.py)",
+      "alert": "The single formal alert (registerservlet.py:60-64 -> get_json('matrix://%s/_matrix/federation/v1/openid/userinfo?...')) is exactly the vulnerable call in the code_before of render_POST: same file, same get_json call, same 'matrix://%s' % matrix_server construction, same args['matrix_server_name'] parameter, same is_valid_hostname weak validation (code_before state matches the analyzed snapshot line-for-line).",
+      "vuln_condition_present": "The analyzed snapshot contains the pre-fix state: is_valid_hostname (with optional-port branch, digits-only labels that admit IPv4 literals) gates the host, no IP blacklisting, no allow-list - precisely the 'lack of parameter validation or IP address blacklisting' root cause stated in the advisory. Commit 0f00412 (together with 9e57334/8936925/3d531ed) replaces it with is_valid_matrix_server_name in all three call sites."
+    },
+    "coverage_of_other_functions": {
+      "authenticate_request / _notify": "Labeled and documented as real attacker-reachable chains in labels.json / query_generation_notes.md (verifier X-Matrix origin key-fetch chain; bind.py _notify onbind POST chain), but they produced NO formal pass3.sarif alerts: the bind chain is a documented taint break at the external signedjson.sign_json boundary, and the verifier chain did not fire an alert in this run. Only the register chain fired.",
+      "is_valid_hostname": "The weak validator itself is the common root cause; it appears in the alert path as a non-barrier check (registerservlet.py:52), so the alert's taint path passes through the exact code fixed by this commit."
+    },
+    "impact_match": "Advisory impact ('Sydent can be induced to send HTTP GET requests to internal systems ... possible to perform an internal port enumeration') matches the assessed exploitability of the alert exactly: attacker-chosen host + optional port, GET method, fixed scheme/path, limited exfiltration.",
+    "conclusion": "命中。本轮唯一正式告警落在修复提交所修改的 render_POST 函数的精确漏洞调用点上（register/matrix_server_name -> matrix:// federation GET 链），且弱校验 is_valid_hostname 正是 0f00412 系列补丁修复的根因。命中方式为 1-of-3 个真实漏洞链（render_POST 命中；_notify 与 authenticate_request 链虽在标签/笔记中确认，但未产出正式告警）——按漏洞（CWE-918 单一漏洞条目）粒度判定为命中。"
+  }
+}
