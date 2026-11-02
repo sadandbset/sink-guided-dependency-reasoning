@@ -1,0 +1,226 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-22",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\dfetch\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no compile, no LLM labeling in this round) against the dfetch_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database dfetch-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded dfetch-db (only codeql-database.yml and the src.zip listing were read for metadata/scope). The database sourceLocationPrefix matches the explored tree (creation sha 81020d54), so file/line evidence below refers to the same snapshot the database was built from. The audit target is the dfetch tool itself (version 0.5.1), a manifest-driven dependency-fetching CLI: it reads a YAML manifest (dfetch.yaml) describing external git/svn projects, fetches them and places them at manifest-specified destinations, applies manifest-specified patches, and writes metadata files. There is NO web surface: all attacker-relevant boundaries are file content (the manifest, fetched-project metadata, patch files, .gitmodules) and subprocess output (git/svn remote-repository data), plus the operator-level CLI."
+  },
+  "target": {
+    "project": "dfetch",
+    "projectDescription": "dfetch 0.5.1 (dfetch/__init__.py __version__) - a Python CLI tool ('Dependency Fetch') for vendoring external git/svn dependencies described by a dfetch.yaml manifest. Core flow: dfetch/__main__.py builds an argparse parser from 9 subcommands (check/diff/environment/freeze/import/init/report/update/validate) and runs sys.argv through it; dfetch.manifest.manifest.find_manifest()/get_manifest() walk the CWD tree for dfetch.yaml, validate it against a pykwalify schema (dfetch/resources/schema.yaml) and yaml.safe_load it into Manifest/ProjectEntry/Remote objects (fields: name, dst, src, patch, url, repo-path, branch, tag, revision, vcs, remote); dfetch.project.make() wraps each ProjectEntry in GitRepo/SvnRepo (dfetch/project/git.py, svn.py, both subclass dfetch/project/vcs.py VCS); VCS.update() deletes the existing destination (safe_rm), fetches (git: pathlib.Path(local_path).mkdir + GitLocalRepo.checkout_version with in_directory chdir, sparse-checkout file write, os.listdir/shutil.move/safe_rmtree of the manifest 'src' subtree; svn: SvnRepo._export -> 'svn export --force <url> <dst>' subprocess with manifest dst), applies the manifest 'patch' file via patch_ng (fromfile + patch_set.apply(root=local_path)), hashes the destination tree (os.walk + open + read) and dumps .dfetch_data.yaml metadata (Metadata.dump, open(self.path)) where the path is built from the manifest destination. 'dfetch import' derives ProjectEntry dst/src from git submodule/.gitmodules or svn:externals subprocess output (dfetch/vcs/git.py submodules(), dfetch/project/svn.py externals()). 'dfetch diff' writes '<project-name>.patch' (name from the manifest) via open(patch_name, 'w'). 'dfetch report' globs the destination CWD and calls infer_license.api.guess_file; sbom reporter writes via cyclonedx outputter.output_to_file(outfile) with the CLI --outfile.",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\dfetch_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (dfetch-db/codeql-database.yml)",
+      "the database source archive (dfetch-db/src.zip) covers 60 .py files: 37 under dfetch/ (commands 12, manifest 6, project 5, util 4, reporting 4, vcs 2, resources 1, package root 3), 15 under tests/, 5 under features/ (BDD steps), 1 under doc/, 2 at the repo root (setup.py, create_venv.py)",
+      "setup.py / pyproject-style packaging of the dfetch package; dfetch/__init__.py __version__ = 0.5.1; dfetch/__main__.py argparse entry"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\dfetch_vuln\\dfetch-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\dfetch_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "81020d5460c48516f5e548e8d1a07c4ef9a10277",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:56:19.870214700Z"
+    },
+    "baselineLinesOfCode": 4159,
+    "finalised": true,
+    "locationNote": "dfetch-db is nested inside the source tree; it was excluded from all exploration and will be excluded from extraction result rows via the path filter in both queries. The database snapshot also covers tests/ (15 files), features/ (5 BDD step files), doc/conf.py and the root scripts setup.py / create_venv.py; both queries filter /tests/, /features/, /dfetch-db/ and /doc/ paths. setup.py and create_venv.py are kept in scope (build/dev scripts with literal paths - expected to be labeled none/FP or produce no rows) so the tool code under dfetch/ dominates the candidate rows."
+  },
+  "toolchain": {
+    "qlpack": "iris/dfetch-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions present under C:\\Users\\lzh\\codeql\\packages\\ and C:\\Users\\lzh\\.codeql\\packages\\ from prior runs in this series)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1)",
+    "compatibilityBasis": "The two queries reuse the structural shapes already compiled and executed successfully on this same CLI + pack family in this series (aiohttp Path_Traversal and the SQL_Injection superset run): moduleHintOf/receiverHint helpers, bindingset[path] excludedPath, AST-cast matching (Attribute/Subscript/Call/Name) with no QL classes, no API::Node-to-DataFlow::Node assignment, variable named moduleHint instead of `module`, Location API only (AstNode.getLocation().getFile().getAbsolutePath() / getStartLine(); AstNode.getFile() does not exist), Function.getAnArg()/Parameter.isSelf()/getPosition(), AstNode.getScope().getEnclosingModule(), Module.getName(). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name, no unbound `this`, no {{...}} template placeholders. CodeQL execution AND compile validation are both deferred to the next round per the task contract (this round is generation-only)."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "argparse CLI (stdlib command framework)",
+          "kind": "cli",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package +0.45: `import argparse` in dfetch/__main__.py:5 and in every command module (dfetch/commands/*.py)",
+            "route/decorator +0.30: subcommand registration pattern - each of the 9 command classes implements Command.create_menu(subparsers) and registers itself via dfetch.commands.command.Command.parser (dfetch/commands/command.py:40-64); all 9 registered in create_parser (dfetch/__main__.py:44-52)",
+            "runtime/bootstrap +0.20: run(argv) parses and dispatches args.func(args) (dfetch/__main__.py:61-77); main() calls run(sys.argv[1:]) (dfetch/__main__.py:80)",
+            "directory/layout +0.05: dedicated dfetch/commands/ package with one module per subcommand"
+          ]
+        },
+        { "name": "flask", "confidence": 0.0, "evidence": ["no flask import anywhere in the tree - references/flask.md was not loaded"] },
+        { "name": "django", "confidence": 0.0, "evidence": ["no django import - references/django.md was not loaded"] },
+        { "name": "fastapi", "confidence": 0.0, "evidence": ["no fastapi import - references/fastapi.md was not loaded"] },
+        { "name": "aiohttp / tornado / bottle / other web server", "confidence": 0.0, "evidence": ["no web-server import of any kind; the tool has no HTTP surface - no request handlers, no routes, no static-file serving, no file responses"] },
+        { "name": "click / celery (CLI decorator / task boundaries)", "confidence": 0.0, "evidence": ["no click or celery usage; the only CLI surface is the hand-rolled argparse tree in dfetch/__main__.py + dfetch/commands/"] }
+      ],
+      "supportLibraries": [
+        { "name": "yaml (PyYAML)", "role": "manifest/metadata parsing boundary (yaml.safe_load at dfetch/manifest/manifest.py:139 and dfetch/project/metadata.py:71; yaml.dump at manifest.py:232 and metadata.py:166)" },
+        { "name": "pykwalify", "role": "manifest schema validation (dfetch/manifest/validate.py:11-27 against dfetch/resources/schema.yaml)" },
+        { "name": "patch_ng", "role": "patch file parsing/application (fromfile at dfetch/project/vcs.py:134, patch_set.apply(0, root=local_path, fuzz=True) at vcs.py:138)" },
+        { "name": "subprocess (stdlib, via dfetch/util/cmdline.py run_on_cmdline)", "role": "git/svn invocation; output parsing is the remote-repository data boundary" },
+        { "name": "cyclonedx / infer_license", "role": "report output file write (sbom_reporter.py:106 output_to_file) and license file read (report.py:90 guess_file)" }
+      ]
+    },
+    "selected": "argparse CLI (primary, confidence 1.0 - the audit target is the CLI tool's manifest-to-filesystem pipeline; there is no web framework, so all HTTP-shaped source families from the references are not applicable)",
+    "notes": "No framework reference matched the detected interface: references/flask.md, django.md, fastapi.md exist in the Augur installation but match no import evidence and were not loaded (per the task contract: framework reference only read when the file matches observed evidence). All source/sink shapes below are derived from repository evidence only. references/python.md and references/patterns.md were loaded: python.md Pass 1 sink cues (open/Path/os.path/shutil, archive extraction destination handling) map onto the observed builtin-open/os.path/shutil/pathlib-mkdir usage; its source cues (CLI args in service-mode tools, function parameters of externally exposed handlers, DB content reused) map onto the observed sys.argv/argparse-args entry parameters and the manifest/metadata/subprocess-output boundaries (python.md's HTTP request families are not applicable here); its sanitizer cues (canonicalize + base containment, explicit '..' rejection, basename-only) map onto the observed absence: none of these guards exist for dst/src/patch (see guardsAndEvidence). patterns.md Pass 1 sink families (file open/read/write APIs with user-controlled path, resource loader methods taking path strings) map onto open/Metadata.dump/patch_ng/svn export; patterns.md's HTTP/messaging source families are not applicable."
+  },
+  "inputBoundaryInventory": {
+    "summary": "The audit target is the dfetch CLI itself, so the untrusted-input boundaries are external FILE CONTENT and SUBPROCESS OUTPUT, not HTTP: (1) the manifest file dfetch.yaml - found by walking the CWD tree (manifest.py:236-247 find_manifest over find_file/os.walk, realpath-normalized), schema-validated (validate.py:11-27; the pykwalify schema only enforces types: dst is an unrestricted str required unique, src is `type: any`, patch is an unrestricted str - NO path-content validation), then yaml.safe_load (manifest.py:139) into ProjectEntry fields via ProjectEntry.from_yaml's yamldata[key] subscript loop (project.py:268) and kwargs.get() reads in ProjectEntry.__init__ (project.py:241-252): 'dst' (destination, defaults to the project name), 'src' (subtree/pattern inside the fetched repo), 'patch' (patch file path), 'url'/'repo-path'/'branch'/'tag'/'revision' - THE dominant attacker-influenced file-location inputs whenever the manifest originates from an untrusted branch/repo (child-manifests: update.py:75-77 and check.py:69-71 chdir into each fetched project's destination and re-read ITS manifests via get_childmanifests, manifest.py:263-280 - fetched remote content feeding the next round of dst/src); (2) fetched-project metadata .dfetch_data.yaml - written into the fetched destination by a previous fetch (remote-influenced content), re-read by yaml.safe_load(metadata_file)['dfetch'] (metadata.py:71) and kwargs.get() reads in Metadata.__init__ (metadata.py:36-48, incl. 'destination' and 'patch'); (3) patch file content - patch_ng.fromfile(self.__project.patch) (vcs.py:134) parses the manifest-designated patch file and patch_set.apply(0, root=self.local_path) (vcs.py:138) writes its target paths under the destination - the patch-internal target paths are the archive-like extraction channel; (4) git/svn subprocess output - .stdout reads in dfetch/vcs/git.py (submodules() output: name/sm_path/sha/toplevel at :229, .gitmodules urls via 'git config --file <toplevel>/.gitmodules' at :264-279, ls-remote refs at :67-69, log/diff at :184/:194/:212) and dfetch/project/svn.py (svn:externals propget output at :46 whose local_path/name become External.path at :70, svn info Repository Root at :268, svn ls license files at :252-253, svnversion/svn info at :287/:298, svn diff at :316) - remote-repository-controlled strings that 'dfetch import' turns into ProjectEntry dst (import_.py:158 external.path, :180 submodule.path); (5) CLI - sys.argv (dfetch/__main__.py:80) and parsed argparse Namespace fields args.projects/force/no_recommendations/revs/outfile/type/verbose (update.py:71/:73/:75, check.py:65/:69, diff.py:104/:108/:111, report.py:65/:68/:75/:76, __main__.py:63) - OPERATOR-TRUST level: the person invoking dfetch is the same trust domain as the config it consumes; emitted for labeling to classify, NOT automatically attacker sources (the task contract requires this judgment); (6) environment variables - NOT observed anywhere in the dfetch tree (no os.environ/os.getenv) - no env family emitted. The dominant filesystem-operation channels are: builtin open (manifest read manifest.py:158 / manifest write :230 / metadata read metadata.py:70 / metadata write :165 whose path = realpath(join(dst, '.dfetch_data.yaml')) / sparse-checkout append vcs/git.py:149-154 whose CONTENT is the manifest 'src' / patch write diff.py:171 with patch_name = f\"{project.name}.patch\" / hash read util.py:107), pathlib.Path(...).mkdir(parents=True) (project/git.py:70 on dst itself; project/svn.py:196 on dirname(dst)), deletion (os.remove util.py:33 via safe_rm(local_path) vcs.py:105 and svn.py:206 of non-matching files under dst; shutil.rmtree util.py:39 via safe_rmtree of local_path vcs.py:105, join(dst,'.git') project/git.py:80 and PurePath(src).parts[0] vcs/git.py:170), moves (shutil.move vcs/git.py:169 of the manifest-'src' subtree into '.'), os.chdir (util.py:52/:54 via in_directory - the CWD scoping all relative resolution depends on: manifest dir update.py:70, project.destination update.py:76), os.path join/realpath/dirname/basename/relpath propagation nodes, patch_ng fromfile/apply, 'svn export --force <url> <dst>' (svn.py:243-246 - the svn process writes files at the Python-supplied dst), cyclonedx output_to_file (sbom_reporter.py:106) and infer_license guess_file (report.py:90) on the CLI --outfile / globbed destination files, and directory walks/listings feeding deletion and hashing (os.walk util.py:22/:83/:92, os.listdir svn.py:207 and vcs/git.py:168, glob.glob report.py:88).",
+    "sourceFamilies": [
+      { "family": "manifest_yaml_load", "flow_kind": "yaml_load", "evidence": "yaml.safe_load(text) at dfetch/manifest/manifest.py:139 (Manifest._load_yaml <- Manifest.from_yaml <- Manifest.from_file <- get_manifest/get_childmanifests) - the dfetch.yaml parse where every project field (name/dst/src/patch/url/repo-path/branch/tag/revision/vcs) enters; yaml.safe_load(metadata_file) at dfetch/project/metadata.py:71 (Metadata.from_file) - the .dfetch_data.yaml of a previously fetched project, remote-influenced content" },
+      { "family": "manifest_root_subscript", "flow_kind": "manifest_field", "evidence": "loaded_yaml[\"manifest\"] at manifest.py:129 (the manifest root dict read); yaml.safe_load(metadata_file)[\"dfetch\"] at metadata.py:71 (the metadata root dict read)" },
+      { "family": "manifest_yamldata_subscript", "flow_kind": "manifest_field", "evidence": "yamldata[key] at dfetch/manifest/project.py:268 (ProjectEntry.from_yaml loop over ProjectEntryDict.__annotations__ keys - the per-field manifest value read, including 'dst'/'src'/'patch'); yamldata[\"name\"]/yamldata[\"url-base\"] at dfetch/manifest/remote.py:52-53 (Remote.from_yaml)" },
+      { "family": "manifest_kwargs_get", "flow_kind": "manifest_field", "evidence": "kwargs.get(...) in ProjectEntry.__init__ (project.py:241-252: revision/remote/default_remote/src/dst/url/patch/repo-path/branch/tag/vcs - dst defaults to the project name when absent) and Remote.__init__ (remote.py:41 'default') - the internal-state boundary where manifest YAML values become ProjectEntry/Remote attributes" },
+      { "family": "metadata_kwargs_get", "flow_kind": "metadata_field", "evidence": "kwargs.get(...) in Metadata.__init__ (dfetch/project/metadata.py:36-48: branch/tag/revision/remote_url/destination/hash/patch) - values sourced from the fetched project's .dfetch_data.yaml (remote-influenced) on re-read" },
+      { "family": "process_stdout", "flow_kind": "process_stdout", "evidence": ".stdout attribute reads in dfetch/vcs/git.py (:24 git --version, :67-69 ls-remote, :184/:194/:212 git log/diff, :229 'git submodule foreach' output - sm_path becomes ProjectEntry dst via import_.py:180, :279 'git config --file <toplevel>/.gitmodules' urls, :296 git branch) and dfetch/project/svn.py (:46 svn propget svn:externals - local_path/name become External.path at :70 then ProjectEntry dst via import_.py:158, :141 svn ls tags, :149 svn --version, :253 svn list license files, :268 svn info, :287/:298 svnversion/svn info, :316 svn diff) - remote-repository-controlled subprocess output crossing into local path/url construction" },
+      { "family": "cli_argv", "flow_kind": "cli", "evidence": "sys.argv at dfetch/__main__.py:80 (run(sys.argv[1:]) - the raw CLI argument list; operator-trust level)" },
+      { "family": "cli_args_fields", "flow_kind": "cli_arg", "evidence": "args.<field> attribute reads of the parsed argparse Namespace: args.verbose (__main__.py:63), args.projects (update.py:71, check.py:65, diff.py:108/:111, report.py:68), args.force (update.py:73), args.no_recommendations (update.py:75, check.py:69), args.revs (diff.py:104 - flows into git/svn diff revisions), args.type (report.py:65), args.outfile (report.py:75/:76 - flows into reporter.dump_to_file -> cyclonedx output_to_file); args.func (__main__.py:67) is dispatch, not data, and is excluded; operator-trust level - recorded for labeling, not automatically attacker sources" },
+      { "family": "cli_entry_params", "flow_kind": "param", "evidence": "the `args: argparse.Namespace` parameters of Command.__call__ in dfetch/commands/ (update.py:65, check.py:59, diff.py:101, freeze.py:67, init.py:29, report.py:61 - the CLI entry boundary carrying all parsed arguments; import/environment/validate take an unused `_`) and the `argv: Sequence[str]` parameter of run() at __main__.py:61" }
+    ],
+    "sinkChannels": [
+      { "channel": "builtin open (read/write/append)", "evidence": "manifest read manifest.py:158 open(path, 'r') (path from find_manifest/os.walk); manifest write manifest.py:230 open(path, 'w+') (Manifest.dump - freeze.py:104 and import_.py:130 dump to the literal DEFAULT_MANIFEST_NAME; from_file callers pass walked paths); metadata read metadata.py:70 open(path, 'r') (path = Metadata.path); metadata write metadata.py:165 open(self.path, 'w+') - self.path = realpath(join(destination, '.dfetch_data.yaml')) at metadata.py:129 or realpath(join(dirname(destination), basename-based sibling)) at :131-133, DESTINATION-CONTROLLED write; sparse-checkout append vcs/git.py:149-154 open('.git/info/sparse-checkout', 'a') - literal relative path but the written CONTENT is the manifest 'src' value, which then selects what git writes to disk; patch write diff.py:171 open(patch_name, 'w') with patch_name = f\"{project.name}.patch\" (diff.py:166) - MANIFEST-NAME-CONTROLLED path write; hash read util.py:107 open(file_path, 'rb') with file_path = join(root, name) under the walked destination (hash_directory on local_path)" },
+      { "channel": "pathlib mkdir (directory creation)", "evidence": "project/git.py:70 pathlib.Path(self.local_path).mkdir(parents=True, exist_ok=True) - creates the manifest dst (and any missing parents, ANYWHERE the dst points, including absolute/..-escaped paths); project/svn.py:196-198 pathlib.Path(os.path.dirname(self.local_path)).mkdir(parents=True, exist_ok=True) - creates the dst's parent chain" },
+      { "channel": "deletion (os.remove / shutil.rmtree)", "evidence": "util.py:33 os.remove(path) inside safe_rm - called as safe_rm(self.local_path) from VCS.update (vcs.py:105) with the manifest dst; svn.py:206 os.remove(file) for every file under the fetched destination that does not match the manifest 'src' pattern (find_non_matching_files(local_path, file_pattern)); util.py:39 shutil.rmtree(path, onerror=_remove_readonly) inside safe_rmtree - called for local_path (vcs.py:105), join(local_path, '.git') (project/git.py:80) and PurePath(src).parts[0] (vcs/git.py:170 - the FIRST COMPONENT of the manifest 'src', deleted recursively)" },
+      { "channel": "move / copy (shutil)", "evidence": "vcs/git.py:169 shutil.move(src + \"/\" + file_to_copy, \".\") - moves each entry of the manifest-'src' subtree (os.listdir(src) at :168) into the CWD (which in_directory set to the dst); freeze.py:103 shutil.move(DEFAULT_MANIFEST_NAME, DEFAULT_MANIFEST_NAME + \".backup\") - literal paths; init.py:38 shutil.copyfile(template_path, DEFAULT_MANIFEST_NAME) - packaged template to literal destination" },
+      { "channel": "os.chdir (CWD scoping)", "evidence": "util.py:52 os.chdir(path) / :54 os.chdir(pwd) inside in_directory - every relative path in the fetch pipeline resolves against the CWD this sets: manifest directory (update.py:70, check.py:63, freeze.py:76, diff.py:106, report.py:67), project.destination (update.py:76, check.py:69 - fetched-project child-manifest discovery), local_path / src (GitLocalRepo methods via vcs/git.py:121/:142/:178/:198/:288, SvnRepo.check_path svn.py:122); a dst that is absolute or contains '..' escapes this scoping entirely" },
+      { "channel": "os.path propagation/validation nodes", "evidence": "os.path.join (util.py:25/:83/:95 walk-result joins, metadata.py:129/:133 destination+metadata-filename joins, project/git.py:80 local_path+'.git', svn.py:70 local_path+name for externals import, vcs/git.py:237 getcwd()+sm_path); os.path.realpath (manifest.py:247/:270 manifest path normalization - NOT a containment check, metadata.py:129/:132 metadata path normalization, import_.py:195 toplevel comparison); os.path.dirname (util.py:51, update.py:70, check.py:63, freeze.py:76, report.py:67, diff.py:131/:169, metadata.py:133, svn.py:196/:219, manifest.py:274, common.py:37); os.path.basename (metadata.py:131 - basename of dst for the sibling metadata filename, a partial basename guard shape); os.path.relpath (common.py:36-38, validate.py:35 - display-only); os.path.isdir/isfile/exists/access (guard reads: util.py:13/:30/:50/:106, update.py:75, check.py:69, diff.py:127, init.py:33, report.py:81, vcs.py:103/:117/:232/:244, metadata.py:128, svn.py:218/:283, vcs/git.py:161/:252/:285)" },
+      { "channel": "pathlib construction + members", "evidence": "pathlib.Path(...) (manifest.py:244 Path(paths[0]).as_posix() warning display, manifest.py:274 Path(path).relative_to(...).as_posix() child-manifest prefix, project/git.py:70 Path(local_path).mkdir - THE dst directory creation, project/svn.py:196 Path(dirname(local_path)).mkdir); PurePath(src).parts[0] (vcs/git.py:170 - first-component extraction feeding safe_rmtree, a traversal AMPLIFIER not a guard); .relative_to (manifest.py:274 - containment-check-shaped but used for a log/error prefix, raises ValueError when the child manifest is not below CWD - a de facto constraint on walked manifests only)" },
+      { "channel": "patch_ng patch application (archive-like extraction)", "evidence": "vcs.py:134 patch_set = fromfile(self.__project.patch) - reads and parses the manifest-designated patch file (patch path from the manifest 'patch' field); vcs.py:138 patch_set.apply(0, root=self.local_path, fuzz=True) - applies the patch writing its target files under the destination root; the patch-internal target paths (parsed by patch_ng, not visible in this database) can carry directory traversal - the archive-extraction-shaped channel of this codebase" },
+      { "channel": "svn export subprocess (process file write)", "evidence": "svn.py:243-246 run_on_cmdline(logger, ['svn','export','--force'] + rev.split(' ') + [url, dst]) inside SvnRepo._export - the svn process writes the exported tree at the Python-supplied dst = self.local_path (manifest dst), called from _fetch_impl (svn.py:202) and for license files (svn.py:221); the git-side equivalent (git init/fetch/reset inside in_directory(local_path), vcs/git.py:142-157) writes files with the CWD set by the chdir channel" },
+      { "channel": "external-library file IO", "evidence": "sbom_reporter.py:106 outputter.output_to_file(outfile, allow_overwrite=True) - cyclonedx writes the report at the CLI --outfile path (report.py:75); report.py:90 infer_license.api.guess_file(license_file) - reads license files found by glob.glob('*') (report.py:88) in the CWD that in_directory set to project.destination (report.py:85)" },
+      { "channel": "directory walk / listing feeding deletion+hashing", "evidence": "os.walk (util.py:22 find_non_matching_files - yields files under dst for os.remove at svn.py:206; util.py:83 find_file - yields manifest paths; util.py:92 hash_directory - yields files under dst for open+read); os.listdir (svn.py:207 local_path emptiness check, vcs/git.py:168 src subtree listing); glob.glob('*') (report.py:88 destination CWD listing)" },
+      { "channel": "file permission change", "evidence": "util.py:14 os.chmod(path, stat.S_IWUSR) inside _remove_readonly - the shutil.rmtree onerror callback re-permissions the path being deleted (path supplied by rmtree from the deleted tree)" },
+      { "channel": "internal path-taking API definitions (file_api_def)", "evidence": "util.py safe_rm(path)@:28, safe_rmtree(path)@:36, in_directory(path)@:47, find_file(name,path)@:80, find_non_matching_files(directory,pattern)@:20, hash_directory(path,skiplist)@:87, hash_file(file_path,digest)@:104; manifest.py Manifest.from_file(path)@:145 (static), Manifest.dump(path)@:228 (self+path); metadata.py Metadata.from_file(path)@:68 (cls+path); vcs/git.py GitLocalRepo.__init__(path)@:114 (self+path), GitLocalRepo.checkout_version(src)@:127 (self,remote,version,src,must_keeps); svn.py SvnRepo._export(dst)@:242 (url,rev,dst); diff.py _dump_patch(patch_name)@:160 (path,revs,project,patch_name,patch)" }
+    ],
+    "guardsAndEvidence": [
+      { "guard": "manifest schema validation (pykwalify)", "evidence": "dfetch/manifest/validate.py:11-27 validates every manifest (get_manifest manifest.py:254, get_childmanifests manifest.py:276) against dfetch/resources/schema.yaml: 'dst' is type str + unique, 'patch' is type str, 'vcs' is enum git/svn, 'src' is type ANY - the schema contains NO path-content constraint (no '..' rejection, no absolute-path check, no charset/pattern restriction), so traversal values in dst/src/patch PASS validation; validation is structure-only, not a path sanitizer" },
+      { "guard": "src single-star restriction (partial)", "evidence": "svn.py:227-236 _parse_file_pattern raises RuntimeError when 'src' contains more than one '*' (only for the svn path) - the ONLY observed content restriction on 'src'; it does not block '..', absolute paths or mixed separators" },
+      { "guard": "version-field validation (not path-relevant)", "evidence": "project/git.py:84-92 _determine_what_to_fetch rejects shortened git SHA revisions; svn.py:181-182 rejects non-numeric svn revisions - these validate version fields, not path fields" },
+      { "guard": "absolute-path / '..' rejection: NOT PRESENT", "evidence": "no startswith/anchor/realpath-containment/'..' check exists anywhere on dst, src or patch: os.path.realpath is used only for normalization (manifest.py:247/:270, metadata.py:129/:132) and one equality comparison (import_.py:195); pathlib .relative_to appears once (manifest.py:274) for a log prefix, not as a base-containment guard on destinations; basename appears once (metadata.py:131) for sibling-filename construction" },
+      { "guard": "CWD scoping via in_directory (weak)", "evidence": "update.py:70-77: the fetch runs with CWD = manifest directory and child-manifest discovery with CWD = project.destination (os.chdir util.py:52) - relative dst values resolve under these roots, but an absolute or '..'-containing dst escapes the scoping entirely (chdir does not confine subsequent relative resolution of an absolute path)" },
+      { "evidence": "TOCTOU window", "note": "vcs.py:103-105: os.path.exists(local_path) check then safe_rm(local_path) then _fetch_impl then Metadata.dump (vcs.py:129-130) - the exists-check/delete/recreate/metadata-write sequence has classic TOCTOU shape; also vcs.py:117 os.path.exists(patch) then vcs.py:134 fromfile(patch). TOCTOU is not separately extractable as a candidate row - recorded as evidence." },
+      { "evidence": "child-manifest recursion (untrusted-content amplification)", "note": "update.py:75-77 and check.py:69-71: after fetching, dfetch chdirs into project.destination (the manifest dst) and re-reads any dfetch.yaml found there via get_childmanifests (manifest.py:263-280, os.walk-based find_file from '.') - fetched REMOTE content supplies the next round of dst/src/patch values (used only for recommendations, not auto-fetch, in this version - recommendations are logged, not fetched: common.py:42-70)" },
+      { "evidence": "subprocess command construction (adjacent CWE-78 material)", "note": "vcs/git.py:144 'git remote add origin {remote}' / :156 'git fetch --depth 1 origin {version}' and svn.py:113/:139/:252/:268 f-string commands interpolate manifest-controlled url/src/tag values into shell-less subprocess.run argument lists (cmdline.py:48-55 splits strings on spaces); this is Pass 2 command/argument-injection material - recorded here for labeling context, NOT emitted as Pass 1 sink rows" },
+      { "evidence": "mixed separators / Windows", "note": "svn.py:70 normalizes os.sep to '/' for the imported external dst; vcs/git.py:169 builds 'src + \"/\" + file_to_copy' with a hardcoded forward slash; on Windows pathlib/os.path treat both '/' and '\\' as separators, so manifest values with either separator traverse identically; no separator normalization guard exists for dst" },
+      { "evidence": "percent-decoding: NOT PRESENT", "note": "no URL/percent decoding exists in the path pipeline (unlike web targets) - manifest YAML values reach the filesystem byte-for-byte after YAML scalar parsing; no double-decode concern" },
+      { "evidence": "symlink handling: NOT PRESENT", "note": "no os.path.islink / os.path.lexists / symlink-aware checks anywhere; shutil.rmtree follows the tree as-is (onerror only re-permissions readonly files, util.py:12-17)" }
+    ],
+    "notObserved": [
+      "web frameworks / HTTP request handling: zero imports of flask/django/fastapi/aiohttp/bottle/tornado; no request objects, no routes, no request.path/query/header/cookie reads, no FileResponse/sendfile/static-file handler - the http_* source families and file_response/file_send sink families of the web-shaped projects are NOT emitted",
+      "os.environ / os.getenv: zero call sites in the whole database snapshot - no env source family emitted (unlike the aiohttp project of this series)",
+      "zipfile / tarfile / extract / extractall: zero imports and zero call sites - no archive extraction family; the patch_ng fromfile/apply pair (vcs.py:134/:138) is the closest archive-like channel and IS emitted",
+      "pathlib .open() / read_text / write_text / read_bytes / write_bytes / .stat() / .iterdir() / .unlink() / .rename(): zero member call sites - pathlib is used only for Path(...)/PurePath(...) construction, .mkdir(parents=True), .as_posix(), .relative_to() and .parts",
+      "io.open / os.open / os.fdopen: zero call sites (all opens are the builtin open()) - not emitted",
+      "os.rename / os.replace / os.abspath / os.path.normpath / os.path.expanduser / os.path.islink: zero call sites - not emitted",
+      "tempfile: zero call sites - not emitted",
+      "os.path.join in vcs/git.py:270 is a STRING CONCATENATION ('toplevel + \"/.gitmodules\"'), not os.path.join - documented as a string-built path, not a join row",
+      "message queues / RPC deserialization / DB content: zero usage - the patterns.md source families for those boundaries do not apply"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution (and compile validation) deferred to the next round per the task contract (generation only).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO source or sink row is expected to resolve at API level: the interesting channels are manifest/parse boundaries (yaml.safe_load results, kwargs.get returns, subscripts on local names), instance members on local variables (result.stdout, patch_set.apply, outputter.output_to_file) and external libraries (patch_ng / cyclonedx / infer_license / yaml) that are not part of the database (only the dfetch tree is). The column is kept 'ast' for all families for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, os/shutil/yaml/args name conventions). Member-name matching (.mkdir/.apply/.relative_to) is receiver-name-agnostic on purpose: receiver identity cannot be proven syntactically (a name collision would be a false candidate row - none observed on these paths in this snapshot; receiver hints like self.local_path/src/patch_set are emitted for the labeling step)."
+    },
+    "flowKinds": {
+      "sources": [
+        "yaml_load",
+        "manifest_field",
+        "metadata_field",
+        "process_stdout",
+        "cli",
+        "cli_arg",
+        "param"
+      ],
+      "sinks": [
+        "file_open",
+        "dir_create",
+        "file_delete",
+        "dir_delete",
+        "file_move",
+        "file_copy",
+        "file_chmod",
+        "chdir",
+        "path_join",
+        "path_canon",
+        "path_part",
+        "path_rel",
+        "path_stat",
+        "path_ctor",
+        "path_containment_check",
+        "patch_read",
+        "patch_apply",
+        "process_file_write",
+        "file_write_ext",
+        "file_read_ext",
+        "dir_list",
+        "dir_walk",
+        "file_api_def"
+      ]
+    },
+    "exclusions": [
+      "paths containing /tests/ (15 files of the database snapshot - the workflow's noise rule for tests and fixtures)",
+      "/features/ (5 behave-BDD step files)",
+      "/dfetch-db/ (the CodeQL database directory nested inside the source tree)",
+      "/doc/ (documentation tree: doc/conf.py)",
+      "/node_modules/ (defensive; not observed in the snapshot)",
+      "setup.py and create_venv.py at the repo root are NOT excluded: they are inside the database and carry only literal/build paths; their rows (if any) are expected to be labeled none/FP (kept for auditability, consistent with prior projects in this series)"
+    ],
+    "expectedVolume": "roughly 45-60 source rows (yaml.safe_load 2, root subscripts 2, yamldata subscripts 3, kwargs.get ~20 across ProjectEntry/Remote/Metadata __init__, process_stdout ~16 across vcs/git.py + project/svn.py, sys.argv 1, args.<field> ~13, CLI entry params 7) and roughly 90-120 sink rows (open 7, mkdir 2, os.remove 2, os.chmod 1, rmtree 1, shutil.move 2, copyfile 1, chdir 2, os.path.join 8, realpath 5, dirname ~13, basename 1, relpath 2, isdir/isfile/exists/access ~20, pathlib ctor 5, relative_to 1, .parts subscript 1, fromfile 1, apply 1, svn-export run_on_cmdline 1, output_to_file 1, guess_file 1, glob 1, listdir 2, walk 3, file_api_def 14). In line with prior projects in this series (aiohttp ~60-120 source / ~55-90 sink rows; this target is a compact CLI tool with one concentrated manifest-to-filesystem pipeline)."
+  },
+  "uncoveredCases": [
+    "String-concatenation / f-string path building is NOT emitted as rows: vcs/git.py:169 'src + \"/\" + file_to_copy', vcs/git.py:270 'toplevel + \"/.gitmodules\"', diff.py:166 patch_name = f\"{project.name}.patch\", metadata.py:131 f\"{BASENAME}-{os.path.basename(self._destination)}.{EXT}\" - BinaryExpr plus and f-string JoinedStr nodes are indistinguishable from ordinary string building at AST level without type resolution; the consuming sink rows (shutil.move/open/run_on_cmdline/realpath) anchor these channels instead.",
+    "git-side subprocess file writes (git init/fetch/reset --hard inside in_directory(local_path), vcs/git.py:142-157) are NOT emitted as Pass 1 sink rows: the file writes are performed by the git process with CWD set by the in_directory chdir channel (util.py:52, emitted); the git command strings are Pass 2 (command/argument injection) material. The svn-side export IS emitted (svn.py:243-246) because it passes the destination path explicitly as a Python-constructed argument list element.",
+    "run_on_cmdline positional structure: in SvnRepo._export the dst is the LAST element of a concatenated list expression (['svn','export','--force'] + rev.split(' ') + [url, dst]) whose length varies with the revision argument - the row therefore reports arg_index -1 with the dst position documented in the query comments rather than a fixed index.",
+    "patch_set.apply(0, root=self.local_path, fuzz=True) passes the destination root as a KEYWORD argument (vcs.py:138) - no positional index exists; the row reports arg_index -1 with the root= keyword documented. The patch-internal target paths that patch_ng writes are parsed inside the patch_ng library (not part of this database) - the apply row anchors the channel, the written paths are invisible to this extraction.",
+    "Dynamic dispatch ambiguity: .mkdir/.apply/.relative_to/.stdout matching is name-based; a non-path/non-process receiver with the same member name would produce a false candidate row (no such collisions observed in this snapshot; receiver hints self.local_path/patch_set/result are emitted for labeling).",
+    "args.<field> CLI reads are matched by the syntactic receiver name 'args' in dfetch/commands/*.py and dfetch/__main__.py - a differently-named Namespace variable would be missed (not observed; every command uses 'args'). args.func (dispatch callback, __main__.py:67) is explicitly excluded; commands taking an unused '_' parameter (import/environment/validate) produce no param rows by design.",
+    "The manifest schema's dst-uniqueness and vcs-enum constraints (dfetch/resources/schema.yaml) are enforcement evidence, not extractable AST nodes - recorded in guardsAndEvidence instead of candidate rows.",
+    "Metadata.path / VCS.local_path / ProjectEntry.destination property definitions are the internal propagation backbone of the manifest-to-filesystem pipeline but are property getters, not calls; the kwargs.get source rows and the file_api_def sink rows bracket them, and the property chains themselves are left to the LLM labeling/summary step (MySummaries material).",
+    "Compile validation was NOT performed in this round (CodeQL execution forbidden by the task contract): the queries reuse verbatim the structural shapes already compiled and executed on the same CLI 2.25.1 + codeql/python-all 7.1.x family in the aiohttp run of this series (helpers, bindingset annotations, AST casts); `codeql query run` + `bqrs decode` remain deferred to the next round."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction via codeql query run + bqrs decode, not database analyze)",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "no framework reference was loaded: references/flask.md / django.md / fastapi.md exist in the Augur installation but match no import evidence in this tree (the detected interface is the stdlib argparse CLI, for which no reference file exists)"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: CVE_APPLICATION_REPORT.md at the dfetch_vuln repo root was NOT opened during this step (observed in the directory listing only, and explicitly avoided), and no known-CWE/CVE/patch information was used; candidate families are derived from repository evidence and the loaded language/pattern references only. The repo-root dfetch.yaml (the project's own sample manifest) was not opened either. dfetch-db was used solely to read codeql-database.yml and the src.zip path listing (metadata/scope) and was otherwise excluded. Project source, the database, and the Augur installation were not modified. Only the three Phase-1 Step-1/2 artifacts under iris_manual/Path_Traversal/dfetch/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). No CodeQL command was executed and no LLM labeling performed, per the task contract; run_manifest.json and summary.md belong to Step 0 / post-execution steps and were not fabricated."
+  }
+}

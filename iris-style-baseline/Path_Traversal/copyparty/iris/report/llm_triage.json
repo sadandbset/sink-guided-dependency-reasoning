@@ -1,0 +1,232 @@
+{
+  "meta": {
+    "analyst": "independent LLM path re-review (Augur IRIS Pass 1 triage, Step 6)",
+    "date": "2026-10-22",
+    "target_rule": "py/augur/copyparty/pass1-path-traversal",
+    "inputs": [
+      "results/pass1.sarif (28 results, 1 run, all ruleId = py/augur/copyparty/pass1-path-traversal, every result carries 4 codeFlows)",
+      "report/iris_report.md (28 raw / 0 likely-TP / 28 candidate)",
+      "labels/labels.json (769 entries, pass 1)",
+      "report/query_generation_notes.md",
+      "source: dataset/codeql_databases/path_traversal_dbs/copyparty_vuln/copyparty/*.py"
+    ],
+    "verdict_counts": { "total": 28, "likely_tp": 3, "likely_fp": 25, "uncertain": 0 },
+    "rule_purity_check": {
+      "question_10": "PASS - the SARIF contains exactly one rule (py/augur/copyparty/pass1-path-traversal, ruleIndex 0), 28 results, all with codeFlows; the diagnostics/ directory is empty; no CodeQL built-in security-query results and no diagnostic-kind results are mixed into this pass-1 output. CodeQL analysis succeeded and produced 28 formal alerts."
+    }
+  },
+
+  "root_cause_families": {
+    "F1_cpr_static_channel": {
+      "findings": ["R00", "R16", "R17"],
+      "verdict": "likely_tp",
+      "source": "self.vpath - the request line path (httpcli.py:241) -> pre-decode undot (httpcli.py:333/:337) -> percent-decode unquotep (httpcli.py:375) -> attribute self.vpath. Attacker controls the full URL path; percent-encoding is decoded AFTER the only dot-normalization step, so %2e%2e (%2e%2e%2f) survives undot and becomes literal ../ in self.vpath.",
+      "sink": "httpcli.py:783 self.tx_file(static_path) with static_path = os.path.join(self.E.mod, 'web/', self.vpath[5:]) (httpcli.py:782). tx_file then performs bos.stat(fs_path) (httpcli.py:2610), bos.open(fs_path, os.O_RDONLY) (httpcli.py:2615), open_func(*open_args) = open(fsenc(fs_path),'rb') (httpcli.py:2728-2735, 2772) and transfers content via os.sendfile (httpcli.py:2773-2775). This is a real file-read-and-respond operation, not a mere string concatenation.",
+      "allowed_root": "self.E.mod/web/ - the copyparty application's bundled web-asset directory. Nothing in the vulnerable revision confines the joined result to it (no absreal/realpath, no startswith containment, no whitelist).",
+      "guard_analysis": {
+        "pre_decode_undot_333_337": "NOT effective: runs on the still percent-encoded string (labels P1-K-0315/P1-K-0316 are 'candidate'; query_generation_notes.md section 2 explicitly leaves this channel unguarded - correct modeling).",
+        "relchk_379": "Windows-only (ANYWIN); blocks backslash/device tricks on Windows but nothing on POSIX.",
+        "nul_check_377": "only rejects \\x00.",
+        "vfs_get_undot_423": "VFS.get(self.vpath,...) is called at httpcli.py:423 and does apply the load-bearing post-decode undot barrier (authsrv.py:473) to its own rem result - but the .cpr branch at :766-:783 re-reads the raw attribute self.vpath directly (vpath[5:]) and never uses the undot'd rem, so the barrier does not apply to this channel.",
+        "authorization": "none relevant: the .cpr branch (httpcli.py:766) executes before the can_read/can_get checks at httpcli.py:789; VFS.get at :423 was invoked with will_read=False. Unauthenticated clients reach the sink (matches the real-world advisory wording)."
+      },
+      "exploit_path": "GET /.cpr/%2e%2e/%2e%2e/%2e%2e/etc/passwd (or any absolute-path injection: vpath[5:] beginning with '/' makes os.path.join discard the web/ prefix entirely). Both %-encoded dot-traversal and absolute-path injection escape E.mod/web/ and read arbitrary files readable by the server account.",
+      "confirms_real_vulnerability": "GHSA-pxfv-7rr3-2qjg / commit 043e3c7dd683113e2b1c15cacb9c8e68f76513ff fixed exactly this branch by adding absreal() + startswith(path_base) + tx_404; the analyzed database is the pre-fix revision (httpcli.py:782-783 has no such check)."
+    },
+
+    "F2_doc_viewer": {
+      "findings": ["R18", "R19"],
+      "verdict": "likely_fp",
+      "source": "self.uparam.get('doc') at httpcli.py:3869 (query parameter, decoded at :341, then decoded AGAIN by unquotep at :3871 - a genuine double-decode exists but does not matter, see guard).",
+      "sink": "httpcli.py:3875 docpath = os.path.join(abspath, doc); :3876 bos.path.getsize(docpath); :3878 open(fsenc(docpath),'rb') + f.read() sent to client.",
+      "allowed_root": "abspath = the current browsed volume directory (from dcanonical/canonical of the undot'd rem).",
+      "guard_analysis": "httpcli.py:3874 - membership whitelist: `if next((x for x in files if x['name'] == doc), None):` - doc must exactly equal the name of a file actually present in the current directory listing (files comes from vn.ls -> statdir/scandir at authsrv.py:515-554, so names are real single-component basenames; scandir never yields '..' or multi-segment names). The check executes before the join/open (:3874 < :3875/:3878) and is an exact string equality against on-disk entries, not a prefix check, not resolve(), not mere authentication. A doc containing ../ or an absolute path simply fails the membership test and falls into the '( textfile not found )' branch. Additionally requires can_read (:3869).",
+      "residual": "only the theoretical ability to read a file that is already listed in the authorized, read-permitted directory - i.e. the intended behavior of the doc viewer, not a traversal."
+    },
+
+    "F3_zip_download_dict_confusion": {
+      "findings": ["R20", "R21"],
+      "verdict": "likely_fp",
+      "source": "self.vpath passed as the vpath argument to tx_zip (httpcli.py:3686 -> :2792 -> vn.zipgen(vpath, ...) at :2838-2839).",
+      "sink": "szip.py:250 and :259 `for buf in yieldfile(src)` with src = f['ap'] (szip.py:239) - real file reads streamed into the archive.",
+      "actual_taint_semantics": "the tainted value enters zipgen's *vpath* parameter and only reaches `vpaths = [vpath + '/' + n ...]` (authsrv.py:671) - the archive-internal entry NAMES. The yielded dicts at authsrv.py:687 are {'vp': v, 'ap': a, 'st': n}; 'vp' is tainted, 'ap' is not ('ap' comes from apaths = os.path.join(apath, n) at :672 where apath = fsroot from VFS.ls/canonical(rem), rem being the undot-barrier-cut remainder of VFS.get at authsrv.py:473 - none of the reported codeFlows passes through authsrv.py:473). CodeQL's dict-level taint makes the subsequent `f['ap']` read appear tainted: a container/value confusion, not a real flow.",
+      "allowed_root": "the volume root (walk -> ls -> canonical); archive contents are exactly the files scandir-listed inside the authorized volume; requires read access. The attacker-chosen vpath only renames entries inside the zip.",
+      "guard_analysis": "undot barrier in VFS.get (authsrv.py:473) applies to rem on this channel; the flt/items selection is filtered against real listing names (authsrv.py:659-665)."
+    },
+
+    "F4_xff_dip_suffix_family": {
+      "findings": ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11", "R12", "R13", "R14", "R15", "R22", "R23", "R24", "R25", "R26", "R27"],
+      "verdict": "likely_fp",
+      "source": "httpcli.py:282 `zso = self.headers.get('x-forwarded-for')` - label P1-S-0109 (http_header family, tp). Genuinely header-derived, but only honored when self.args.rproxy is set AND the connection peer is 127.0.0.1/::1 (httpcli.py:283); the selected element zsl[n].strip() (:289/:291) is attacker-influenceable only in specific reverse-proxy configurations. It is not a path-shaped input - all 40 http_header tp labels were auto-extracted as generic self.headers.get(...) reads, so this source family is over-generalized for path-traversal purposes (checklist item 9).",
+      "propagation": "self.ip -> dip() (httpcli.py:515-519: self.ip.replace(':','.') only when args.plain_ip, otherwise iphash.s(self.ip) = one-way hash) -> suffix = '-{:.6f}-{}'.format(time.time(), dip) (httpcli.py:1455, :2186) -> params['suffix'] (:1461) / open_args (:2187) -> ren_open(fname, ..., suffix=...) (httpcli.py:1519/:1561/:2190/:2233) -> util.py ren_open: fpath = os.path.join(fdir, fname) (clean fname), and ONLY on filename collision `if suffix and os.path.lexists(fsenc(fpath)): fpath += suffix; fname += suffix` (util.py:1211-1214) -> open(fsenc(fpath)) (util.py:1216) and downstream joins/unlinks/stats/renames (httpcli.py:1521/:1531/:1564/:1584/:1607/:2254/:2255/:2281/:2337; util.py:1221, 1548, 1962-1965).",
+      "filename_channel_is_sanitized": "the actual upload filename always passes sanitize_fn(fn, '', bad) (httpcli.py:1473, :2176; util.py:1691: fn.replace('\\\\','/').split('/')[-1]) before any join - basename-only, so the fn channel itself cannot traverse; taint surviving past it is basename taint, which carries no path structure.",
+      "why_not_exploitable": "the only branch where the tainted suffix can enter a path string is the collision append `fpath += suffix` (util.py:1212). For that to traverse, the suffix must contain '/' and the path segment formed by '<existing-file>-<time.time() with 6 decimals>-<ip>' immediately before the first '/' would have to be an ALREADY-EXISTING DIRECTORY (kernel path resolution requires each pre-'..' segment to exist). That directory name embeds the current request's microsecond-precision server timestamp, which the attacker cannot predict or pre-create (they would have to MKCOL the exact directory name between the suffix computation and the open, microseconds apart).",
+      "preconditions_stacked": "(1) --rproxy > 0 with the connection arriving from loopback; (2) attacker control of the selected XFF element; (3) --plain_ip enabled (otherwise dip() hashes the value); (4) authenticated write access to a volume (PUT/POST upload); (5) filename collision (target file already exists) AND a pre-created directory whose name matches the unpredictable microsecond timestamp.",
+      "barrier_evidence": "sanitize_fn basename barrier (httpcli.py:1473/:2176) on the fn channel; _assert_safe_rem (httpcli.py:197-200) on the upload rem; VFS.get undot barrier (authsrv.py:473) on fdir (fdir = canonical(rem) from the guarded vpath, never from the XFF value).",
+      "residual_note": "a defense-in-depth concern exists in theory (raw header bytes reaching a filename suffix), but no realistic traversal write/read; classified likely_fp with the residual documented."
+    }
+  },
+
+  "findings": [
+    {
+      "id": "R00",
+      "sarif_index": 0,
+      "location": "copyparty/httpcli.py:783 (handle_get)",
+      "sink_call": "self.tx_file(static_path)",
+      "verdict": "likely_tp",
+      "confidence": 0.92,
+      "family": "F1_cpr_static_channel",
+      "controllable_path": "full URL path via percent-encoded traversal: /.cpr/%2e%2e/%2e%2e/... or /.cpr//etc/passwd style absolute injection",
+      "allowed_root": "self.E.mod/web/ (bundled web assets); escapable",
+      "actual_operation": "file response: tx_file -> bos.stat (:2610) -> open(fsenc(fs_path),'rb') via open_func (:2733-:2735/:2772) -> os.sendfile (:2773-:2775)",
+      "taint_flow": "httpcli.py:241 request line -> undot :333/:337 (pre-decode, unsound) -> unquotep :375 -> self.vpath -> :782 vpath[5:] -> os.path.join(E.mod,'web/',...) -> :783 tx_file",
+      "guards": "none effective before access (pre-decode undot unsound vs %2e; relchk Windows-only; .cpr branch precedes the can_read check at :789; VFS.get's undot barrier at authsrv.py:473 is bypassed because the branch re-reads self.vpath directly)",
+      "preconditions": "none - unauthenticated, any copyparty < 1.8.2 not behind prisonparty jail",
+      "reason": "matches the pre-fix code of GHSA-pxfv-7rr3-2qjg exactly (commit 043e3c7 added absreal+startswith at precisely this statement); source, sink and missing guard all verified in the analyzed source tree"
+    },
+    {
+      "id": "R16",
+      "sarif_index": 16,
+      "location": "copyparty/httpcli.py:2610 (tx_file)",
+      "sink_call": "bos.stat(fs_path) with fs_path = req_path + ext, req_path = static_path from :783",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "family": "F1_cpr_static_channel",
+      "controllable_path": "same as R00",
+      "allowed_root": "self.E.mod/web/; escapable",
+      "actual_operation": "filesystem stat of the escaped path (first step of the same tx_file file-response pipeline; existence/metadata oracle for the same traversal)",
+      "taint_flow": "identical to R00 up to :783, then tx_file(req_path) -> :2609 fs_path = req_path + ext -> :2610 bos.stat",
+      "guards": "none effective (see R00)",
+      "preconditions": "none",
+      "reason": "same vulnerability and same channel as R00; the sink is the stat step inside the real file-serving function. Duplicate alert of the single .cpr root cause."
+    },
+    {
+      "id": "R17",
+      "sarif_index": 17,
+      "location": "copyparty/httpcli.py:2615 (tx_file)",
+      "sink_call": "bos.open(fs_path, os.O_RDONLY) (block-device size probe branch)",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "family": "F1_cpr_static_channel",
+      "controllable_path": "same as R00",
+      "allowed_root": "self.E.mod/web/; escapable",
+      "actual_operation": "raw read-open of the escaped path inside tx_file",
+      "taint_flow": "identical to R00 up to :2609/:2614, then :2615 bos.open",
+      "guards": "none effective (see R00)",
+      "preconditions": "none (S_ISBLK branch; also the plain-file branch opens at :2772)",
+      "reason": "same vulnerability and channel as R00; third sink anchor of the same root cause."
+    },
+    {
+      "id": "R18",
+      "sarif_index": 18,
+      "location": "copyparty/httpcli.py:3876 (tx_browser)",
+      "sink_call": "bos.path.getsize(docpath)",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "family": "F2_doc_viewer",
+      "controllable_path": "?doc= query value (double-decoded at :3871)",
+      "allowed_root": "the current browsed directory abspath; NOT escapable",
+      "actual_operation": "size probe + subsequent read of a listed file (intended doc-viewer feature)",
+      "taint_flow": "uparam['doc'] (:3869) -> unquotep (:3871) -> membership check (:3874) -> os.path.join(abspath, doc) (:3875) -> getsize (:3876)",
+      "guards": "exact-match listing-membership whitelist at :3874 BEFORE any access; doc must equal a real scandir basename; scandir can never yield '..'; requires can_read",
+      "preconditions": "read access to the volume; the requested name must exist in the current listing",
+      "reason": "the membership check is a genuine, pre-access, exact-equality whitelist against real directory entries - traversal strings simply never match; the double-decode at :3871 also cannot bypass it because comparison happens after all decoding"
+    },
+    {
+      "id": "R19",
+      "sarif_index": 19,
+      "location": "copyparty/httpcli.py:3878 (tx_browser)",
+      "sink_call": "open(fsenc(docpath), 'rb')",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "family": "F2_doc_viewer",
+      "controllable_path": "?doc= query value",
+      "allowed_root": "current browsed directory; NOT escapable",
+      "actual_operation": "read of a listed file's content into the page",
+      "taint_flow": "as R18 plus :3878 open + f.read()",
+      "guards": "same membership whitelist at :3874 (before open); size cap 1024*txt_max at :3877",
+      "preconditions": "as R18",
+      "reason": "same guard neutralizes the flow; reading an authorized listed file is the feature's purpose"
+    },
+    {
+      "id": "R20",
+      "sarif_index": 20,
+      "location": "copyparty/szip.py:250 (StreamZip.ser, pre_crc pass)",
+      "sink_call": "for buf in yieldfile(src)  [src = f['ap']]",
+      "verdict": "likely_fp",
+      "confidence": 0.75,
+      "family": "F3_zip_download_dict_confusion",
+      "controllable_path": "the zip-request vpath - but it only reaches archive entry names, never the read path",
+      "allowed_root": "volume root via walk/ls/canonical(rem); rem is undot-barrier-cut",
+      "actual_operation": "streamed read of volume files into the archive (authorized zip-download feature)",
+      "taint_flow": "self.vpath (:3686) -> tx_zip vpath param (:2792) -> vn.zipgen vpath (:2839/authsrv.py:642) -> vpaths list ('vp' names, authsrv.py:671) -> yielded dict (authsrv.py:687) -> f['ap'] read (szip.py:239) -> yieldfile (szip.py:250)",
+      "guards": "VFS.get undot barrier (authsrv.py:473) on rem (no reported flow passes through it); 'ap' values derive from os.path.join(fsroot-from-canonical, scandir names) at authsrv.py:672; read permission required",
+      "preconditions": "read access to the volume; no-ndownload not set",
+      "reason": "dict-container taint confusion: only the 'vp' (display/entry-name) value is tainted; f['ap'] is clean in reality; the files zipped are exactly the scandir-listed, authorized volume files"
+    },
+    {
+      "id": "R21",
+      "sarif_index": 21,
+      "location": "copyparty/szip.py:259 (StreamZip.ser, main pass)",
+      "sink_call": "for buf in yieldfile(src)",
+      "verdict": "likely_fp",
+      "confidence": 0.75,
+      "family": "F3_zip_download_dict_confusion",
+      "controllable_path": "as R20",
+      "allowed_root": "as R20",
+      "actual_operation": "as R20",
+      "taint_flow": "as R20, sink at :259",
+      "guards": "as R20",
+      "preconditions": "as R20",
+      "reason": "duplicate sink anchor of the same dict-confusion root cause"
+    },
+    { "id": "R01", "sarif_index": 1, "location": "copyparty/httpcli.py:1519 (dump_to_file)", "sink_call": "ren_open(fn, *open_a, **params) - file create via util.py:1216 open(fsenc(fpath))", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "X-Forwarded-For element -> self.ip -> dip() -> collision suffix appended at util.py:1212", "allowed_root": "volume dir fdir = canonical(undot'd rem)", "actual_operation": "temp-file create during PUT upload", "taint_flow": "httpcli.py:282 XFF -> :289/:291 self.ip -> :517 dip -> :1455 suffix -> :1461 params['suffix'] -> :1519 ren_open kwargs -> util.py:1178 suffix -> :1211-:1214 fpath += suffix (collision only) -> :1216 open", "guards": "sanitize_fn basename on fn (:1473); suffix reaches a path only via the lexists-collision append", "preconditions": "rproxy>0 + loopback peer + attacker-controlled XFF element + --plain_ip + write access + existing-file collision + pre-created dir matching the microsecond timestamp", "reason": "the fn channel is basename-sanitized; the suffix-append branch requires a directory named with the current request's unpredictable microsecond timestamp to actually traverse - not practically achievable; source is a generic header auto-label, not a path input" },
+    { "id": "R02", "sarif_index": 2, "location": "copyparty/httpcli.py:1531 (dump_to_file)", "sink_call": "bos.unlink(path)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "as R01 (path = join(fdir, zfw['orz'][1]) at :1521, fname possibly suffix-appended inside ren_open)", "allowed_root": "volume dir", "actual_operation": "delete of an upload temp path on limiter failure", "taint_flow": "as R01 then :1519 ren_open -> :1520 zfw -> :1521 path -> :1531 unlink", "guards": "as R01", "preconditions": "as R01", "reason": "same impractical suffix-append channel; value is otherwise basename-sanitized" },
+    { "id": "R03", "sarif_index": 3, "location": "copyparty/httpcli.py:1561 (dump_to_file, magic-rename)", "sink_call": "ren_open(fn, *open_a, **params)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "as R01", "allowed_root": "volume dir", "actual_operation": "second temp-file create for extension rename", "taint_flow": "as R01 with params['suffix']=suffix[:-4] at :1560", "guards": "as R01", "preconditions": "as R01 + 'magic' volflag + nameless upload", "reason": "as R01" },
+    { "id": "R04", "sarif_index": 4, "location": "copyparty/httpcli.py:1584 (dump_to_file)", "sink_call": "os.unlink(path)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "as R02 (path2 chain :1564-:1567)", "allowed_root": "volume dir", "actual_operation": "delete on xau hook rejection", "taint_flow": "as R02 via the path2 branch (:1558 fn2 -> :1564 path2 -> :1567 path)", "guards": "as R01 (fn2 built from sanitized fn + extension from magician.ext)", "preconditions": "as R01 + xau hook present", "reason": "as R01" },
+    { "id": "R05", "sarif_index": 5, "location": "copyparty/httpcli.py:1496 (dump_to_file)", "sink_call": "bos.path.exists(path)", "verdict": "likely_fp", "confidence": 0.75, "family": "F4_xff_dip_suffix_family", "controllable_path": "fn = 'put'+suffix (nameless PUT) - but sanitize_fn (:1473) reduces it to a basename before the join at :1475", "allowed_root": "volume dir", "actual_operation": "weak existence probe (overwrite decision)", "taint_flow": ":1455 suffix -> :1458 suffix += '.bin' -> :1459 fn -> :1475 path -> :1496 exists", "guards": "sanitize_fn basename barrier at :1473 precedes the join; the surviving taint is basename-only (no path structure)", "preconditions": "as R01 + nameless PUT + WebDAV overwrite conditions", "reason": "the reported flow skips the value-level effect of sanitize_fn; a basename cannot traverse - the value at the sink is clean" },
+    { "id": "R06", "sarif_index": 6, "location": "copyparty/httpcli.py:1607 (dump_to_file)", "sink_call": "bos.stat(path).st_ino (fk checksum)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "as R05", "allowed_root": "volume dir", "actual_operation": "stat of the uploaded file for the filekey", "taint_flow": "as R05, sink :1607", "guards": "as R05", "preconditions": "as R05 + 'fk' volflag", "reason": "as R05" },
+    { "id": "R07", "sarif_index": 7, "location": "copyparty/httpcli.py:1512 (dump_to_file)", "sink_call": "bos.path.exists(os.path.join(fdir, tnam))", "verdict": "likely_fp", "confidence": 0.75, "family": "F4_xff_dip_suffix_family", "controllable_path": "tnam = fn + '.PARTIAL' from the basename-sanitized fn", "allowed_root": "volume dir", "actual_operation": "weak existence probe (.PARTIAL check)", "taint_flow": ":1459 fn -> :1504 tnam -> :1512 exists", "guards": "sanitize_fn at :1473 basenames fn before :1504", "preconditions": "as R05", "reason": "basename-only value at the sink" },
+    { "id": "R08", "sarif_index": 8, "location": "copyparty/httpcli.py:1517 (dump_to_file)", "sink_call": "bos.unlink(path)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "as R05", "allowed_root": "volume dir", "actual_operation": "unlink before overwrite", "taint_flow": "as R05, sink :1517", "guards": "as R05", "preconditions": "as R05 + daw/x-oc-mtime", "reason": "as R05" },
+    { "id": "R09", "sarif_index": 9, "location": "copyparty/httpcli.py:1513 (dump_to_file)", "sink_call": "bos.path.getsize(path)", "verdict": "likely_fp", "confidence": 0.75, "family": "F4_xff_dip_suffix_family", "controllable_path": "as R05", "allowed_root": "volume dir", "actual_operation": "weak size probe", "taint_flow": "as R05, sink :1513", "guards": "as R05", "preconditions": "as R05", "reason": "as R05" },
+    { "id": "R10", "sarif_index": 10, "location": "copyparty/httpcli.py:1514 (dump_to_file)", "sink_call": "bos.path.getmtime(path)", "verdict": "likely_fp", "confidence": 0.75, "family": "F4_xff_dip_suffix_family", "controllable_path": "as R05", "allowed_root": "volume dir", "actual_operation": "weak mtime probe (blank_wt freshness check)", "taint_flow": "as R05, sink :1514", "guards": "as R05", "preconditions": "as R05", "reason": "as R05" },
+    { "id": "R11", "sarif_index": 11, "location": "copyparty/httpcli.py:2337 (handle_plain_upload)", "sink_call": "bos.stat(ap).st_ino", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "abspath = join(fdir, fname) where fname comes from ren_open's possibly suffix-appended name", "allowed_root": "volume dir fdir_base = canonical(rem)", "actual_operation": "stat of uploaded file for fk filekey", "taint_flow": ":282 XFF -> self.ip -> dip (:2166) -> suffix (:2186) -> ren_open (:2190) -> fname (:2191) -> abspath (:2197) -> ap (:2263/:2330) -> :2337 stat", "guards": "multipart filename sanitize_fn (:2176) on the fname channel; suffix only via the ren_open collision append (util.py:1211-:1214)", "preconditions": "as R01 (rproxy/loopback/plain_ip/collision) + multipart POST upload + 'fk' volflag", "reason": "same impractical suffix channel; the actual multipart filename is basename-sanitized" },
+    { "id": "R12", "sarif_index": 12, "location": "copyparty/httpcli.py:2233 (handle_plain_upload)", "sink_call": "ren_open(tnam, 'wb', 512*1024, **open_args) - create of the .PARTIAL temp file", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "tnam = fname + '.PARTIAL', fname from ren_open (:2191) possibly carrying the collision suffix", "allowed_root": "volume dir", "actual_operation": "file create/write of upload data", "taint_flow": "as R11 then :2193 tnam -> :2233 ren_open -> util.py:1216 open", "guards": "sanitize_fn at :2176 on the original multipart filename; collision-append precondition as R01", "preconditions": "as R11", "reason": "as R11" },
+    { "id": "R13", "sarif_index": 13, "location": "copyparty/httpcli.py:2254 (handle_plain_upload)", "sink_call": "bos.unlink(tabspath)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "tabspath = join(fdir, tnam) (:2235), tnam possibly suffix-appended", "allowed_root": "volume dir", "actual_operation": "delete of upload temp on limiter failure", "taint_flow": "as R12 then :2234 tnam -> :2235 tabspath -> :2254 unlink", "guards": "as R12", "preconditions": "as R12 + limiter violation", "reason": "as R11" },
+    { "id": "R14", "sarif_index": 14, "location": "copyparty/httpcli.py:2255 (handle_plain_upload)", "sink_call": "bos.unlink(abspath)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "abspath (:2197) from possibly suffix-appended fname", "allowed_root": "volume dir", "actual_operation": "delete of reserved destination name", "taint_flow": "as R11, sink :2255", "guards": "as R12", "preconditions": "as R13", "reason": "as R11" },
+    { "id": "R15", "sarif_index": 15, "location": "copyparty/httpcli.py:2281 (handle_plain_upload)", "sink_call": "os.unlink(abspath)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "as R14", "allowed_root": "volume dir", "actual_operation": "delete on xau hook rejection", "taint_flow": "as R11, sink :2281", "guards": "as R12", "preconditions": "as R14 + xau hook", "reason": "as R11" },
+    { "id": "R22", "sarif_index": 22, "location": "copyparty/util.py:1221 (ren_open)", "sink_call": "open(fsenc(fp2), 'wb') - fn-trunc debug file", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "fp2 = 'fn-trunc.{b64}.txt' joined with fdir; b64 is a urlsafe-base64 encoding (safe alphabet) of the truncated name", "allowed_root": "volume dir", "actual_operation": "write of the original filename into a debug file on name-too-long retry", "taint_flow": "as R01 -> util.py:1178 suffix -> :1213 fname += suffix -> b64 path -> :1219-:1221 fp2 open", "guards": "b64 urlsafe alphabet cannot encode '/' or '..' structure; filename fixed prefix 'fn-trunc'", "preconditions": "as R01 + ENAMETOOLONG retry path", "reason": "the tainted component passes through urlsafe base64, which is structure-destroying; no traversal possible" },
+    { "id": "R23", "sarif_index": 23, "location": "copyparty/util.py:1211 (ren_open)", "sink_call": "the open itself (fun(fsenc(fpath)) at :1216, anchored at the fpath computation :1207-:1211)", "verdict": "likely_fp", "confidence": 0.65, "family": "F4_xff_dip_suffix_family", "controllable_path": "fpath = join(fdir, fname) [+ collision suffix]", "allowed_root": "volume dir", "actual_operation": "file create for the upload", "taint_flow": "httpcli.py:282 XFF -> dip -> suffix -> params -> util.py:1174 kwargs/:1178 suffix -> :1207 fpath -> :1216 open", "guards": "fname basename-sanitized by the callers; suffix enters fpath only through :1212 fpath += suffix under lexists-collision", "preconditions": "as R01 (all five stacked conditions incl. the unpredictable microsecond-timestamp directory)", "reason": "the most direct sink of the family, but the traversal requires a pre-existing directory whose name embeds the current request's microsecond timestamp - practically impossible; residual risk documented in the family entry" },
+    { "id": "R24", "sarif_index": 24, "location": "copyparty/util.py:1548 (rand_name)", "sink_call": "os.path.exists(fsenc(os.path.join(fdir, fn)))", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "fn = urlsafe_b64(os.urandom)[:nc] + ext, ext from the caller's (possibly suffix-tainted) filename", "allowed_root": "volume dir", "actual_operation": "weak existence probe used to pick a random name", "taint_flow": "XFF -> dip -> suffix -> 'put'+suffix (nameless, httpcli.py:1459) -> rand_name (:1471) ext -> util.py:1547 fn -> :1548 exists; result is then sanitize_fn'd at httpcli.py:1473 before any open", "guards": "random part is os.urandom b64; the returned name is basename-sanitized before use; probe result only selects a retry name", "preconditions": "as R01 + rnd volflag", "reason": "existence oracle at most, on a value that is destroyed by sanitize_fn before any real file access; no read/write of an escaped path" },
+    { "id": "R25", "sarif_index": 25, "location": "copyparty/util.py:1962 (atomic_move)", "sink_call": "os.path.exists(dst)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "dst (udst) = tabspath/abspath chain with possibly suffix-appended name (as R13)", "allowed_root": "volume dir", "actual_operation": "PY2-only overwrite check inside atomic_move", "taint_flow": "as R13 then atomic_move (:2260) -> util.py:1958 dst -> :1962 exists", "guards": "as R12; branch is Python-2-only legacy", "preconditions": "as R13 + PY2 runtime", "reason": "same family; the suffix channel is practically inert and the value is basename-derived" },
+    { "id": "R26", "sarif_index": 26, "location": "copyparty/util.py:1963 (atomic_move)", "sink_call": "os.unlink(dst)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "as R25", "allowed_root": "volume dir", "actual_operation": "PY2-only pre-rename unlink", "taint_flow": "as R25, sink :1963", "guards": "as R25", "preconditions": "as R25", "reason": "as R25" },
+    { "id": "R27", "sarif_index": 27, "location": "copyparty/util.py:1965 (atomic_move)", "sink_call": "os.rename(src, dst)", "verdict": "likely_fp", "confidence": 0.7, "family": "F4_xff_dip_suffix_family", "controllable_path": "as R25", "allowed_root": "volume dir", "actual_operation": "PY2-only rename to the destination", "taint_flow": "as R25, sink :1965", "guards": "as R25", "preconditions": "as R25", "reason": "as R25; on PY3 the rename at :1960 has the same practical-inertness argument" }
+  ],
+
+  "checklist_answers": {
+    "1_source_attacker_controlled": "Yes for F1 (full URL path, unauthenticated), F2 (query param) and F4 (XFF header element, conditional). F3's source is the URL path but it never reaches the read path in value terms.",
+    "2_source_reaches_file_access": "F1: yes, verifiably through vpath[5:]/join/tx_file with no intermediate normalization. F4: yes through dip/suffix/ren_open, but only into a collision-avoidance suffix. F2/F3: the reported edges terminate before an unguarded access (guard at :3874; dict confusion for 'ap').",
+    "3_sink_is_sensitive_operation": "F1: yes (stat, open, sendfile -> full file disclosure). F3/F4 sinks are real reads/writes/deletes but the values reaching them are neutralized. Pure concatenations were not counted as sinks (tx_file/ren_open/yieldfile are genuine access wrappers).",
+    "4_declared_roots_and_escape": "F1's root is E.mod/web/ and is escapable (that is the vulnerability). F2/F3/F4 roots are volume dirs guarded by undot (VFS.get), listing membership, or sanitize_fn basename.",
+    "5_traversal_vectors": "F1: %-encoded dot-segments survive the pre-decode undot (decode at :375 happens after), absolute-path injection via os.path.join absolute-component semantics, %-encoded separators. Windows-only relchk blocks backslash variants there. Symlinks: canonical/dcanonical TOCTOU shapes exist on other channels (per notes) but are not part of these alerts.",
+    "6_real_guards": "F2: exact listing-membership whitelist before access (effective). F3: undot barrier on rem (effective). F4: sanitize_fn basename (effective on the fn channel). F1: NO effective guard - that is the finding.",
+    "7_misjudged_guards": "The pre-decode undot at :333/:337 was correctly NOT treated as a barrier (unsound vs percent-encoding); no finding was dismissed merely because of Path.resolve/normpath/startswith or login checks. dip()'s hash is a value transform, not relied on as a barrier.",
+    "8_authorized_normal_service": "F2 (doc viewer) and F3 (zip download) are authorized features with effective guards. F4's upload machinery is authorized write behavior; the XFF suffix carries no practical traversal. F1 is NOT normal service: the .cpr static branch escapes its asset root.",
+    "9_overgeneralization_causes": "F3 is a dict-container value confusion (classic FP mechanism). F4 stems from the http_header label family auto-classifying every self.headers.get (incl. x-forwarded-for, P1-S-0109) as a path source; the flow itself is real but the security effect is neutralized. F1 was the pre-registered primary expected alert and is genuine.",
+    "10_rule_purity": "Only py/augur/copyparty/pass1-path-traversal is present (28 results, 4 codeFlows each); no diagnostics, no built-in CodeQL query results, no other CWEs mixed in."
+  },
+
+  "real_vulnerability_hit_check": {
+    "commit": "https://github.com/9001/copyparty/commit/043e3c7dd683113e2b1c15cacb9c8e68f76513ff",
+    "cwe": "CWE-22",
+    "advisory": "GHSA-pxfv-7rr3-2qjg (the /.cpr endpoint allowed full access to the server filesystem)",
+    "vulnerable_function": "handle_get, copyparty/httpcli.py",
+    "vulnerable_code": "static_path = os.path.join(self.E.mod, 'web/', self.vpath[5:]); return self.tx_file(static_path)  [httpcli.py:782-783 in the analyzed pre-fix tree]",
+    "hit": true,
+    "hit_by_findings": ["R00 (httpcli.py:783, tx_file call)", "R16 (httpcli.py:2610, bos.stat inside tx_file)", "R17 (httpcli.py:2615, bos.open inside tx_file)"],
+    "evidence": "The formal pass-1 SARIF reports source-to-sink paths for exactly this branch: request line (:241) -> pre-decode undot (:333/:337) -> percent-decode (:375) -> self.vpath -> .cpr branch (:766-:783) -> vpath[5:] -> os.path.join(E.mod, 'web/', ...) -> tx_file (stat/open/sendfile). The analyzed database is the pre-fix revision (no absreal/startswith containment; the fix commit adds absreal(os.path.join(path_base, vpath[5:])) + startswith(path_base) + tx_404 at precisely this location). The pre-decode undot is unsound against %2e%2e, the .cpr branch runs before the permission checks at :789, and the VFS.get undot barrier does not apply because the branch reads self.vpath directly. Unauthenticated arbitrary-file read, matching the advisory description ('Unauthenticated users were able to retrieve any files which are accessible ... from the copyparty process').",
+    "notes": "R16/R17 are additional sink anchors of the same single root cause (tx_file's stat and raw-open), not separate vulnerabilities. No other finding maps to this commit."
+  },
+
+  "summary": "CodeQL analysis succeeded; the formal Pass 1 run produced 28 alerts under py/augur/copyparty/pass1-path-traversal. Independent re-review of all 28 codeFlows against the real source: 3 alerts are likely true positives - all anchored on the unauthenticated /.cpr static-asset traversal (GHSA-pxfv-7rr3-2qjg, fixed by commit 043e3c7), which is exactly the real vulnerability under review and IS hit by this pass. 25 alerts are likely false positives in two shapes: (a) effective pre-access guards the taint model cannot see (doc-viewer listing-membership whitelist; VFS.get undot on the zip channel), and (b) an X-Forwarded-For -> dip() -> collision-suffix chain in the upload temp-file machinery that is practically non-exploitable (basename sanitization plus a required unpredictably-timestamped directory)."
+}

@@ -1,0 +1,313 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-22",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\fides\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL query execution, no LLM labeling in this round) against the fides_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database fides-db sits INSIDE the source tree root (as a sibling of src/), so all exploration, file traversal and grep evidence collection excluded fides-db; both generated queries positively scope to %/src/fides/% and also filter fides-db out of result rows. The database sourceLocationPrefix matches the explored tree (creation sha 1212eadf), so file/line evidence below refers to the same snapshot the database was built from. Source-location ground truth present in the source root (FIDES-VULNERABILITY-REPORT.md, path_traversal_full_audit_report.md, path_traversal_priority_analysis.md, path_traversal_priority_analysis_revised.md, path_traversal_sinks.csv, path_traversal_sinks_classified.csv, path_traversal_sinks_classified_revised.csv) was deliberately NOT opened, per the experimental-independence constraint."
+  },
+  "target": {
+    "project": "fides (ethyca-fides)",
+    "projectDescription": "Ethyca Fides (setup.py name 'ethyca-fides'; version via versioneer from git - the CHANGELOG shows the tree is on main after 2.15.0, database creation sha 1212eadf) - a privacy-engineering platform: a FastAPI 0.89.1 webserver (src/fides/api) with a Click CLI (src/fides/cli), a client library layer (src/fides/core), Celery workers, and non-Python frontends under clients/ (admin-ui, privacy-center - outside this python database). Path-traversal-relevant architecture: (1) the admin-UI static file serving channel - src/fides/api/main.py:154-197 registers a catchall route @app.get(\"/{catchall:path}\") whose handler read_other_paths reads path = request.path_params[\"catchall\"] at :160, resolves it via match_route(get_ui_file_map(), path) at :163 (a regex-anchored route map built from .glob('**/*.html') over the packaged admin UI directory, ui.py:82), falls back to get_path_to_admin_ui_file(path) at :167 (ui.py:32-42: package_path / ADMIN_UI_DIRECTORY / path - a pathlib __truediv__ chain in which an ABSOLUTE user path REPLACES the entire base and '..' segments are kept lexically), checks ui_file.is_file() at :170, guards with path_is_in_ui_directory(ui_file) at :171 (ui.py:134-141: `ui_directory in path.parents` - a LEXICAL containment check on the UNRESOLVED path, which passes for paths like <ui_dir>/../../etc/passwd because the lexical parents list still contains <ui_dir>), and finally serves FileResponse(ui_file) at :180 (the starlette-side open is external to this database). No resolve()/realpath, no '..' rejection, no basename extraction, and no percent-decoding in fides' own code (starlette decodes the URL path before routing). (2) the zip template upload channel - src/fides/api/api/v1/endpoints/saas_config_endpoints.py:358-388 register_custom_connector_template takes a raw application/zip body (file: bytes = Body(...)), parses it with ZipFile(BytesIO(file), 'r') at :378 and CustomConnectorTemplateLoader.save_template (connector_registry_service.py:178-283) reads entries via zip_file.read(info) at :191 using info.filename only for endswith('config.yml'/'dataset.yml'/'.svg'/'.py') selection - ALL IN MEMORY (BytesIO), nothing is extracted to the filesystem; the .py entry content additionally reaches register_custom_functions/exec (connector_registry_service.py:445-482, RestrictedPython-gated, PASS 4 material, not pass 1). (3) the local upload write channel - src/fides/api/tasks/storage.py:172-190 upload_to_local builds filename = f\"fides_uploads/{file_key}\" at :184 where file_key = f\"{privacy_request.id}.{ext}\" (storage_uploader_service.py:67-75 - server-generated request id, NOT request-controlled) and writes it with open(filename, 'wb') at :187 after os.makedirs at :182. (4) the DSR report channel - dsr_report_builder.py builds an in-memory zip (zipfile.ZipFile(BytesIO) at :41, writestr member names f\"/{dataset_name}/{collection_name}/{index}.html\" derived from graph dataset keys at :83/:93/:99/:116/:128) and reads one packaged asset via Path(os.path.join(DSR_DIRECTORY, 'assets/back.svg')).read_text() at :150. (5) the config/CLI channels - config loading via toml.load(getenv-config path) (config/__init__.py:197-202), load_file searching FIDES__CONFIG_PATH/cwd/parent/home (config/helpers.py:15-47), packaged SaaS template reads (saas_util.py load_yaml_as_string/load_config/load_as_string/load_datasets/encode_file_contents, connector_registry_service.py:73-100 os.listdir/os.path.join over data/saas), consent notice yaml reads (consent_util.py:511/:560 via load_file), and the Click CLI (fides_dir/manifests_dir/input_filename/output_filename/keyfile_path/env_file parameters flowing into manifest write/read, credentials write/read, config write, keyfile read) - all operator-trust level. FastAPI, starlette, pathlib, zipfile, fideslang, toml and RestrictedPython are external libraries not present in this CodeQL database (the 145882-LOC baseline covers the fides repo only).",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\fides_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (fides-db/codeql-database.yml)",
+      "source layout: the audit target is the python package src/fides (api/, cli/, core/, common/, config/, connectors/, data/ - the api/ tree alone has ~30 endpoint modules and ~176 route registrations)",
+      "build manifests: setup.py + pyproject.toml + setup.cfg ([versioneer] versionfile_source = src/fides/_version.py) packaging ethyca-fides; requirements.txt pins fastapi[all]==0.89.1, fideslang==1.4.2, celery==5.2.7"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\fides_vuln\\fides-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\fides_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "1212eadf972fa9beed2908d377a3ee39e1f3d6f7",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T04:00:13.084939300Z"
+    },
+    "baselineLinesOfCode": 145882,
+    "finalised": true,
+    "locationNote": "fides-db is nested inside the source tree root (a sibling of src/, tests/, clients/ and docs/); it was excluded from all exploration and is excluded from extraction result rows via the path filters in both queries. Both queries scope positively to %/src/fides/% (the shipped python package: webserver + CLI + core + config + connectors + packaged data templates), which leaves the root-level tests/ tree, clients/ (TypeScript frontends), docs/, scripts/ (dev tooling with open() calls at generate_docs.py:18, quickstart.py:186/:224/:473), noxfile.py/noxfiles/, setup.py and versioneer.py outside the candidate tables. Within src/fides, only %/src/fides/_version.py (versioneer-generated, open() at :152) is additionally excluded as generated code; src/fides/api/alembic/migrations/ stays in scope but contains no filesystem-API matches (its rename_table calls are DB migrations)."
+  },
+  "toolchain": {
+    "qlpack": "iris/fides-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace from Step 0",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1; local CLI verified on disk at E:\\codeql - codeql.exe present; no query was executed in this round)",
+    "compatibilityBasis": "API facts used by the generated queries reuse only structural shapes already proven by the queries of this series that RAN on this same CLI + pack family (aiohttp, airflow ran both sources and sinks; ansible ran sources; dfetch/coderedcms/copyparty/django generated with the same contract): AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), AstNode.getScope() and Scope.getEnclosingModule() (semmle/python/AstExtended.qll), Module.getName() and Module.getFile().getShortName() (semmle/python/Module.qll), Call.getFunc() (semmle/python/Exprs.qll), Attribute.getName()/getObject(), Subscript.getObject() (semmle/python/Exprs.qll), Function.getName()/getAnArg()/getEnclosingScope() (semmle/python/Function.qll - getAnArg() covers positional parameters), Parameter.isSelf()/getPosition()/getName() (semmle/python/Function.qll, proven by the airflow and dfetch projects), Class.getName() (semmle/python/Class.qll). The two queries define no QL classes (only predicates), never assign API::Node values to DataFlow::Node variables, keep every variable bound through a positive body, keep resolved-API matching out entirely (all families are AST syntax matches; the match_kind column is kept 'ast' for cross-project contract consistency), name the module-path variable moduleHint (never `module`), and leave no {{...}} template placeholders. Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no unbound `this`. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "FastAPI",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package: from fastapi import FastAPI/APIRouter/HTTPException/Request/Response/Depends/Security/Body across src/fides/api (main.py:9, saas_config_endpoints.py:3 Body, every endpoint module); requirements.txt fastapi[all]==0.89.1, fastapi-caching, fastapi-pagination",
+            "route/decorator: ~176 @router.<method>/@app.<method> route registrations (grep over src/fides/api), incl. the catchall @app.get(\"/{catchall:path}\") at main.py:154; APIRouter instances in every endpoints module",
+            "runtime/bootstrap: create_fides_app() (app_setup.py) + uvicorn Server/Config (main.py:237-248 start_webserver); Pydantic body models as the request schema layer",
+            "directory/layout: src/fides/api/api/v1/endpoints/ with 30+ endpoint modules, schemas/, deps.py, middleware.py"
+          ]
+        },
+        {
+          "name": "Starlette",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package: from starlette.background import BackgroundTask (main.py:13), starlette.types.Message (middleware.py:8), fastapi.responses FileResponse re-export (main.py:10, ui.py:10)",
+            "route/decorator: @app.middleware(\"http\") request middlewares (main.py:50/:129/:251), request.scope/request.url/request.body() starlette Request APIs throughout",
+            "runtime/bootstrap: uvicorn ASGI server; StreamingResponse (privacy_request_endpoints.py:297)",
+            "directory/layout: middleware.py at the api root"
+          ],
+          "referenceNote": "No references/starlette.md exists in the Augur installation; FastAPI's request object IS the starlette Request, so references/fastapi.md is the applicable framework reference and covers the request-attribute source shapes used here."
+        },
+        {
+          "name": "Celery",
+          "confidence": 0.75,
+          "evidence": [
+            "import/package: requirements.txt celery[pytest]==5.2.7; src/fides/api/tasks/__init__.py:47 app = Celery(__name__)",
+            "route/decorator: @celery_app.task(base=DatabaseTask, bind=True) task decorators (message_dispatch_service.py:92, email_batch_service.py:35, request_runner_service.py:277)",
+            "runtime/bootstrap: task dispatch via run_privacy_request.delay(...) (request_runner_service.py:259) and dispatch_message_task.apply_async(...) with named queues",
+            "directory/layout: src/fides/api/tasks/, src/fides/api/worker/"
+          ],
+          "referenceNote": "No references/celery.md exists in the Augur installation. The Celery task payload boundary is a message-queue consumer channel per patterns.md section 8; in this codebase the payloads carry server-generated privacy_request ids and ORM state, so no task-parameter source rows are emitted (recorded in uncoveredCases for the labeling step to judge)."
+        },
+        {
+          "name": "Click",
+          "confidence": 0.85,
+          "evidence": [
+            "import/package: import click / from click import echo (cli tree, config/helpers.py:8)",
+            "route/decorator: ~87 @click.command/@click.option/@click.argument decorators across src/fides/cli/commands (init, push, evaluate, parse, annotate dataset, generate datasets/systems, deploy up, db, user, view)",
+            "runtime/bootstrap: fides_cli entry point wiring in src/fides/cli/__init__.py; click.Path(exists=True) types on manifests_dir/fides_dir/env_file options",
+            "directory/layout: src/fides/cli/commands/, options.py with shared option decorators"
+          ],
+          "referenceNote": "No references/click.md exists in the Augur installation; the CLI is an operator-trust boundary (the person invoking fides owns the config tree it reads/writes), so CLI parameters are emitted as cli_param rows for the labeling step to classify, not as assumed attacker sources."
+        },
+        {
+          "name": "Flask / Django",
+          "confidence": 0.0,
+          "evidence": ["no `from flask import` / `from django import` anywhere in src/fides"]
+        }
+      ],
+      "nonPythonCandidates": ["Gin/Echo (go), Spring (java), Express (javascript), ASP.NET Core (csharp): not applicable, database language is python; the clients/admin-ui and clients/privacy-center TypeScript frontends are outside this python database"],
+      "result": "FastAPI detected as primary framework (confidence 1.0) with Starlette as its underlying ASGI request layer (1.0, handled through fastapi.md), Celery as a secondary task-queue framework (0.75) and Click as the CLI framework (0.85). references/fastapi.md was loaded per WORKFLOW.md 4.2.3 and its source signatures (path parameters in route handlers, Request.query_params/path_params/headers/cookies, request body readers, UploadFile metadata) were cross-checked against the actual code: the ONE route-path source in this codebase is the catchall route (main.py:154/:160) - of 176 route registrations it is the only one with a path variable; the header/body reader signatures match request.headers.get(...) and await request.body() sites; there is NO UploadFile usage anywhere (the only raw file upload is the bytes Body zip endpoint). The fastapi.md sink guidance (filesystem APIs receiving route/body/query values, archive extraction destinations) maps to the FileResponse/is_file/open families below; the archive-extraction shape does NOT apply (zip handling is in-memory only)."
+    }
+  },
+  "inputBoundaryInventory": {
+    "summary": "fides is a FastAPI webserver + Click CLI + Celery workers, so the untrusted-input boundaries are: (1) the catchall route path variable - @app.get(\"/{catchall:path}\") injects the entire decoded request path into read_other_paths as request.path_params[\"catchall\"] (main.py:160), which drives the admin-UI static file resolution (match_route -> get_path_to_admin_ui_file -> is_file -> path_is_in_ui_directory -> FileResponse); (2) request header reads (request.headers.get: X-Fides-Source analytics, UNESCAPE_SAFESTR_HEADER consent-notice flags, User-Agent/Referer consent reporting, content-type yaml gate, authorization audit middleware, plus the bare request.headers read at privacy_preference_endpoints.py:242); (3) request body readers (await request.body() in the audit-log middleware and the YAML dataset PATCH endpoint); (4) the raw application/zip upload body (file: bytes = Body(...) of register_custom_connector_template - the only file-upload endpoint; parsed in memory, never extracted to disk); (5) request.url/url.path/url.hostname/method/client/scope reads (analytics and audit middleware - not file-targeting, recorded for completeness); (6) the 176 typed CRUD routes take Pydantic body/query models (the standard API channel - config/secrets/identity data flows into the DB and outbound connectors, no observed flow into local filesystem paths; not emitted per-field, see uncoveredCases); (7) environment variables (FIDES__CONFIG_PATH, FIDES_CREDENTIALS_PATH) and the config file they select - operator trust level; (8) the Click CLI (fides_dir, manifests_dir, input_filename, output_filename, keyfile_path, env_file command parameters flowing into manifest/config/credentials/keyfile reads and writes) - operator trust level; (9) the Celery task payload boundary (server-generated privacy request ids, ORM state). The sink side funnels through: FileResponse (the actual static file serve), pathlib path construction and lexical containment (ui.py get_path_to_admin_ui_file's `/` chain, path_is_in_ui_directory's `in path.parents`), builtin open() (12 sites: local upload write, config/credentials/manifest/keyfile/notice-yaml/saas-template reads and writes), os.makedirs/os.mkdir, os.path.join/isfile/exists/abspath, os.listdir/.iterdir/.glob/glob.glob, in-memory zipfile (ZipFile ctor, writestr member names, zip entry reads), fideslang manifest write/read (write_manifest, ingest_manifests, load_yaml_into_dict), toml.load config read, .read_text on a packaged asset, and the internal path-taking wrapper definitions (load_file, load_config, upload_to_local, get_path_to_admin_ui_file, match_route, path_is_in_ui_directory, write/read credentials, get_manifest_list, ...).",
+    "sourceFamilies": [
+      {
+        "family": "http_path_param",
+        "shape": "request.path_params[...] subscripts - the catchall route variable",
+        "trustChain": "main.py:154 @app.get(\"/{catchall:path}\") -> :160 path = request.path_params[\"catchall\"] -> :163 match_route(get_ui_file_map(), path) / :167 get_path_to_admin_ui_file(path) -> :170 ui_file.is_file() -> :171 path_is_in_ui_directory(ui_file) -> :180 FileResponse(ui_file). Starlette decodes the URL path before routing; the value is the whole request path below '/'",
+        "evidenceSites": ["src/fides/api/main.py:154 (route registration), :160 (path_params subscript), :163, :167, :170, :171, :180"]
+      },
+      {
+        "family": "http_header",
+        "shape": "request.headers.get(...) calls and the bare request.headers attribute read",
+        "trustChain": "starlette Request headers - client-controlled header values; used here for analytics (X-Fides-Source), consent-notice escaping flags (UNESCAPE_SAFESTR_HEADER), consent reporting (User-Agent/Referer), a media-type gate (content-type) and audit-log auth (authorization)",
+        "evidenceSites": ["src/fides/api/main.py:64 (X-Fides-Source)", "src/fides/api/middleware.py:39 (authorization)", "src/fides/api/api/v1/endpoints/privacy_notice_endpoints.py:92/:191 (UNESCAPE_SAFESTR_HEADER)", "src/fides/api/api/v1/endpoints/privacy_experience_endpoints.py:168", "src/fides/api/api/v1/endpoints/privacy_experience_config_endpoints.py:86/:214", "src/fides/api/api/v1/endpoints/privacy_preference_endpoints.py:242 (bare request.headers), :244 (User-Agent), :245 (Referer)", "src/fides/api/api/v1/endpoints/dataset_endpoints.py:309 (content-type)"]
+      },
+      {
+        "family": "http_body",
+        "shape": "await request.body() calls",
+        "trustChain": "raw request body bytes - read in the audit-log resource middleware (re-injected via set_body/get_body) and in the YAML dataset PATCH handler (patch_yaml_datasets: content-type application/yaml, yaml.safe_load(body) -> DatasetConfig upsert; no filesystem path use)",
+        "evidenceSites": ["src/fides/api/middleware.py:45 (set_body(request, await request.body())), :124 (get_body)", "src/fides/api/api/v1/endpoints/dataset_endpoints.py:314 (body = await request.body()), :316 (yaml.safe_load)"]
+      },
+      {
+        "family": "http_body_param",
+        "shape": "the `file: bytes = Body(..., media_type=\"application/zip\")` parameter of register_custom_connector_template",
+        "trustChain": "the ONLY file-upload endpoint in the codebase: POST /api/v1/connection/register/connector-template (oauth scope CONNECTOR_TEMPLATE_REGISTER) takes the raw zip bytes; saas_config_endpoints.py:378 ZipFile(BytesIO(file), \"r\") parses it IN MEMORY and connector_registry_service.py:191 zip_file.read(info) reads entries - entry names are only used for endswith selection (config.yml/dataset.yml/.svg/.py), nothing is extracted to the filesystem",
+        "evidenceSites": ["src/fides/api/api/v1/endpoints/saas_config_endpoints.py:358 (route), :363 (file param), :378 (ZipFile parse)", "src/fides/api/service/connectors/saas/connector_registry_service.py:178 (save_template), :191 (zip_file.read), :197-:218 (filename endswith selection)"]
+      },
+      {
+        "family": "http_url / http_request_field / http_scope",
+        "shape": "request.url, request.url.path, request.url.hostname, request.method, request.client, request.scope[...] reads",
+        "trustChain": "starlette request metadata - consumed by the analytics middlewares (dispatch_log_request endpoint string, log_request path) and the audit-log middleware (request.scope[\"path\"]); none of these flow into filesystem paths in this codebase - recorded for labeling completeness",
+        "evidenceSites": ["src/fides/api/main.py:60 (request.url.path), :66 (request.method + request.url), :76/:86 (request.url.hostname), :139 (request.url.path), :260 (request.scope[\"path\"])", "src/fides/api/middleware.py:31 (request.scope[\"path\"])", "src/fides/api/api/v1/endpoints/privacy_preference_endpoints.py:243 (request.client)"]
+      },
+      {
+        "family": "handler_param",
+        "shape": "the `request: Request` parameter of the catchall handler read_other_paths",
+        "trustChain": "the framework-injected request object of the static-file serving route - the boundary carrying the catchall path; the http_path_param family captures the actual path value read one step later",
+        "evidenceSites": ["src/fides/api/main.py:155 (def read_other_paths(request: Request))"]
+      },
+      {
+        "family": "env",
+        "shape": "getenv(...) / os.getenv(...) calls selecting filesystem paths",
+        "trustChain": "FIDES__CONFIG_PATH selects the toml config file (config/__init__.py:197 and the load_file search list at config/helpers.py:30); FIDES_CREDENTIALS_PATH selects the CLI credentials file (core/utils.py:171) - operator-configured environment, not request data; emitted for labeling to judge, not an assumed attacker source",
+        "evidenceSites": ["src/fides/config/__init__.py:197 (getenv FIDES__CONFIG_PATH)", "src/fides/config/helpers.py:30 (os.getenv inside load_file)", "src/fides/core/utils.py:171 (getenv FIDES_CREDENTIALS_PATH)"]
+      },
+      {
+        "family": "cli_param",
+        "shape": "click command parameters with path semantics (fides_dir, manifests_dir, input_filename, output_filename, keyfile_path, env_file)",
+        "trustChain": "the fides CLI operator supplies these: fides_dir drives init's .fides/fides.toml creation (ungrouped.py:126 -> config/create.py:202 os.mkdir/:197 open), manifests_dir drives parse/evaluate/push manifest reads (get_manifest_list glob + fideslang ingest), input_filename drives the annotate-in-place dataset file (annotate.py:37 -> core/annotate_dataset.py:86 ingest_manifests/:163 write_manifest), output_filename drives generated dataset manifests (generate.py -> core/dataset.py:319 write_dataset_manifest), keyfile_path drives the BigQuery keyfile read (generate.py:91 -> cli/utils.py:345/:361 open), env_file is passed to docker compose. Operator trust level - the CLI user owns the tree being read/written",
+        "evidenceSites": ["src/fides/cli/commands/ungrouped.py:126 (init fides_dir), :203 (push manifests_dir), :245-:247 (evaluate manifests_dir), :304 (parse manifests_dir)", "src/fides/cli/commands/annotate.py:19/:34-:38 (input_filename)", "src/fides/cli/commands/generate.py:44/:51, :83/:91, :124/:133, :170 (output_filename; keyfile_path at :85/:91)", "src/fides/cli/commands/deploy.py:46/:59 (env_file)"]
+      }
+    ],
+    "sinkChannels": [
+      {
+        "channel": "FileResponse static file serve (the actual file read of the catchall flow)",
+        "argIndex": 0,
+        "evidenceSites": ["src/fides/api/main.py:180 FileResponse(ui_file) - serves the resolved path; ui_file comes from match_route(...) (values built from .glob over the packaged UI dir) OR get_path_to_admin_ui_file(path) (package_path / ADMIN_UI_DIRECTORY / path with the raw request path - the untrusted join)", "src/fides/api/ui.py:50 FileResponse(index) with index = get_path_to_admin_ui_file(\"index.html\") (literal path, root route main.py:145-151)"]
+      },
+      {
+        "channel": "pathlib path construction / validation in the UI serving pipeline",
+        "argIndex": "0 for Path(...) ctors; -1 for receiver-based members (.parent/.resolve/.is_file/.exists/.glob)",
+        "evidenceSites": ["src/fides/api/ui.py:42 package_path / ADMIN_UI_DIRECTORY / path (the `/` operator join with the request path - an absolute path REPLACES the base, '..' segments are kept lexically; the BinaryExpr itself is documented as a gap, anchored by the get_path_to_admin_ui_file def row)", "ui.py:27 Path(spec.origin).parent (package root discovery), :70 Path(ui_directory), :71 ui_path.exists(), :82 ui_path.glob(\"**/*.html\") (route-map discovery), :88 filepath.relative_to(ui_path) (display-path derivation, not a serving guard), :134-:141 path_is_in_ui_directory - `ui_directory in path.parents` LEXICAL containment on the unresolved path", "src/fides/api/main.py:170 ui_file.is_file() (guard read; separate syscall from the FileResponse open - TOCTOU shape)"]
+      },
+      {
+        "channel": "builtin open()",
+        "argIndex": 0,
+        "evidenceSites": ["src/fides/api/tasks/storage.py:187 open(filename, \"wb\") - the local DSR upload write; filename = f\"fides_uploads/{file_key}\" with file_key = f\"{request_id}.{ext}\" (privacy_request.id is server-generated; storage_uploader_service.py:67-75 restricts naming to FileNaming.request_id)", "src/fides/api/util/consent_util.py:511/:560 open(load_file([notice_yaml_file_path]), \"r\") - packaged default notice yaml reads (path from app_setup.py:51 join of dirname(__file__))", "src/fides/api/util/saas_util.py:27/:34/:50/:75 (load_yaml_as_string/load_config/load_as_string/load_datasets - packaged data/saas template reads via load_file), :381 encode_file_contents open(file_path, \"rb\") (packaged icon read)", "src/fides/cli/utils.py:361 open(keyfile_path) - CLI BigQuery keyfile read", "src/fides/config/create.py:197 open(outfile_path, \"w\") (config docs write), src/fides/config/helpers.py:92 open(config_path, \"w\") (config update write), src/fides/config/utils.py:18/:24 open(config_path) (config read/rewrite)", "src/fides/core/pull.py:19 open(manifest_path, \"w\") (manifest write), src/fides/core/utils.py:161/:181 open(credentials_path) (credentials write/read)"]
+      },
+      {
+        "channel": "os directory creation",
+        "argIndex": 0,
+        "evidenceSites": ["src/fides/api/tasks/storage.py:182 os.makedirs(LOCAL_FIDES_UPLOAD_DIRECTORY) (literal \"fides_uploads\")", "src/fides/config/create.py:215 os.mkdir(fides_dir_path) (CLI-init .fides dir; fides_dir_path from the CLI fides_dir param)"]
+      },
+      {
+        "channel": "os.path propagation/validation",
+        "argIndex": 0,
+        "evidenceSites": ["src/fides/config/helpers.py:33 (abspath), :34/:42 (join - the load_file search-path joins), :43 (isfile)", "src/fides/api/service/connectors/saas/connector_registry_service.py:75 os.path.join(\"data/saas/config\", file) (packaged template dir listing join)", "src/fides/api/service/privacy_request/dsr_package/dsr_report_builder.py:150 os.path.join(DSR_DIRECTORY, \"assets/back.svg\") (packaged asset)", "src/fides/api/app_setup.py:51/:56 join(dirname(__file__), \"../data/privacy_notices\", ...) (packaged notice paths)", "src/fides/api/tasks/storage.py:181 os.path.exists, src/fides/config/create.py:221 os.path.isfile (guard reads)"]
+      },
+      {
+        "channel": "directory listing / globbing",
+        "argIndex": "0 (os.listdir, glob.glob, .glob); -1 (.iterdir)",
+        "evidenceSites": ["src/fides/api/service/connectors/saas/connector_registry_service.py:73 os.listdir(\"data/saas/config\") (template discovery)", "src/fides/api/service/saas_request/override_implementations/__init__.py:9 os.listdir(directory) (module auto-import discovery - feeds importlib.import_module, Pass 4 adjacent)", "src/fides/api/ui.py:82 ui_path.glob(\"**/*.html\") (admin-UI route-map discovery)", "src/fides/core/utils.py:92 glob.glob(f\"{manifests_dir}/**/*.{yml_ending}\") (CLI manifest discovery - manifests_dir from the CLI)", "src/fides/api/db/samples.py:89 sample_connections_path.iterdir() (packaged sample resources)"]
+      },
+      {
+        "channel": "zipfile (in-memory only)",
+        "argIndex": "0 for ZipFile ctor and .writestr member name / .read entry; no filesystem extraction anywhere",
+        "evidenceSites": ["src/fides/api/api/v1/endpoints/saas_config_endpoints.py:378 ZipFile(BytesIO(file), \"r\") - the request zip parsed in memory", "src/fides/api/service/connectors/saas/connector_registry_service.py:191 zip_file.read(info) - archive entry reads; :197-:218 info.filename used ONLY for endswith selection - no extractall, no entry write to disk", "src/fides/api/tasks/storage.py:84 zipfile.ZipFile(zipped_csvs, \"w\") + :90 f.writestr(f\"{key}.csv\", ...) - in-memory DSR zip (BytesIO); member names derive from graph dataset keys (DB-stored dataset names)", "src/fides/api/service/privacy_request/dsr_package/dsr_report_builder.py:41 zipfile.ZipFile(self.baos, \"w\") + :83 self.out.writestr(f\"{filename}\", ...) - in-memory DSR report zip; member names f\"/{dataset_name}/{collection_name}/{index}.html\" from DSR data keys (dataset names from connector configs)"]
+      },
+      {
+        "channel": "external-library manifest/config IO (fideslang, toml)",
+        "argIndex": 0,
+        "evidenceSites": ["src/fides/core/dataset.py:327 manifests.write_manifest(file_name, ...) and src/fides/core/annotate_dataset.py:163 manifests.write_manifest(dataset_file, ...) - fideslang manifest writes (CLI output_filename / annotate in-place)", "src/fides/core/annotate_dataset.py:109 ingest_manifests(dataset_file), src/fides/core/parse.py:20 ingest_manifests(manifests_dir), src/fides/core/pull.py:38 load_yaml_into_dict(manifest_path) - fideslang manifest reads", "src/fides/config/__init__.py:201 toml.load(config_path) (env/CLI-selected config read), src/fides/core/utils.py:182 toml.load(credentials_file) (credentials read), and the from-imported bare toml load at src/fides/config/helpers.py:61/:84 (helpers.py:10 `from toml import dump, load`) inside get_config_from_file/update_config_file; the companion dump(...) at helpers.py:93 writes an already-opened handle (anchored by the open() row at :92) and is not emitted"]
+      },
+      {
+        "channel": "pathlib .open/.read_text and packaged-asset reads",
+        "argIndex": "-1 (path is the receiver)",
+        "evidenceSites": ["src/fides/api/db/samples.py:93 yaml_path.open(\"r\") (packaged sample connections, iterdir-walked)", "src/fides/api/service/privacy_request/dsr_package/dsr_report_builder.py:150 Path(os.path.join(DSR_DIRECTORY, \"assets/back.svg\")).read_text() (packaged asset)"]
+      },
+      {
+        "channel": "internal path-taking wrapper definitions (file_api_def rows)",
+        "evidenceSites": ["ui.py get_path_to_admin_ui_file(path) :32, generate_route_file_map(ui_directory) :63, match_route(route_file_map, route) :108, path_is_in_ui_directory(path) :134", "tasks/storage.py upload_to_local(data, file_key, ...) :172", "config/helpers.py load_file(file_names) :15, get_config_from_file(config_path_override) :50, update_config_file(updates, config_path_override) :72; config/__init__.py get_config(config_path_override) :179; config/utils.py replace_config_value(fides_directory_location) :7; config/create.py create_config_file(config, fides_directory_location) :202, generate_config_docs(config, outfile_path) :159", "api/util/saas_util.py load_yaml_as_string :25, load_config :31, load_as_string :48, load_datasets :72, encode_file_contents :376", "api/util/consent_util.py load_default_notices_on_startup(db, notice_yaml_file_path) :498, load_default_experience_configs_on_startup(db, notice_yaml_file_path) :549", "core/pull.py write_manifest_file(manifest_path, manifest) :15; core/utils.py get_manifest_list(manifests_dir) :83, write_credentials_file(credentials, credentials_path) :159, read_credentials_file(credentials_path) :175; core/dataset.py write_dataset_manifest(file_name, ...) :319; core/annotate_dataset.py annotate_dataset(config, dataset_file, ...) :86; cli/utils.py handle_bigquery_config_options(fides_config, dataset, keyfile_path, credentials_id) :345"]
+      }
+    ],
+    "guardsAndEvidence": [
+      {
+        "guard": "catchall static-file route: LEXICAL containment only (guard-weakness evidence, CWE-022 primary)",
+        "evidence": "main.py:154-197 read_other_paths: path = request.path_params[\"catchall\"] (:160); ui_file = match_route(get_ui_file_map(), path) (:163 - the route map keys are regex patterns anchored ^...$ built from relative_paths of globbed UI files, so match_route VALUES are always files physically inside the packaged UI dir); fallback ui_file = get_path_to_admin_ui_file(path) (:167 -> ui.py:42 package_path / ADMIN_UI_DIRECTORY / path - pathlib keeps '..' segments lexically and an ABSOLUTE path replaces the base entirely); then ui_file.is_file() (:170) and path_is_in_ui_directory(ui_file) (:171 -> ui.py:134-141: `return ui_directory in path.parents`) - the containment check is computed on the UNRESOLVED lexical path: for a candidate like <ui_dir>/../../etc/passwd the parents list is [<ui_dir>/../../etc, <ui_dir>/../.., <ui_dir>/.., <ui_dir>, ...], so <ui_dir> IS a member and the guard PASSES while the OS resolves the path outside the UI directory. There is no Path.resolve()/os.path.realpath normalization, no '..' string rejection, no basename extraction and no symlink check anywhere in this flow. TOCTOU: is_file() at :170 and the FileResponse file open at :180 are separate syscalls.",
+        "cwe": "CWE-022 / CWE-023 / CWE-036 / CWE-073"
+      },
+      {
+        "guard": "route-map match takes precedence (partial mitigation)",
+        "evidence": "main.py:163-167: match_route is tried FIRST; only when no regex route matches does the raw request path reach get_path_to_admin_ui_file. The route map itself is built from files globbed out of the packaged UI directory (ui.py:82), so the match_route branch cannot leave that directory; the get_path_to_admin_ui_file fallback branch carries the raw path.",
+        "cwe": "CWE-022 (partial mitigation)"
+      },
+      {
+        "guard": "zip template upload is memory-only (non-channel for pass 1)",
+        "evidence": "saas_config_endpoints.py:378 ZipFile(BytesIO(file), 'r') and connector_registry_service.py:189-:218: zip_file.read(info) with info.filename used only for endswith('config.yml'/'dataset.yml'/'.svg'/'.py') selection; NO extractall/extract, no entry name joined onto a filesystem path, no write to disk. The .py entry content does reach RestrictedPython exec (register_custom_functions, connector_registry_service.py:445-482, gated by CONFIG.security.allow_custom_connector_functions and the CONNECTOR_TEMPLATE_REGISTER oauth scope) - that is Pass 4 material, recorded here as an adjacent channel, not a pass-1 path sink.",
+        "cwe": "CWE-022 (non-channel)"
+      },
+      {
+        "guard": "local DSR upload filename is server-generated",
+        "evidence": "storage_uploader_service.py:67-75 _construct_file_key raises unless naming == FileNaming.request_id and returns f\"{request_id}.{get_extension(...)}\"; request_id is privacy_request.id (server-generated). storage.py:184 filename = f\"{LOCAL_FIDES_UPLOAD_DIRECTORY}/{file_key}\" then :187 open(filename, 'wb') - the write path is not request-controlled in this code path.",
+        "cwe": "CWE-022 (contextual)"
+      },
+      {
+        "guard": "load_file search-path base directories (semantics, not a guard)",
+        "evidence": "config/helpers.py:29-:45 load_file joins the file name onto FIDES__CONFIG_PATH / curdir / pardir / two-up / pardir/.fides / ~ before isfile - the packaged template and notice readers pass literal relative names; if any caller ever passed a request-derived name, an absolute name would again replace the base (os.path.join semantics). All current callers pass packaged constants (data/saas/..., privacy_notices paths from app_setup.py:51/:56).",
+        "cwe": "CWE-022 / CWE-073 (semantics note)"
+      },
+      {
+        "guard": "external-library boundaries (cannot be verified from this DB)",
+        "evidence": "starlette FileResponse's actual file open, the URL path decoding before path_params injection, fastapi's Body/bytes parsing, fideslang's manifest read/write internals, toml.load, importlib_resources files().joinpath traversal and RestrictedPython's enforcement are all outside the fides repo and thus outside this CodeQL database; their behavior is recorded as an evidence gap rather than assumed either way.",
+        "cwe": "CWE-022 (evidence gap)"
+      },
+      {
+        "guard": "oauth scope gating on the upload endpoint",
+        "evidence": "saas_config_endpoints.py:358-361: register_custom_connector_template requires Security(verify_oauth_client, scopes=[CONNECTOR_TEMPLATE_REGISTER]); the catchall static route has NO auth gate (main.py:154-155). Auth gates limit the attacker population, not the path values - contextual, not sanitization (fastapi.md section 4).",
+        "cwe": "CWE-022 (contextual)"
+      }
+    ],
+    "notObserved": [
+      "no extractall/extract, no tarfile, no shutil, no io.open, no os.open, no tempfile, no os.symlink, no os.remove/unlink/rmdir/rename/replace, no os.chdir, no os.walk anywhere in src/fides (the only zipfile operations are the in-memory BytesIO-based reads/writes listed above; 'shutil'/'tempfile' appear only as strings in the RestrictedPython blocked-import list at connector_registry_service.py:509/:512)",
+      "no StaticFiles mounts and no send_file - static file serving is the hand-rolled catchall route + FileResponse",
+      "no multipart UploadFile / starlette UploadFile usage anywhere in src/fides (fastapi.md's UploadFile source family does not apply; the only raw upload is the bytes Body zip endpoint)",
+      "no os.path.dirname/basename/relpath/realpath/normpath and no Path.resolve()-based containment in the serving flow (the ONLY resolve() calls are the packaged-directory constants at dsr_report_builder.py:17 and get_email_template.py:22/:24); no safe_join, no explicit '..' rejection, no startswith(base_dir) checks in fides' own code",
+      "no URL percent-decoding of file paths in fides' own code (starlette decodes the request path before route injection, so the path_params value is post-decode; the only unquote_to_bytes calls are redis-cache key handling at api/util/cache.py:61/:155)",
+      "no DB-content-to-local-filesystem-path flows observed: request-derived config/secrets/identity data flows into the database, outbound SaaS connector requests and S3 object keys (upload_to_s3), not into local file paths; the DSR report write path is server-generated",
+      "no Path.open except samples.py:93; no .write_text/.read_bytes/.write_bytes/.mkdir(pathlib)/.unlink/.rmdir/.rename/.touch in src/fides (ui.py mkdir searches found none)",
+      "no message-queue payload reaching filesystem paths (Celery task kwargs carry server-generated privacy request ids and ORM state); no CLI subprocess file writes; the only webbrowser.open (core/deploy.py:287-288) opens a file:// URL of the CLI-controlled uploads dir - not an in-process filesystem operation"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql (this run, generated)",
+      "iris/extraction/sinks.ql (this run, generated)"
+    ],
+    "executionPlan": [
+      "cd iris && codeql pack install (qlpack.yml already present: iris/fides-cwe22, codeql/python-all: \"*\")",
+      "codeql query run extraction/sources.ql --database C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/fides_vuln/fides-db --output extraction/sources.bqrs",
+      "codeql bqrs decode extraction/sources.bqrs --format=csv --output=extraction/sources.csv",
+      "codeql query run extraction/sinks.ql --database <same db> --output extraction/sinks.bqrs",
+      "codeql bqrs decode extraction/sinks.bqrs --format=csv --output=extraction/sinks.csv",
+      "sequential execution only (WORKFLOW.md 3.2-3.3); no database analyze, no SARIF in this round"
+    ],
+    "metadataForm": "plain multi-column select queries (10 columns) for codeql query run + bqrs decode; @kind problem is intentionally NOT set (wrong shape for candidate tables - it requires exactly element+string) and @kind table is not assumed to exist",
+    "columnContract": ["node", "role (source_candidate|sink_candidate)", "callableName", "flowKind", "receiver", "moduleHint", "argIndex", "file", "line", "matchKind (api|ast)"],
+    "matchKindSemantics": "every family in both queries is an AST syntax-level shape match (match_kind 'ast'): fastapi/starlette, pathlib, zipfile, glob, fideslang and toml are external libraries not part of this database, and the request-object reads flow through instance/local attribute shapes - so no API-graph rows are expected; the match_kind column is kept for cross-project contract consistency with the prior projects of this series (aiohttp/airflow/ansible/coderedcms/copyparty/dfetch/django).",
+    "flowKinds": {
+      "sources": ["http_path_param", "http_header", "http_body", "http_body_param", "http_url", "http_url_part", "http_request_field", "http_scope_path", "handler_param", "env", "cli_param"],
+      "sinks": ["file_open", "file_open_member", "dir_create", "file_response", "path_stat_member", "path_stat", "path_join", "path_join_member", "path_canon", "path_canon_member", "path_part", "path_containment_check", "dir_list", "dir_list_member", "path_glob", "path_ctor", "file_read_text", "zip_ctor", "zip_member_write", "zip_read", "file_write_ext", "file_read_ext", "file_api_def"]
+    },
+    "exclusions": [
+      "%/fides-db/% (CodeQL database nested in the source tree) - excluded from every row in both queries",
+      "positive scope %/src/fides/% in both queries: root-level tests/, clients/ (TypeScript frontends), docs/, scripts/ (dev tooling with open() at generate_docs.py:18, quickstart.py:186/:224/:473), noxfile.py/noxfiles/, setup.py, versioneer.py are never candidates",
+      "%/src/fides/_version.py excluded as versioneer-generated code (its open() at :152 is build tooling)",
+      "src/fides/api/alembic/migrations/ stays in scope but contributes no rows (no filesystem API matches; its rename_table calls are database migrations)"
+    ],
+    "expectedVolume": {
+      "sources": "roughly 45 rows: http_path_param 1, http_header_get ~11, http_header_attr 1, http_body 3, http_body_param 1, http_url ~5, http_url_part ~3, http_request_field ~2, http_scope_path 2, handler_param 1, env 3, cli_param ~15 (fides_dir 1, manifests_dir 4, input_filename 1, output_filename 4-5, keyfile_path 1, env_file 1)",
+      "sinks": "roughly 80 rows: file_open 15 (12 builtin sites after excluding _version.py), file_open_member 1 (samples.py:93), dir_create 3 (os.makedirs, os.mkdir, bare makedirs deploy.py:160), file_response 2, path_stat_member 3 (is_file x2, exists x1), os.path family ~14 (qualified: join 4, isfile 2, exists 1, abspath 1; path.-style database.py: dirname 1, abspath 1, join 2; bare: join 3, dirname 3, exists 1, isfile 1), path_join_member 2 (joinpath), path_canon_member 3 (resolve), path_part 4 (parent), path_containment_check 2 (relative_to 1 + parents 1), dir_list 2, dir_list_member 1 (iterdir), path_glob 2, path_ctor 6, file_read_text 1, zip_ctor 3, zip_member_write 2, zip_read 1, file_write_ext 2, file_read_ext 7 (ingest 2, load_yaml 1, toml.load 2, bare toml load 2), file_api_def 26",
+      "note": "volumes estimated from grep counts over the explored tree; the CSV decode of the next round yields the exact numbers"
+    }
+  },
+  "uncoveredCases": [
+    "pathlib __truediv__ path construction: package_path / ADMIN_UI_DIRECTORY / path (ui.py:42 - THE join of the catchall request path onto the UI base) and package_path / ADMIN_UI_DIRECTORY (ui.py:60) are BinaryExpr '/' nodes, indistinguishable from arithmetic division at AST level - not emitted as rows; the get_path_to_admin_ui_file file_api_def row and the is_file/FileResponse sink rows anchor the flow, and a MySummaries taint step for pathlib __truediv__ must be added in Phase 2 if the pass-1 flow needs it. Same for f-string path building: storage.py:184 f\"{LOCAL_FIDES_UPLOAD_DIRECTORY}/{file_key}\", config/utils.py:14/:16, config/create.py:207-:209 - anchored by the consuming open() rows.",
+    "the `ui_directory in path.parents` containment guard (ui.py:141) is a Compare expression, not a call - it is emitted as the .parents attribute row (path_containment_check) so the labeling step can classify it as a (lexical, resolve-free) sanitizer candidate; its pass/fail semantics under lexical '..' paths are documented in guardsAndEvidence and must be weighed during labeling.",
+    "FileResponse's actual file open happens inside starlette (external to this database) - the FileResponse call row marks the boundary; likewise fideslang write_manifest/ingest_manifests/load_yaml_into_dict and toml.load perform their IO inside the external library.",
+    "Pydantic request-body model fields of the ~176 typed CRUD routes are NOT emitted per-field (a full sweep would produce hundreds of rows of config/secrets/identity data with no observed path into local filesystem operations); the two request channels that DO reach file handling are both emitted (the catchall path and the raw zip body). If labeling or Phase 2 surfaces a body-model-to-path flow, the specific handler parameter can be added then.",
+    "Celery task payload boundary: run_privacy_request.delay(privacy_request_id=...) / dispatch_message_task.apply_async(kwargs=...) carry server-generated ids and ORM state; no task-parameter source rows are emitted (no observed task-arg-to-filesystem-path flow).",
+    "importlib.util.find_spec(...)/spec.origin (ui.py:25-27) yields the installed package location - server-internal, not a source; the Path(spec.origin) ctor row captures the sink side. importlib.import_module in override_implementations/__init__.py:13 is Pass 4 material (dynamic code loading from the packaged directory).",
+    "dynamic dispatch: match_route returns a value selected by regex iteration over the route_file_map dict; SaaS connector request construction (assign_placeholders over config templates) is dynamic - neither is shape-matchable beyond the rows already emitted; the dict-value flow needs MySummaries if Phase 2 requires it.",
+    "receiver-name collisions: the http source families match attribute chains whose base local name is exactly 'request' - the SaaS connector request objects use different local names (current_request in saas_util.py:316-:338, prepared_request in authenticated_client.py) and are correctly NOT matched; a starlette handler using a different local name would be missed. zip_read matches the local name 'zip_file' in connector_registry_service.py (the actual shape); .open member matching excludes the webbrowser receiver (core/deploy.py:287/:288 - browser URL open, not a filesystem op).",
+    "webbrowser.open(f\"file:///{FIDES_DEPLOY_UPLOADS_DIR}\") (core/deploy.py:288) opens a browser at the CLI-controlled uploads dir - not an in-process filesystem operation, not emitted as a sink row.",
+    "os.path member-call double-matching avoided by construction: the .is_file/.exists/.exists member family requires a non-Attribute receiver so the qualified os.path.exists form only produces the os.path-family row; os.path.join/exists/isfile/abspath each yield exactly one row per site.",
+    "module-level code (app_setup.py:51/:56 joins, get_email_template.py:22/:24 pathlib constants, override_implementations module auto-import) yields rows but no enclosing-function file_api_def; the enclosing module is reported in moduleHint.",
+    "the source tree contains pre-existing ground-truth artifacts (FIDES-VULNERABILITY-REPORT.md, path_traversal_*.md, path_traversal_sinks*.csv); they were neither opened nor used - all evidence above comes from first-hand source reading of src/fides only."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction contract in 4.3; Python pitfalls in section 9 - no Decorator class, no StrConst; migration/test FP heuristics in 5.3.2)",
+    "augur-0.3.0/references/patterns.md (always loaded per 4.2.3; cross-language candidate-row contract and pass-1 sink families)",
+    "augur-0.3.0/references/python.md (always loaded per 4.2.3; pass-1 sink families: open/Path/filesystem operations - matched; archive extraction destination handling - NOT applicable, zip handling is in-memory only)",
+    "augur-0.3.0/references/fastapi.md (framework reference loaded for the detected primary framework: detection heuristics matched - from fastapi import FastAPI/APIRouter, ~176 route decorators, Depends/Security; source signatures matched - path parameters (the catchall), Request.headers/body readers; UploadFile family checked - not used in this codebase; sink guidance filesystem-APIs-receiving-route-values matched to FileResponse/is_file/open; section 4 auth-context guidance applied to the CONNECTOR_TEMPLATE_REGISTER scope gate; section 11 risk clusters - the file-download/static-serving cluster is exactly the catchall route shape)",
+    "augur-0.3.0/assets/extraction/README.md, python_sources.ql.tmpl, python_sinks.ql.tmpl, extract_sources.ql.tmpl, extract_sinks.ql.tmpl (starter template contract and minimum output columns; the @kind problem metadata of the stubs is intentionally dropped because the multi-column select is the wrong shape for problem queries)",
+    "no references/starlette.md, references/celery.md or references/click.md exist in the Augur installation; Starlette is handled through fastapi.md (FastAPI's Request IS the starlette Request), the Celery payload boundary is documented in inputBoundaryInventory/uncoveredCases, and Click is treated as the operator-trust CLI boundary"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": "The source root contains audit/ground-truth artifacts (FIDES-VULNERABILITY-REPORT.md, path_traversal_full_audit_report.md, path_traversal_priority_analysis.md, path_traversal_priority_analysis_revised.md, path_traversal_sinks.csv, path_traversal_sinks_classified.csv, path_traversal_sinks_classified_revised.csv) and a tests/ tree. None of them was opened or read; all evidence above comes from first-hand source reading of src/fides only. The fides_vuln tree, fides-db, the Augur installation and the sibling project workspaces (aiohttp, airflow, ansible, coderedcms, copyparty, dfetch, django) were read where needed for cross-project column-contract consistency (the 10-column CSV contract and the proven QL shapes) but never modified; only the three files of this run were written into this project's iris workspace.",
+    "notes": "No CodeQL query run (no BQRS/results extraction) and no LLM labeling were performed in this round (Step 1-2 only). During error fixing, `codeql query compile` (plan compilation only, no database, no result rows) was run once per query to verify the fix: both extraction/sources.ql and extraction/sinks.ql compile clean with zero warnings against the local toolchain (CLI 2.25.1 + codeql/python-all 7.1.x). The extraction run (codeql query run + bqrs decode) is deferred to the next round per the task contract. Fix note: the original sinks.ql doc comments contained the glob patterns **/*.html and {manifests_dir}/**/*.{yml}, whose **/ sequence embeds a QL block-comment terminator (*/), closing the doc comment early and causing the parser to treat comment text as code; the patterns are now written in comment text with the slash separated from the stars (e.g. ui_path.glob of \"**\" plus \"*.html\"), and both files pass a state-machine comment/string scan as well as query compile."
+  }
+}

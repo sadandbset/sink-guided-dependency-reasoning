@@ -1,0 +1,172 @@
+{
+  "version": "1.0",
+  "kind": "llm-independent-path-review",
+  "project": "fides (ethyca-fides)",
+  "target_commit": "1212eadf (fides_vuln source tree, database fides-db)",
+  "reviewed_rule": "py/augur/fides/pass1-path-traversal",
+  "reviewed_at": "2026-10-22",
+  "reviewer": "glm-5.3 (Claude Code CLI harness), independent LLM re-check of official Pass 1 SARIF codeFlows",
+  "inputs_reviewed": [
+    "results/pass1.sarif (only ruleId py/augur/fides/pass1-path-traversal; 2 results, 1 codeFlow each)",
+    "report/iris_report.md",
+    "labels/labels.json (204 entries; 1 source/tp, 2 sink/tp, 1 summary/tp, 2 rejected sanitizer/fp)",
+    "report/query_generation_notes.md",
+    "src/fides/api/main.py:129-197 (log_request middleware, catch-all route, read_other_paths)",
+    "src/fides/api/ui.py:1-147 (get_path_to_admin_ui_file, match_route, generate_route_file_map, path_is_in_ui_directory)"
+  ],
+  "official_result_count": 2,
+  "other_content_excluded": "SARIF toolExecutionNotifications js/baseline/expected-extracted-files are baseline notifications, not results; only the 2 results of the official Augur rule were triaged. No CodeQL built-in security query results or other CWE rules appear among the results.",
+  "summary": {
+    "likely_tp": 2,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "overall": "Both official Pass 1 alerts describe one real, exploitable unauthenticated path traversal (arbitrary file read) in read_other_paths on the catch-all route. They correspond exactly to the real fides vulnerability fixed by commit f526d9ff (GHSA-r25m-cr6v-p9hq) — see real_vulnerability_coverage. The iris_report.md Step-6 heuristic that filtered both as 'likely FP' (reason: path traversal guard heuristic 'reject|deny|block.*\\.\\.') is a misfire: it treated the lexical path_is_in_ui_directory guard as if it rejected '..' segments, which the source code disproves (Q7)."
+  },
+  "triage": [
+    {
+      "alert_index": 1,
+      "rule_id": "py/augur/fides/pass1-path-traversal",
+      "sink_location": "src/fides/api/main.py:170",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "role_in_vulnerability": "secondary sink — OS-level existence/stat oracle and the gate that enables the primary read at main.py:180; not the disclosure itself",
+      "taint_flow": [
+        "src/fides/api/main.py:154  @app.get(\"/{catchall:path}\") route registration (no dependencies=/Security, registered last as catch-all)",
+        "src/fides/api/main.py:160  path = request.path_params[\"catchall\"]  (SOURCE — full URL remainder, percent-decoded once by the server/router, leading '/' stripped, always relative)",
+        "src/fides/api/main.py:163  match_route(get_ui_file_map(), path)  (safe fixed-map selector; patterns from ui.py:77-78 use [a-zA-Z10-9-_]+ / [a-zA-Z10-9-_/]+ classes with no dots, so '..' payloads never fullmatch — flow always falls through)",
+        "src/fides/api/main.py:167  ui_file = get_path_to_admin_ui_file(path)  (fallback branch, arg 0 tainted)",
+        "src/fides/api/ui.py:32  parameter path of get_path_to_admin_ui_file",
+        "src/fides/api/ui.py:42  return package_path / ADMIN_UI_DIRECTORY / path  (pathlib __truediv__ chain; '..' preserved lexically, no canonicalization)",
+        "src/fides/api/main.py:170  if ui_file and ui_file.is_file()  (SINK — pathlib stat on the unresolved Path; the OS resolves '..' at stat time, giving an existence oracle outside the UI root and gating the read)"
+      ],
+      "codeflow_matches_source": "yes — every codeFlow step (main.py:160 Subscript→path, main.py:167, ui.py:32, ui.py:42 path+BinaryExpr, main.py:167 call result→ui_file, main.py:170) corresponds to real statements verified in the source files; no fabricated or diagnostic edges",
+      "q1_source_attacker_controlled": {
+        "answer": "yes",
+        "evidence": "main.py:154/160: the {catchall:path} converter captures the entire remaining URL path of any GET request not matched by a more specific route. uvicorn/Starlette percent-decode the target once before route matching, so '..' and '/' separators are fully attacker-controlled (e.g. GET /..%2F..%2F..%2Fetc%2Fpasswd -> catchall='../../../etc/passwd'). No auth dependency is attached to this route."
+      },
+      "q2_source_reaches_file_param": {
+        "answer": "yes",
+        "evidence": "Direct synchronous chain, no gaps: main.py:160 variable 'path' -> passed as arg 0 at main.py:167 -> ui.py:32 function parameter -> ui.py:42 joined via pathlib '/'. No async hop, no wrapper the codeFlow cannot show; the callee body is one return statement deriving its result from the argument."
+      },
+      "q3_real_sensitive_operation": {
+        "answer": "yes (stat/existence read, not disclosure)",
+        "evidence": "main.py:170 ui_file.is_file() is a pathlib stat-family probe — a real OS-level file metadata access on the attacker-influenced path, not mere path-object construction. It resolves the lexical '..' via the OS and yields a file-existence oracle outside the allowed root. On its own it leaks only existence; its security weight is that of the gate for the FileResponse read one branch later (same chain, primary alert at main.py:180)."
+      },
+      "q4_allowed_root_and_escape": {
+        "answer": "escape possible",
+        "evidence": "Declared/implied allowed root: <package_path>/ui-build/static/admin/ (ui.py:14 ADMIN_UI_DIRECTORY='ui-build/static/admin/', base from importlib find_spec at ui.py:24-27 — operator trust). The controlled suffix '../..' chains escape this root at OS level because nothing normalizes the path before access; the file actually stat'd is outside the packaged admin UI (e.g. /etc/passwd)."
+      },
+      "q5_traversal_mechanisms": {
+        "answer": "'..' is decisive; other mechanisms immaterial",
+        "evidence": "'..' segments: preserved by the pathlib join (ui.py:42) and resolved by the OS at stat/open time -> real target change. Percent decoding: exactly one decode pass at the server/router layer; no application-level re-decoding on the chain, so repeated/double encoding is not needed and does not apply. Absolute paths: catchall is always relative (leading '/' stripped by routing), and an absolute right operand would replace the pathlib base — unreachable, and exactly the only case the guard rejects. Separator variation: POSIX server treats backslashes as ordinary characters; not a vector. Symlinks: none created anywhere in the audited tree and the packaged admin UI dir is not attacker-writable — not applicable."
+      },
+      "q6_effective_guards_before_access": {
+        "answer": "none effective",
+        "evidence": "The only containment attempt is path_is_in_ui_directory (ui.py:134-141): 'return ui_directory in path.parents'. pathlib keeps '..' as an ordinary component, so the lexical parents of <package>/ui-build/static/admin/../../etc/passwd still include <package>/ui-build/static/admin — the guard PASSES for precisely the payloads that escape at OS level. It executes before the FileResponse (main.py:171) but also before/around the is_file probe (main.py:170 runs first, unguarded). match_route's fixed map (ui.py:101 patterns built from route names with [a-zA-Z10-9-_]+/[a-zA-Z10-9-_/]+ classes, no dots) is a genuine whitelist but only gates its own branch: traversal payloads never match it, so the flow always takes the vulnerable fallback at main.py:166-167. No resolved-root containment, no '..' rejection, no basename anywhere on the chain."
+      },
+      "q7_guard_misjudged": {
+        "answer": "yes — this exact error occurred in the pipeline's own Step-6 filter",
+        "evidence": "iris_report.md lists both alerts as 'Filtered as Likely False Positives' with reason 'path traversal guard heuristic: reject|deny|block.*\\.\\.' — i.e. the heuristic assumed a guard that rejects '..' exists. Source disproves this: the guard is a lexical parents-membership check on the UNRESOLVED path (equivalent to a string-prefix check without canonicalization) and does not reject any '..' segment. labels.json and query_generation_notes.md §5 both explicitly classified the guard as a REJECTED sanitizer (sanitizer/fp, must not be an isBarrier). There is no resolve()/normpath()/relative_to() and no login requirement on this route (only middleware is log_request, main.py:129-141, pure logging)."
+      },
+      "q8_normal_static_serving_or_unreachable": {
+        "answer": "no — this is the vulnerability, not legitimate serving",
+        "evidence": "It is a catch-all static-file route serving the packaged admin UI, but with an input that can name any file on the container filesystem and a guard that fails to confine it — unauthenticated arbitrary file read, not authorized static serving. The route is live production code in src/fides/api/main.py (not test code, no fixed constants on the tainted branch), registered as the final catch-all so it is reached for any unmatched GET path."
+      },
+      "q9_overgeneralization_or_coverage_fp": {
+        "answer": "no",
+        "evidence": "The alert message, source anchor (main.py:160), join (ui.py:42), and sink (main.py:170) are all precise and code-grounded; the codeFlow has no gaps and no summary-only leaps. The only defect in the pipeline output is the Step-6 FP filter (see q7), which under-reports a true positive. Line-anchored sinks in main.py do not collide with the fixed-constant FileResponse at ui.py:50 (index.html)."
+      },
+      "q10_wrong_cwe_or_baseline_mix": {
+        "answer": "no",
+        "evidence": "Both alerts carry ruleId py/augur/fides/pass1-path-traversal only; CWE-022/023/036/073 as declared for Pass 1. The js/baseline/expected-extracted-files entries in the SARIF are toolExecutionNotifications (baseline bookkeeping), not results, and were not counted."
+      },
+      "preconditions": [
+        "fides webserver reachable directly by the attacker (not stripped/normalized by a reverse proxy — matches the advisory's stated workaround condition)",
+        "target file must exist and be readable by the webserver process (is_file gate at main.py:170; container server typically runs with broad read access)",
+        "GET request (route is GET-only)"
+      ],
+      "rationale": "Every element of the official finding is confirmed in the real source: unauthenticated attacker-controlled path parameter, lexical-only join with no canonicalization, a containment guard that passes '..' payloads, and a real stat on the joined path. likely_tp; confidence 0.85 rather than higher only because the standalone security impact of an existence oracle is weaker than the read itself — but the identical chain terminates one branch later in arbitrary file read (see alert 2)."
+    },
+    {
+      "alert_index": 2,
+      "rule_id": "py/augur/fides/pass1-path-traversal",
+      "sink_location": "src/fides/api/main.py:180",
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "role_in_vulnerability": "primary sink — unauthenticated arbitrary file read disclosed to the remote client",
+      "taint_flow": [
+        "src/fides/api/main.py:154  @app.get(\"/{catchall:path}\") route registration (no dependencies=/Security, registered last as catch-all)",
+        "src/fides/api/main.py:160  path = request.path_params[\"catchall\"]  (SOURCE — full URL remainder, percent-decoded once by the server/router, leading '/' stripped, always relative)",
+        "src/fides/api/main.py:163  match_route(get_ui_file_map(), path)  (safe fixed-map selector; never matches '..' — patterns use dot-free character classes, so traversal payloads always fall through)",
+        "src/fides/api/main.py:167  ui_file = get_path_to_admin_ui_file(path)  (fallback branch, arg 0 tainted)",
+        "src/fides/api/ui.py:32  parameter path of get_path_to_admin_ui_file",
+        "src/fides/api/ui.py:42  return package_path / ADMIN_UI_DIRECTORY / path  (pathlib __truediv__ chain; '..' preserved lexically, no canonicalization)",
+        "src/fides/api/main.py:170  if ui_file and ui_file.is_file()  (OS-level stat resolves the traversal; passes when target exists)",
+        "src/fides/api/main.py:171  if not path_is_in_ui_directory(ui_file)  (guard PASSES for '..' payloads — lexical parents-membership on unresolved path)",
+        "src/fides/api/main.py:180  return FileResponse(ui_file)  (SINK — starlette FileResponse opens and streams the file as the HTTP response: arbitrary file read)"
+      ],
+      "codeflow_matches_source": "yes — identical 9-step codeFlow to alert 1 except the terminal step (main.py:180 ui_file), matching 'return FileResponse(ui_file)' verbatim",
+      "q1_source_attacker_controlled": {
+        "answer": "yes",
+        "evidence": "As alert 1: main.py:154/160, unauthenticated catch-all path parameter, percent-decoded once, fully attacker-controlled including '..' and '/'."
+      },
+      "q2_source_reaches_file_param": {
+        "answer": "yes",
+        "evidence": "As alert 1: synchronous, gap-free chain main.py:160 -> 167 -> ui.py:32 -> ui.py:42 -> returned Path -> ui_file -> FileResponse argument 0 at main.py:180."
+      },
+      "q3_real_sensitive_operation": {
+        "answer": "yes — this is the disclosure",
+        "evidence": "main.py:180 FileResponse(ui_file) (starlette.responses.FileResponse, imported at ui.py:10 and used in main.py) opens the file at response time and streams its bytes to the remote client. This is not path construction; it is the actual file read that constitutes the arbitrary-file-read impact."
+      },
+      "q4_allowed_root_and_escape": {
+        "answer": "escape possible",
+        "evidence": "Allowed root <package_path>/ui-build/static/admin/ (ui.py:14, ui.py:24-27). Attacker-controlled '../..' suffix escapes it at OS resolution time; FileResponse opens the escaped target."
+      },
+      "q5_traversal_mechanisms": {
+        "answer": "'..' decisive; single decode; no symlink factor",
+        "evidence": "As alert 1: '..' survives the join and is resolved by the OS at open time; exactly one percent-decode (server layer), no app-level re-decode; absolute-path replacement unreachable (relative-only catchall); no symlinks in play."
+      },
+      "q6_effective_guards_before_access": {
+        "answer": "none effective",
+        "evidence": "Order of operations: is_file (main.py:170, resolves at OS level) runs BEFORE the guard; path_is_in_ui_directory (main.py:171 -> ui.py:134-141) compares the lexical unresolved parents and passes for '../..' payloads, so the 404 at main.py:172-174 is never raised for traversal; FileResponse then serves the escaped file. match_route's whitelist never sees traversal payloads (dot-free patterns). No canonicalize-then-contain, no '..' rejection, no filename whitelist anywhere on the path to the sink."
+      },
+      "q7_guard_misjudged": {
+        "answer": "yes — pipeline Step-6 heuristic misfired on this alert too",
+        "evidence": "iris_report.md filtered this alert as likely FP under the 'reject|deny|block.*\\.\\.' guard heuristic, assuming the lexical guard blocks '..'. The guard cannot: 'ui_directory in path.parents' on the unresolved Path is satisfied by traversal payloads. No Path.resolve/normpath/relative_to exists on the chain, and the route has no authentication (only the logging middleware at main.py:129-141)."
+      },
+      "q8_normal_static_serving_or_unreachable": {
+        "answer": "no",
+        "evidence": "Reachable, unauthenticated, production route; the served file is not confined to the declared UI file set — arbitrary read of any existing readable file on the webserver container, which is precisely the reported impact of the real vulnerability."
+      },
+      "q9_overgeneralization_or_coverage_fp": {
+        "answer": "no",
+        "evidence": "Source, join, and sink anchors all verified in real code; message text accurate ('joined into the packaged admin-UI directory without canonicalization and the lexical path_is_in_ui_directory guard does not reject .. segments'). The FP classification in iris_report.md is the error, not the alert."
+      },
+      "q10_wrong_cwe_or_baseline_mix": {
+        "answer": "no",
+        "evidence": "Single official rule id; CWE-22/23/36/73 scope correct; js/baseline notifications not counted as results."
+      },
+      "preconditions": [
+        "direct reachability of the fides webserver (reverse-proxy normalization would strip '../..' — the advisory's documented workaround)",
+        "target file exists and is readable by the server process",
+        "GET request"
+      ],
+      "rationale": "Complete, code-verified, unauthenticated source-to-disclosure chain with no effective barrier; matches the exact function, lines, and mechanism of the real fides path traversal (GHSA-r25m-cr6v-p9hq, fixed by adding sanitise_url_path — absent from this database snapshot, confirming the analyzed tree is pre-fix). likely_tp at 0.95."
+    }
+  ],
+  "real_vulnerability_coverage": {
+    "question": "Was the real fides vulnerability (commit f526d9ffb176006d701493c9d0eff6b4884e811f, GHSA-r25m-cr6v-p9hq, CWE-22, function read_other_paths in src/fides/api/main.py) hit by the official Pass 1 alerts?",
+    "verdict": "HIT — yes, covered by both alerts",
+    "confidence": 0.95,
+    "evidence": [
+      "Vulnerable function: read_other_paths, src/fides/api/main.py:155 (route decorator at :154). Both official alerts are located inside this exact function (sink lines 170 and 180), and both codeFlows start at the exact tainted extraction line 160 (request.path_params['catchall']) — the same statement the real fix guards by wrapping it in sanitise_url_path.",
+      "Vulnerable join: ui.py:32-42 get_path_to_admin_ui_file returning package_path / ADMIN_UI_DIRECTORY / path — present in both codeFlows (ui.py:32, ui.py:42 BinaryExpr).",
+      "Vulnerable sink: main.py:180 FileResponse(ui_file) — the arbitrary file read; and main.py:170 is_file — the probe on the same chain. This is the read_other_paths 'Serve up the file' branch of code_before.",
+      "Missing guard: the analyzed tree contains no sanitise_url_path / MalisciousUrlException / MaliciousUrlException anywhere (grep over src/ returns nothing), i.e. the database snapshot is the pre-fix code_before, while the user-supplied fix diff inserts exactly that sanitization at main.py:160. The only other guard on the branch, path_is_in_ui_directory (ui.py:134-141, unchanged by the fix), is the ineffective lexical check that leaves the vulnerability open — confirmed by source analysis (q6).",
+      "No other Pass 1 alert exists that could correspond to this vulnerability, and neither alert corresponds to any unrelated code: the 2 alerts are the 2 sinks of this single vulnerability."
+    ],
+    "assessment": "The official Pass 1 run correctly identified the real vulnerability's complete taint path (source main.py:160 -> join ui.py:42 -> sinks main.py:170/180) with no false path elements. The only pipeline error is downstream: iris_report.md's Step-6 guard heuristic filtered both true alerts as 'likely FP', so the report's headline counts (Likely TP 0 / Likely FP 2) under-report; the correct final labels are 2 likely_tp.",
+    "coverage_caveat": "Both alerts describe the same single vulnerability (two sinks of one flow), so vulnerability-level recall is 1/1 and alert-level precision is 2/2."
+  },
+  "independence_statement": "This review read only the Pass 1 SARIF (official rule only), the IRIS report/labels/query notes, and the real Python source in the fides_vuln tree; the vulnerability metadata (commit, code_before/code_after, advisory text) was supplied by the user in the task prompt. No PyVul ground-truth files, fix commits, or CVE descriptions in the repository were consulted. No SARIF, labels, or official query files were modified; the only write is this report/llm_triage.json."
+}

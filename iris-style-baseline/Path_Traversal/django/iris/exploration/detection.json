@@ -1,0 +1,177 @@
+{
+  "run": {
+    "timestamp": "2026-10-22",
+    "pipeline": "Augur 0.3.0 (agent-agnostic IRIS pipeline), Phase 1 Steps 1-2 only",
+    "pass_id": 1,
+    "pass_name": "Path Traversal",
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"],
+    "db_path": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/django_vuln/django-db",
+    "source_root": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/django_vuln",
+    "db_metadata": {
+      "primaryLanguage": "python",
+      "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\django_vuln",
+      "creation_sha": "c9f648ccfac5ab90fb2829a66da4f77e68c7f93a",
+      "creation_cli_version": "2.25.1",
+      "baselineLinesOfCode": 265831
+    },
+    "toolchain": {
+      "codeql_cli": "2.25.1 (DB creation); local pack used for query compilation: codeql/python-all 7.1.2 under ~/.codeql/packages",
+      "qlpack": "iris/qlpack.yml with dependency codeql/python-all: \"*\" (resolves to installed 7.1.2)",
+      "note": "WORKFLOW.md validated baseline is CLI 2.24.x / pack 6.1.x; the local toolchain is newer (2.25.1 / 7.1.2), so generated queries were written against 7.1.2 library shapes (StringLiteral.getS(), Parameter.getPosition(), API::CallNode via semmle.python.ApiGraphs) and verified by direct inspection of the installed pack sources."
+    }
+  },
+  "language": {
+    "detected": "python",
+    "evidence": [
+      "codeql-database.yml primaryLanguage: python",
+      "repository is a pure Python package tree (django/ with __init__.py in every module)",
+      "setup.py / setup.cfg / pyproject-less 2.2-era packaging present at repo root"
+    ]
+  },
+  "project": {
+    "identity": "Django web framework source itself (not an application built on Django)",
+    "version": "2.2.26 alpha (django/__init__.py: VERSION = (2, 2, 26, 'alpha', 0))",
+    "layout": "django/ package (http, core, contrib, db, template, urls, views, utils, forms, conf, middleware, test) plus top-level tests/, docs/, extras/, scripts/ outside the shipped package"
+  },
+  "framework": {
+    "candidates": [
+      {
+        "name": "django",
+        "role": "the audited codebase IS the Django framework implementation",
+        "confidence": 1.0,
+        "evidence": [
+          "import/package evidence (+0.45): django/__init__.py defines VERSION and setup(); every module does `from django.conf import settings` / `from django.utils ...`",
+          "route/decorator evidence (+0.30): django/urls/resolvers.py + django/urls/base.py implement the URL resolver; django/views/generic/base.py View dispatch; URLconf machinery in django/urls/",
+          "runtime/bootstrap evidence (+0.20): django/__init__.py setup() -> apps/conf/log/urls.set_script_prefix; django/core/handlers/wsgi.py WSGIHandler; django/core/management/__init__.py execute_from_command_line",
+          "directory/layout evidence (+0.05): canonical django/ package layout (views.py, urls.py, models in db/models, contrib/ apps)"
+        ]
+      }
+    ],
+    "note": "django.contrib apps and django.views generic views are in-package; no second framework is present (no flask/fastapi imports anywhere in django/)."
+  },
+  "references_loaded": [
+    "references/patterns.md (Rosetta stone, loaded first)",
+    "references/python.md (language reference)",
+    "references/django.md (framework reference; django.md exists locally and Django is detected)",
+    "assets/extraction/python_sources.ql.tmpl",
+    "assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "scope": {
+    "positive": "%/django_vuln/django/% (the shipped django package)",
+    "excluded": [
+      "%/django-db/% - the nested CodeQL database directory (also outside the positive scope by construction: 'django-db' does not match %/django/%)",
+      "%/django/test/% - in-package test-client/assert tooling (test noise rule; also never attacker-reachable)",
+      "%/django/contrib/admin/bin/% - manually run asset-build script compress.py (tooling noise)"
+    ],
+    "outside_positive_scope_by_construction": [
+      "top-level tests/ (Django's own test suite), docs/, extras/, scripts/, setup.py, Gruntfile.js, js_tests/"
+    ]
+  },
+  "input_entrypoints_observed": [
+    {
+      "family": "wsgi_request_path",
+      "detail": "WSGIRequest.__init__ builds request.path/request.path_info from environ PATH_INFO/SCRIPT_NAME (core/handlers/wsgi.py:69-:99); get_path_info/get_script_name extract them via get_bytes_from_wsgi(environ, 'PATH_INFO'|'SCRIPT_NAME'|'SCRIPT_URL'|'REDIRECT_URL'|'SCRIPT_NAME', ...) (core/handlers/wsgi.py:157-:189); QUERY_STRING extracted the same way (core/handlers/wsgi.py:105)"
+    },
+    {
+      "family": "request_accessors",
+      "detail": "HttpRequest initializes GET/POST/COOKIES/META/FILES (http/request.py:52-:56), path/path_info (http/request.py:58-:59), cached_property headers (http/request.py:70-:72), body property reads the raw stream (http/request.py:278+)"
+    },
+    {
+      "family": "route_params",
+      "detail": "URL-resolver-injected view arguments: django.views.static.serve(request, path, document_root, show_indexes) (views/static.py:19, the (?P<path>.*)$ route pattern documented in its docstring); contrib.staticfiles.views.serve(request, path, insecure) (contrib/staticfiles/views.py:15); JavaScriptCatalog.get kwargs 'packages'/'domain' (views/i18n.py:193-:199, plus-sign delimited packages string from the request); admindocs TemplateDetailView self.kwargs['template'] (contrib/admindocs/views.py:322)"
+    },
+    {
+      "family": "multipart_upload",
+      "detail": "MultiPartParser.parse() reads the client filename from the Content-Disposition header params (disposition.get('filename') at http/multipartparser.py:205), html.unescape + rsplit('/')/'\\\\' basename filtering in sanitize_file_name (http/multipartparser.py:296-:315, docstring itself says the result must still be treated as untrusted, e.g. 'C:some_file.txt' survives); RFC2231 filename*= values are percent-decoded via unquote() in parse_header (http/multipartparser.py:687); the filename is handed to FileUploadHandler.new_file(field_name, file_name, ...) (core/files/uploadhandler.py:93) and stored via UploadedFile._set_name (core/files/uploadedfile.py:39-:53, os.path.basename + validate_file_name)"
+    },
+    {
+      "family": "session_cookie_key",
+      "detail": "SessionMiddleware reads the session key from the cookie (contrib/sessions/middleware.py:19: request.COOKIES.get(settings.SESSION_COOKIE_NAME)) and constructs SessionStore(session_key) (middleware.py:20), whose file backend joins it into a filesystem path (contrib/sessions/backends/file.py:41-:55 _key_to_file, guarded by VALID_KEY_CHARS subset check at :51)"
+    },
+    {
+      "family": "cli_boundary",
+      "detail": "TemplateCommand (django-admin startproject/startapp): handle(app_or_project, name, target, **options) with 'name'/'target' positional args and options['template'] (core/management/templates.py:59-:113, --template may be a local path, file:// path or http/https/ftp URL); handle_template(template, subdir) (core/management/templates.py:180-:201); download(url) fetches via urlretrieve (core/management/templates.py:238-:259). CLI/operator trust level - rows are emitted for the labeling step to judge, not automatically attacker sources."
+    },
+    {
+      "family": "environment",
+      "detail": "os.environ.get('DJANGO_SETTINGS_MODULE') (conf/__init__.py:57), DJANGO_COLORS (core/management/color.py:73), PATH/PATHEXT (core/management/utils.py:53/:58), COMP_WORDS shell-completion words (core/management/__init__.py:252-:253). Deployer trust level - emitted as candidates, labeling judges."
+    }
+  ],
+  "sink_candidates_observed": [
+    {
+      "family": "builtin_open",
+      "detail": "~40 bare-name open() sites in scope: contrib/sessions/backends/file.py:78 (session file read, cookie-keyed path), core/cache/backends/filebased.py:34/:53/:63/:93 (cache file read/write, request-derived cache key md5'd at :127-:135), core/files/storage.py:231 (FileSystemStorage._open -> open(self.path(name))), core/files/base.py:112 (File.open reopens by self.name), core/files/move.py:56, core/mail/backends/filebased.py:61, template/loaders/filesystem.py:23 (template source read, safe_join-fed), views/debug.py:358, utils/archive.py:183/:221 (archive member extraction writes), core/management/templates.py:151/:155 and the makemessages/makemigrations/compilemessages/dumpdata/squashmigrations commands, core/mail/backends/base.py:10, contrib/auth/password_validation.py:213, contrib/gis/geos/factory.py:11"
+    },
+    {
+      "family": "os_syscalls",
+      "detail": "os.open (core/files/storage.py:273 _save, contrib/sessions/backends/file.py:126 save), os.remove (storage.py:310 delete, sessions file.py:181, cache filebased.py:59/:85, db/backends/sqlite3/creation.py, core/management/templates.py:176, makemessages.py:153/:450), os.rename (sessions file.py:137/:161, move.py:34/:48/:51), os.rmdir (storage.py:308), os.makedirs (storage.py:245-:252, sessions file.py (mkstemp dir), cache filebased.py:117/:121, mail filebased.py:32, archive.py:170/:182/:215/:219, collectstatic.py:314, makemessages.py:361/:625, db/migrations/writer.py:253), os.mkdir (templates.py:124, makemigrations.py:214), os.chmod (storage.py:297, archive.py:110, templates.py:334, global_settings.py:308/:312), os.scandir (storage.py:322 listdir, forms/fields.py:1109), os.listdir (sessions file.py:193, db/migrations/questioner.py:49/:53), os.stat (sessions file.py:61), os.walk (templates.py:117, forms/fields.py:1094, compilemessages.py:67/:98, makemessages.py:483), os.symlink/os.unlink (collectstatic.py:319/:320/:239), os.utime (compilemessages.py:21), os.access (move.py:45, sqlite creation, mail filebased.py:38, templates.py:331), os.fdopen (storage.py:280, core/files/temp.py:40)"
+    },
+    {
+      "family": "pathlib",
+      "detail": "Path(safe_join(document_root, path)) constructor + fullpath.open('rb') (views/static.py:36/:50 - THE dev static file serving sink), fullpath.is_dir()/exists()/stat() (:37/:41/:44, TOCTOU-shaped stat before open), fullpath.iterdir() (views/static.py:95), admindocs Path(safe_join(directory, template)) + template_file.open() (contrib/admindocs/views.py:332/:334/:333), mail/message.py:351-:352 attach_file Path(path).open('rb'), pathlib.PurePath(dir_name).parts traversal check (core/files/storage.py:71, attribute read - see gaps), pathlib.PurePosixPath(name) (core/files/utils.py:16), autoreload/debug/validators/db-utils/forms-renderers/conf/gis-geoip2 Path uses (internal/config paths)"
+    },
+    {
+      "family": "archive_extraction",
+      "detail": "archive.extract(filename, tempdir) (core/management/templates.py:313, CLI --template archive), Archive(path) wrapper (utils/archive.py:50), TarArchive via tarfile.open(file) (utils/archive.py:155), ZipArchive via zipfile.ZipFile(file) (utils/archive.py:197), extractfile(member) (utils/archive.py:173), per-member open(filename, 'wb') writes (utils/archive.py:183/:221) with target_filename prefix containment check (utils/archive.py:138-:143: abspath(join(to_path, name)) must startswith abspath(to_path))"
+    },
+    {
+      "family": "storage_and_file_api",
+      "detail": "FileSystemStorage: _open (storage.py:230-:231), _save (storage.py:233-:300, os.open with O_EXCL + makedirs + file_move_safe), path (storage.py:329-:330 safe_join(location, name)), delete (:302-:310 os.rmdir/os.remove), exists (:316-:317), listdir (:319-:327 os.scandir), size (:332-:333), get_accessed/created/modified_time (:354-:361); consumed via FieldFile self.storage.open/save/delete/path (db/models/fields/files.py:44/:75/:88/:58), staticfiles finders self.storage.path/exists (contrib/staticfiles/finders.py:229/:230/:223); file_move_safe (core/files/move.py:30-:81, os.rename fallback open+os.open) called at storage.py:268 and cache filebased.py:55"
+    },
+    {
+      "family": "file_serve",
+      "detail": "FileResponse(fullpath.open('rb')) (views/static.py:50; FileResponse streams filelike.read and stats os.path.getsize on the name, http/response.py:390-:427); contrib.staticfiles.views.serve delegates to static.serve (contrib/staticviews.py:39) after finders.find(normalized_path) (contrib/staticfiles/views.py:33, finders.py:96-:123 with safe_join at :121)"
+    },
+    {
+      "family": "sessions_cache_file_backends",
+      "detail": "SessionStore file backend _key_to_file join + open/os.open/os.rename/os.unlink/os.stat/os.listdir/shutil.move (contrib/sessions/backends/file.py:41-:203); FileBasedCache open/os.remove/tempfile.mkstemp/file_move_safe (core/cache/backends/filebased.py:31-:169)"
+    },
+    {
+      "family": "config_file_backends",
+      "detail": "file-based email backend open(self._get_filename()) with settings EMAIL_FILE_PATH (core/mail/backends/filebased.py:59-:62, config trust level); file-based cache dir; FilePathField choices via os.walk/os.scandir on the model-configured path (forms/fields.py:1094/:1109); sqlite test-DB os.access/os.remove (db/backends/sqlite3/creation.py)"
+    },
+    {
+      "family": "path_propagation_validation",
+      "detail": "os.path.join (~250 qualified sites incl. sessions _key_to_file :55, cache _key_to_file :134, storage generate_filename :108, admindocs? no - admindocs uses safe_join), posixpath.normpath on the request path before serve (views/static.py:35, contrib/staticfiles/views.py:32), abspath/realpath/normcase/normpath/expanduser/exists/isfile/isdir, and the alias-import forms: from os.path import abspath, dirname, join, normcase (utils/_os.py:3, used bare in safe_join :32-:33/:41-:43), from os import path (core/management/templates.py:9, used as path.join/expanduser/normpath/isdir/exists/abspath/isfile), from shutil import copystat (core/files/move.py:10, bare copystat at :71)"
+    }
+  ],
+  "sanitizers_and_guards_observed": [
+    "django.utils._os.safe_join (utils/_os.py:24-:47): abspath(join(base, *paths)) + normcase prefix containment with separator/equality/root exceptions, raising SuspiciousFileOperation; used by static serve (:36), FileSystemStorage.path (storage.py:330), template loaders (loaders/filesystem.py:36, backends/base.py:77), staticfiles finders (finders.py:121), admindocs (views.py:332)",
+    "validate_file_name (core/files/utils.py:7-:24): rejects '', '.', '..' basenames and, without allow_relative_path, any name containing path elements; used at storage.py:73, uploadedfile.py:51, db/models/fields/files.py:308 (allow_relative_path=True also rejects absolute and '..' parts via PurePosixPath)",
+    "Storage.get_available_name '..' check on the dirname (storage.py:71-:72) and generate_filename '..' check (storage.py:106-:107); get_valid_name -> get_valid_filename (storage.py:58-:63, utils/text.py)",
+    "MultiPartParser.sanitize_file_name (http/multipartparser.py:296-:315): html.unescape + basename-only rsplit on '/' and '\\\\', rejects '', '.', '..' - but explicitly documented as NOT fully trusted (drive-letter relative names survive)",
+    "Session key VALID_KEY_CHARS subset check before the join (contrib/sessions/backends/file.py:51-:53)",
+    "FileBasedCache key md5-hexdigest before join (core/cache/backends/filebased.py:127-:135) and _delete prefix check (:82)",
+    "archive target_filename prefix containment (utils/archive.py:138-:143)",
+    "posixpath.normpath + lstrip('/') on the request path before safe_join in static serve (views/static.py:35)"
+  ],
+  "toctou_evidence": [
+    "views/static.py:41-:50: fullpath.exists() and fullpath.stat() happen before fullpath.open('rb') (classic check-then-use; safe_join is prefix-based, not realpath-based - symlinks inside document_root are not resolved)",
+    "core/files/storage.py:238-:255: os.path.exists(directory) then os.makedirs(directory) race acknowledged in comment; mitigated for file creation by O_CREAT|O_EXCL at :273",
+    "core/files/move.py:44-:49: os.access(new_file_name, F_OK) then os.rename (TOCTOU-shaped; allow_overwrite flag controls O_EXCL on the fallback os.open at :58)",
+    "sessions file backend: _key_to_file validation then open/os.open/os.unlink at different times (contrib/sessions/backends/file.py:51/:78/:126/:181)"
+  ],
+  "coverage_gaps": [
+    "Alias imports are handled only where observed: utils/_os.py (from os.path import abspath, dirname, join, normcase), core/management/templates.py (from os import path), core/files/move.py (from shutil import copystat). Other modules that re-export os.path members (if any appear) would be missed by the qualified-form match.",
+    "pathlib attribute reads that are not calls are not extracted: pathlib.PurePath(dir_name).parts traversal checks (storage.py:71, storage.py:106, db path checks) - .parts is an attribute, not a call; recorded here as sanitizer evidence instead of candidate rows.",
+    "pathlib .is_dir()/.exists()/.stat()/.is_file() attribute-name calls are only extracted for views/static.py and contrib/admindocs/views.py (the request-path-driven sites); a package-wide match would collide with QuerySet.exists() and other same-named methods.",
+    "Path-method family (Attribute-name matching for .open/.read_text/.write_text/.read_bytes/.write_bytes/.iterdir) cannot constrain the receiver to a pathlib Path at AST level; non-Path .open receivers (self.storage.open, self.file.open) also match and are additionally covered by the dedicated storage-wrapper family - the same call node can therefore yield two rows with different flow_kind (same policy as the api/ast duplicate rows of the prior projects).",
+    "os.environ.get is extracted package-wide via API graphs plus the qualified syntax shape; bare-name `from os import environ` aliases were not observed in the package.",
+    "Dynamic dispatch: no copyparty-style dynamic open (open_func = open) was observed in the audited paths; getattr-based attribute dispatch (e.g. FileProxyMixin property forwarding, FileResponse filelike.read) is not call-site matched.",
+    "urlretrieve (urllib.request, core/management/templates.py:259) downloads the --template URL to a temp file; it is a network-fetch boundary (Pass 3 shape), emitted only via the CLI source rows and the archive/open sink rows around it, not as its own sink family.",
+    "tempfile.mkdtemp/mkstemp/NamedTemporaryFile destinations are internal temp directories; the only attacker-influenced fragment is the NamedTemporaryFile suffix derived from os.path.splitext of the upload name (uploadedfile.py:63-:64), which cannot contain path separators after splitext - no sink family emitted for tempfile.",
+    "request.headers (http/request.py:70-:72) is a cached_property over META; header values surface as request.META['HTTP_*'] reads - covered by the request.META attribute family rather than a separate headers family."
+  ],
+  "experimental_independence": {
+    "truth_files_not_read": [
+      "django_vuln/path_traversal_sinks.csv present at the source repo root was NOT opened (potential ground-truth artifact)",
+      "no PyVul CVE/CWE truth, fix commits or patch diffs were consulted",
+      "only the django/ source tree, the DB metadata file and the Augur installation were read"
+    ],
+    "mutations": "none - django_vuln, django-db and other projects' artifacts were not modified"
+  },
+  "next_artifacts": [
+    "iris/extraction/sources.ql (multi-column candidate table for codeql query run + bqrs decode)",
+    "iris/extraction/sinks.ql (same column contract)"
+  ]
+}

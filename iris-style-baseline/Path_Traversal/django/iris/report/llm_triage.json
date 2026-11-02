@@ -1,0 +1,199 @@
+{
+  "review": {
+    "reviewer": "independent-llm-path-review",
+    "date": "2026-10-22",
+    "scope": "Augur IRIS Pass 1 Path Traversal (CWE-22/23/36/73) formal SARIF codeFlows, ruleId py/augur/django/pass1-path-traversal only",
+    "inputs": [
+      "results/pass1.sarif",
+      "report/iris_report.md",
+      "labels/labels.json",
+      "report/query_generation_notes.md",
+      "source: django/contrib/sessions/backends/file.py, base.py, middleware.py, django/http/cookie.py, django/core/files/storage.py, django/core/files/utils.py, django/http/multipartparser.py"
+    ],
+    "sarif_integrity": {
+      "runs": 1,
+      "rules": ["py/augur/django/pass1-path-traversal"],
+      "results": 4,
+      "diagnostics_or_builtin_results_counted": 0,
+      "note": "SARIF contains a single run with only the Augur pass1 rule; no CodeQL built-in security query results, no diagnostic-kind results, and no other CWE rules are mixed into the formal Pass 1 result set (question 10)."
+    }
+  },
+  "formal_alerts": [
+    {
+      "alert_id": "pass1-file.py:78",
+      "rule_id": "py/augur/django/pass1-path-traversal",
+      "location": "django/contrib/sessions/backends/file.py:78",
+      "sink_operation": "read",
+      "sink_code": "with open(self._key_to_file(), \"r\", encoding=\"ascii\") as session_file:  # load()",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "taint_flow": {
+        "source": {
+          "file": "django/contrib/sessions/middleware.py",
+          "line": 19,
+          "code": "session_key = request.COOKIES.get(settings.SESSION_COOKIE_NAME)",
+          "attacker_controlled": true,
+          "note": "Cookie value, fully client-settable, no authentication precondition (SessionMiddleware.process_request runs for every request). Q1: the Source is genuine."
+        },
+        "propagation": [
+          "middleware.py:20 request.session = self.SessionStore(session_key)",
+          "file.py:20 SessionStore.__init__(session_key) (label src-0077)",
+          "base.py:44-45 self._session_key = session_key (field step, codeFlow 1 confirms)",
+          "base.py:155-158 _get_or_create_session_key / session_key property",
+          "file.py:46 session_key = self._get_or_create_session_key()",
+          "file.py:55 return os.path.join(self.storage_path, self.file_prefix + session_key) (label snk-0154)"
+        ],
+        "sink": "file.py:78 open(..., 'r') inside load() (label snk-0158)"
+      },
+      "allowed_root": "self.storage_path = settings.SESSION_FILE_PATH or tempfile.gettempdir() (file.py:30-39); session files are '<SESSION_COOKIE_NAME><key>' inside that directory.",
+      "actual_operation": "Read of a session data file (pickled/base64 session content) — a real read sink, not a pure string concat (Q3).",
+      "barrier_evidence": {
+        "check": "file.py:51 if not set(session_key).issubset(VALID_KEY_CHARS): raise InvalidSessionKey(...)",
+        "charset": "VALID_KEY_CHARS = string.ascii_lowercase + string.digits (base.py:17)",
+        "timing": "The check executes inside _key_to_file() BEFORE the join at :55 and before every file access; the exception aborts the call, so the sink at :78 is unreachable with an invalid key (Q6: check precedes access).",
+        "coverage": "Every path to this sink passes through _key_to_file(); there is no alternate path to the open() argument.",
+        "bypass_analysis": "Whitelist admits only [a-z0-9]: no '/', no '\\', no '.', so no '..' segments, no separators, no absolute paths, no Windows drive-colon forms, no percent signs. Cookie values are unescaped by http.cookies._unquote (django/http/cookie.py:25, backslash/octal escapes for quoted values), but the whitelist is applied to the post-decode string that is actually joined, so decoding cannot smuggle traversal characters past it (Q5). Empty string passes the subset test but joins to storage_path + file_prefix, still inside the root.",
+        "symlink_note": "safe_join is not used here (plain join), but a symlink escape would require a pre-existing symlink named '<prefix><a-z0-9 string>' inside the session storage directory; cookie-only access cannot create such a file, and session file names are prefix + 32-char key. Out of scope for a remote cookie attacker.",
+        "false_comfort_check": "The guard is NOT normpath, NOT abspath, NOT a startsWith prefix, NOT login/auth — it is a strict character-set whitelist on the exact value used in the path, which is genuinely sufficient here (Q7: no misjudged protection; conversely the guard is real and effective)."
+      },
+      "fp_cause": "Control-flow guard (inline set().issubset at :51) is invisible to taint dataflow; the query's sanitizer model correctly did not fabricate a barrier for it. This matches query_generation_notes.md §5-2 and the label rationales ('expected triage FP', kept for recall). Not an over-generalized source/sink/summary and not a database-coverage artifact (Q9).",
+      "preconditions_for_real_exploitation": "None found: any cookie containing a traversal-relevant character is rejected before path construction.",
+      "reasons": [
+        "Q1 Source real (cookie, middleware.py:19) but that alone does not make a vulnerability.",
+        "Q2 Flow is real and source-mapped; no fabricated async/wrapper hops (codeFlows map to actual source lines).",
+        "Q3 Sink is a real file read.",
+        "Q4/Q5/Q6 Controlled input cannot point outside the storage root: strict a-z0-9 whitelist applied before access on every sink path.",
+        "Q7 Guard is a genuine whitelist, not a weak prefix/normpath check.",
+        "Q8 Not static-file service/test/unreachable code — it is remotely reachable session storage, but the guard holds."
+      ]
+    },
+    {
+      "alert_id": "pass1-file.py:126",
+      "rule_id": "py/augur/django/pass1-path-traversal",
+      "location": "django/contrib/sessions/backends/file.py:126",
+      "sink_operation": "create+write",
+      "sink_code": "fd = os.open(session_file_name, flags)  # save(); flags = os.O_WRONLY [| O_BINARY], + O_EXCL|O_CREAT if must_create",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "taint_flow": {
+        "source": "same as pass1-file.py:78 (middleware.py:19 cookie -> SessionStore.__init__)",
+        "propagation": [
+          "file.py:20 -> base.py:44-45 -> base.py:158 (session_key property)",
+          "file.py:118 session_file_name = self._key_to_file()  (codeFlows confirm :118 intermediate)",
+          "file.py:126 os.open(session_file_name, flags)"
+        ],
+        "sink": "file.py:126 os.open, arg 0 (labels snk-0160/0161)"
+      },
+      "allowed_root": "Same session storage_path as above; file name = SESSION_COOKIE_NAME + key.",
+      "actual_operation": "Creates/opens for write the placeholder session file, then close() at :127 — a real create+write sink (Q3).",
+      "barrier_evidence": {
+        "check": "file.py:51 VALID_KEY_CHARS subset check inside _key_to_file(), executed at :118 before the value is used at :126",
+        "note": "Additional safe branch: save() at :112-113 — if self.session_key is None it delegates to create(), which uses get_random_string(32, VALID_KEY_CHARS) (base.py:151), a server-generated key. Both branches funnel through _key_to_file()'s whitelist.",
+        "coverage": "session_file_name's only assignment is self._key_to_file() (:118); no bypass path."
+      },
+      "fp_cause": "Same as :78 — control-flow whitelist guard not visible to dataflow (Q9: not over-generalization; alert is the predicted 'expected triage FP').",
+      "preconditions_for_real_exploitation": "None found; traversal characters rejected at :51."
+    },
+    {
+      "alert_id": "pass1-file.py:164",
+      "rule_id": "py/augur/django/pass1-path-traversal",
+      "location": "django/contrib/sessions/backends/file.py:164",
+      "sink_operation": "move (atomic rename onto destination)",
+      "sink_code": "shutil.move(output_file_name, session_file_name)  # save()",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "taint_flow": {
+        "source": "same cookie-derived session key chain",
+        "propagation": [
+          "file.py:118 session_file_name = self._key_to_file()",
+          "file.py:164 shutil.move(output_file_name, session_file_name) — arg 1 is the tainted destination (label snk-0163)"
+        ],
+        "sink": "file.py:164 shutil.move arg 1 (destination)"
+      },
+      "allowed_root": "Same session storage_path.",
+      "actual_operation": "Atomic rename of a server-generated mkstemp temp file (file.py:153, dir=dir, prefix=prefix+'_out_') onto the session file path — real move/rename-to-destination sink (Q3). The source argument is server-generated (tempfile.mkstemp), only the destination is key-derived.",
+      "barrier_evidence": {
+        "check": "file.py:51 VALID_KEY_CHARS whitelist inside _key_to_file() at :118, before the move at :164",
+        "coverage": "session_file_name only from _key_to_file(); destination cannot contain separators or dots, so the move target stays directly inside storage_path."
+      },
+      "fp_cause": "Same control-flow-guard invisibility as the other session alerts (Q9).",
+      "preconditions_for_real_exploitation": "None found."
+    },
+    {
+      "alert_id": "pass1-file.py:181",
+      "rule_id": "py/augur/django/pass1-path-traversal",
+      "location": "django/contrib/sessions/backends/file.py:181",
+      "sink_operation": "delete",
+      "sink_code": "os.unlink(self._key_to_file(session_key))  # delete()",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "taint_flow": {
+        "source": "same cookie-derived session key chain",
+        "propagation": [
+          "file.py:175 delete(self, session_key=None)",
+          "file.py:179 session_key = self.session_key (cookie-derived, base.py:158 property) OR an explicitly passed key (e.g. SessionBase.cycle_key, base.py:296-300, whose key also originates from the cookie-loaded session or a server-generated key)",
+          "file.py:181 os.unlink(self._key_to_file(session_key))"
+        ],
+        "sink": "file.py:181 os.unlink arg 0 (label snk-0168)"
+      },
+      "allowed_root": "Same session storage_path.",
+      "actual_operation": "File deletion — a real delete sink (Q3).",
+      "barrier_evidence": {
+        "check": "file.py:51 VALID_KEY_CHARS whitelist inside _key_to_file(), applied to the session_key argument at :181 before unlink",
+        "coverage": "Both branches (self.session_key and explicit argument) route through _key_to_file()'s whitelist; no bypass. codeFlows 2/3 confirm the :179 -> :181 -> :46/:55 path."
+      },
+      "fp_cause": "Same control-flow-guard invisibility (Q9). The label rationale itself records 'expected triage FP'.",
+      "preconditions_for_real_exploitation": "None found; an attacker-supplied cookie key containing '/', '\\', '.' etc. raises InvalidSessionKey before unlink."
+    }
+  ],
+  "review_questions_summary": {
+    "q1_source_attacker_controlled": "Yes for all 4 alerts: request.COOKIES[SESSION_COOKIE_NAME] (middleware.py:19) is fully client-controlled with no auth precondition. Source authenticity is not the FP cause.",
+    "q2_source_reaches_sink": "Yes: confirmed dataflow via real source lines (middleware.py:19-20 -> file.py:20 -> base.py:44-45/158 -> file.py:46/55 -> sinks). codeFlows in the SARIF map one-to-one onto actual statements; the sessionKeyFieldStep (base.py:44-45 field write -> file.py reads) has genuine source evidence; no fabricated async/wrapper hops.",
+    "q3_real_file_operation": "Yes: open 'r' (:78), os.open O_WRONLY(+O_CREAT|O_EXCL) (:126), shutil.move destination (:164), os.unlink (:181) — all real read/create/write/move/delete operations, not string construction.",
+    "q4_allowed_root_and_escape": "Root = settings.SESSION_FILE_PATH or tempfile.gettempdir() (file.py:30). File set = '<SESSION_COOKIE_NAME><session_key>' within that root. Controlled input cannot point outside: the key is constrained to [a-z0-9] before the join.",
+    "q5_traversal_vectors": "'..' requires '.' (rejected); absolute path requires '/' or '\\' or ':' (rejected); cookie unquote (http.cookies._unquote, django/http/cookie.py:25 — backslash/octal escapes) happens before the whitelist, which is applied to the final joined value, so no decode-smuggling; separator variants all rejected; symlink escape would need a pre-planted symlink in the storage dir, unreachable for a cookie-only attacker.",
+    "q6_pre_access_validation": "Yes: the VALID_KEY_CHARS subset check at file.py:51-53 runs inside _key_to_file() on every path to every sink and raises before any join/file access. All four sinks are downstream of this single choke point.",
+    "q7_misjudged_protection": "No. The effective guard is a strict character whitelist, not Path.resolve/normpath/startsWith/auth. (For contrast, the query's own notes correctly refuse to treat normpath/abspath/startswith as barriers elsewhere.) The guard is genuinely sufficient; the alert fires only because a control-flow guard cannot be a dataflow barrier.",
+    "q8_not_authorized_normal_flow": "The code is remotely reachable session storage (not test/CLI/unreachable), so reachability is real — but it is the session backend's normal, guarded operation, not an unauthorized file access. No alert here represents a real out-of-root access.",
+    "q9_fp_cause_classification": "FP cause = control-flow guard invisible to taint tracking (documented in query_generation_notes.md §5-2 and label rationales as 'expected triage FP'). Source/Sink/summary modeling is narrow and evidence-backed; no database-coverage or wrong-path artifact detected.",
+    "q10_result_mixing": "None: single run, single Augur rule, 4 results, all with codeFlows; no diagnostics, no CodeQL built-in query results, no other-CWE findings in the formal result set."
+  },
+  "ground_truth_hit_analysis": {
+    "target": {
+      "cve": "CVE-2021-45452",
+      "commit": "https://github.com/django/django/commit/4cb35b384ceef52123fc66411a73c36a706825e1",
+      "cwe": "CWE-22",
+      "functions": ["save", "generate_filename", "_save", "get_available_name"],
+      "file": "django/core/files/storage.py"
+    },
+    "vulnerable_code_present_in_dataset": {
+      "confirmed": true,
+      "evidence": [
+        "storage.py:40-52 save(): matches code_before exactly — no validate_file_name(name, allow_relative_path=True) after self._save(name, content); returns _save's result directly.",
+        "storage.py:65-96 get_available_name(): matches code_before — no str(name).replace('\\\\', '/') normalization before os.path.split.",
+        "storage.py:99-108 generate_filename(): matches code_before — no backslash-to-slash replacement of the incoming filename.",
+        "storage.py:233-296 _save(): matches code_before — returns name.replace('\\\\', '/') instead of os.path.relpath(full_path, self.location); os.open(full_path, ...) at :273, file_move_safe at :268, os.makedirs at :245/:249.",
+        "django/core/files/utils.py: validate_file_name(name, allow_relative_path=False) exists (its 'allow_relative_path' PurePosixPath branch checks '/'-style paths only), consistent with the pre-fix state in which a directly-passed crafted name can slip past the os.path.split/PurePath checks via separator tricks and be returned/stored unsanitized."
+      ]
+    },
+    "hit_by_formal_pass1": false,
+    "verdict": "未命中（missed / false negative relative to ground truth）",
+    "evidence_of_miss": [
+      "results/pass1.sarif contains exactly 4 results, all in django/contrib/sessions/backends/file.py (:78, :126, :164, :181); zero alerts in django/core/files/storage.py or anywhere on the storage save chain.",
+      "The formal sink model did include the storage sinks (snk-0409 _open :231, snk-0413/0414 makedirs :245/:249, snk-0416 file_move_safe :268, snk-0417/0418 os.open :273, snk-0423/0424 delete :302/:308), so the sinks were reachable in the query — no source reached them."
+    ],
+    "why_missed": [
+      "Primary cause (structural): the vulnerable call form requires an application to pass a crafted filename directly to Storage.save()/generate_filename() (the CVE is an API-misuse exposure: 'if crafted filenames are directly passed to it'). The analyzed database is the Django framework source only; no in-repo caller forwards raw request data into Storage.save's name parameter, so no source->sink path exists inside the DB. This is a boundary limitation of framework-only analysis, not a query modeling defect.",
+      "Secondary cause (real barrier): the only in-framework attacker-controlled filename source — the multipart Content-Disposition filename (multipartparser.py:205, label src-0116) — passes through sanitize_file_name at :208 (:296-315: html.unescape + rsplit('/')[-1] + rsplit('\\\\')[-1] + reject ''/'.'/'..'), which strips all directory components in both separators. The query models this as a barrier (isSanitizeFileNameBarrier), correctly cutting the upload chain toward the storage sinks; a post-sanitize filename cannot carry the traversal form needed for CVE-2021-45452.",
+      "Residual defense in the chain: FileSystemStorage.path() (storage.py:110-113) routes through safe_join (django/utils/_os.py), which rejects plain '../' and absolute names via normpath+abspath prefix containment; only the specific separator/return-value form fixed by the CVE (mixed separators reaching the return value of _save / get_available_name, and the unvalidated returned name) escapes — and that form is not producible from any in-framework source."
+    ],
+    "assessment": "The formal Pass 1 result set contains no true positive. The session-backend alerts are expected triage FPs, and the ground-truth storage subsystem vulnerability was not hit. The miss is attributable to the vulnerability's application-misuse trigger form (no in-repo source-to-storage.save name flow) plus the genuine multipart filename sanitization barrier — both legitimate, evidence-backed reasons, not accidental query gaps."
+  },
+  "overall_conclusion": {
+    "formal_alerts_total": 4,
+    "likely_tp": 0,
+    "likely_fp": 4,
+    "uncertain": 0,
+    "statement": "CodeQL 分析成功且产生 4 条正式 Pass 1 路径穿越告警，全部位于 django/contrib/sessions/backends/file.py（:78 读、:126 写、:164 搬移、:181 删除）。四条告警的 Source（cookie 注入的 session key）与 Sink（真实文件操作）均真实可达，但 file.py:51 的 VALID_KEY_CHARS 严格字符白名单（a-z0-9）在所有 sink 路径的唯一咽喉点 _key_to_file() 内、于路径构造与文件访问之前执行，彻底排除 ..、绝对路径、分隔符与解码穿越，故四条均为 likely_fp（控制流守卫对数据流不可见所致，与标签 rationale 预测的 'expected triage FP' 一致）。同时，数据集中真实存在的 CVE-2021-45452 storage 子系统漏洞（storage.py save/generate_filename/_save/get_available_name 均为修复前代码）未被本轮正式结果命中：其触发需要应用侧将构造文件名直接传入 Storage.save（API 误用形态，框架源码内无该调用链），且框架内唯一可控文件名源（multipart filename）在 multipartparser.py:208 被 sanitize_file_name 双分隔符 basename 切断。本轮无 formal TP；diagnostics 与 CodeQL 内置查询结果未混入。"
+  }
+}

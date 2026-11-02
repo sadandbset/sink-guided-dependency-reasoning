@@ -1,0 +1,231 @@
+{
+  "triage_id": "llm-triage-dfetch-pass1-pathtraversal",
+  "generated": "2026-10-22",
+  "reviewer": "independent LLM path re-review (glm-5.3)",
+  "scope": "ruleId = py/augur/dfetch/pass1-path-traversal, formal SARIF results only (results/pass1.sarif, 15 results, 15 codeFlows verified against source)",
+  "source_db_snapshot": "dfetch_vuln (dfetch 0.5.1, pre-fix: dfetch/commands/update.py contains no _check_destination)",
+  "inputs_read": [
+    "iris/results/pass1.sarif",
+    "iris/report/iris_report.md",
+    "iris/labels/labels.json (structure: 1 pass, 160 entries; 11 source / 16 sink / 0 sanitizer / 33 summary / 100 none)",
+    "iris/report/query_generation_notes.md",
+    "dfetch source: commands/{diff,update,check,report}.py, manifest/{manifest,project}.py, manifest/validate.py + schema.yaml, project/{vcs,git,svn,metadata}.py, vcs/git.py, util/util.py"
+  ],
+  "not_read_by_contract": [
+    "PyVul ground truth, fix commits, CVE descriptions",
+    "repo-root CVE_APPLICATION_REPORT.md / PATH_TRAVERSAL_AUDIT_REPORT.md / GITHUB_PRIVATE_VULN_REPORT*.md (present in source dir; deliberately not opened)"
+  ],
+  "shared_context": {
+    "source_assessment": "Sources are manifest fields (dst/src/patch/name) parsed by yaml.safe_load (manifest.py:139/129; project.py:268 -> 246/248) plus .dfetch_data.yaml (metadata.py:71) and git-submodule stdout (vcs/git.py:229). dfetch walks CHILD manifests out of fetched destinations (update.py:75-77 / check.py:69-71 -> get_childmanifests walks '.' == fetched dir, manifest.py:263-280), and `dfetch import` builds manifests from remote subprocess output. So manifest path fields are attacker-controllable whenever the manifest originates from fetched/foreign repo content (malicious child manifest, untrusted checkout, CI run on foreign repo). The project itself treats dst as a hostile path input (its real fix adds a realpath-based destination check) — the untrusted-manifest trust model is defensible, not over-generalized.",
+    "allowed_root": "Implicitly the manifest's own directory (process CWD, set via in_directory(os.path.dirname(path)) at update.py:70 / diff.py:106 / check.py:63). There is NO explicit allowed-root, whitelist, or canonicalize-then-contain check anywhere in this snapshot. Absolute dst bypasses it entirely (os.path.join semantics); '../' escapes relatively; no symlink check exists.",
+    "barriers": "None effective. pykwalify validation (schema.yaml) enforces only type/unique ('dst: str unique', 'patch: str', 'src: any') - no path-content constraint, and it runs BEFORE the access without blocking anything path-shaped. realpath (metadata.py:129/133, manifest.py:247/270) is normalization for path CONSTRUCTION only, never compared against a base. basename (metadata.py:131) neutralizes only the filename component of the metadata fallback path. No Path.resolve/normpath/startsWith containment is claimed anywhere, so criterion 7 (misjudged sanitizer) is N/A - the query correctly rendered 0 sanitizers.",
+    "traversal_factors": "No URL/percent decoding exists in the pipeline (YAML scalars reach the filesystem byte-for-byte); '../' components and absolute prefixes survive every construction (os.path.join, f-strings, '+' concat, Path()); mkdir(parents=True) creates full chains; shutil.rmtree follows the tree as-is. Symlinks: unguarded (realpath resolves before use, no post-check) - a placed symlink can redirect the target; documented, not blocked.",
+    "sarif_hygiene": "15/15 results carry exactly ruleId py/augur/dfetch/pass1-path-traversal; tool.driver.rules contains only that rule; toolExecutionNotifications are baseline-coverage/telemetry entries at level 'none' (no diagnostic alerts, no built-in CodeQL security query results). No CWE mixing, no SARIF-parse diagnostics in the formal set (criterion 10 satisfied).",
+    "general_precondition": "For every 'attacker-controlled' verdict: the manifest (or a child manifest inside a fetched destination / a repo on which the operator runs dfetch) is not authored by the operator. Under pure operator-trust of the top-level manifest these would be authorized behavior; the child-manifest/untrusted-repo scenarios are real and are the scenario the project's own CWE-22 fix addresses."
+  },
+  "alerts": [
+    {
+      "id": "A00",
+      "location": "dfetch/commands/diff.py:171",
+      "sink_operation": "open(patch_name, 'w') + write (diff.py:171-172) - file WRITE",
+      "taint_flow": "manifest yamldata[name] (project.py:268) -> ProjectEntry.name (project.py:326) -> patch_name = f\"{project.name}.patch\" (diff.py:114) -> _dump_patch (diff.py:119) -> open(patch_name,'w') at :171; CWD = manifest dir (diff.py:106)",
+      "controllable_path": "project.name - full attacker control of the filename (minus forced '.patch' suffix)",
+      "verdict": "likely_tp",
+      "confidence": "medium-high",
+      "reasoning": "Source is a manifest field, flow is entirely real code (verified line-by-line), sink is a genuine write. name containing '../' or an absolute prefix writes the .patch file outside the manifest directory. Constraints: target always ends in '.patch'; content is a generated diff (attacker-influenced repo content). Note diff.py uses get_manifest() (top-level manifest only, no child-manifest walk), so exploitation requires the operator to run `dfetch diff` on an untrusted tree - narrower than the update.py scenario but still a genuine traversal write.",
+      "preconditions": "untrusted top-level manifest (untrusted checkout / CI); non-empty diff produced"
+    },
+    {
+      "id": "A01",
+      "location": "dfetch/project/git.py:70",
+      "sink_operation": "pathlib.Path(self.local_path).mkdir(parents=True, exist_ok=True) - directory CREATION at attacker path",
+      "taint_flow": "manifest dst (project.py:246 kwargs.get('dst', name)) -> ProjectEntry.destination (project.py:336) -> VCS.local_path (vcs.py:177-180) -> GitProject._fetch_impl (git.py:65) -> mkdir at :70; reached from Update.__call__ update.py:73 -> make(project).update() -> VCS.update (vcs.py:85-112)",
+      "controllable_path": "dst - full control; absolute value or '..'-chain both escape the CWD scoping",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "This is the core of the real CWE-22: unchecked manifest dst creates the destination directory chain anywhere on disk (parents=True). The project's actual fix (adding a realpath destination check in Update.__call__ before make(project).update()) guards exactly this flow. Sink is a real, impactful filesystem mutation; no barrier exists between source and sink.",
+      "preconditions": "untrusted manifest; project resolved to Git VCS"
+    },
+    {
+      "id": "A02",
+      "location": "dfetch/project/metadata.py:70",
+      "sink_operation": "open(path, 'r') in Metadata.from_file - file READ",
+      "taint_flow": "manifest dst -> Metadata._destination (metadata.py:46 kwargs.get('destination')) -> Metadata.path property (metadata.py:128-134: realpath(join(destination, '.dfetch_data.yaml'))) -> from_file open at :70; consumers report.py:105, vcs.py:232/244",
+      "controllable_path": "dst - controls the directory; basename is fixed '.dfetch_data.yaml' (or '.dfetch_data-<basename>.yaml' when dst is not a dir)",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "reasoning": "Genuine traversal READ of an attacker-chosen location with a fixed filename, parsed as YAML (needs a 'dfetch' key to be useful). Impact bounded: extracted version/hash values are only compared and logged. Real tainted read, low severity.",
+      "preconditions": "untrusted manifest; file exists at traversed location and parses as YAML with 'dfetch' root"
+    },
+    {
+      "id": "A03",
+      "location": "dfetch/project/metadata.py:165",
+      "sink_operation": "open(self.path, 'w+') + yaml.dump (metadata.py:165-166) - file OVERWRITE/CREATE",
+      "taint_flow": "manifest dst -> _destination -> Metadata.path (metadata.py:128-134) -> dump() (vcs.py:129-130, called on every update) -> open at :165",
+      "controllable_path": "dst - attacker-chosen directory; fixed basename '.dfetch_data.yaml'",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "Traversal WRITE executed on every successful update. Fixed filename limits target selection; content is dfetch-generated (version/hash/timestamp - low attacker control). realpath at :129/:133 is construction-only, no containment comparison, so it is not a barrier. Genuine write-side consequence of unchecked dst.",
+      "preconditions": "untrusted manifest; update reaches the dump step (fetch succeeds)"
+    },
+    {
+      "id": "A04",
+      "location": "dfetch/project/svn.py:196",
+      "sink_operation": "pathlib.Path(os.path.dirname(self.local_path)).mkdir(parents=True, exist_ok=True) - directory CREATION",
+      "taint_flow": "manifest dst -> ProjectEntry.destination -> VCS.local_path (vcs.py:180) -> SvnProject._fetch_impl (svn.py:186) -> mkdir at :196",
+      "controllable_path": "dirname(dst) - full control",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "SVN variant of A01: same unchecked dst, same missing barrier; mkdir(parents=True) creates the parent chain at any traversed location before svn export writes into it.",
+      "preconditions": "untrusted manifest; project resolved to SVN VCS"
+    },
+    {
+      "id": "A05",
+      "location": "dfetch/project/svn.py:206",
+      "sink_operation": "os.remove(file) - file DELETE, files enumerated by find_non_matching_files(self.local_path, file_pattern) (svn.py:205 -> util.py:20-25 os.walk rooted at dst)",
+      "taint_flow": "manifest dst -> local_path -> os.walk(dst) -> yielded join(root, basename) -> os.remove at :206",
+      "controllable_path": "dst as the walk ROOT - every file under the traversed target that does not match the src glob is deleted",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "Destructive arbitrary-file deletion under an attacker-chosen root. dst '../../important-dir' causes `dfetch update` to delete non-matching files in that tree. Real sink (os.remove), real enumeration flow. This is the most destructive SVN-side consequence of the unchecked dst.",
+      "preconditions": "untrusted manifest; SVN project; src contains exactly one '*' (parse_file_pattern svn.py:227-236) so the cleanup loop runs; export into dst succeeded"
+    },
+    {
+      "id": "A06",
+      "location": "dfetch/project/svn.py:242",
+      "sink_operation": "run_on_cmdline(['svn','export','--force', ...url, dst]) (svn.py:242-246) - process-mediated directory WRITE at dst",
+      "taint_flow": "manifest dst -> local_path -> SvnRepo._export(complete_path, rev_arg, self.local_path) at svn.py:202 -> dst argument at :245",
+      "controllable_path": "dst - svn export writes the fetched tree at the attacker-chosen path (--force overwrites)",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "The svn subprocess materializes files at the tainted dst; this is a real file-write sink (not mere path construction). rev.split(' ') keeps the dst at a fixed list position because revision is validated numeric (svn.py:181-182), so the flattening concern in the notes does not materialize. Same unchecked-dst root cause.",
+      "preconditions": "untrusted manifest; SVN project; network fetch of the remote succeeds"
+    },
+    {
+      "id": "A07",
+      "location": "dfetch/project/svn.py:245",
+      "sink_operation": "same svn export dst argument, reached via the license-file export branch: dest = self.local_path / dirname (svn.py:216-221) -> SvnRepo._export(f\"{root}/{file}\", rev_arg, dest)",
+      "taint_flow": "manifest dst -> local_path -> dest (svn.py:216-220) -> _export dst at :245",
+      "controllable_path": "dst",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "Second entry into the same process-write sink; the license branch additionally exports a remote-chosen filename into the traversed dst. Duplicate alert site of A06 but a distinct real flow.",
+      "preconditions": "untrusted manifest; SVN project; source set; license file found on branch"
+    },
+    {
+      "id": "A08",
+      "location": "dfetch/util/util.py:14",
+      "sink_operation": "os.chmod(path, stat.S_IWUSR) in _remove_readonly (rmtree onerror callback) - permission CHANGE",
+      "taint_flow": "manifest dst -> local_path -> safe_rmtree(join(local_path,'.git')) (git.py:80) / safe_rmtree(local_path) (vcs.py:105) -> shutil.rmtree(path, onerror=_remove_readonly) (util.py:39) -> callback paths supplied by rmtree at :14",
+      "controllable_path": "paths under the (possibly escaped) dst tree being recursively removed",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "reasoning": "The chmod targets are rmtree-supplied paths inside the attacker-chosen dst; when dst escapes, files outside the intended tree get their permission changed and are then deleted. Genuine but strictly derivative of the rmtree flow (A10): fires only on the readonly-onerror path.",
+      "preconditions": "untrusted manifest; rmtree of escaped dst encounters a read-only file"
+    },
+    {
+      "id": "A09",
+      "location": "dfetch/util/util.py:33",
+      "sink_operation": "os.remove(path) in safe_rm - direct file DELETE (non-directory case)",
+      "taint_flow": "manifest dst -> local_path -> VCS.update 'Clearing destination' (vcs.py:103-105: if os.path.exists(local_path): safe_rm(local_path)) -> os.remove at :33",
+      "controllable_path": "dst itself - an arbitrary existing FILE at any traversed/absolute location is deleted before fetch",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "Unconditional pre-fetch deletion of whatever dst points at (file case). Existence check at vcs.py:103 is a TOCTOU-style probe, not containment. Exactly the destructive half of the real dst-traversal vulnerability.",
+      "preconditions": "untrusted manifest; dst exists and is a file; update deemed required (or --force)"
+    },
+    {
+      "id": "A10",
+      "location": "dfetch/util/util.py:39",
+      "sink_operation": "shutil.rmtree(path, onerror=_remove_readonly) - RECURSIVE DIRECTORY DELETE",
+      "taint_flow": "manifest dst -> local_path -> safe_rm (vcs.py:105, util.py:31) or join(local_path,'.git') (git.py:80) -> rmtree at :39",
+      "controllable_path": "dst (or dst/.git) - the whole tree at the attacker-chosen location is recursively deleted",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "Strongest sink of the pass: `dfetch update` on a manifest with dst='../../victim' first recursively deletes that tree (vcs.py:103-105), then re-creates and re-populates it. No containment anywhere. This is the canonical realization of the real CWE-22 in this codebase.",
+      "preconditions": "untrusted manifest; dst exists as a directory; update deemed required"
+    },
+    {
+      "id": "A11",
+      "location": "dfetch/util/util.py:52",
+      "sink_operation": "os.chdir(path) in in_directory - working-directory CHANGE",
+      "taint_flow": "(a) manifest dst -> in_directory(project.destination) at update.py:76 / check.py:70 -> chdir at :52; (b) git submodule foreach stdout (vcs/git.py:229, src-017: sm_path from remote .gitmodules) -> GitLocalRepo(join(cwd, sm_path)) at :237 -> in_directory(self._path) at :121 -> chdir",
+      "controllable_path": "dst (flow a); sm_path from remote .gitmodules content (flow b, genuinely remote-controlled, intra-run)",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "reasoning": "Both flows are real source-to-node paths with verified code, and chdir to an attacker path does break the tool's only confinement mechanism. However chdir is a process-state change, not itself a read/write/delete/archive operation - under the strict sink criterion (question 3) it is not a sensitive file access. The harmful effect materializes only downstream (child-manifest discovery walks the escaped CWD; git commands execute there), which is covered by other flows/alert families. Kept 'uncertain' rather than FP because the confinement-escape is genuine and the query documents chdir as a reviewed sink (C7), not an accidental over-match.",
+      "preconditions": "untrusted manifest (a) / malicious .gitmodules during dfetch import (b)"
+    },
+    {
+      "id": "A12",
+      "location": "dfetch/util/util.py:107",
+      "sink_operation": "open(file_path, 'rb') in hash_file - file READ (MD5 digesting)",
+      "taint_flow": "manifest dst -> local_path -> hash_directory(self.local_path, ...) (vcs.py:125 / vcs.py:269) -> os.walk + join(root, name) (util.py:92-95) -> open at :107",
+      "controllable_path": "walk root = dst; every file under the traversed location is opened and hashed",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "reasoning": "Genuine traversal read of arbitrary files under an attacker-chosen root. Impact bounded: contents only feed an MD5 digest that is compared (never printed/returned to the attacker), giving at most a behavioral oracle on whether local files changed. Real tainted read, low severity.",
+      "preconditions": "untrusted manifest; update/hash path executes"
+    },
+    {
+      "id": "A13",
+      "location": "dfetch/project/vcs.py:134",
+      "sink_operation": "patch_ng.fromfile(self.__project.patch) - file READ/PARSE (patch file)",
+      "taint_flow": "manifest patch field (project.py:248) -> ProjectEntry.patch (project.py:340) -> VCS.update (vcs.py:116-118: exists check) -> fromfile at :134",
+      "controllable_path": "patch - attacker-chosen patch file path anywhere on disk",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "Direct read+parse of an arbitrary local file as a patch; schema imposes no path constraint on 'patch'. Combined with A14 (apply root = dst) the attacker also controls where parsed hunks are written. The exists() probe at vcs.py:117 is TOCTOU, not containment.",
+      "preconditions": "untrusted manifest; patch target exists and parses as a valid patch-ng file"
+    },
+    {
+      "id": "A14",
+      "location": "dfetch/project/vcs.py:138",
+      "sink_operation": "patch_set.apply(0, root=self.local_path, fuzz=True) - patch-driven file WRITES under root",
+      "taint_flow": "manifest dst -> local_path (vcs.py:180) -> apply(root=local_path) at :138, driven by the separately-tainted patch content (A13)",
+      "controllable_path": "root = dst (attacker-chosen); patch-internal target paths additionally attacker-chosen",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "patch-ng writes/recreates files under root; with both patch and dst attacker-controlled this composes into arbitrary file write outside the intended tree. The keyword-arg sink anchoring (root=) is structurally sound - there is no positional index, and the flagged node is exactly the root value.",
+      "preconditions": "untrusted manifest; patch exists and applies successfully"
+    }
+  ],
+  "summary": {
+    "total_formal_alerts": 15,
+    "likely_tp": 14,
+    "likely_fp": 0,
+    "uncertain": 1,
+    "tp_families": {
+      "dst_traversal_core (matches real CWE-22)": ["A01", "A04", "A09", "A10", "A06", "A07", "A03", "A08"],
+      "dst_traversal_reads": ["A02", "A12"],
+      "patch_field_traversal": ["A13", "A14"],
+      "name_traversal_write": ["A00"],
+      "confinement_escape (chdir, not itself a file access)": ["A11"]
+    },
+    "no_alert_cases": "There IS a formal Pass 1 alert set; the 'no hits' statement is not applicable. All 15 alerts are the Augur ruleId only - no diagnostics, no built-in CodeQL security query results, no other CWE mixed in (verified: single rule in driver.rules, notifications all level=none telemetry/coverage)."
+  },
+  "real_vulnerability_hit_analysis": {
+    "question": "Did the formal Pass 1 results hit the real vulnerability (dfetch commit 02a4f250, CWE-22, Update.__call__ / dfetch/commands/update.py)?",
+    "db_snapshot_is_vulnerable_version": true,
+    "evidence": "dfetch/commands/update.py in the analyzed snapshot matches code_before exactly (no destinations list, no _check_destination); the fix adds os.path.realpath(project.destination) for all manifest.projects plus self._check_destination(project, destinations) before make(project).update() - i.e., the project's own remediation confirms manifest dst is the untrusted path input and Update.__call__ the vulnerable entry.",
+    "vulnerable_dataflow": "Update.__call__ (update.py:65-73) -> in_directory(os.path.dirname(path)) -> make(project).update() -> VCS.update (vcs.py:85) -> [exists(dst) -> safe_rm -> rmtree/remove (util.py:33/39)] + [_fetch_impl -> mkdir (git.py:70 / svn.py:196) -> fetch into dst -> metadata dump write (metadata.py:165) -> hash read (util.py:107)]; sibling flows: in_directory(project.destination) (update.py:76), patch apply (vcs.py:134/138).",
+    "verdict": "HIT (命中)",
+    "reasoning": "No alert is anchored inside update.py itself (it is the dispatcher, not a sink), but the vulnerable dataflow it launches - manifest dst flowing unchecked into destructive and constructive filesystem operations - is captured at every consequential stage: A10/A09 (rmtree/os.remove of dst via vcs.py:103-105, the clearing step), A01/A04 (mkdir parents at git.py:70/svn.py:196, the destination-creation step), A06/A07 (svn export dst), A03 (metadata write), A02/A12 (reads), A08 (chmod during escaped rmtree). A11 additionally covers update.py:76 in_directory(project.destination). These are precisely the operations the fix's realpath-based _check_destination (casing/overlap/escape check, called in __call__ before update) was introduced to guard. The strongest exact matches are A01, A04, A09 and A10.",
+    "coverage_gaps": [
+      "update.py:__call__ itself is never a SARIF location (dispatcher has no file operation) - acceptable: the vulnerable flow, not the fix site, is what a taint query must capture.",
+      "The fix's secondary concerns (casing warnings #256, overlapping destinations #173) are availability/robustness issues, not additional traversal taint paths - no alert expected or needed for them."
+    ]
+  },
+  "criteria_answers": {
+    "1_source_attacker_controlled": "Yes for all flows: manifest dst/src/patch/name are attacker-controlled whenever the manifest originates from fetched child-manifest content / untrusted repo (the trust model the project's own fix validates); git-submodule sm_path (A11 flow b) is directly remote-controlled .gitmodules content, intra-run.",
+    "2_source_reaches_file_param": "Yes for all 15: every codeFlow step was re-verified in real source; the cross-object hops (yamldata -> ProjectEntry fields -> VCS.local_path -> consumers; Metadata.path) correspond to actual property getters (project.py:326-343, vcs.py:177-180, metadata.py:125-134) - no fabricated or async-opaque edges.",
+    "3_sink_is_sensitive_op": "Yes for 14 (write/create/delete/chmod/read/parse/process-write). One exception kept uncertain: A11 os.chdir is a process-state change, not itself a file access - its impact is downstream and covered elsewhere.",
+    "4_allowed_root_and_escape": "Allowed root = manifest dir via process CWD only; no containment check exists; absolute or '..'-containing dst/src/patch all escape it (confirmed by absence of any realpath-comparison in the snapshot).",
+    "5_traversal_factors": "'..' and absolute paths are effective (join/concat/Path all preserve them; mkdir parents=True; rmtree follows tree); no percent/URL decoding or double-decode anywhere (not a factor); symlinks unguarded.",
+    "6_real_barriers": "None. pykwalify schema (type/unique only) runs before access but constrains nothing path-shaped; realpath/basename are construction-only. No whitelist, no canonicalize-then-contain, no islink.",
+    "7_misjudged_guards": "None found - no resolve/normpath/startsWith containment or auth-based dismissal is present in code or in the query's barrier set (0 sanitizers, faithfully rendered).",
+    "8_authorized_normal_use_or_unreachable": "None of the 15 are test code, static file service, or fixed constants. All are production paths; the only conditional one is A11 (impact indirect) and A08 (error-path dependent). Under a strict operator-trust-everything model these would be authorized behavior, but the child-manifest/untrusted-repo scenario is real, documented in the codebase's own docs (update.py docstring 'manifests are read as well' from fetched projects), and remediated by the project's fix.",
+    "9_overgeneralization_fp": "No FPs from over-generalized sources/sinks/summaries found. Every fired sink is a concrete file operation with a concrete tainted argument. sink-015 (sparse-checkout literal arg) correctly did NOT fire. No database-coverage artifacts observed.",
+    "10_contamination": "Clean: single Augur ruleId across all 15 results; no diagnostics, no CodeQL built-in security queries, no other CWE mixed into the formal Pass 1 set."
+  }
+}

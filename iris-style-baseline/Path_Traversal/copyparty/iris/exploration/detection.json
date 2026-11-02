@@ -1,0 +1,317 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-21",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\copyparty\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the copyparty_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database copyparty-db sits INSIDE the source tree root (as a sibling of the copyparty/ package), so all exploration, file traversal and grep evidence collection excluded copyparty-db; both generated queries scope positively to the package directory %/copyparty_vuln/copyparty/% which excludes copyparty-db by construction (copyparty-db does not match %/copyparty/%) plus an explicit negative filter. The database sourceLocationPrefix matches the explored tree (creation sha 8f59afb), so file/line evidence below refers to the same snapshot the database was built from. The audit target is copyparty 1.8.1 'argon' (copyparty/__version__.py:4-6, build 2023-07-07), a self-contained multi-protocol file server. Source-location ground truth present in the source root (VULNERABILITY_AUDIT_REPORT.md, enhanced_path_sinks.csv, path_traversal_sinks.csv) was deliberately NOT opened, per the experimental-independence constraint."
+  },
+  "target": {
+    "project": "copyparty",
+    "projectDescription": "copyparty 1.8.1 'argon' (copyparty/__version__.py VERSION = (1, 8, 1), CODENAME 'argon', BUILD_DT 2023-07-07) - a dependency-free multi-protocol file server (README: 'turn almost any device into a file server with resumable uploads/downloads using any web browser'; protocols http // ftp // webdav // smb/cifs). Path-traversal-relevant architecture, all verified in the shipped copyparty/ package (no web framework - hand-rolled socket-level HTTP stack): (1) the HTTP request path channel - httpcli.py:241 splits the raw request line into self.mode/self.req/self.http_ver from the socket; :329-:343 splits self.req into vpath + uparam (query values percent-decoded per-key at :341 via unquotep); vpath is dot-filtered FIRST (undot at :333/:337) and percent-decoded AFTER (self.vpath = unquotep(vpath) at :375 - encoded traversal such as %2e%2e therefore survives the first undot and the decoded '..' is only removed by the SECOND undot inside VFS.get at authsrv.py:473); :377-:383 rejects \\x00 and (windows-only, relchk) illegal chars; :423-:428 resolves self.vpath through asrv.vfs.get() into a volume node + fs remainder and builds the absolute path via vn.canonical(rem) (authsrv.py:498-:504: realpath + '/' + rem, then absreal = abspath(realpath(...)) symlink resolution) with vn.chk_ap(ap) containment only when the volume opted into xdev/xvol flags (authsrv.py:705-:734 prefix-match aps.startswith(vap)); the resulting abspath reaches the file-serving read tx_file (httpcli.py:2597: bos.stat :2610, bos.open O_RDONLY :2615, dynamic open_func(*open_args) at :2772 with open_func = open at :2733, then sendfile_kern os.sendfile / sendfile_py f.read) at :3537, the static-resource read os.path.join(self.E.mod, 'web/', self.vpath[5:]) at :782 (vpath under .cpr), the browser listing (dcanonical at :3431, README open at :3604, ?doc= file read at :3871-:3874 with doc = unquotep(uparam doc) and os.path.join(abspath, doc) + open) and the thumbnail channel (thumbcli.get(dbv, vrem, ...) at :3506 -> th_srv.py:190-:197 abspath = os.path.join(ptop, rem) with NO undot/relchk/assert_safe_rem on this join, then Image.open(fsenc(abspath)) at th_srv.py:355); (2) the WebDAV write channel - handle_lock dcanonical+open(fsenc(abspath),'wb') at :1117/:1159, handle_move dst = self.headers['destination'] regex-stripped and unquotep-decoded at :1197-:1199 then _mv(self.vpath, dst...), MKCOL _mkdir (parser.require('name') :2049, sanitize_fn :2052, canonical :2059, bos.mkdir :2071), PUT dump_to_file (vfs.get :1389, canonical :1392, bos.makedirs :1403, ren_open atomic-create :1519/:1561 - the ren_open wrapper util.py:1173 resolves os.path.join(fdir, fname) and opens via the dynamic fun=open at :1216), new_md open(fsenc(fn),'wb') at :2110, and the up2k chunk/channel uploads - all write paths pass _assert_safe_rem (httpcli.py:197-:200: rejects rem starting '/' or '../' or containing '/../') at :2058/:2096/:2148/:2415, while the READ paths (tx_file/tx_browser/thumbnails/static) do NOT pass any such check; (3) the up2k upload engine (up2k.py) - the browser POSTs the handshake JSON parsed at httpcli.py:1752 json.loads (client fields name/hash/size/lmod; server injects ptop/vtop/prel from the vpath at :1769-:1774, name = undot(body['name']) + sanitize_fn(cj['name'], '', ...) at :1765 / up2k.py:2235 - basename-only since ok='' per util.py:1691); destinations are built with djoin(job['ptop'], job['prel'], job['name']) (up2k.py:2666/:2699/:2727-:2730, djoin = os.path.join minus empty args, util.py:1658) and written via ren_open/hashcopy; delete/remove goes through bos.unlink(djoin(ptop, rd, fn)) at up2k.py:2909/:2925 (rd/fn from the client JSON 'srch'/'delete' arrays, percent-decoded at httpcli.py:1726 before tx_zip/handle_rm - handle_rm at :3304 delegates to the up2k broker process via broker.ask('up2k.handle_rm', ...) :3319 - a cross-process boundary); (4) the zip/tar download channel - tx_zip (httpcli.py:2788) feeds vn.zipgen (authsrv.py:640, walk/statdir-based) into StreamZip/StreamTar (szip.py/star.py) whose gen reads each file via yieldfile (szip.py:259 -> util.py:2120-:2127 open(fsenc(fn), 'rb')); item names are unquotep-decoded at httpcli.py:1726; (5) the FTP channel - ftpd.py FtpFs (pyftpdlib subclass): v2a (:142-:176) backslash-normalizes, sanitize_fn-basenames the final component (:157), resolves vfs.get(vpath) (:160) + canonical (:166) and returns os.path.join(vfs.realpath, rem) (:176); rv2a joins the client-controlled CWD state (:188-:189, os.path.join(self.cwd, vpath)); FtpFs.open/mkdir/rmdir/remove/rename/stat (:205/:250/:288/:296/:306/:323) all funnel through v2a/rv2a with open(fsenc(ap), mode) at :221; validpath (:198) only guards /.hist/ internals; (6) the SMB channel - smbd.py _v2a (:122-:131) resolves vfs.get(vpath, LEELOO_DALLAS, True, True) + canonical(rem) and _open (:163-:185) calls bos.open(ap, flags) at :185; (7) the deployer/CLI environment - __main__.py os.environ.get('XDG_CONFIG_HOME'/'TMPDIR'/'TEMP'/'TMP'/'APPDATA'/'TERM') at :148-:152/:202/:1148 (operator trust level). Filesystem access is centralized in the first-party bos module (copyparty/bos/: bos.open/stat/unlink/rename/mkdir/makedirs wrap os with windows long-path handling; bos.path.* wraps os.path) - a first-party fs abstraction, in scope.",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\copyparty_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (copyparty-db/codeql-database.yml)",
+      "source layout: the audit target is the python package copyparty/ (httpcli.py, httpsrv.py, httpconn.py, authsrv.py, up2k.py, util.py, ftpd.py, smbd.py, th_srv.py, szip.py, star.py, u2idx.py, mtag.py, svchub.py, fsutil.py, cfg.py, cert.py + bos/ + stolen/ vendored libs - 22079 LOC across copyparty/*.py plus bos/ and stolen/)",
+      "build manifests: setup.py + pyproject.toml at the source root packaging copyparty (dynamic version from copyparty/__version__.py); README documents python-2/3 single-file deployment"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\copyparty_vuln\\copyparty-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\copyparty_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "8f59afb1593a75b8ce8c91ceee304097a07aea6e",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:36:19.740650900Z"
+    },
+    "baselineLinesOfCode": 27258,
+    "finalised": true,
+    "locationNote": "copyparty-db is nested inside the source tree root (a sibling of the copyparty/ package directory, next to tests/, scripts/, bin/, contrib/ and docs/); it was excluded from all exploration and is excluded from extraction result rows: both queries scope positively to %/copyparty_vuln/copyparty/% (the shipped package, 22079 LOC) which leaves copyparty-db, root setup.py, tests/, scripts/, bin/, contrib/, docs/ and srv/ outside the candidate tables by construction, plus an explicit not-%/copyparty-db/% filter. Within the package, %/copyparty/stolen/% (vendored third-party: dnslib, ifaddr, qrcodegen, surrogateescape) is excluded as vendored external code per WORKFLOW.md 4.3.2; the first-party bos/ module is kept in scope (it is the project's own filesystem abstraction, not third-party). copyparty/web/ contains no python (JS/CSS/HTML assets only); copyparty/res/ has no python beyond an empty __init__."
+  },
+  "toolchain": {
+    "qlpack": "iris/copyparty-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace from Step 0",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1; same CLI family as the sibling projects of this series)",
+    "compatibilityBasis": "API facts used by the generated queries reuse only structural shapes already proven by the queries of this series that RAN on this same CLI + pack family (aiohttp, airflow, ansible ran; coderedcms generated with the identical contract): AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), AstNode.getScope() and Scope.getEnclosingModule() (semmle/python/AstExtended.qll), Module.getName() / Module.getFile().getShortName(), Call.getFunc()/getArg(), Attribute.getName()/getObject(), Subscript.getObject()/getIndex(), Function.getName()/getAnArg()/getEnclosingScope(), Parameter.getName()/getPosition() (for methods the self parameter occupies position 0), Class.getName(), AstNode.getParentNode(), API::moduleImport(m) with chained .getMember(...) and .getACall() plus the API::CallNode -> ControlFlowNode -> AstNode -> Call chain cn.getNode().getNode().(Call) (astCallOf helper). The queries define no QL classes (predicates only), never assign API::Node values to DataFlow::Node variables, keep every variable bound through a positive body, name the module column variable moduleHint (module is not a valid QL variable name here), use bindingset[path] scope predicates, and emit a plain multi-column select (no @kind problem - wrong shape for candidate tables - and no @kind table assumption). Deprecations avoided: no StrConst, no Decorator class, no {{...}} template placeholders left in the generated files. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "Django",
+          "confidence": 0.0,
+          "evidence": ["no `from django import` / django.urls / urlpatterns anywhere in the copyparty package"]
+        },
+        {
+          "name": "Flask",
+          "confidence": 0.0,
+          "evidence": ["no `from flask import` / @app.route anywhere in the copyparty package"]
+        },
+        {
+          "name": "FastAPI",
+          "confidence": 0.0,
+          "evidence": ["no `from fastapi import` anywhere in the copyparty package"]
+        }
+      ],
+      "externalLibrariesNotFrameworks": [
+        "pyftpdlib (ftpd.py: imports DummyAuthorizer/AbstractedFS/FTPHandler/TLS_FTPHandler; FTPHandler subclasses) - an external protocol-server library, not a web framework; the FTP command dispatch that feeds FtpFs.v2a/open is pyftpdlib-internal and outside this CodeQL database",
+        "jinja2 (httpsrv.py:135 FileSystemLoader, httpcli.py:205-:213 j2s/j2j template rendering) - a template library used for HTML generation only, no file-serving semantics",
+        "PIL (th_srv.py:45 from PIL import Image) - image decoding of thumbnail sources",
+        "impacket-derived smbd (smbd.py) - SMB protocol server over the project's VFS"
+      ],
+      "nonPythonCandidates": ["Gin/Echo (go), Spring (java), Express (javascript), ASP.NET Core (csharp): not applicable, database language is python"],
+      "result": "No framework detected (all candidates 0.0). Per WORKFLOW.md 4.2.3 the no-framework path applies: source/sink shapes were derived from repository code using references/python.md (HTTP request path/query/body/header values, handler parameters, file APIs open/Path/os.path/shutil, archive extraction destination handling) and references/patterns.md; no framework reference file was loaded because none matches (django.md/flask.md/fastapi.md exist in the Augur installation but their detection heuristics - django.urls, @app.route, fastapi imports - all fail against this codebase). The request boundary is the hand-rolled HttpCli.run() state machine on raw sockets (httpcli.py:218-:430), which is first-party code and fully inside the CodeQL database - a coverage advantage over framework-based projects."
+    }
+  },
+  "inputBoundaryInventory": {
+    "summary": "copyparty is a framework-less multi-protocol file server, so every untrusted-input boundary is first-party code: (1) the HTTP request line self.req (raw path+query from the socket, httpcli.py:241), the decoded URL path self.vpath (unquotep at :375, dot-filtered before decode) and the percent-decoded query dict self.uparam (per-key unquotep at :341) - self.vpath is the single most load-bearing attacker-controlled value in the server (116 references in httpcli.py); (2) HTTP headers self.headers (40 read sites, including the WebDAV Destination header that becomes a move target at :1197-:1199) and cookies self.cookies; (3) the URL-decoder family itself - unquotep/unquote call sites (:341, :375, :1199, :1327, :1726, :3337, :3871) covering the post-decode values for zip item lists, delete/move targets and the ?doc= file read; (4) the up2k handshake JSON body (json.loads at :1752; client fields name/size/lmod/hash, delete/srch item arrays) and multipart form fields + filenames (self.parser.require / self.parser.gen - the MultipartParser at util.py:1268 reads from the request socket, filename later basenamed by sanitize_fn); (5) FTP: the vpath parameters of FtpFs.v2a/rv2a plus the client-controlled CWD state self.cwd (ftpd.py:188); (6) SMB: the vpath parameters of smbd.py _v2a/_open/_listdir; (7) environment variables in __main__.py (deployer trust level). The sink side funnels through builtin open() and the first-party bos module (bos.open/stat/unlink/rename/mkdir/makedirs, bos.path.*), os.sendfile/os.scandir/os.unlink, PIL Image.open, the ren_open/yieldfile/statdir/sendfile_kern/sendfile_py util wrappers, the VFS path-resolution core (vfs.get / canonical / dcanonical / chk_ap) and the os.path join/check/resolve propagation pipeline.",
+    "sourceFamilies": [
+      {
+        "family": "http_path",
+        "shape": "self.vpath attribute reads (the percent-decoded URL path stored at httpcli.py:375)",
+        "trustChain": "socket -> read_header (httpcli.py:230) -> request-line split (:241) -> '?' split + undot (:329-:337) -> self.vpath = unquotep(vpath) (:375) -> vfs.get(self.vpath) (:423) -> canonical(rem) (:425) -> tx_file/tx_browser/thumbnails/static-resources",
+        "evidenceSites": ["copyparty/httpcli.py:375 (assignment), :142, :423, :766-:782 (.cpr static path join), :1117, :1389, :1769, :2047-:2053, :2147, :2414, :3312, :3420-:3425, :3506, :3811 (index.html resolve) among 116 references"]
+      },
+      {
+        "family": "http_req",
+        "shape": "self.req attribute reads (raw request line, pre-split/pre-decode)",
+        "trustChain": "headerlines[0].split(' ') at :241; used for logging, the '&'/'?' hint (:326-:327) and lf_url filtering (:313-:314); the origin of vpath/uparam",
+        "evidenceSites": ["copyparty/httpcli.py:241 (assignment), :313-:314, :326-:327, :753, :868, :1168, :1185, :2801, :2867, :3867"]
+      },
+      {
+        "family": "http_url_decode",
+        "shape": "unquotep(...) / unquote(...) bare-name calls in httpcli.py (the percent-decode boundary)",
+        "trustChain": "imported from .util (httpcli.py:78-:79); every URL-encoded attacker value is decoded here: query values (:341), the URL path (:375), WebDAV Destination (:1199), basic-auth payload (:1327, password - not path-bearing), zip item lists (:1726), the move= query target (:3337) and the ?doc= filename (:3871)",
+        "evidenceSites": ["copyparty/httpcli.py:341, :375, :1199, :1327, :1726, :3337, :3871"]
+      },
+      {
+        "family": "http_query",
+        "shape": "self.uparam.get(...) calls and self.uparam[...] subscripts (percent-decoded query parameters)",
+        "trustChain": "built at :330-:343 (keys lowercased, values unquotep-decoded, '+' folded to space); path-bearing uses: th (thumbnail format, :3475), doc (?doc= file read, :3869-:3874), move (move destination, :3327), k (filekey), txt/mime, gz/xz (compression level - int), dots/lt/b (listing flags)",
+        "evidenceSites": ["copyparty/httpcli.py:27 self.uparam.get sites + 10 self.uparam[...] sites, e.g. :3475, :3521, :3869, :3327, :2751-:2753, :417-:421"]
+      },
+      {
+        "family": "http_header",
+        "shape": "self.headers.get(...) calls and self.headers[...] subscripts (raw header values, no percent-decode)",
+        "trustChain": "headers lowercased at :243-:247; path-bearing uses: the WebDAV Destination header (move destination, :1197), content-type charset (:1741), pw (:399), range/accept-encoding/if-modified-since (byte-range and caching - not path-bearing but attacker-controlled)",
+        "evidenceSites": ["copyparty/httpcli.py:32 self.headers.get sites + 8 self.headers[...] sites, e.g. :1197, :359, :385, :399, :1733, :2417, :2683"]
+      },
+      {
+        "family": "http_cookie",
+        "shape": "self.cookies.get(...) calls (unescaped cookie values)",
+        "trustChain": "parsed from the cookie header at :359-:368 (unescape_cookie); cookies['b'] (browser mode) and cppws/cppwd (password cookies); not path-bearing but request-derived",
+        "evidenceSites": ["copyparty/httpcli.py:362-:365, :3802-:3803 and 4 self.cookies.get sites"]
+      },
+      {
+        "family": "json_body",
+        "shape": "json.loads(...) of the POST body (api + ast rows)",
+        "trustChain": "handle_post_json (httpcli.py:1731-:1752) parses up to 1 MB of client JSON (the up2k upload handshake): client-controlled fields name/hash/size/lmod/rand plus the delete/srch item arrays; name is undot-ed (:1765) and sanitize_fn-ed (up2k.py:2235) before djoin(ptop, prel, name) destination construction; the other json.loads sites in the package (httpcli.py:3006 broker IPC reply, cert.py:66, mtag.py:587, up2k.py:799 registry file) are internal/file-derived and included as rows for labeling to judge",
+        "evidenceSites": ["copyparty/httpcli.py:1752 (request boundary), :3006 (broker IPC), copyparty/cert.py:66, copyparty/mtag.py:587, copyparty/up2k.py:799"]
+      },
+      {
+        "family": "form_field",
+        "shape": "self.parser.require(field_name, max_len) calls (multipart POST form fields)",
+        "trustChain": "MultipartParser (util.py:1268) reads the request body; require() returns raw field strings: 'name' of mkdir (:2049) and new-md (:2091), 'lastmod' of text-upload (:2409); name values flow through sanitize_fn (:2052/:2101) into _mkdir/new_md file creation",
+        "evidenceSites": ["copyparty/httpcli.py:2049, :2091, :2409 (6 self.parser.require sites total)"]
+      },
+      {
+        "family": "multipart_gen",
+        "shape": "self.parser.gen attribute reads (the multipart body generator yielding (field, filename, datafile) tuples)",
+        "trustChain": "the client-supplied multipart filename p_file is consumed at httpcli.py:2170-:2197 (sanitize_fn basename-only at :2176-:2178, then ren_open(fname, 'wb', fdir=fdir) at :2190 and os.path.join(fdir, fname) at :2197); the MultipartParser-side filename handling is first-party (util.py:1268+) but socket-level - the parser.gen anchor plus the ren_open/sanitize_fn sink rows capture the two ends",
+        "evidenceSites": ["copyparty/httpcli.py:2170, :2233, :2492 (4 self.parser.gen sites)"]
+      },
+      {
+        "family": "ftp_param / ftp_cwd",
+        "shape": "the vpath parameters of FtpFs.v2a/rv2a (ftpd.py) and self.cwd attribute reads (the FTP client-controlled working directory)",
+        "trustChain": "pyftpdlib (external) dispatches FTP commands (RETR/STOR/CWD/MKD/DELE/RNFR/RNTO) to FtpFs methods with the client-supplied path string; v2a (:142-:176) backslash-normalizes, sanitize_fn-basenames the final component (:157), vfs.get-resolves (:160) and canonical-joins (:166/:176); rv2a prefixes the client-set CWD state (:188-:189); the pyftpdlib dispatch itself is outside the database (evidence gap)",
+        "evidenceSites": ["copyparty/ftpd.py:142 (v2a vpath param), :189 (rv2a vpath param), :188 (os.path.join(self.cwd, vpath)), 9 self.cwd sites, :205-:221 (open), :250, :288, :296, :306, :323"]
+      },
+      {
+        "family": "smb_param",
+        "shape": "the vpath parameters of smbd.py _v2a/_listdir/_open (and any other smbd function taking vpath)",
+        "trustChain": "the impacket-style SMB server dispatches client path strings into these methods; _v2a (:122-:131) normalizes backslashes, lstrips leading '/', vfs.get(vpath, LEELOO_DALLAS, True, True) (note: LEELOO_DALLAS is the full-access account name, i.e. SMB-side permission bypass by design) then canonical(rem); _open (:163-:185) -> bos.open(ap, flags)",
+        "evidenceSites": ["copyparty/smbd.py:122 (_v2a), :133 (_listdir), :163 (_open), :185 (bos.open)"]
+      },
+      {
+        "family": "env",
+        "shape": "os.environ.get(...) calls in __main__.py (api + ast rows)",
+        "trustChain": "config-directory and temp-directory discovery (XDG_CONFIG_HOME/TMPDIR/TEMP/TMP/APPDATA) plus TERM detection - deployer/operator trust level, NOT attacker input; included for the labeling step to judge per the task's boundary rule",
+        "evidenceSites": ["copyparty/__main__.py:148, :150, :151, :152, :202, :1148"]
+      }
+    ],
+    "sinkChannels": [
+      {
+        "channel": "builtin open() (bare-name calls)",
+        "argIndex": 0,
+        "evidenceSites": ["copyparty/httpcli.py:1159 (WebDAV LOCK create, dcanonical-fed), :1661 (bruteforce file), :2110 (new-md create), :2374 (upload log), :2518 (text-upload write, canonical+join-fed), :3604 (README read), :3874 (?doc= read - os.path.join(abspath, doc) with unquotep-decoded uparam doc)", "copyparty/ftpd.py:221 (FtpFs.open, v2a-fed)", "copyparty/th_srv.py:210 (dir.txt write), :302 (empty thumbnail marker), :1253/:1263 in authsrv.py (powner read/write)", "copyparty/up2k.py:3493 (_hashlist_from_file read)", "copyparty/util.py:1221 (ren_open internal), :2121 (yieldfile read - the zip-download file read)"]
+      },
+      {
+        "channel": "bos.* first-party fs API (bos.open/stat/unlink/rename/mkdir/makedirs + bos.path.*)",
+        "argIndex": "0 (rename: src 0 / dst 1)",
+        "evidenceSites": ["copyparty/httpcli.py:2610 (bos.stat fs_path in tx_file), :2615 (bos.open O_RDONLY for block devices), :1403 (bos.makedirs fdir in dump_to_file), :2071 (bos.mkdir in _mkdir), :2254-:2255 (bos.unlink upload rollback), :2445 (bos.stat fp), :2489 (bos.rename to .hist), :1543 (bos.utime)", "copyparty/up2k.py (31 bos.* sites: stat/rename/unlink/makedirs over djoin-built upload paths, e.g. :2281, :2299, :2666/:2699/:2730, :2925)", "copyparty/th_srv.py (8 sites: stat/makedirs/rename/unlink of thumbnail paths), :206", "copyparty/smbd.py:185 (bos.open), :135-:137 (listdir)", "copyparty/szip.py:318 (bos.unlink errf)", "~91 bos.* fs-op calls and ~69 bos.path.* calls across the package"]
+      },
+      {
+        "channel": "os-level fs syscalls (os.sendfile / os.scandir / os.unlink)",
+        "argIndex": "sendfile 1 (in_fd), scandir/unlink 0",
+        "evidenceSites": ["copyparty/util.py:2200 (os.sendfile in sendfile_kern - the file-data-to-socket syscall of tx_file), :2237 (os.scandir in statdir - the directory-listing read behind VFS.ls/walk/zipgen)", "copyparty/httpsrv.py:475 (os.scandir of the web assets dir)", "copyparty/th_srv.py:307 (os.unlink)"]
+      },
+      {
+        "channel": "PIL Image.open (thumbnail source read)",
+        "argIndex": 0,
+        "evidenceSites": ["copyparty/th_srv.py:355 - Image.open(fsenc(abspath)) where abspath = os.path.join(ptop, rem) at :197 with rem = the thumbnail-request vrem from httpcli.py:3506 (no undot/relchk/_assert_safe_rem on this join - the thumbnail channel joins the request remainder directly onto the volume realpath)"]
+      },
+      {
+        "channel": "ren_open / yieldfile util wrappers (atomic create / streaming read)",
+        "argIndex": "0 (ren_open fname; yieldfile fn)",
+        "evidenceSites": ["copyparty/httpcli.py:1519, :1561 (dump_to_file PUT writes), :2190 (plain-upload destination reservation with fdir/fname), :2233 (chunk write)", "copyparty/util.py:1173-:1224 (ren_open: os.path.join(fdir, fname) at :1207, dynamic fun(fsenc(fpath)) at :1216 with fun=open default)", "copyparty/szip.py:259 (yieldfile(src) - the zip-download content read of f['ap'] paths from zipgen)"]
+      },
+      {
+        "channel": "VFS path resolution core (vfs.get / canonical / dcanonical / chk_ap)",
+        "argIndex": "0",
+        "evidenceSites": ["copyparty/httpcli.py:423-:428 (the central request-path resolution: vfs.get(self.vpath) + canonical(rem) + chk_ap(ap)), :874 (PROPFIND), :1117 (LOCK dcanonical), :1392 (PUT), :1784 (up2k json), :2059 (MKCOL), :2104 (new-md), :2152 (plain upload), :2422 (text upload), :3431 (browser listing dcanonical), :3537 (tx_file(abspath))", "copyparty/authsrv.py:498-:513 (canonical = realpath + '/' + rem then absreal abspath+realpath; dcanonical resolves the parent dir only - TOCTOU-shaped), :705-:734 (chk_ap: aps.startswith(vap) prefix containment ONLY under xdev/xvol volume flags)", "copyparty/ftpd.py:160/:166/:176, :226, :427", "copyparty/smbd.py:130-:131", "copyparty/up2k.py:7 vfs.get sites (e.g. :2298 registry)"]
+      },
+      {
+        "channel": "os.path propagation/validation pipeline (join / isfile-isdir-exists-getsize / abspath-realpath-dirname-split)",
+        "argIndex": 0,
+        "evidenceSites": ["copyparty/httpcli.py:782 (os.path.join(self.E.mod, 'web/', self.vpath[5:]) - static-resource path from the request path), :2105, :2197, :2224-:2235, :2428, :3487, :3495, :3587, :3602", "copyparty/th_srv.py:197 (os.path.join(ptop, rem) - thumbnail source), :208, :285", "copyparty/ftpd.py:152, :176, :188, :552-:553 (jnorm os.path.join + normpath)", "copyparty/up2k.py:36 os.path.* sites + 41 djoin (os.path.join wrapper) sites", "copyparty/util.py:1660 (djoin def), :1733 (absreal def - abspath+realpath), ~42 os.path.join + ~250 os.path.* total across the package; emitted as path_join (api+ast) / path_check / path_resolve (ast) propagation rows, and undot/sanitize_fn as path_sanitize rows"]
+      },
+      {
+        "channel": "tx_file / tx_md (the HTTP file-serving response wrappers)",
+        "argIndex": 0,
+        "evidenceSites": ["copyparty/httpcli.py:783 (tx_file(static_path) - request-path-fed static resources), :3509 (tx_file(thp) - thumbnail artifact), :3537 (tx_file(abspath) - THE file download), :3814 (tx_file(ap) - index.html resolve), :3535 (tx_md(abspath) - markdown viewer); tx_file body: bos.stat :2610, bos.open :2615, editions loop over req_path+'.gz'/'.br' at :2607-:2610 (extension concat), dynamic open_func(*open_args) at :2772 (open_func = open at :2733, gzip.open at :2728), sendfile_kern/sendfile_py at :2773-:2775"]
+      },
+      {
+        "channel": "internal_file_wrapper definition rows (functions whose body directly performs a filesystem operation)",
+        "evidenceSites": ["expected: HttpCli.tx_file (:2597 - bos.stat/bos.open), dump_to_file (:1386), handle_plain_upload (:2144), handle_text_upload (:2406), handle_new_md (:2089), _mkdir (:2055), handle_lock (:~1117), FtpFs.open/mkdir/rmdir/remove/rename/stat/v2a (ftpd.py), smbd _v2a/_open/_listdir, th_srv get/worker/conv_pil, VFS.ls/walk/zipgen (authsrv.py, via statdir), util ren_open/yieldfile/statdir/sendfile_kern/sendfile_py, up2k upload/removal helpers (the bos.* cluster), szip StreamZip.ser/gen (via yieldfile)"]
+      }
+    ],
+    "guardsAndEvidence": [
+      {
+        "guard": "double-undot with decode in between (ordering hazard, the core CWE-022 evidence)",
+        "evidence": "httpcli.py:329-:337 applies undot (util.py:1673-:1686: drops '', '.' and '..' path segments) to the RAW (still percent-encoded) request path, THEN percent-decodes at :375 (self.vpath = unquotep(vpath)); VFS.get re-applies undot to the decoded value at authsrv.py:473. Consequences: (a) encoded traversal (%2e%2e%2f) survives the first undot and only the second undot inside vfs.get neutralizes the decoded '..' - the guard exists but its correctness depends on this double application being reachable on every path; (b) undot splits on '/' only, so backslash traversal ('..\\\\') passes undot on POSIX and is only stopped by the Windows-only relchk (httpcli.py:378-:380, authsrv.py:466-:471); (c) undot on the query-free branch only removes leading/duplicated dots - absolute-looking paths become relative ('/etc/x' -> 'etc/x') which is then joined onto the volume realpath.",
+        "cwe": "CWE-022 / CWE-023"
+      },
+      {
+        "guard": "_assert_safe_rem (write-side-only traversal check)",
+        "evidence": "httpcli.py:197-:200 raises on rem starting with '/' or '../' or containing '/../' ('sanity check to prevent any disasters'); applied ONLY to the write paths: _mkdir :2058, handle_new_md :2096, handle_plain_upload :2148, handle_text_upload :2415. The read paths (tx_file :3537, tx_browser :3431, static :782, thumbnails :3506, ?doc= :3874, zipgen) do NOT pass through any _assert_safe_rem - they rely solely on the vfs.get double-undot + canonical resolution. Also note '..' without a trailing component ('a/..') and mid-path 'x..y' are not covered by the check (only '../' patterns).",
+        "cwe": "CWE-022 (partial mitigation, asymmetric coverage)"
+      },
+      {
+        "guard": "canonical/dcanonical symlink resolution (TOCTOU-shaped containment)",
+        "evidence": "authsrv.py:498-:504: canonical(rem) = realpath + '/' + rem then absreal (util.py:1733-:1743: os.path.abspath(os.path.realpath(...))) when resolve=True - symlinks under the volume are resolved at request time, so a symlink planted between resolution and the later open/stat (tx_file :2610 stat then :2772 open; th_srv worker :223 queue then :355 Image.open) is a classic TOCTOU window; dcanonical (:506-:513) resolves only the parent directory, leaving the final component un-resolved at open time.",
+        "cwe": "CWE-022 / CWE-036 / CWE-059-adjacent"
+      },
+      {
+        "guard": "chk_ap prefix containment is opt-in per volume (xdev/xvol flags)",
+        "evidence": "authsrv.py:705-:734: chk_ap validates aps.startswith(vap) (prefix match, no separator-boundary check documented) and device-id equality - but ONLY for volumes configured with the xdev or xvol flags (httpcli.py:424-:428). Default volumes have no post-canonical containment at all; the string-concatenation ap = self.realpath + '/' + rem at :500-:502 plus the undot chain is the entire defense.",
+        "cwe": "CWE-073"
+      },
+      {
+        "guard": "sanitize_fn basename-only filenames (upload/mkdir name channel)",
+        "evidence": "util.py:1689-:1718: sanitize_fn(fn, ok, bad) with ok='' takes fn.replace('\\\\','/').split('/')[-1] (basename-only) plus windows devname/charset remapping; applied to the multipart upload filename (httpcli.py:2176-:2178, up2k.py:2235), the FTP final path component (ftpd.py:157) and the mkdir/new-md form names (httpcli.py:2052/:2101). NOT applied to URL-path components (the vpath channel) and NOT to the up2k 'prel' relative directory (server-derived at httpcli.py:1774) or the delete/srch/move item arrays (unquotep at :1726/:3337, resolved through vfs.get/undot like the read path).",
+        "cwe": "CWE-022 (partial mitigation, name channel only)"
+      },
+      {
+        "guard": "relchk and \\x00 rejection (windows-only / null-byte)",
+        "evidence": "httpcli.py:377-:383 rejects \\x00 in self.vpath always and applies relchk (util.py:1721-:1730: windows illegal chars [\\\\:*?\"<>|] and CRLF) only under ANYWIN; authsrv.py:466-:471 applies relchk inside vfs.get under ANYWIN. On POSIX, backslashes and control chars other than \\x00 pass into canonical's string concatenation.",
+        "cwe": "CWE-023 / CWE-022"
+      },
+      {
+        "guard": "authorization is per-volume/per-user, not per-path-shape",
+        "evidence": "authsrv.py:476-:486 checks uread/uwrite/umove/udel per volume; httpcli.py:399-:406 resolves the user from pw/headers/cookies/basic-auth. Auth limits WHO can request a path, not WHAT path is resolved - and the FTP v2a path additionally funnels through vfs.get with the user's permissions, while smbd.py:130 resolves with LEELOO_DALLAS (the full-access builtin account) - SMB paths bypass the per-user volume permission check by design. opt-in per-volume filekey (fk) checks exist at httpcli.py:3517-:3524 for get-only volumes.",
+        "cwe": "CWE-073 / CWE-022 (contextual)"
+      },
+      {
+        "guard": "validpath .hist guard (FTP only)",
+        "evidence": "ftpd.py:198-:203 blocks '/.hist/' internals (up2k.* and dir.txt) on the FTP channel only; the HTTP side implements the same guard ad-hoc at httpcli.py:3453-:3456 for the browser listing path.",
+        "cwe": "CWE-200-adjacent (internal-file exposure), recorded as path-channel evidence"
+      },
+      {
+        "guard": "external-library boundaries (cannot be verified from this DB)",
+        "evidence": "pyftpdlib's FTP command dispatch and AbstractedFS semantics, impacket/SMB dispatch, PIL image-loading side effects, jinja2 template loading (httpsrv.py:135 FileSystemLoader over the web/ dir), and the pyftpdlib-side path normalization are outside the copyparty package and this CodeQL database; recorded as evidence gaps. The MultipartParser (util.py:1268+) IS first-party and in-database - the filename bytes are parsed there before sanitize_fn.",
+        "cwe": "CWE-022 (evidence gap)"
+      }
+    ],
+    "notObserved": [
+      "no web framework (no Django/Flask/FastAPI imports anywhere) - the HTTP stack is hand-rolled on raw sockets; no FileResponse/send_file/send_from_directory/static handler framework APIs exist - file serving is tx_file (httpcli.py:2597) using bos.stat + a dynamic open_func + os.sendfile/f.read directly",
+      "no archive extraction of request data: szip.py/star.py GENERATE zip/tar downloads only (tarfile.open mode 'w|' at star.py:59); the only extractall in the tree is __main__.py:186-:187 unpacking the application's own release tarball at boot (operator-controlled input, outside the request path); no zipfile.ZipFile reads, no extract()/extractall() of user input - so no archive_entry sink family is emitted",
+      "no pathlib in request paths: the only pathlib import is u2idx.py:29 (Path for the search-index sqlite location - deployment path); Path(...)/.mkdir/.resolve sinks do not exist on request-reachable paths; all path construction is string concatenation and os.path.join/djoin",
+      "no io.open, no os.remove (uses bos.unlink/os.unlink), no tempfile usage on request paths",
+      "no os.environ/getenv reads inside request handlers - env reads are __main__.py boot/config only (operator trust level); no message-queue consumers, no cron/scheduled watchers reading external paths, no RPC deserializers",
+      "no eval/exec on request paths in the request-serving modules (eval-family is out of pass-1 scope anyway)",
+      "no explicit '..' string rejection on the read path and no startswith(base-dir) containment outside the opt-in chk_ap; no safe_join-style helper exists in the package",
+      "no async request handlers on the file paths (the HTTP server is thread/connection-based; async shapes are absent), and no alias imports of os (`from os import path` does not occur; all os.path usage is qualified - the os.path.join api rows additionally cover djoin's internal call)",
+      "no route-parameter injection framework - the 'route' is the vpath string itself (prefix dispatch on self.vpath.startswith('.cpr') etc. at httpcli.py:766-:783), so no route_param source family is emitted (http_path/http_req cover the value directly)"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql (this run, generated)",
+      "iris/extraction/sinks.ql (this run, generated)"
+    ],
+    "executionPlan": [
+      "cd iris && codeql pack install (qlpack.yml already present: iris/copyparty-cwe22, codeql/python-all: \"*\")",
+      "codeql query run extraction/sources.ql --database C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/copyparty_vuln/copyparty-db --output extraction/sources.bqrs",
+      "codeql bqrs decode extraction/sources.bqrs --format=csv --output=extraction/sources.csv",
+      "codeql query run extraction/sinks.ql --database <same db> --output extraction/sinks.bqrs",
+      "codeql bqrs decode extraction/sinks.bqrs --format=csv --output=extraction/sinks.csv",
+      "sequential execution only (WORKFLOW.md 3.2-3.3); no database analyze, no SARIF in this round"
+    ],
+    "metadataForm": "plain multi-column select queries (10 columns) for codeql query run + bqrs decode; @kind problem is intentionally NOT set (wrong shape for candidate tables - it requires exactly element+string) and @kind table is not assumed to exist",
+    "columnContract": ["node", "role (source_candidate|sink_candidate)", "callableName", "flowKind", "receiver", "moduleHint", "argIndex", "file", "line", "matchKind (api|ast)"],
+    "matchKindSemantics": "api = call resolved to the real API through API graphs (API::moduleImport(...).getMember(...)[.getMember(...)].getACall(); json.loads and os.environ.get in sources, os.path.join in sinks), alias-aware; ast = syntax-level shape match (self.vpath/self.req/self.uparam/self.headers/self.cookies reads, unquotep/unquote calls, parser.require/parser.gen, ftpd/smbd vpath parameters, bos.* / os.* / ren_open / yieldfile / canonical / tx_file call shapes, wrapper definition rows). The same call site may legitimately appear as both an api and an ast row (identical to the airflow/coderedcms projects of this series); labeling dedupes by file/line/signature.",
+    "flowKinds": {
+      "sources": ["http_path", "http_req", "http_url_decode", "http_query", "http_header", "http_cookie", "json_body", "form_field", "multipart_gen", "ftp_param", "ftp_cwd", "smb_param", "env"],
+      "sinks": ["file_open", "bos_open", "fs_stat", "fs_unlink", "fs_rename", "fs_mkdir", "fs_sendfile", "fs_scandir", "image_open", "path_join", "path_check", "path_resolve", "path_sanitize", "vfs_canonical", "vfs_get", "vfs_chk_ap", "fs_open_wrapper", "fs_read_wrapper", "file_serve", "internal_file_wrapper"]
+    },
+    "exclusions": [
+      "%/copyparty-db/% (CodeQL database nested in the source tree) - excluded from every row in both queries (redundant with the positive scope but kept explicit)",
+      "positive scope %/copyparty_vuln/copyparty/% in both queries: copyparty-db, root setup.py, tests/, scripts/, bin/, contrib/, docs/ and srv/ are never candidates",
+      "%/copyparty/stolen/% (vendored third-party: dnslib, ifaddr, qrcodegen, surrogateescape) excluded as external vendored code per WORKFLOW.md 4.3.2; the first-party bos/ module stays in scope"
+    ],
+    "expectedVolume": {
+      "sources": "roughly 220 rows: http_path ~116 (all self.vpath refs incl. the two assignments), http_req ~10, http_url_decode 7, http_query ~27 (17 get + 10 subscript), http_header ~40, http_cookie ~4, json_body 10 (5 sites x api+ast), form_field 6, multipart_gen 4, ftp_param 2 + ftp_cwd 9, smb_param 3, env ~12 (6 sites x api+ast)",
+      "sinks": "roughly 480 rows: file_open ~12 (bare open), bos_open 2, fs_stat ~30, fs_unlink ~15, fs_rename ~8, fs_mkdir ~12, fs_sendfile 1, fs_scandir 2, image_open 1, path_join ~75 (api+ast over ~38 sites incl. djoin's internal call), path_check ~70, path_resolve ~60, path_sanitize ~10 (undot + sanitize_fn), vfs_canonical ~17, vfs_get ~31, vfs_chk_ap ~3, fs_open_wrapper 4, fs_read_wrapper 2, file_serve 5, internal_file_wrapper ~60 (functions containing a direct fs op)",
+      "note": "volumes estimated from grep counts over the explored tree (httpcli 116 vpath refs, 17/10 uparam, 32/8 headers, 91 bos.* fs-ops, 69 bos.path.*, ~250 os.path.*, 41 djoin in up2k); the CSV decode of the next round yields the exact numbers"
+    }
+  },
+  "uncoveredCases": [
+    "dynamic file-open dispatch: tx_file assigns open_func = open / gzip.open (httpcli.py:2728-:2733) and opens via open_func(*open_args) at :2772 - the Call func is a Name variable, not the open builtin, so the file_open family does not match it; the tx_file call-site family (file_serve) and the internal_file_wrapper row for tx_file (via its direct bos.stat/bos.open at :2610/:2615) capture the site, but the taint step from req_path into the dynamic open needs a MySummaries entry later. Same shape in ren_open's fun kwarg (util.py:1176, fun=open default, called at :1216) and dump_to_file's open_ka fun override (httpcli.py:1447-:1451, gzip.GzipFile / lzma.open).",
+    "th_srv worker dispatch: fun(abspath, ttpath, vn) at th_srv.py:293 selects conv_pil/conv_vips/conv_ffmpeg from a runtime-built list (th_srv.py:264-:279) - dynamic dispatch; the Image.open row at :355 and the os.path.join(ptop, rem) path_join row at :197 capture the channel ends.",
+    "cross-process broker boundary: handle_rm (httpcli.py:3319 broker.ask('up2k.handle_rm', ...)) and the upload/job engine run in a separate process (broker_mp/broker_thr); the delete items array crosses an IPC boundary before reaching up2k's bos.unlink(djoin(...)) at up2k.py:2909-:2925 - the json_body/unquotep source rows and the up2k bos.*/djoin sink rows capture both ends, but the IPC hop needs a summary step in Phase 2.",
+    "MultipartParser internals: the parser (util.py:1268+) reads the multipart body from the request socket and yields (field, filename, datafile); the filename bytes are parsed inside first-party code that the parser.gen source row and the sanitize_fn/ren_open sink rows bracket - the per-part Content-Disposition parsing itself is not emitted as rows (socket reads, not AST-shaped file paths).",
+    "the search-index DB (u2idx.py) and up2k sqlite registry (up2k.py) return stored rd/fn path values (DB content re-used as file paths, e.g. up2k.py:2279 djoin(ptop, dp_dir, dp_fn)); these are second-order (values were client-supplied at upload time) - covered only implicitly through the djoin/bos.* sink rows and the json_body source family; no db_json source family is emitted because the reads are sqlite cursors, not json.loads.",
+    "self.rem / self.vn attribute reads (the vfs.get results stored at httpcli.py:423 and re-read throughout) are internal propagation, not a boundary - not emitted as source rows; a MySummaries step (vfs.get returns attacker-controlled rem) is the Phase-2 fix.",
+    "MembershipTest guards (\"x\" in self.uparam / in self.vpath) and self.ouparam (the pre-lowercase copy) are not emitted; self.pw/auth values (password, not path-bearing) are intentionally excluded.",
+    "WebDAV XML bodies (PROPFind depth/href, LOCK lockinfo at httpcli.py:1113-:1155) are request input but not path-bearing (the LOCK lockroot href is echoed from quotep(self.vpath), not parsed into a path); not emitted.",
+    "argparse CLI surface of __main__.py (1425 lines of operator-facing config: volume mounts, --rp-loc, fk-salt etc.) is operator trust level - not emitted as source rows (the env family covers the boot-time environment reads); its os.path.join usage appears in the sink propagation rows where it shapes deployment paths.",
+    "receiver-name collisions: http_query/http_header/http_cookie match the exact self.<attr> receiver shapes of HttpCli (the only class holding these attributes); ftp_param matches Parameters named vpath of ftpd.py functions v2a/rv2a (rv2a included although it delegates to v2a); smb_param matches any smbd.py function parameter named vpath; canonical/dcanonical/chk_ap/tx_file/tx_md match by method name only (canonical exists solely on VFS in this codebase; verified by grep); vfs_get matches .get calls whose receiver attribute is named vfs (the asrv.vfs / hub.asrv.vfs shapes - all 31 sites verified by grep). Non-matching same-named locals would survive to labeling as noise.",
+    "os.path.join argument position: the path_join rows record argIndex 0, but copyparty joins are two-sided (base, controlled-name) - os.path.join(fdir, fname) at httpcli.py:2197, os.path.join(abspath, doc) at :3874, os.path.join(ptop, rem) at th_srv.py:197 put the controlled component at index 1; the labeling step must treat join as taint-preserving for ALL arguments (a summary model, not a single-arg sink).",
+    "API-graph/syntax double rows: json.loads, os.environ.get (sources) and os.path.join (sinks) call sites can each yield one api row and one ast row with different matchKind - intentional, identical to the airflow/coderedcms projects; labels.json deduplication handles it.",
+    "async/await handlers: not applicable - the connection handling is thread/socket based (httpsrv/tcpsrv), no async file paths."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction contract in 4.3; Python pitfalls in section 9; test/generated-code FP heuristics in 5.3.2)",
+    "augur-0.3.0/references/patterns.md (always loaded per 4.2.3)",
+    "augur-0.3.0/references/python.md (always loaded per 4.2.3; source families HTTP request path/query/body/header/cookie values and handler params matched to the HttpCli shapes; sink families open/Path/os.path/filesystem-operations matched - the pathlib branch does not apply (no pathlib in request paths); archive-extraction branch does not apply (write-only archives); pitfalls 7.1-7.4 rechecked: no Decorator class, no StrConst, dynamic-dispatch mitigation via receiver/module constraints, source families restricted to the actual boundary attributes rather than all parameters)",
+    "augur-0.3.0/assets/extraction/README.md (starter template contract and minimum output columns)",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl and python_sinks.ql.tmpl (language starter stubs - placeholder bodies filled from repo evidence; the @kind problem metadata of the stubs is intentionally dropped because the multi-column select is the wrong shape for problem queries)",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl and extract_sinks.ql.tmpl (generic skeletons consulted for the column contract)",
+    "no framework reference loaded: django.md/flask.md/fastapi.md exist in the Augur installation but their detection heuristics all fail against copyparty (no framework - hand-rolled HTTP stack); per WORKFLOW.md 4.2.3 the no-framework path applies (language reference + repository code)"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": "The source root contains audit/ground-truth artifacts (VULNERABILITY_AUDIT_REPORT.md, enhanced_path_sinks.csv, path_traversal_sinks.csv) and tests/. None of them was opened or read; all evidence above comes from first-hand source reading of the copyparty package only (httpcli.py, authsrv.py, util.py, up2k.py, th_srv.py, ftpd.py, smbd.py, szip.py, star.py, httpsrv.py, httpconn.py, fsutil.py, cfg.py, __main__.py, __version__.py, bos/, plus targeted greps). The copyparty_vuln tree, copyparty-db, the Augur installation and the sibling project workspaces (aiohttp, airflow, ansible, coderedcms) were read where needed for cross-project column-contract consistency (the 10-column CSV contract and the proven QL shapes) but never modified; only the three files of this run were written into this project's iris workspace.",
+    "notes": "No CodeQL query execution (query run/bqrs decode) and no LLM labeling were performed in this round (Step 1-2 only); both queries DID pass `codeql query compile --check-only` on the local toolchain (CLI 2.25.1 + codeql/python-all 7.1.x) with zero errors and zero warnings. One compile hazard was found and fixed during verification: slash-separated module lists inside block comments (httpcli/up2k/mtag/th_*/ftpd/smbd/u2idx) produced a `*/` sequence that terminated the /* ... */ comment early and derailed the parse (fixed by comma-separating the lists); additionally a wrapped line placing `@kind` at a QLDoc line start was reworded (it polluted the @kind metadata value), and the unused moduleHintOf helper was dropped from sources.ql (all its families hardcode the moduleHint constant). The actual query run + bqrs decode is deferred to the next round per the task contract."
+  }
+}
