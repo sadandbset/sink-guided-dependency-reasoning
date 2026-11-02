@@ -1,0 +1,194 @@
+{
+  "review_type": "independent_llm_path_review",
+  "pass": 5,
+  "cwe": "CWE-89",
+  "project": "rtx",
+  "rule_id": "py/augur/rtx/pass5-sql-injection",
+  "reviewed_at": "2026-10-21",
+  "inputs_reviewed": [
+    "results/pass5.sarif",
+    "report/iris_report.md",
+    "labels/labels.json",
+    "report/query_generation_notes.md",
+    "libraries/MySummaries.qll",
+    "libraries/MySanitizers.qll",
+    "libraries/MySinks.qll",
+    "queries/Pass5_SQLInjection.ql",
+    "dataset/codeql_databases/sql_injection_dbs/rtx_vuln/code/autocomplete/server.py",
+    "dataset/codeql_databases/sql_injection_dbs/rtx_vuln/code/autocomplete/rtxcomplete.py"
+  ],
+  "sarif_overview": {
+    "total_results": 4,
+    "all_results_rule_id": "py/augur/rtx/pass5-sql-injection",
+    "native_codeql_baseline_results_present": false,
+    "diagnostic_results_present": false,
+    "note": "SARIF 仅含 1 条正式 rule（py/augur/rtx/pass5-sql-injection）和 4 条 result。invocations.toolExecutionNotifications 中的 py/baseline/expected-extracted-files / cli/file-coverage-baseline 均为 CodeQL 基线遥测通知（level=none），不是告警结果；iris/diagnostics 目录为空。未发现 py/sql-injection 原生基线或诊断结果混入 Pass 5 正式结果。"
+  },
+  "shared_context": {
+    "entry_point": {
+      "file": "code/autocomplete/server.py",
+      "route": "GET /nodeslike(.*)",
+      "route_registration": "code/autocomplete/server.py:125",
+      "handler": "nodesLikeSearch.get (server.py:97-110)",
+      "auth": "无任何认证/鉴权；公网 autocomplete 服务（监听 4999 端口）"
+    },
+    "source": {
+      "file": "code/autocomplete/server.py",
+      "line": 102,
+      "code": "word = self.get_argument(\"word\")",
+      "nature": "tornado RequestHandler.get_argument 返回的 HTTP GET 查询参数，攻击者完全可控",
+      "call_chain": "server.py:104 rtxcomplete.get_nodes_like(word, limit) -> rtxcomplete.py:29 word 形参"
+    },
+    "sink_common": {
+      "object": "rtxcomplete 模块级全局 cursor（rtxcomplete.py:16-25：sqlite3.connect 后 conn.cursor()）",
+      "api": "sqlite3 DB-API cursor.execute(query_text)",
+      "sink_argument": "仅 execute 的第 0 个参数（SQL 文本）被建模为 sink；绑定值参数从不匹配（MySinks.qll sink 纪律）"
+    },
+    "sanitization_state": {
+      "word_channel": "无任何净化。被分析快照与 commit fa2797e 的 code_before 完全一致（不存在 word.replace('\"','') 一行）",
+      "limit_channel": "rtxcomplete.py:34 requested_limit = int(requested_limit) 为 int() 屏障（pass5-san-001），只保护 LIMIT 插值，不保护 word 通道",
+      "parameterized_calls": "rtxcomplete.py:106/:127 的 INSERT 使用 ? 绑定参数，正确地未被标记为 sink（labels pass5-sink-058/-060 = fp/none）"
+    },
+    "sql_position_analysis": "污点进入的是 WHERE/LIKE 谓词中双引号包裹的 SQL 字符串字面量（值位置）。SQLite 的 DQS 语义下双引号字面量可被包含 \" 的 word 提前闭合，从而注入任意 SQL 语法（UNION/子查询/注释）。无用户控制的表名/列名；唯一的结构位置插值是 LIMIT {requested_limit}，已被 int() 屏障覆盖。",
+    "edge_a_overapproximation_note": "MySummaries.qll 的 tornadoWordHandoff（Edge A）把 server.py:101(limit)/102(word)/103(callback) 三个 get_argument 调用结果都连到 word 与 requested_limit 两个形参。因此部分 codeFlow 以 101/103 为根（cf0/cf3 等）——limit/callback 到 word 的流是 summary 边的过近似产物（callback 在真实代码中只进入 JSONP 响应拼接 server.py:105，从不进入 SQL；limit 走 requested_limit 通道且被 int() 截断）。但每个告警的 codeFlow 集合中都包含以 server.py:102(word) 为根的真实流（部分 cf2 还显式经过调用点 server.py:104），word 通道的 source→sink 是真实存在的，故不影响 TP 判定。"
+  },
+  "findings": [
+    {
+      "sarif_result_index": 0,
+      "rule_id": "py/augur/rtx/pass5-sql-injection",
+      "sink": {
+        "file": "code/autocomplete/rtxcomplete.py",
+        "line": 76,
+        "code": "cursor.execute(f\"SELECT rowid, fragment FROM cached_fragments WHERE fragment == \\\"{word_part}\\\"\")"
+      },
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "path": [
+        "server.py:102 word = self.get_argument('word')  [真实攻击者输入]",
+        "server.py:104 rtxcomplete.get_nodes_like(word, limit)",
+        "rtxcomplete.py:29 word 形参",
+        "rtxcomplete.py:73 word_part = word",
+        "rtxcomplete.py:82 word_part = word_part[:-1] (循环内逐步截断)",
+        "rtxcomplete.py:76 f-string SQL 文本 -> cursor.execute"
+      ],
+      "controlled_sql_part": "WHERE fragment == \"{word_part}\" 的双引号字符串字面量（值位置，可闭合引号注入语法）",
+      "binding_or_barrier_evidence": "无。word/word_part 无任何转义或绑定；int() 屏障只覆盖 requested_limit 通道",
+      "preconditions": [
+        "GET /nodeslike 可达（无鉴权）",
+        "len(word) >= 3（while len(word_part) > 2 才进入查询；len(word)>=2 已由 :39 提前返回保证）",
+        "n_values < requested_limit（Query 1 未填满限额，攻击者可用大 limit 保证）"
+      ],
+      "reasoning": "Source 为 tornado get_argument 的 word 参数，完全攻击者可控且入口可达；word_part 由 word 逐步截尾派生，污点保留；SQL 由 f-string 拼接进双引号字面量；sink 是 sqlite3 cursor.execute 第 0 参的真实执行。无覆盖该片段的净化。codeFlows 4 条中 cf0/cf1/cf3 根在 101/103 属 Edge A 过近似，但 cf2（根 102）为真实路径。真实代码与 SARIF 路径一致。"
+    },
+    {
+      "sarif_result_index": 1,
+      "rule_id": "py/augur/rtx/pass5-sql-injection",
+      "sink": {
+        "file": "code/autocomplete/rtxcomplete.py",
+        "line": 49,
+        "code": "cursor.execute(f\"SELECT term FROM terms WHERE term > \\\"{floor}\\\" AND term < \\\"{ceiling}\\\" AND term LIKE \\\"{word}%%\\\" ORDER BY length(term),term LIMIT {requested_limit}\")"
+      },
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "path": [
+        "server.py:102 word = self.get_argument('word')  [真实攻击者输入]",
+        "server.py:104 rtxcomplete.get_nodes_like(word, limit)",
+        "rtxcomplete.py:29 word 形参",
+        "rtxcomplete.py:42 floor = word[:-1]（cf1 经 floor 的派生流）",
+        "rtxcomplete.py:49 f-string SQL 文本 -> cursor.execute"
+      ],
+      "controlled_sql_part": "term > \"{floor}\" / term < \"{ceiling}\" / term LIKE \"{word}%%\" 三个双引号字面量（值位置，均可经 word/floor/ceiling 闭合引号）；LIMIT {requested_limit} 为数值位置但被 int() 屏障覆盖",
+      "binding_or_barrier_evidence": "无针对 word/floor/ceiling 的净化；仅 requested_limit 通道被 :34 的 int() 屏障（pass5-san-001）保护",
+      "preconditions": [
+        "GET /nodeslike 可达（无鉴权）",
+        "len(word) >= 2（rtxcomplete.py:39 提前返回保护）"
+      ],
+      "reasoning": "这是链路最短、前置条件最少的一条：word 直接进入 f-string。Source/Sink 均为真实攻击者输入与真实 sqlite3 执行。cf0/cf3 根在 101/103 为 Edge A 过近似（limit 通道在真实代码中走 requested_limit 且被 int() 截断、callback 不入 SQL），cf1 经 floor、cf2 直达 word 均为真实流。此行即 PoC 中 word 参数注入的主通道。"
+    },
+    {
+      "sarif_result_index": 2,
+      "rule_id": "py/augur/rtx/pass5-sql-injection",
+      "sink": {
+        "file": "code/autocomplete/rtxcomplete.py",
+        "line": 112,
+        "code": "cursor.execute(\"SELECT term FROM terms WHERE term LIKE \\\"%%%s%%\\\" ORDER BY length(term),term LIMIT %s\" % (word,10000))"
+      },
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "path": [
+        "server.py:102 word = self.get_argument('word')  [真实攻击者输入]",
+        "server.py:104 rtxcomplete.get_nodes_like(word, limit)",
+        "rtxcomplete.py:29 word 形参",
+        "rtxcomplete.py:112 % 格式化 BinaryExpr -> cursor.execute"
+      ],
+      "controlled_sql_part": "LIKE \"%%%s%%\" 中的 word 插值（双引号字面量，值位置，可闭合引号）；LIMIT %s 处插的是常量 10000",
+      "binding_or_barrier_evidence": "无。% 格式化直接拼接 word，无转义、无绑定",
+      "preconditions": [
+        "GET /nodeslike 可达（无鉴权）",
+        "n_values < requested_limit",
+        "found_fragment is None（cached_fragments 无 word 前缀命中；攻击者用一个未缓存过的新词即可满足，且首次请求本身会走该分支）"
+      ],
+      "reasoning": "原始 SQL 通过 % 格式化构造（第 3 问中的 format 家族之一），与真实代码一致；sink 为 cursor.execute 第 0 参真实执行。cf2 显式含 server.py:102→104 的真实调用链路，cf0/cf1/cf3 中根为 101/103 的为 Edge A 过近似。前置条件在攻击者输入下均可满足。"
+    },
+    {
+      "sarif_result_index": 3,
+      "rule_id": "py/augur/rtx/pass5-sql-injection",
+      "sink": {
+        "file": "code/autocomplete/rtxcomplete.py",
+        "line": 88,
+        "code": "cursor.execute(f\"SELECT term FROM cached_fragment_terms WHERE fragment_id = {fragment_id} AND term LIKE \\\"%%{word}%%\\\"\")"
+      },
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "path": [
+        "server.py:102 word = self.get_argument('word')  [真实攻击者输入]",
+        "server.py:104 rtxcomplete.get_nodes_like(word, limit)",
+        "rtxcomplete.py:29 word 形参",
+        "rtxcomplete.py:88 f-string SQL 文本 -> cursor.execute"
+      ],
+      "controlled_sql_part": "term LIKE \"%%{word}%%\" 中的 word（双引号字面量，值位置，可闭合引号）。fragment_id 是数据库 rowid（整型，且经 :79 fragment_id = rows[0][0] 来自 DB，非用户直接可控，插在数值位置，非本告警的污点来源）",
+      "binding_or_barrier_evidence": "无针对 word 的净化；此查询为 f-string 拼接而非绑定参数",
+      "preconditions": [
+        "GET /nodeslike 可达（无鉴权）",
+        "n_values < requested_limit",
+        "found_fragment 为真（cached_fragments 命中 word 的某前缀）——可由攻击者分两步达成：先发一次普通 word 请求使 :106 INSERT 缓存该词，再发含 \" 的同前缀词触发本分支"
+      ],
+      "reasoning": "word 直接插值进 LIKE 字面量，可控且无屏障；sink 为真实 sqlite3 execute。cf2 含显式 server.py:102→104 调用链。fragment_id 虽非污点但 word 是，注入可行性成立。"
+    }
+  ],
+  "triage_summary": {
+    "likely_tp": 4,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "all_tp_in_function": "code/autocomplete/rtxcomplete.py::get_nodes_like",
+    "overall_conclusion": "4 条正式 Pass 5 告警全部判定为 likely_tp（高置信）。真实链路：GET /nodeslike（无鉴权）→ server.py:102 self.get_argument('word') → server.py:104 get_nodes_like(word, limit) → rtxcomplete.py:49/76/88/112 的 f-string / % 格式化 SQL → sqlite3 cursor.execute。word 通道无任何净化；唯一屏障 int() 只保护 limit 通道；参数化 ? 绑定只出现在未被标记的 :106/:127。注：iris_report.md 将 4 条列为 candidate（无 TP 启发式命中），本次独立复核将其全部提升为 likely_tp。"
+  },
+  "real_vulnerability_hit_analysis": {
+    "commit": "https://github.com/rtxteam/rtx/commit/fa2797e656e3dba18f990a2db1f0f029d41f1921",
+    "cwe": "CWE-89",
+    "vulnerable_function": "get_nodes_like (code/autocomplete/rtxcomplete.py:29)",
+    "fixed_by": "在函数开头新增 word = word.replace('\"','')（移除双引号以阻断双引号字面量闭合），并给 :106 的 INSERT 加 try/except",
+    "is_hit": true,
+    "hit_evidence": [
+      "被分析快照（rtx_vuln 源码）与该 commit 的 code_before 完全一致：get_nodes_like 中不存在 word.replace('\"','')，:106 无 try/except——即数据库对应漏洞引入状态",
+      "Pass 5 正式 SARIF 的全部 4 条告警都落在 get_nodes_like 函数内，且 sink 行号 49/76/88/112 与该修复 commit 所覆盖的四个未转义插值点逐行对应（修复通过对 word 一次性去双引号同时保护这四处）",
+      "Source 判定与真实漏洞入口一致：修复 commit 的描述明确指出 /rtxcomplete/nodeslike 端点的 word 查询参数为注入点，对应 server.py:102 的 get_argument('word')（SARIF 真实 codeFlow 的根节点）",
+      "修复手法（仅移除双引号）与告警的注入机理（双引号字面量闭合）完全吻合，进一步确认这 4 条告警即该真实漏洞"
+    ],
+    "coverage_gaps": [
+      "本次仅对 label 体系内已建模的链路生效：predictor.py:65/:328-372 与 fisher_exact_test.py:579 的 tp sink 因缺少入站 summary 边未被点亮（query_generation_notes.md §5.1 已记录的预期欠报）；COHD 候选 sink 亦未命中。这些属于同项目其他潜在注入通道，不影响本真实漏洞的命中结论"
+    ],
+    "verdict": "PyVul 真实漏洞（commit fa2797e, CWE-89, get_nodes_like SQL 注入）被 Pass 5 正式结果完整命中：4/4 个注入点全部报出，无漏报（就本函数而言），无误报（4 条告警全部位于该漏洞函数内）。"
+  },
+  "caveats": [
+    "Edge A（tornadoWordHandoff）把 limit/callback 两个 get_argument 结果也连到 word 形参，导致部分 codeFlow 变体（根在 server.py:101/103）是过近似假路径：callback 在真实代码中只进入 JSONP 响应拼接，从不进入 SQL；limit 走 requested_limit 通道并被 :34 的 int() 屏障截断。由于每个告警都同时包含根在 102 的真实流，该过近似不改变 TP 判定，但建议后续把 Edge A 收紧为 word→word、limit→requested_limit 的逐参对应。",
+    "labels.json 将 pass5-src-253(limit)/pass5-src-255(callback) 也标为 tp source；从真实可达性看这两个 source 对 SQL 注入本身没有独立贡献（如上）。source 标签偏宽，但未产生额外告警。",
+    "iris_report.md 的启发式分层（0 TP / 4 candidate / 0 FP）偏保守；本次逐条 codeFlow 人工复核后 4 条均为 likely_tp。"
+  ],
+  "constraints_compliance": {
+    "sarif_modified": false,
+    "labels_modified": false,
+    "codeql_query_modified": false,
+    "pyvul_groundtruth_read": "本轮仅读取用户提供的 commit diff（code_before/code_after）以完成真实漏洞命中性分析；未读取 PyVul 真值标签文件、CVE 描述全文或修复提交之外的任何外部材料"
+  }
+}

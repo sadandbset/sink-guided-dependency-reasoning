@@ -1,0 +1,142 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (agent-agnostic IRIS pipeline)",
+    "phase": "Phase 1, Step 1-2 (explore/detect + candidate extraction query generation)",
+    "date": "2026-10-21",
+    "target_pass": 5,
+    "pass_focus": "SQL Injection",
+    "cwes": ["CWE-089"],
+    "pass_query_name": "Pass5_SQLInjection.ql",
+    "source_root": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/rtx_vuln",
+    "database": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/rtx_vuln/rtx-db",
+    "workspace": "C:/Users/lzh/Desktop/github/PyVul-main/iris_manual/SQL_Injection/rtx/iris"
+  },
+  "toolchain": {
+    "codeql_cli": "2.25.1 (local, E:/codeql)",
+    "python_pack": "codeql/python-all 7.1.2 (resolved from '*' in iris/qlpack.yml; 7.1.1 also cached locally)",
+    "db_metadata": {
+      "primaryLanguage": "python",
+      "baselineLinesOfCode": 67515,
+      "source_sha": "12b9fa79bbe71299dfe3e9211239b381153014df",
+      "cliVersion_at_creation": "2.25.1"
+    },
+    "notes": "ApiGraphs in this pack version uses API::Node with getMember()/getACall()/getReturn(); API::CallNode extends DataFlow::CallCfgNode. AstNode.getFile() does not exist; Location API (getLocation().getFile()/getStartLine()) is used instead."
+  },
+  "language": {
+    "language": "python",
+    "evidence": [
+      "rtx-db/codeql-database.yml primaryLanguage: python",
+      "code/ tree is all-Python (ARAX, kg2, kg2c, reasoningtool, UI, autocomplete, NLPCode)",
+      "only build manifest found: code/kg2c/requirements.txt (no pyproject/setup.py at root)"
+    ]
+  },
+  "project_profile": {
+    "identity": "RTX/ARAX: biomedical TRAPI reasoner over knowledge graphs (RTX-KG2/KG2c, COHD, NodeSynonymizer, autocomplete service)",
+    "subsystems": [
+      "code/ARAX: main reasoner (ARAXQuery DSL parser, Expand/Overlay/filter/resultify pipeline, NodeSynonymizer, ResponseCache, query tracker)",
+      "code/UI/OpenAPI/python-flask-server: connexion/Flask OpenAPI front-end for ARAX (query, asyncquery, translate, entity, response, pubmed_mesh_ngd, status, meta_knowledge_graph controllers) + a separate KG2 variant",
+      "code/UI/Feedback: RTXFeedback (SQLAlchemy ORM over MySQL, used by feedback endpoints)",
+      "code/autocomplete: tornado web autocomplete service (server.py) over sqlite3 (rtxcomplete.py, create_load_db.py)",
+      "code/kg2, code/kg2c, code/reasoningtool, code/NLPCode: KG build/ETL and legacy reasoning code (neo4j Cypher, sqlite3 build scripts)"
+    ]
+  },
+  "frameworks": [
+    {
+      "name": "connexion/Flask (OpenAPI server)",
+      "confidence": 0.85,
+      "evidence": {
+        "imports": [
+          "import connexion, flask, flask_cors (openapi_server/__main__.py:3)",
+          "from flask import Flask,redirect (UI/Feedback/RTXFeedback.py:17, ARAX/ResponseCache/response_cache.py:20)",
+          "from flask import json (controller tests)"
+        ],
+        "bootstrap": "connexion.App(__name__, specification_dir='./openapi/') + add_api('openapi.yaml') + app.run (openapi_server/__main__.py:34-51)",
+        "routing": "operation handlers resolved from openapi.yaml: query(), asyncquery(), translate(), get_entity()/post_entity(), pubmed_mesh_ngd(), get_response() in openapi_server/controllers/"
+      }
+    },
+    {
+      "name": "Tornado (autocomplete service)",
+      "confidence": 1.0,
+      "evidence": {
+        "imports": ["import tornado.ioloop", "import tornado.web (autocomplete/server.py:1-2)"],
+        "routing": "tornado.web.Application handlers: /auto, /fuzzy, /autofuzzy, /nodeslike, /define (server.py:118-128)",
+        "bootstrap": "tornado.httpserver.HTTPServer(...).listen(4999); tornado.ioloop.IOLoop.current().start() (server.py:150-165)"
+      }
+    },
+    {
+      "name": "Django",
+      "confidence": 0.0,
+      "evidence": "no django imports, no urlpatterns, no models.py/manager usage anywhere in code/ - not used"
+    }
+  ],
+  "reference_files_loaded": [
+    "references/patterns.md",
+    "references/python.md",
+    "assets/extraction/python_sources.ql.tmpl",
+    "assets/extraction/python_sinks.ql.tmpl",
+    "assets/extraction/extract_sinks.ql.tmpl"
+  ],
+  "data_access_layers": {
+    "sqlite3 (DB-API 2.0, primary CWE-89 surface)": {
+      "usage": "cursor.execute / cursor.executemany / connection.execute with hand-built SQL strings",
+      "hotspots": [
+        "code/autocomplete/rtxcomplete.py:49,76,88,112 (f-string and %-format SQL with HTTP-derived word/limit values)",
+        "code/ARAX/ARAXQuery/ARAX_decorator.py:69-72,151-154 (f-string IN-list SQL from KG node ids, quote-escaped)",
+        "code/ARAX/ARAXQuery/Overlay/predictor/predictor.py:65,328,348,350,370,372 (f-string SQL with curie/disease/drug values)",
+        "code/ARAX/ARAXQuery/Overlay/fisher_exact_test.py:468,579 (f-string IN-list SQL from normalized curies)",
+        "code/ARAX/ARAXQuery/Overlay/compute_ngd.py:347 (f-string IN-list SQL)",
+        "code/ARAX/NodeSynonymizer/node_synonymizer.py:1618,1987,2048 (f-string batch IN-list SQL, quote-escaped)",
+        "code/ARAX/KnowledgeSources/COHD_local/scripts/COHDIndex.py (very many f-string SQL sites, concept_id/domain/dataset_id interpolated)",
+        "build/ETL scripts: kg2c/create_kg2c_files.py, kg2c/record_kg2c_meta_info.py, autocomplete/create_load_db.py, ARAX/ARAXQuery/Overlay/ngd/build_ngd_database.py, GraphSage py_scripts"
+      ]
+    },
+    "SQLAlchemy (over MySQL via mysql+pymysql://)": {
+      "usage": "ORM declarative models + session.query; one raw-SQL fragment via sqlalchemy.text() with :named bind params (ARAX_query_tracker.py:283-291)",
+      "files": ["ARAX/ARAXQuery/ARAX_query_tracker.py", "ARAX/ResponseCache/response_cache.py", "UI/Feedback/RTXFeedback.py"]
+    },
+    "pymysql / MySQLdb": "no direct execute calls observed; pymysql only appears inside sqlalchemy connection strings (create_engine('mysql+pymysql://...'))",
+    "psycopg / psycopg2": "not observed anywhere in code/",
+    "neo4j (Cypher, NOT SQL)": "used extensively (kg2_querier, Expand/DTD_querier, Overlay, reasoningtool legacy); Cypher queries are out of scope for CWE-089 SQL sink modeling in this pass",
+    "executescript": "no active sqlite3 executescript calls observed (only commented-out code)"
+  },
+  "external_input_boundaries": {
+    "http_json": [
+      "query_controller.py:88 query = connexion.request.get_json() -> ARAX_query.ARAXQuery().query_return_message(query_dict) (POST /api/rtx/v1/query)",
+      "asyncquery_controller.py:24 (POST /api/rtx/v1/asyncquery)",
+      "translate_controller.py:21 (POST /translate, NL question)",
+      "headers: query_controller.py:92 / asyncquery_controller.py:28 query['remote_address'] = connexion.request.headers['x-forwarded-for']",
+      "same pattern in KG2 variant server (UI/OpenAPI/python-flask-server/KG2/openapi_server/controllers/)"
+    ],
+    "http_query_params": [
+      "entity_controller.py get_entity(q) -> NodeSynonymizer.get_normalizer_results(q)",
+      "pubmed_mesh_ngd_controller.py pubmed_mesh_ngd(term1, term2)",
+      "autocomplete/server.py: get_argument('word'/'limit'/'callback') in autoSearch/fuzzySearch/autofuzzySearch/nodesLikeSearch handlers"
+    ],
+    "http_path_params": "tornado handler get(self, arg, word=None) path captures (autocomplete/server.py)",
+    "cli_env": "sys.argv / argparse in offline reasoningtool & NLPCode scripts (Q1Solution.py, PatchKG.py, TISP, ...); config read from local JSON file (RTXConfiguration.py:33-36) - judged non-attacker-controlled, not modeled as source",
+    "tasks_messages": "no message-queue/task-queue input boundaries observed"
+  },
+  "propagation_notes": {
+    "arax_pipeline": "user query_dict -> ARAX_query.query_return_message -> ActionsParser.parse(operations.actions) -> add_qnode(ids=...)/expand/overlay actions -> node curies flow into NodeSynonymizer.get_canonical_curies, Overlay predictor/COHD/fisher/compute_ngd, ARAXDecorator - these are intermediate propagation nodes, not sources",
+    "quote_escaping_observed": "several SQL-IN-list builders apply re.sub(\"'\",\"''\")-style escaping (node_synonymizer.py, ARAX_decorator.py:67,149, fisher_exact_test.py) or drop curies containing quotes (compute_ngd.py:346) - sanitizer evidence for later labeling, incomplete for arbitrary SQLite injection",
+    "parameterized_usage_observed": "node_synonymizer.py:1747-2227 (SELECT ... WHERE x = ?, (value,)), rtxcomplete.py:106,127 (INSERT ... VALUES(?,?)), ARAX_query_tracker.py text() with .params() - bound-parameter style, candidate sanitizers"
+  },
+  "dynamic_dispatch_gaps": [
+    "autocomplete/server.py calls rtxcomplete.prefix()/fuzzy()/autofuzzy() but these functions are NOT defined in the current rtxcomplete.py snapshot (only load() and get_nodes_like() exist) - those handlers would AttributeError at runtime; only nodesLikeSearch -> get_nodes_like(word, limit) is a live SQL path in this snapshot",
+    "self.connection.execute / self.cursor.execute / self.graph_cur.execute receiver types are resolved via API graphs only when local flow tracks them; otherwise reported as ast-name-match with unresolved module hint",
+    "COHDIndex methods receive concept ids through a curie->OMOP mapping dict (overlay_clinical_info.py:136-143) - interprocedural value flow is a labeling/summary concern"
+  ],
+  "exclusions": {
+    "rtx-db": "database directory lives inside source root; excluded from all exploration, path filters and query output filters (%rtx-db%)",
+    "tests": "paths matching test/ dirs or test_*.py files excluded (openapi_server test suites)",
+    "not_modeled_as_sources": "RTXConfiguration JSON config file reads (local admin-controlled), open()/pd.read_csv file ingestion in offline build scripts",
+    "not_modeled_as_sinks": "neo4j session.run()/Cypher (not SQL), HTTP requests to external KPs, logging"
+  },
+  "extraction_strategy": {
+    "queries": ["extraction/sources.ql", "extraction/sinks.ql"],
+    "execution_mode": "codeql query run + codeql bqrs decode --format=csv (multi-column candidate tables; no @kind problem/table metadata, no database analyze/SARIF)",
+    "columns": ["node", "role", "callable", "flow_kind", "receiver", "moduleHint", "arg_index", "file", "line", "snippet"],
+    "role_values": ["source (external input boundary)", "intermediate (propagation node / SQL fragment construction)", "sink (SQL text execution)"],
+    "sink_modeling_target": "SQL query text (or SQL-syntax-affecting fragment) passed as argument 0 of DB-API execute-family calls (cursor.execute, cursor.executemany, connection.execute, executescript) plus SQLAlchemy text()/engine.execute; string concatenation and SQL object construction are recorded via the arg-0 snippet and the sqlalchemy text() intermediate family, and must be traced to a real execute call during labeling"
+  }
+}
