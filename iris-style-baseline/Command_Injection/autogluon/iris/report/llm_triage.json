@@ -1,0 +1,75 @@
+{
+  "version": "2.0.0",
+  "metadata": {
+    "run_id": "autogluon-pass2-phase1-20261012",
+    "triage_type": "independent_llm_path_review",
+    "triage_round": 2,
+    "triaged_at": "2026-10-19",
+    "model": "glm-5.3",
+    "project": "autogluon",
+    "pass": 2,
+    "cwe": "CWE-78",
+    "sarif_analyzed": "results/pass2.sarif",
+    "sarif_execution_successful": true,
+    "formal_alerts": 1,
+    "rule": "py/augur/autogluon/pass2-command-injection",
+    "source_tree": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/autogluon_vuln",
+    "round1_archive": "report/llm_triage_v1.json",
+    "notes": [
+      "CodeQL 分析成功（executionSuccessful=true），本轮 SARIF 含 1 条正式 CWE-78 告警，不只有解析诊断。",
+      "版本对齐说明（本实验最重要的核查点）：分析对象是 CodeQL 数据库 autogluon-db，创建于 sha 1a62b445（漏洞版父提交）——DB 内 predictor.py:1124 为 yaml.load(f, Loader=yaml.Loader)（本分诊所有源码证据均取自 DB 的 src.zip）。磁盘工作树 autogluon_vuln 的 git HEAD 为修复提交 23a37e74，该位置已是 yaml.safe_load——磁盘树不可用于本告警的源码核验，行号均为 DB 版本行号。",
+      "管线来源说明（如实记录）：v1 正式查询结果为 0 条（sink 模型仅 subprocess.check_output(shell=True)）；本告警来自其后的 post-triage remediation 增补标签（source p2-supp-004：predictor.py:1123 open()；sink p2-sink-013：predictor.py:1124 unsafe yaml.load），过程记录于 query_generation_notes.md v2 章节与 labels.json metadata notes。本轮分诊仅依据代码证据对该告警做独立判定，未使用任何漏洞真值。",
+      "报告状态：report/iris_report.md 已重新生成（2026-10-19T02:42）并与当前 SARIF 一致（Raw=1，Label Summary 8 sources / 3 sinks）；该告警因 filter_and_report 的 pass-2 TP 启发式只识别 shell 文本模式而落入 'Candidate'（无 FP/TP 启发式匹配）。iris_report_v2.md 为带 Analyst Addendum 的同内容版本。",
+      "诊断结果排除：results/pass2_diagnostic.sarif（sync_remote.py:50/52 shell 路径，2 条）为诊断查询产物，不计入正式结果，亦不作为 TP 依据。",
+      "运行通知：invocation 含 1 条非阻塞文件解析通知（examples/automm/kaggle_pawpularity/kaggle_pawpularity_submit.py 语法错误，DB 既有问题），不影响本告警。",
+      "本轮未修改任何 SARIF、标签或查询文件；round-1 分诊已归档为 report/llm_triage_v1.json，本文件为本轮（round 2）输出。"
+    ]
+  },
+  "summary": {
+    "total": 1,
+    "likely_tp": 1,
+    "uncertain": 0,
+    "likely_fp": 0,
+    "by_location": {
+      "multimodal/src/autogluon/multimodal/predictor.py:1124": 1
+    }
+  },
+  "findings": [
+    {
+      "id": "ALERT-01",
+      "rule": "py/augur/autogluon/pass2-command-injection",
+      "location": "multimodal/src/autogluon/multimodal/predictor.py:1124:43-44（DB 版本行号）",
+      "fingerprint": "191261928bc5f45d:1",
+      "function": "_top_k_average（MultiModalPredictor 类方法）",
+      "sink_code": "best_k_models = yaml.load(f, Loader=yaml.Loader)",
+      "classification": "likely_tp",
+      "confidence": 0.85,
+      "sources_in_flows": [
+        "predictor.py:1123 open(best_k_models_yaml_path, \"r\")（文件内容输入边界，标签 p2-supp-004；路径 = os.path.join(save_path, BEST_K_MODELS_FILE)，1121 行）"
+      ],
+      "path_summary": "predictor.py:1123 with open(best_k_models_yaml_path, \"r\") as f（open() 调用 18-52 列）→ f（with 绑定，56 列）→ predictor.py:1124 yaml.load(f, Loader=yaml.Loader) 流实参（43-44 列）。写入端为同文件 593 行 yaml.dump(checkpoints_paths_and_scores, ...)（fit 流程中 ray tune 分析写出 best_k_models.yaml）；_top_k_average 有 3 个 in-repo 调用点（596 predictor._top_k_average、846/1098 self._top_k_average），均在训练/蒸馏流程内可达。",
+      "q1_source": "不是网络消息或请求参数——是文件内容输入边界：save_path 目录下的 best_k_models.yaml 模型工件。攻击者可控性取决于工件目录的来源：本机训练自写（可信）vs 加载不受信来源的模型/checkpoint 工件目录（共享、下载的模型，ML 工件加载的标准威胁模型——此时攻击者完全控制 YAML 流内容）。源为 candidate 级：输入边界真实，但非远程请求边界，攻击者可控性依赖'不受信工件目录'假设。",
+      "q2_propagation": "传播证据真实且最短：同函数 2 行（with-open 绑定直传，无任何中间变换/净化）；codeFlow 3 步全部对应 DB 版本真实代码行。训练内往返（yaml.dump 593 写出 → 1124 读回）与 3 个 in-repo 调用点（596/846/1098）证明路径真实可达，非跨函数拼凑。",
+      "q3_sink": "不是系统命令解释器。是 PyYAML（import yaml，predictor.py:13）的不安全反序列化：Loader=yaml.Loader 为 unsafe full Loader，解析 !!python/object、!!python/object/apply 等标签时构造任意 Python 对象（构造器/new 调用副作用）→ autogluon 进程内代码执行。按 CWE-78 字面语义（OS 命令注入）它不是命令 sink；按'代码执行'危害它是真实执行边界（CWE-502 机制，本数据集将其记为 CWE-78 冲击——分类学错位，分诊按实际危害判定）。",
+      "q4_command_influenced": "被反序列化的流（f 的全部内容）完全由 source 决定：攻击者控制 best_k_models.yaml 文件内容即控制被构造的对象图与执行路径；无需任何额外注入点。",
+      "q5_protections": "无防护：调用点周边无 allowlist/过滤/schema 校验/类型约束（1122 行仅 os.path.exists 存在性检查）；下游用法为纯数据（keys=checkpoint 路径字符串、values=分数数值，经 sorted/average_checkpoints 消费），yaml.safe_load 可完全满足——unsafe Loader 非功能必需，即不存在'必须用 full Loader'的正常理由。",
+      "q6_normal_feature": "读取 best_k_models.yaml 是正常功能（模型平均所需的 checkpoint 列表），但使用 unsafe full Loader 不是：纯数据场景 SafeLoader 功能等价，本告警锚定的 Loader 选择是缺陷而非功能。",
+      "q7_reachability": "路径真实可达：in-repo 调用链完整（fit → _top_k_average → open + yaml.load）。sink 谓词精确锚定该调用点（文件+行号+Loader keyword 形状+arg 0），source 谓词锚定 1123 open()——无过度近似的虚构环节；唯一近似是 source 信任域假设（工件目录不受信），这属于威胁模型判断而非路径虚构。",
+      "rationale": "likely_tp 0.85：unsafe-by-construction 反序列化 sink（PyYAML full Loader 任意对象构造→代码执行）+ 无任何防护 + 纯数据用法证明 SafeLoader 即可（锚定缺陷而非功能）+ 路径真实可达（3 步 codeFlow 全为真实代码，in-repo 调用链完整）。置信度未取更高仅因 source 为文件边界而非网络/请求边界——攻击者可控性依赖'不受信模型工件目录'威胁模型（ML 框架加载共享模型的现实攻击面）。判定仅基于代码证据，未使用漏洞真值。"
+    }
+  ],
+  "cross_cutting_conclusion": {
+    "command_execution_sink_exists": false,
+    "evidence": "全库（DB 版本）不存在从正式 source 可达的 OS 命令执行点：shell=True 仅 sync_remote.py:50/52 两处（v1 sink 模型），未被本告警覆盖且其可达路径仅在诊断查询中（唯一 in-repo 调用方传固定字面量 'dask-scheduler'）。",
+    "deserialization_sink_exists": true,
+    "evidence": "predictor.py:1124 yaml.load(f, Loader=yaml.Loader)——DB 版本全库 65k 行唯一一处 unsafe yaml.load（src.zip 全量扫描验证），即本告警锚定点，判定为该项目真实的代码执行边界。",
+    "report_layer_note": "iris_report.md（已重生成，与 SARIF 一致）将本告警列为 Candidate——filter_and_report 的 pass-2 TP 启发式只识别 shell 文本模式，不含 unsafe-loader 反序列化族；本分诊判定 likely_tp 0.85 为最终人工结论（工具启发式改进建议已记录于 iris_report_v2.md Analyst Addendum）。",
+    "overall_verdict": "1 条正式告警：1 likely_tp（predictor.py:1124 unsafe YAML 反序列化），0 uncertain，0 likely_fp。本轮正式结果覆盖了该项目的实际代码执行边界。"
+  },
+  "constraints_observed": [
+    "未修改任何原始 SARIF、标签或查询文件；round-1 分诊已归档为 report/llm_triage_v1.json，本文件为本轮（round 2）输出",
+    "本轮未读取 PyVul 漏洞真值、修复提交或 CVE 公告；ALERT-01 的判定完全基于代码证据（DB 版本源码 + SARIF codeFlow）",
+    "诊断查询结果（pass2_diagnostic.sarif）未计入正式结果，未作为 TP 依据",
+    "源码核验使用 CodeQL 数据库的 src.zip（sha 1a62b445 版本）；未使用磁盘工作树（其 HEAD 为修复提交，该位置已为 safe_load）"
+  ]
+}
