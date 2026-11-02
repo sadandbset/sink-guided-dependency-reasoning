@@ -1,0 +1,280 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-16",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\tensorflow\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (exploration + candidate extraction query generation only; no CodeQL run, no LLM labeling) against the tensorflow_vuln source tree. The CodeQL database tensorflow-db was created from the same tree (sourceLocationPrefix matches, creation sha 349172cf), so the file/line evidence below is verified against the database snapshot scope: src.zip holds 2945 files covering the tensorflow/ tree plus 7 third_party files; the tensorflow-safe-db copy and the repository-root scripts (configure.py, _show_real.py, _triage.py) are NOT in the database."
+  },
+  "target": {
+    "project": "tensorflow",
+    "projectDescription": "TensorFlow is a large numerical-computation library: a C++ runtime (grappler, distributed_runtime, kernels, TFLite flatbuffers) with an extensive Python API layer (tensorflow/python, tensorflow/keras, tensorflow/lite/python), Python build/CI tooling (tensorflow/tools, tensorflow/compiler), a Python gRPC debug server (tfdbg, tensorflow/python/debug), and argparse/absl CLI entry points. The Python database covers only the Python files of the tree; the C++ servers (worker/grpc servers, tf.data service) are out of scope for this pass.",
+    "pass": 2,
+    "cwes": ["CWE-78"],
+    "focus": "Command/Argument Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\tensorflow_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (tensorflow-db/codeql-database.yml)",
+      "2917 .py files under tensorflow_vuln/tensorflow{,/tools}; src.zip of the database holds 2945 files covering the tensorflow/ tree",
+      "bazel build manifests (BUILD, WORKSPACE) at the repository root; python packaging via tensorflow/tools/pip_package/setup.py"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\tensorflow-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\tensorflow_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "349172cf0ac29ba1346d244a40dc4761b4600f2e",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-27T01:16:18.558091100Z"
+    },
+    "baselineLinesOfCode": 866981,
+    "finalised": true,
+    "scopeNote": "src.zip contains 2945 files: the tensorflow/ tree (python files plus generated proto grpc stubs such as tensorflow/python/debug/lib/debug_service_pb2_grpc.py) and 7 third_party files. tensorflow-safe-db (full pristine copy shipped in the source tree) and repository-root .py scripts are not part of the database, so no duplicate rows are expected from them."
+  },
+  "toolchain": {
+    "qlpack": "iris/tensorflow-cwe78 (dependencies: codeql/python-all: \"*\")",
+    "packResolutionExpected": "codeql/python-all resolved from the local pack cache by qlpack.yml (codeql/python-all 7.1.1 and 7.1.2 present in C:\\Users\\lzh\\.codeql\\packages)",
+    "codeqlCli": "2.25.1 (E:\\codeql)",
+    "apiVerification": "query constructs verified against semmle/python of the local python-all pack: Call/Attribute/Name/List/Keyword/Parameter/Function/StringLiteral/Fstring/True/Mod classes and getLocation()/getStartLine()/getPosition()/getANamedArg()/getArg()/getValue()/getS() APIs all exist in Exprs.qll, Keywords.qll, Operations.qll, Function.qll"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] },
+        { "name": "django", "confidence": 0.0, "evidence": [] },
+        { "name": "flask", "confidence": 0.0, "evidence": [] }
+      ]
+    },
+    "selected": "none (library codebase: absl/argparse CLIs + grpc + tfdbg, no web framework)",
+    "notes": "No web framework detected. All framework scores are below the 0.50 threshold, so no framework reference is loaded. TensorFlow's Python attack surface is library-level: the tfdbg gRPC debug server (network receive boundary), argparse/absl/tf.app CLI entry points, environment-variable configuration (TF_CONFIG and TF_* variables), and file/model loading (SavedModel, TFLite flatbuffers, keras configs). Source/sink shapes below are derived from repository evidence per references/python.md and references/patterns.md (language reference path, since no framework reference matches).",
+    "customBoundaryEvidence": [
+      "tensorflow/python/debug/lib/grpc_debug_server.py:99 'class EventListenerBaseServicer(debug_service_pb2_grpc.EventListenerServicer)' - gRPC service implementation",
+      "tensorflow/python/debug/lib/grpc_debug_server.py:123 'def SendEvents(self, request_iterator, context)' - network stream receive entry point",
+      "tensorflow/python/debug/lib/grpc_debug_server.py:347 'self.server = grpc.server(futures.ThreadPoolExecutor(...))' + :351 'self.server.add_insecure_port(\"[::]:%d\")' - unauthenticated gRPC listener",
+      "tensorflow/python/debug/lib/readline_ui.py:40 'self._input = six.moves.input' + :78 'return self._input(self.CLI_PROMPT).strip()' - tfdbg CLI command input loop",
+      "tensorflow/python/debug/lib/grpc_wrapper.py:142 'response = six.moves.input(...)' - CLI prompt",
+      "tensorflow/python/platform/app.py:27 'return flags.FLAGS(_sys.argv if argv is None else argv, known_only=True)' - absl flag parsing over sys.argv",
+      "tensorflow/lite/python/tflite_convert.py:653 'tflite_flags, unparsed = parser.parse_known_args(args=sys.argv[1:])' - TFLite converter CLI",
+      "tensorflow/python/distribute/cluster_resolver/tfconfig_cluster_resolver.py:39 'return json.loads(os.environ.get(_TF_CONFIG_ENV, \"{}\"))' - TF_CONFIG environment cluster spec"
+    ]
+  },
+  "inputBoundaryInventory": {
+    "summary": "Attacker-relevant input boundaries in the Python layer: (1) the tfdbg gRPC debug server: an unauthenticated grpc.server listener whose SendEvents/SendTracebacks/SendSourceFiles methods receive Event protos from any client that can reach the port; the message bodies are JSON-decoded (plugin metadata, core metadata) and reassembled GraphDefs are ParseFromString-decoded, then handed to on_value_event/on_graph_def/on_core_metadata_event callbacks and, in grpc_debug_test_server, the grpc_path field flows into an os.path.join; (2) CLI entry points: argparse/absl parsers (339 non-test add_argument sites), sys.argv reads (tfdbg CLIs, tflite_convert, pip_package setup, multi_process_lib), raw input() prompts; (3) environment variables: ~74-82 non-test os.environ/os.getenv sites, notably TF_CONFIG JSON cluster specs and CUDA_VISIBLE_DEVICES; (4) files/models: 148 non-test open() calls (SavedModel/TFLite/keras configs, keras config json.load, tfdbg CLI config), gfile.Open reads, proto ParseFromString (72 non-test sites); (5) outbound HTTP fetches whose responses are trusted: tf.tpu client and keras data_utils urlopen. Command-execution sinks concentrate in tensorflow/lite/python/convert.py (Popen with shell=True, the deprecated toco binary path), tensorflow/lite/schema/upgrade_schema.py (flatc), slurm_cluster_resolver (nvidia-smi), and tensorflow/tools build/CI/packaging scripts; several more os.system sites live in tflite testing harnesses. Normal build-tool command execution is not automatically a vulnerability.",
+    "sourceFamilies": [
+      {
+        "family": "grpc_debug_receive",
+        "evidence": [
+          "tensorflow/python/debug/lib/grpc_debug_server.py:123 'def SendEvents(self, request_iterator, context)' - gRPC stream receive; :148 'for event in request_iterator' iterates network messages",
+          "tensorflow/python/debug/lib/grpc_debug_server.py:52/68/87 'def on_core_metadata_event(self, event)' / 'on_graph_def(self, graph_def, device_name, wall_time)' / 'on_value_event(self, event)' - receive-callback boundary handing network data to business handlers",
+          "tensorflow/python/debug/lib/grpc_debug_server.py:461 'def SendTracebacks(self, request, context)' and :478 'def SendSourceFiles(self, request, context)' - additional network receive methods",
+          "tensorflow/python/debug/lib/grpc_debug_server.py:245 'debugger_plugin_metadata = json.loads(compat.as_text(value.metadata.plugin_data.content))' - JSON decode of a network message field",
+          "tensorflow/python/debug/lib/grpc_debug_server.py:311 'graph_def.ParseFromString(b\"\".join(...))' - proto decode of reassembled network chunks",
+          "tensorflow/python/debug/lib/grpc_debug_test_server.py:87 'def on_core_metadata_event(self, event)' with :90 'core_metadata = json.loads(event.log_message.message)' and :93-98 'grpc_path = core_metadata[\"grpc_path\"] ... os.path.join(self._dump_dir, grpc_path)' - network field flows into a filesystem path; :131 'def on_value_event(self, event)'; :200 'json.loads(compat.as_text(summary_metadata.plugin_data.content))'",
+          "tensorflow/python/debug/lib/debug_service_pb2_grpc.py - generated EventListener servicer/stub code present in the database scope"
+        ]
+      },
+      {
+        "family": "json_decode",
+        "evidence": [
+          "tensorflow/python/debug/lib/grpc_debug_server.py:245, grpc_debug_test_server.py:90/:200, debug_data.py:237 'json.loads(event.log_message.message)' - debug-event JSON decode",
+          "tensorflow/python/distribute/cluster_resolver/tfconfig_cluster_resolver.py:39, distribute/distribute_coordinator.py:586/:748, python/keras/distribute/distribute_coordinator_utils.py:563, python/keras/benchmarks/distribution_util.py:145, python/distribute/cluster_resolver/sagemaker_cluster_resolver.py:51 - json.loads of TF_CONFIG / SageMaker environment JSON",
+          "tensorflow/python/keras/saving/saved_model/json_utils.py:62 'json.loads(json_string, object_hook=_decode_helper)' - SavedModel JSON deserialization",
+          "tensorflow/python/keras/layers/preprocessing/index_lookup.py:887 'accumulator_dict = json.loads(compat.as_text(encoded_accumulator))'",
+          "tensorflow/python/keras/backend.py:6395 '_config = json.load(fh)' - keras config file",
+          "tensorflow/python/debug/cli/cli_config.py:148 'config_dict = json.load(config_file)' - tfdbg CLI config",
+          "tensorflow/lite/schema/upgrade_schema.py:145 'return json.load(open(json_file))', tensorflow/lite/tools/visualize.py:449 'data = json.load(open(tflite_input))' - TFLite model JSON",
+          "tensorflow/python/tpu/client/client.py:316 'version_details = json.loads(resp.read())' - JSON decode of an HTTP response body",
+          "tensorflow/lite/python/op_hint.py:763 '_json.loads(...)' - aliased json module (import json as _json at :70)"
+        ]
+      },
+      {
+        "family": "env_reads",
+        "evidence": [
+          "tensorflow/python/distribute/cluster_resolver/slurm_cluster_resolver.py:119 'return os.environ[name]' (SLURM_* variables) and :143 \"os.environ['CUDA_VISIBLE_DEVICES']\"",
+          "tensorflow/python/distribute/cluster_resolver/tfconfig_cluster_resolver.py:39 'os.environ.get(_TF_CONFIG_ENV, \"{}\")' - TF_CONFIG cluster spec (JSON)",
+          "tensorflow/python/distribute/cluster_resolver/sagemaker_cluster_resolver.py:49-53 'os.environ[_SM_HOSTS]' / 'os.environ[_SM_CURRENT_HOST]' - cluster topology from environment",
+          "tensorflow/python/autograph/impl/api.py:69 'os.environ.get(\"AUTOGRAPH_STRICT_CONVERSION\", \"0\")'",
+          "tensorflow/python/debug/cli/curses_ui.py:396 'os.getenv(\"COLORTERM\")'",
+          "tensorflow/python/compat/compat.py:50 'os.getenv(_FORWARD_COMPATIBILITY_DELTA_DAYS_VAR_NAME)'",
+          "tensorflow/python/distribute/coordinator/cluster_coordinator.py:704/706/808 'os.environ.get(\"TF_COORDINATOR_*\")'",
+          "~74 non-test os.environ / os.environ.get / os.getenv sites in total under tensorflow/{python,lite,tools}"
+        ]
+      },
+      {
+        "family": "cli_input",
+        "evidence": [
+          "339 non-test 'parser.add_argument(...)' sites (argparse/absl), e.g. tensorflow/lite/python/tflite_convert.py:383-608 _get_tf1_flags/_get_tf2_flags, tensorflow/lite/toco/python/toco_from_protos.py:61-85, tensorflow/python/debug/lib/grpc_tensorflow_server.py:129-152",
+          "56 non-test '.parse_args(...)/.parse_known_args(...)' sites, e.g. tensorflow/lite/python/tflite_convert.py:653/:660, tensorflow/lite/toco/python/toco_from_protos.py:87",
+          "sys.argv reads: tensorflow/python/client/notebook.py:43-125, tensorflow/python/tools/pip_package/... setup.py:56-60 (sys.argv.index('--project_name')), tensorflow/python/distribute/multi_process_lib.py:136-145 ('-c' in sys.argv), tensorflow/lite/tools/visualize.py:543 'main(sys.argv)', tensorflow/tools/ci_build/builds/check_system_libs.py:25 'tf_source_path = sys.argv[1]'",
+          "tensorflow/python/debug/cli/readline_ui.py:40/:78 - tfdbg CLI command loop (six.moves.input stored on self._input)",
+          "tensorflow/python/debug/wrappers/grpc_wrapper.py:142 'six.moves.input(...)' - interactive CLI response",
+          "tensorflow/python/keras/utils/io_utils.py:51/:54 'input(\"[WARNING] %s already exists - overwrite?\")' - interactive confirmation prompt"
+        ]
+      },
+      {
+        "family": "file_model_config_input",
+        "evidence": [
+          "148 non-test 'open(...)' call sites; 41 of them pass an explicit read mode",
+          "tensorflow/lite/toco/python/toco_from_protos.py:30-42 'open(FLAGS.model_proto_file, \"rb\")' - CLI-supplied proto/model/input files",
+          "tensorflow/python/debug/lib/source_remote.py:37 'with gfile.Open(file_path, \"r\") as f' - debugged source files",
+          "tensorflow/lite/tools/visualize.py:449 'json.load(open(tflite_input))' and :433 'open(tflite_input, \"rb\")' - TFLite model file",
+          "tensorflow/python/keras/backend.py:6395 keras config json.load(fh)",
+          "tensorflow/python/tpu/client/client.py - HTTP responses (see network_fetch)"
+        ]
+      },
+      {
+        "family": "proto_decode",
+        "evidence": [
+          "72 non-test 'ParseFromString(...)' sites - proto wire-format decode boundary",
+          "tensorflow/python/debug/lib/grpc_debug_server.py:311 'graph_def.ParseFromString(b\"\".join(graph_def_chunks[...]))' - decoding of network-received GraphDef chunks"
+        ]
+      },
+      {
+        "family": "network_fetch",
+        "evidence": [
+          "tensorflow/python/tpu/client/client.py:78/:315/:401 'resp = request.urlopen(req)' (from six.moves.urllib import request at :26) - TPU metadata/endpoint HTTP fetches, response decoded at :316",
+          "tensorflow/python/keras/utils/data_utils.py:82 'response = urlopen(url, data)' - keras dataset download",
+          "tensorflow/tools/tensorflow_builder/config_detector/data/cuda_compute_capability.py:63 'source = urllib.request.urlopen(url)' - build-tool data fetch"
+        ]
+      },
+      {
+        "family": "internal_transfer_to_handlers",
+        "evidence": [
+          "tensorflow/python/debug/lib/grpc_debug_server.py:157 'stream_handler.on_value_event(maybe_tensor_event)', :168 'stream_handler.on_graph_def(...)', :177 'stream_handler.on_core_metadata_event(event)' - dispatch of network-received data into business handlers",
+          "tensorflow/python/debug/lib/debug_data.py - Datum/event processing of debug data (json.loads at :237)"
+        ]
+      }
+    ],
+    "sinkFamilies": [
+      {
+        "family": "subprocess_exec",
+        "evidence": [
+          "tensorflow/lite/python/convert.py:400 '_subprocess.Popen(cmdline, shell=True, ...)' (import subprocess as _subprocess at :22) inside _run_toco_binary (:322) - RUNTIME TFLite conversion path; cmd list at :390-397 joins fixed binary name, temp-file names and a '--debug_proto_file={}'.format(...) flag; cmdline = \" \".join(cmd) at :398",
+          "tensorflow/python/distribute/cluster_resolver/slurm_cluster_resolver.py:147 'subprocess.check_output([\"nvidia-smi\", \"--list-gpus\"], encoding=\"utf-8\")' inside _get_num_nvidia_gpus (:138) - RUNTIME GPU discovery, fixed argv",
+          "tensorflow/lite/schema/upgrade_schema.py:130/:166 'subprocess.call([self._flatc_path, ...])' - flatc schema conversion (build tool)",
+          "tensorflow/tools/git/gen_git_source.py:163 'subprocess.check_output([...])' - build tooling",
+          "tensorflow/tools/tensorflow_builder/config_detector/config_detector.py:140-142 'subprocess.Popen(..., shell=True)' - build tooling",
+          "tensorflow/tools/docs/build_java_api_docs.py:62/:63/:68 and build_cc_api_headers.py:39/:40/:45/:47 'subprocess.Popen/check_call(...)' - doc build",
+          "tensorflow/tools/pip_package/pip_smoke_test.py:118/:130/:172 'subprocess.check_output(...)' and check_load_py_test.py:34/:44/:70 (shell=True at :34) - packaging",
+          "tensorflow/tools/ci_build/update_version.py:237, sizetrack_helper.py:189/:237, linux/mkl/set-build-env.py:246/:254 (shell=True at :246) - CI build",
+          "tensorflow/tools/test/run_and_gather_logs_lib.py:167 'subprocess.check_call(...)' - test infra (excluded by the test-path filter)"
+        ]
+      },
+      {
+        "family": "os_exec",
+        "evidence": [
+          "tensorflow/lite/testing/toco_convert.py:181 'os.system(cmd)', tensorflow/lite/toco/python/toco_from_protos_test.py:70, tensorflow/lite/python/tflite_convert_test.py:61, tensorflow/lite/experimental/mlir/testing/mlir_convert.py:179/:228/:263 - all inside testing/ dirs or *_test.py files (excluded rows); the os.system/os.popen/os.exec*/os.spawn* API set is kept in the query for exhaustiveness, and the AST family would also match any future os.system in production code",
+          "no os.popen / os.exec* / os.spawn* / subprocess.getoutput call site exists in non-test project source"
+        ]
+      },
+      {
+        "family": "shell_true_flag",
+        "evidence": [
+          "tensorflow/lite/python/convert.py:402 'shell=True' - runtime toco binary invocation with a string command",
+          "tensorflow/tools/tensorflow_builder/config_detector/config_detector.py:142, tensorflow/tools/ci_build/linux/mkl/set-build-env.py:246, tensorflow/tools/pip_package/check_load_py_test.py:34 (test-path excluded), tensorflow/lite/tools/flatbuffer_utils_test.py:181 (test file)"
+        ]
+      },
+      {
+        "family": "shell_arg_list",
+        "evidence": "no [\"bash\", \"-c\", cmd] / [\"cmd\", \"/c\", cmd] explicit shell wrapper list exists in non-test project source; the family is kept in the query because it is the standard CWE-78 shell-wrapper shape (command string at list position 2)"
+      },
+      {
+        "family": "command_string_format",
+        "evidence": [
+          "tensorflow/lite/python/convert.py:396 '\"--debug_proto_file={}\".format(debug_filename)' inside the exec-wrapper function _run_toco_binary - command-template formatting at the sink",
+          "tensorflow/lite/testing/toco_convert.py, tensorflow/lite/experimental/mlir/testing/mlir_convert.py build '%'/%-formatted command strings for os.system but sit in excluded test harnesses",
+          "tensorflow/python/tools/saved_model_aot_compile.py:137-139 '_XLA_MAKEFILE_TEMPLATE.format(...)' builds a makefile command template with _shlex_quote() quoting (shlex.quote at :67) - command-string construction that is NOT inside an exec-wrapper function and IS explicitly shlex-quoted; recorded as a sanitizer observation, not a sink row"
+        ]
+      },
+      {
+        "family": "internal_exec_wrappers",
+        "evidence": [
+          "tensorflow/lite/python/convert.py:322 'def _run_toco_binary(model_flags_str, toco_flags_str, input_data_str, debug_info_str=None)' - contains the Popen(shell=True)",
+          "tensorflow/python/distribute/cluster_resolver/slurm_cluster_resolver.py:138 'def _get_num_nvidia_gpus()' - contains check_output",
+          "tensorflow/lite/schema/upgrade_schema.py methods around :130/:166 containing subprocess.call (flatc)",
+          "tensorflow/tools/* build/CI/doc/packaging mains and helpers containing the remaining exec sites"
+        ]
+      },
+      {
+        "family": "native_execution_boundary",
+        "evidence": "tensorflow/lite/toco/python/toco_from_protos.py:46 '_pywrap_toco_api.TocoConvert(...)' and the C++ grpc worker servers execute in native code, not via Python process APIs; recorded here because they are the real execution/conversion engines behind the Python wrappers, but they are not CWE-78 Python sinks and produce no query rows"
+      }
+    ],
+    "sanitizerObservations": [
+      "tensorflow/python/tools/saved_model_aot_compile.py:63-67 'def _shlex_quote(s): ... return shlex.quote(s)' - the only shlex quoting helper in the tree, applied to makefile template arguments (:114, :139, :358); no other shell-escaping helper exists in non-test project source",
+      "tensorflow/lite/python/convert.py:390-397 - the Popen command list is assembled from a fixed binary name, tempfile-generated file names and a single formatted flag; no user-controlled model data is interpolated into the command string, but shell=True still routes the joined string through a shell",
+      "tensorflow/python/distribute/cluster_resolver/slurm_cluster_resolver.py:147 - fixed argv list ['nvidia-smi', '--list-gpus'], no dynamic operands",
+      "tensorflow/lite/schema/upgrade_schema.py:130/:166 - fixed flatc path with file-path arguments, no shell",
+      "grpc_debug_test_server.py:95-98 strips a leading '/' from grpc_path but performs no other validation before os.path.join (path-domain, not command-domain)",
+      "build/CI/doc/packaging tool invocations (tensorflow/tools/ci_build, tools/docs, tools/git, tools/pip_package, tools/tensorflow_builder) run static toolchain commands with literals or repo-derived paths"
+    ],
+    "nonVulnerabilityNote": "Most command-execution sites in this snapshot are build, CI, doc, packaging or GPU-discovery tooling with static or internally-derived operands. The runtime TFLite path (convert.py _run_toco_binary) passes a joined string to Popen with shell=True, and the tfdbg gRPC server accepts unauthenticated network input; these are recorded as candidates for the LLM labeling step, not as vulnerabilities. Normal command execution functionality is not automatically treated as a vulnerability."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query compile followed by codeql query run (sequential, one at a time) and codeql bqrs decode --format=csv; NOT database analyze / SARIF",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist). Raw BQRS output is decoded directly to CSV.",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs (API::moduleImport(...).getMember(...).getACall()); alias-aware for 'import subprocess as _subprocess' / 'import json as _json', only genuine resolved calls into external modules",
+      "ast": "pure AST shape match (attribute/name text, syntactic module prefix, receiver name, function/method name); catches dynamic or unresolved shapes that API graphs miss and is subject to name-collision noise. The six.moves.urllib indirection (tpu client: 'from six.moves.urllib import request' then request.urlopen) is invisible to API graphs, so the network-fetch boundary is matched at AST level"
+    },
+    "flowKinds": {
+      "sources": ["return", "network", "env", "cli", "file", "proto_decode", "internal_transfer", "param"],
+      "sinks": ["arg", "shell_true", "shell_arg_list", "cmd_format", "internal_exec_wrapper"]
+    },
+    "exclusions": [
+      "test files and test harnesses: any path under a tests/, test/ or testing/ directory, conftest.py, and *_test.py / *_test_base.py basenames (bazel convention; this also removes tensorflow/tools/test/, tensorflow/lite/testing/, tensorflow/lite/experimental/mlir/testing/, multi_worker_test_base.py and the *_test.py files that contain most os.system sites)",
+      "tensorflow-safe-db (pristine copy in the source tree) is not part of the database, so no duplicate rows are expected",
+      "logging-only helpers (print / logger.<level> parents) are excluded from the cmd_format sink family",
+      "the 7 third_party files inside the database are kept (negligible volume)"
+    ]
+  },
+  "uncoveredCases": [
+    "tensorflow/python/debug/lib/grpc_debug_server.py:148-178 - per-field attribute reads of the network event (event.summary.value[0], event.graph_def, event.log_message.message) are not extracted as individual rows; the SendEvents parameter row and the json.loads/ParseFromString rows mark the boundary instead",
+    "tensorflow/python/debug/lib/grpc_debug_test_server.py:93-98 - 'core_metadata[\"grpc_path\"]' dict read flows into os.path.join; dict-key reads are not extracted as a separate family (the on_core_metadata_event parameter and json.loads rows cover the entry)",
+    "six.moves indirection: tpu/client/client.py imports request from six.moves.urllib and keras data_utils uses urlopen imported conditionally per Python version; API graphs cannot resolve these, so urlopen/urlretrieve matching relies on the ast match_kind (bare 'urlopen' name or 'request'/'urllib' receiver prefix)",
+    "import aliases: 'import subprocess as _subprocess' (lite/python/convert.py), 'import json as _json' (lite/python/op_hint.py), 'import os as _os' (platform/tf_logging, resource_loader, convert.py) - API graphs are expected to resolve _subprocess.Popen/_json.loads through the import table (match_kind api); the AST fallback additionally accepts these alias prefixes (match_kind ast)",
+    "no 'from subprocess import ...' / 'from os import <exec>' form exists in the tree, so bare-name execution sinks are only matched for the distinctive names system/popen/getoutput/getstatusoutput; bare run/call/Popen/check_call/check_output are too collision-prone and are excluded (this gap is not exercised in this snapshot)",
+    "tensorflow/python/distribute/multi_process_lib.py:126 'multiprocessing.get_context().set_executable(sys.argv[0])' - process spawning through the multiprocessing module is not a subprocess-API sink in the query; the sys.argv read is captured as a cli source row",
+    "native execution boundaries (_pywrap_toco_api.TocoConvert, C++ grpc servers, tf.compile) are out of scope for Python CWE-78 sinks (see sinkFamilies.native_execution_boundary)",
+    "tensorflow/python/tools/saved_model_aot_compile.py:137-139 makefile-template formatting is not inside an exec-wrapper function and is shlex-quoted, so it produces no cmd_format row",
+    "dynamic dispatch through getattr is not modeled; no such dispatch was observed on the exec or receive paths in this snapshot"
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "columnContract aligned with iris_manual/mlflow and iris_manual/maltrail extraction outputs for cross-project CSV consistency"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: cmd_sinks.csv (at the database root and in the source tree), confirmed_vulns.json, CVE_application_report*.md, vulnerability_audit_report.md, 优先级策略漏洞审查报告.md and the tensorflow-safe-db tree were NOT opened during this step; candidate families are derived from repository evidence and the loaded language/pattern references only. Project source, database, and Augur installation files were not modified. Only files under iris_manual/tensorflow/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql)."
+  }
+}

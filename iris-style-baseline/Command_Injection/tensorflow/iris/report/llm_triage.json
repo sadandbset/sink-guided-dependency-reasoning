@@ -1,0 +1,128 @@
+{
+  "meta": {
+    "reviewer": "independent LLM path re-review (CWE-78, pass 2)",
+    "reviewed_at": "2026-10-16",
+    "experiment_dir": "iris_manual/tensorflow/iris",
+    "source_dir": "dataset/codeql_databases/tensorflow_vuln",
+    "inputs_reviewed": [
+      "results/pass2.sarif",
+      "report/iris_report.md",
+      "labels/labels.json",
+      "report/query_generation_notes.md",
+      "configure.py (real source of all 3 alerts)",
+      "tensorflow/python/tools/saved_model_cli.py (ground-truth check, second task)"
+    ],
+    "constraints_honored": [
+      "No PyVul ground-truth files (confirmed_vulns.json, cmd_sinks.csv, *_report.md, _show_real.py, _triage.py) were read; the ground-truth vulnerability analyzed in section 'ground_truth_check' came solely from the user's prompt.",
+      "Original SARIF, labels and queries were not modified.",
+      "Only report/llm_triage.json was written."
+    ]
+  },
+  "analysis_status": {
+    "codeql_analysis_succeeded": true,
+    "formal_cwe78_findings": 3,
+    "note": "The formal SARIF contains 3 CWE-78 path findings (rule py/augur/tensorflow/pass2-command-injection), all in repository-root configure.py. This is not a diagnostics-only run; all 3 formal findings were re-reviewed below. No findings were fabricated."
+  },
+  "shared_context": {
+    "file": "configure.py (repository root)",
+    "nature": "Interactive local build-configuration script (`./configure`). Executed by the developer compiling TensorFlow on their own machine. Not a server, service, or network-facing entry point.",
+    "source_function": "get_input() at configure.py:93-101 (input()/raw_input() at :96-:98) — interactive prompt answers; get_from_env_or_user_or_default() at :598-604 additionally reads environment variables (PYTHON_BIN_PATH).",
+    "sink_functions": [
+      "run_shell() at configure.py:145-155 — subprocess.check_output(cmd, stderr=stderr) at :150 and :154; cmd is an argv list, shell is not used",
+      "validate_cuda_config() at configure.py:1246-1249 — subprocess.Popen([environ_cp['PYTHON_BIN_PATH'], paths[0]] + cuda_libraries, ...) — argv list, no shell"
+    ]
+  },
+  "findings": [
+    {
+      "finding_id": "pass2-configure-150",
+      "rule_id": "py/augur/tensorflow/pass2-command-injection",
+      "location": "configure.py:150:40 (subprocess.check_output(cmd, stderr=stderr) inside run_shell(), try branch for allow_non_zero=True)",
+      "verdict": "likely_fp",
+      "confidence": 0.9,
+      "code_flows_reviewed": 3,
+      "representative_path": "configure.py:98 input() -> :101 answer -> :600/:604 get_input() var -> :207 get_from_env_or_user_or_default() -> :207 python_bin_path -> :228 (get_python_path call) -> :170-:173 run_shell([python_bin_path, '-c', 'import site; print(...)']) -> :145 cmd -> :150 check_output(cmd)",
+      "analysis": {
+        "q1_source_is_attacker_controllable": "No, not across any trust boundary. The source is (a) input()/raw_input() at configure.py:96-98 — the interactive answer typed by the developer who is running ./configure on their own machine — and/or (b) the PYTHON_BIN_PATH environment variable set by that same local user. There is no remote request parameter, network input, or lower-privilege input crossing into a higher-privilege executor. The person 'injecting' the path already fully controls the machine.",
+        "q2_propagation_has_real_code_evidence": "Yes, the data flow itself is genuine (not an over-approximation artifact): get_input (:93-101) -> get_from_env_or_user_or_default (:598-604) -> setup_python python_bin_path (:207) -> get_python_path (:228) -> run_shell cmd list (:170-173) -> check_output (:150). Every hop corresponds to real assignments and call arguments in configure.py.",
+        "q3_sink_executes_system_command": "Yes, subprocess.check_output executes a subprocess — but with an argv list and no shell=True. No shell interpreter is invoked, so no shell metacharacter interpretation occurs at all.",
+        "q4_command_content_influenced_by_source": "No. The tainted value (python_bin_path) only occupies argv[0] — the executable path. The command content is a fixed string literal: '-c' and 'import site; print(\"\\\\n\".join(site.getsitepackages()))' (configure.py:171-172). The source selects which python binary is executed, never what code it runs.",
+        "q5_protections": "(1) argv-list form, no shell=True — no command-injection grammar applies; (2) setup_python validates the path before first use: os.path.isfile(python_bin_path) and os.access(python_bin_path, os.X_OK) (configure.py:212); (3) the -c payload is a constant literal.",
+        "q6_normal_supported_functionality": "Yes. This is ./configure's documented purpose: probe the user-specified Python interpreter for its site-packages (get_python_path, configure.py:163-192). Running the interpreter the user pointed at is the feature, not a flaw.",
+        "q7_path_real_or_overapproximated": "The data-flow path is real, but the alert arises from threat-model over-approximation: labeling interactive input()/env reads as 'untrusted source' is only meaningful when a trust boundary is crossed. Here source and sink authority are identical (the local user), so no attacker-relevant path exists."
+      },
+      "reasoning": "Real data flow, benign by design: an interactive local build script executes the Python binary the same local user selected via prompt or PYTHON_BIN_PATH, as an argv list with a fixed literal -c payload and an isfile/X_OK existence check. No trust boundary, no shell, no attacker-controlled command content. Command injection is not meaningful here."
+    },
+    {
+      "finding_id": "pass2-configure-154",
+      "rule_id": "py/augur/tensorflow/pass2-command-injection",
+      "location": "configure.py:154:38 (subprocess.check_output(cmd, stderr=stderr) inside run_shell(), else branch)",
+      "verdict": "likely_fp",
+      "confidence": 0.9,
+      "code_flows_reviewed": 3,
+      "representative_path": "configure.py:98 input() -> :101 answer -> :600/:604 var -> :207 python_bin_path -> :242 (get_python_major_version call) -> :197 run_shell([python_bin_path, '-c', 'import sys; print(sys.version[0])']) -> :145 cmd -> :154 check_output(cmd)",
+      "analysis": {
+        "q1_source_is_attacker_controllable": "No — same as pass2-configure-150: local interactive prompt answer / PYTHON_BIN_PATH env var set by the same user who runs the script.",
+        "q2_propagation_has_real_code_evidence": "Yes — same genuine chain, terminating at get_python_major_version (configure.py:195-197) whose run_shell argv list embeds python_bin_path as argv[0].",
+        "q3_sink_executes_system_command": "Yes, a subprocess executes, but argv-list form without shell=True; no shell interpretation.",
+        "q4_command_content_influenced_by_source": "No — argv[0] (executable path) only; the -c payload 'import sys; print(sys.version[0])' (configure.py:197) is a fixed literal.",
+        "q5_protections": "argv-list form (no shell); isfile+X_OK validation at configure.py:212; fixed literal payload.",
+        "q6_normal_supported_functionality": "Yes — probing the major version of the user-selected interpreter is standard ./configure behavior.",
+        "q7_path_real_or_overapproximated": "Real data flow, over-approximated threat model (identical authority on both ends). Same root cause as pass2-configure-150 — these are the two branches of the same check_output call site family and share one explanation."
+      },
+      "reasoning": "Duplicate family of pass2-configure-150 (the non-allow_non_zero branch of the same wrapper, reached from get_python_major_version). Same analysis: local interactive build tooling, argv-list sink, fixed literal payload, tainted value only selects the executable. Not a vulnerability."
+    },
+    {
+      "finding_id": "pass2-configure-1247",
+      "rule_id": "py/augur/tensorflow/pass2-command-injection",
+      "location": "configure.py:1247:7 (subprocess.Popen([environ_cp['PYTHON_BIN_PATH'], paths[0]] + cuda_libraries, ...) inside validate_cuda_config())",
+      "verdict": "likely_fp",
+      "confidence": 0.9,
+      "code_flows_reviewed": 3,
+      "representative_path": "configure.py:98 input() -> :101 answer -> :600/:604 var -> :207 python_bin_path (setup_python) -> :254 environ_cp['PYTHON_BIN_PATH'] = python_bin_path -> main() :1315 setup_python -> :1347/:1362/:1220 environ_cp pass-through -> :1247 environ_cp['PYTHON_BIN_PATH'] as Popen argv[0]",
+      "analysis": {
+        "q1_source_is_attacker_controllable": "No — the value in environ_cp['PYTHON_BIN_PATH'] originates either from the local user's environment or from the interactive prompt answered by the same local user running ./configure. No remote or lower-privilege input reaches this key.",
+        "q2_propagation_has_real_code_evidence": "Yes — setup_python stores the validated path into environ_cp at configure.py:254; main() passes environ_cp down (setup_python :1315, TF_NEED_CUDA gate :1347-1362, validate_cuda_config :1220/:1362) and validate_cuda_config reads it at :1247 as argv[0] of Popen. The codeFlow hops match actual assignments.",
+        "q3_sink_executes_system_command": "Yes — subprocess.Popen launches find_cuda_config.py with the configured interpreter. argv-list form, no shell=True, so no shell metacharacter execution.",
+        "q4_command_content_influenced_by_source": "No. argv[0] (the interpreter) is the only tainted element; argv[1] is paths[0] from glob.glob('**/third_party/gpus/find_cuda_config.py') (:1242) — a repository-internal script; the remaining argv entries are the fixed names cuda_libraries = ['cuda', 'cudnn', ('tensorrt'), ('nccl')] (:1235-1240). The script being executed is fixed; only the interpreter binary is user-selected.",
+        "q5_protections": "argv-list form (no shell); the PYTHON_BIN_PATH value passed through the isfile+X_OK validation loop in setup_python (configure.py:212-219) before being stored at :254; remaining operands are repo-glob-resolved script path plus a fixed literal library list.",
+        "q6_normal_supported_functionality": "Yes — running the repo's CUDA discovery script with the user-configured Python interpreter is precisely the intended function of validate_cuda_config.",
+        "q7_path_real_or_overapproximated": "The flow through the environ_cp dict is real (and the analysis correctly tracked the dictionary-element store/load through main()), but treating the configuring user's own interpreter choice as untrusted taint is a threat-model over-approximation. No attacker-relevant path exists."
+      },
+      "reasoning": "Real but benign data flow: the local user's validated interpreter path is used as argv[0] of an argv-list Popen running a fixed repo script with fixed library-name arguments. No shell, no tainted command content, no trust boundary. Consistent with query_generation_notes' own assessment of snk-0003 ('environment-influenced executable, list form')."
+    }
+  ],
+  "triage_summary": {
+    "total_formal_findings": 3,
+    "likely_tp": 0,
+    "likely_fp": 3,
+    "uncertain": 0,
+    "fp_root_causes": [
+      "Threat-model over-approximation: the source model treats interactive input()/env reads as untrusted, but in ./configure the 'source' and the process owner are the same local user — no privilege boundary is crossed.",
+      "All three sinks are argv-list subprocess calls without shell=True; the tainted value only ever reaches argv[0] (executable selection), never the command content (fixed '-c' literal payload / fixed repo script + fixed argument names).",
+      "These are the intended features of the interactive build configuration script."
+    ],
+    "path_quality_note": "The codeFlows themselves are faithful to the code (every hop verified in configure.py, including the non-trivial environ_cp dictionary-element propagation for pass2-configure-1247). The FP verdict is a threat-model judgment, not a spurious-path judgment."
+  },
+  "ground_truth_check": {
+    "task": "Second task: verify whether the pass-2 formal analysis hit the known real vulnerability supplied by the user (PyVul entry, commit 8b202f08d52e8206af2bdb2112a62fafbc546ec7, CWE-78, eval in preprocess_input_exprs_arg_string). Evidence for this section comes from the user's prompt and the project source only; no PyVul ground-truth files were read.",
+    "vulnerability_present_in_snapshot": true,
+    "vulnerable_site": "tensorflow/python/tools/saved_model_cli.py:549 — input_dict[input_key] = eval(expr)  # pylint: disable=eval-used",
+    "full_attack_path_in_source": [
+      "saved_model_cli.py:1192 — args = parser.parse_args() (CLI boundary; --input_exprs declared at :928, dispatch func=run wired via parser_run.set_defaults(func=run) at :962)",
+      "saved_model_cli.py:1194 — args.func(args) → run(args)",
+      "saved_model_cli.py:751 — run() calls load_inputs_from_input_arg_string(args.inputs, args.input_exprs, args.input_examples)",
+      "saved_model_cli.py:662 — load_inputs_from_input_arg_string calls preprocess_input_exprs_arg_string(input_exprs_str)",
+      "saved_model_cli.py:547 — input_key, expr = input_raw.split('=', 1)",
+      "saved_model_cli.py:549 — eval(expr) on the user-supplied expression → arbitrary Python code execution (matches the pre-fix code_before in the commit; the fix replaces it with ast.literal_eval under safe=True)"
+    ],
+    "hit_by_formal_analysis": false,
+    "why_missed": [
+      "PRIMARY — sink-model gap: eval() is not a sink in the pass-2 model. All 11 rendered candidate sinks are subprocess command-execution sites (Popen / check_output / call / run, shell-string or argv-list); labels.json contains zero sink labels involving eval (verified by search over all 1077 pass-2 entries). The pass-2 sink review was explicitly scoped to 'subprocess/os command execution' (query_generation_notes §1/§6), and eval is Python expression evaluation, which that scope excluded.",
+      "SECONDARY — even with an eval sink, the flow needs the args.func(args) dynamic dispatch through argparse set_defaults(func=run) (saved_model_cli.py:962/:1194), which native data flow does not resolve and for which no summary edge exists. A parse_args→subcommand-handler summary would also have been required.",
+      "The source half of the model was actually present: parser.parse_args() at saved_model_cli.py:1192 was labeled tp (src-0850, isCliParseSource), so only the sink (and dispatch) prevented a hit."
+    ],
+    "severity_note": "The vulnerability is real and exploitable by anyone who controls the --input_exprs string passed to `saved_model_cli run` (e.g. shared scripts, CI pipelines): e.g. --input_exprs 'x=__import__(\"os\").system(\"id\")' executes arbitrary Python. The upstream fix (ast.literal_eval under safe=True) confirms the security impact.",
+    "cwe_classification_note": "PyVul classifies this as CWE-78, but the sink is eval() — Python code/eval injection, canonically CWE-95 (with CWE-94 impact), not OS command injection. The pass's declared scope was the CWE-077/078/088 injection family; under a strict 'subprocess command execution' reading of CWE-78 the miss is a scope decision, but the pass focus text ('CLI arguments ... reaching subprocess/os command execution') never names expression-evaluation sinks, so eval was never reviewed as a candidate sink.",
+    "recommendation_for_future_passes": "Add site-pinned eval/exec/compile sinks (or a CWE-95 pass) and an argparse set_defaults(func=...) dispatch summary (parse_args result attribute → subcommand handler args parameter). With those two additions this vulnerability's path would be complete: src-0850 (tp source) is already in the strict tier."
+  }
+}
