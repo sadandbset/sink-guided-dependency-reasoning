@@ -1,0 +1,4595 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "run_id": "mindsdb-pass1-20261022",
+    "generated_at": "2026-10-22T08:19:33+00:00",
+    "language": "python",
+    "framework": "Flask (+ flask-restx)",
+    "model": "glm-5.3",
+    "project": "mindsdb",
+    "notes": [
+      "Labeling performed in-process by the glm-5.3 model driving the Claude Code agent (direct LLM analysis of the mindsdb_vuln source tree); no external LLM API endpoint was invoked.",
+      "Batches: 8 (S1-S4 source batches, K1-K4 sink batches). Raw candidates: 120 source rows and 116 sink rows -> 90 unique source entries and 110 unique sink entries after deduplication (30 source and 6 sink same-line/ same-statement rows merged).",
+      "Dedup policy: flask request reads at the same file:line (subscript / attribute-read / field-access shapes of one expression) were merged, preferring the most specific accessor; pathlib receiver-form and os.* argument-form rows of the same statement (os.unlink/os.rmdir) were merged.",
+      "No sanitizer-role entries: no extraction CSV candidate node is itself a proven neutralization barrier. Concrete barriers verified in source are documented in entry rationales/evidence and in labels/phase1_review.md (config.py:133-136 resolve+parents containment, integrations.py:68-69 copy-then-basename, file_controller.py:128 Path(...).name, fs.py:297/311 absolute-path rejection, werkzeug safe_join inside send_from_directory).",
+      "Scope matches extraction/sources.csv and extraction/sinks.csv (mindsdb/ package only, tests and setup.py excluded at extraction time); ground-truth artifacts in the source root were not opened.",
+      "Manual review points are recorded in labels/phase1_review.md; unresolved items keep classification candidate/unknown."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": [
+        {
+          "id": "S001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.file.file_controller",
+            "type": "FileController",
+            "callable": "save_file",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/file/file_controller.py",
+            "line": 55
+          },
+          "rationale": "Route variable of /api/files/<name> and SQL-side table name; used only as a DB record key and duplicate-name check, never as a path component, so it is not a Pass 1 source.",
+          "evidence": [
+            "file_controller.py:67-68 name compared against existing file names only",
+            "file_controller.py:82-89 name stored in the db.File record",
+            "input_control: attacker-controlled string but with no path semantics; no traversal flow"
+          ]
+        },
+        {
+          "id": "S002",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.file.file_controller",
+            "type": "FileController",
+            "callable": "save_file",
+            "arg_index": 2,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/file/file_controller.py",
+            "line": 55
+          },
+          "rationale": "Boundary receiver: file_path is os.path.join(temp_dir_path, data['file']) built at the /api/files/<name> upload route from the client-controlled multipart filename or request.json['file']; an absolute value replaces the join base and '..' segments escape temp_dir_path. It flows into FileHandler._handle_source (open 'rb') and shutil.move.",
+          "evidence": [
+            "file.py:129 file_path = os.path.join(temp_dir_path, data['file'])",
+            "file.py:57-66 python-multipart UPLOAD_KEEP_FILENAME=True keeps the client filename",
+            "file_handler.py:158 open(file_path, 'rb') via _handle_source (file_controller.py:75)",
+            "file_controller.py:100 shutil.move(file_path, str(source))",
+            "dangerous_path_arg: this parameter is itself the dangerous path",
+            "input_control: full client control of the joined path segment via data['file']"
+          ]
+        },
+        {
+          "id": "S003",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.file.file_controller",
+            "type": "FileController",
+            "callable": "save_file",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/file/file_controller.py",
+            "line": 55
+          },
+          "rationale": "Optional original_file_name form field from the upload route; becomes file_dir.joinpath(file_name) and the shutil.move destination, so an absolute or '..'-laden value escapes the per-file storage directory file_dir.",
+          "evidence": [
+            "file.py:127 original_file_name = data.get('original_file_name') (multipart on_field value)",
+            "file_controller.py:98 source = file_dir.joinpath(file_name)",
+            "file_controller.py:100 shutil.move(file_path, str(source))",
+            "dangerous_path_arg: this parameter is the move destination path",
+            "input_control: full client control of the destination filename"
+          ]
+        },
+        {
+          "id": "S004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.file.file_controller",
+            "type": "FileController",
+            "callable": "get_file_path",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/file/file_controller.py",
+            "line": 122
+          },
+          "rationale": "SQL file-table name used only as a DB lookup key; the retrieval path applies Path(file_record.source_file_path).name (basename) and file_dir is derived from the record id, so no tainted path component reaches the returned path.",
+          "evidence": [
+            "file_controller.py:123-127 record lookup by name; file_dir = 'file_{company_id}_{id}'",
+            "file_controller.py:128 Path(file_record.source_file_path).name basename neutralization",
+            "input_control: attacker controls the lookup key, not the path"
+          ]
+        },
+        {
+          "id": "S005",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.integrations.handlers.file_handler.file_handler",
+            "type": "FileHandler",
+            "callable": "_handle_source",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/file_handler/file_handler.py",
+            "line": 98
+          },
+          "rationale": "Called from FileController.save_file with the upload-route joined path; directly feeds _get_data_io which does open(file_path, 'rb') — arbitrary file read when the client controls the joined segment.",
+          "evidence": [
+            "file_controller.py:75 FileHandler._handle_source(file_path)",
+            "file_handler.py:100 delegated to _get_data_io(file_path)",
+            "file_handler.py:158 open(file_path, 'rb')",
+            "dangerous_path_arg: 0 (the path parameter)",
+            "input_control: full client control via data['file'] at the upload route"
+          ]
+        },
+        {
+          "id": "S006",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.integrations.handlers.file_handler.file_handler",
+            "type": "FileHandler",
+            "callable": "_get_data_io",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/file_handler/file_handler.py",
+            "line": 142
+          },
+          "rationale": "Terminal wrapper before open(file_path, 'rb'); receives the same attacker-influenced path from _handle_source.",
+          "evidence": [
+            "file_handler.py:158 open(file_path, 'rb')",
+            "file_handler.py:100 called with file_path from _handle_source",
+            "dangerous_path_arg: 0",
+            "input_control: full client control via data['file'] at the upload route"
+          ]
+        },
+        {
+          "id": "S007",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.storage.fs",
+            "type": "FileStorage",
+            "callable": "push_path",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 194
+          },
+          "rationale": "Internal FileStorage wrapper: os.path.join(self.folder_name, path) is forwarded to fs_store.put and copy()/open with no absolute or '..' validation; known callers pass server-side relative names, so it is kept as a taint propagation step rather than a source.",
+          "evidence": [
+            "fs.py:195 os.path.join(self.folder_name, path)",
+            "fs.py:30-45 copy() opens src/dst",
+            "no is_absolute or containment check on path"
+          ]
+        },
+        {
+          "id": "S008",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.storage.fs",
+            "type": "FileStorage",
+            "callable": "pull_path",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 203
+          },
+          "rationale": "Internal wrapper mirroring push_path: os.path.join(self.folder_name, path) forwarded to fs_store.get/copy without absolute or '..' validation; propagation step only.",
+          "evidence": [
+            "fs.py:210 os.path.join(self.folder_name, path)",
+            "fs.py:206 existence check only",
+            "no containment check on path"
+          ]
+        },
+        {
+          "id": "S009",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.storage.fs",
+            "type": "FileStorage",
+            "callable": "file_set",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 214
+          },
+          "rationale": "name becomes self.folder_path / name and is opened 'wb' with no is_absolute rejection (unlike get_path/delete), so an absolute or '..' name escapes folder_path; known callers pass the fixed literal 'model_code' or basename'd values (byom model_code is Path(arg_value).name-baselined in IntegrationController.add), hence candidate, not tp.",
+          "evidence": [
+            "fs.py:218 dest_abs_path = self.folder_path / name",
+            "fs.py:220 open(dest_abs_path, 'wb')",
+            "fs.py:297/311 show the is_absolute guard exists only in get_path/delete, not here",
+            "byom_handler.py:45 file_set('model_code', ...) fixed name at the known call site",
+            "integrations.py:69 Path(arg_value).name basenames PATH args before storage"
+          ]
+        },
+        {
+          "id": "S010",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.storage.fs",
+            "type": "FileStorage",
+            "callable": "file_get",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 226
+          },
+          "rationale": "name becomes self.folder_path / name opened 'rb' with no absolute/'..' validation; the known byom caller passes a basename'd connection arg; kept as a propagation step with a containment gap.",
+          "evidence": [
+            "fs.py:231 dest_abs_path = self.folder_path / name",
+            "fs.py:233 open(dest_abs_path, 'rb')",
+            "byom_handler.py:49-50 file_get(file_name) with basenamed model_code value"
+          ]
+        },
+        {
+          "id": "S011",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.storage.fs",
+            "type": "FileStorage",
+            "callable": "get_path",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 276
+          },
+          "rationale": "Partial barrier only: absolute paths are rejected (fs.py:297-298) but resolve() is commented out (fs.py:295) and no post-join containment is enforced, so '..' segments still escape folder_path into os.makedirs/returned path; callers pass fixed arg-name keys. Modeled as a propagation step.",
+          "evidence": [
+            "fs.py:297-298 relative_path.is_absolute() -> TypeError",
+            "fs.py:295 # relative_path = relative_path.resolve() (commented out)",
+            "fs.py:300-303 ret_path = folder_path / relative_path; os.makedirs(ret_path)",
+            "integrations.py:293-294 callers pass arg-name keys such as 'db_file'"
+          ]
+        },
+        {
+          "id": "S012",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.storage.fs",
+            "type": "FileStorage",
+            "callable": "delete",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 307
+          },
+          "rationale": "Partial barrier only: absolute paths rejected, but (folder_path / relative_path).resolve() is compared only for equality with the root (fs.py:316), not containment, so '../..' resolves outside and is unlinked/rmdired; propagation step with a containment gap.",
+          "evidence": [
+            "fs.py:311-312 is_absolute -> TypeError",
+            "fs.py:314 path = (folder_path / relative_path).resolve()",
+            "fs.py:316 equality check against folder_path.resolve() only (not containment)",
+            "fs.py:325-328 path.unlink() / path.rmdir()"
+          ]
+        },
+        {
+          "id": "S013",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.interfaces.database.integrations",
+            "type": "IntegrationController",
+            "callable": "add",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/database/integrations.py",
+            "line": 45
+          },
+          "rationale": "Boundary receiver: connection args come from SQL CREATE DATABASE ... PARAMETERS or HTTP PUT /api/config/integrations params; ARG_TYPE.PATH values are used raw in shutil.copy(arg_value, files_dir) at integrations.py:68 before the Path(arg_value).name replacement at line 69.",
+          "evidence": [
+            "executor_commands.py:800-816 answer_create_database passes statement.parameters",
+            "config.py:120-122 params from request.json/form",
+            "integrations.py:60-69 shutil.copy(arg_value, files_dir) then Path(arg_value).name",
+            "dangerous_path_arg: the PATH-typed values inside this dict",
+            "input_control: full client control of PATH-typed connection arg values"
+          ]
+        },
+        {
+          "id": "S014",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.args",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 28
+          },
+          "rationale": "Log filter parameters (min_timestamp/max_timestamp/context/level/log_from/limit) consumed by get_logs(); no path flow — values never reach a filesystem operation.",
+          "evidence": [
+            "config.py:28-33 values parsed and passed to get_logs()",
+            "input_control: query-string values, but no path consumer"
+          ]
+        },
+        {
+          "id": "S015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 29
+          },
+          "rationale": "Log filter parameters (min_timestamp/max_timestamp/context/level/log_from/limit) consumed by get_logs(); no path flow — values never reach a filesystem operation.",
+          "evidence": [
+            "config.py:28-33 values parsed and passed to get_logs()",
+            "input_control: query-string values, but no path consumer"
+          ]
+        },
+        {
+          "id": "S016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 30
+          },
+          "rationale": "Log filter parameters (min_timestamp/max_timestamp/context/level/log_from/limit) consumed by get_logs(); no path flow — values never reach a filesystem operation.",
+          "evidence": [
+            "config.py:28-33 values parsed and passed to get_logs()",
+            "input_control: query-string values, but no path consumer"
+          ]
+        },
+        {
+          "id": "S017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 31
+          },
+          "rationale": "Log filter parameters (min_timestamp/max_timestamp/context/level/log_from/limit) consumed by get_logs(); no path flow — values never reach a filesystem operation.",
+          "evidence": [
+            "config.py:28-33 values parsed and passed to get_logs()",
+            "input_control: query-string values, but no path consumer"
+          ]
+        },
+        {
+          "id": "S018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 32
+          },
+          "rationale": "Log filter parameters (min_timestamp/max_timestamp/context/level/log_from/limit) consumed by get_logs(); no path flow — values never reach a filesystem operation.",
+          "evidence": [
+            "config.py:28-33 values parsed and passed to get_logs()",
+            "input_control: query-string values, but no path consumer"
+          ]
+        },
+        {
+          "id": "S019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.args.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 33
+          },
+          "rationale": "Log filter parameters (min_timestamp/max_timestamp/context/level/log_from/limit) consumed by get_logs(); no path flow — values never reach a filesystem operation.",
+          "evidence": [
+            "config.py:28-33 values parsed and passed to get_logs()",
+            "input_control: query-string values, but no path consumer"
+          ]
+        },
+        {
+          "id": "S020",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 55
+          },
+          "rationale": "Auth config update: attacker controls the JSON content, but it is written to the fixed server-side config.json path; content injection into config is not a Pass 1 path flow.",
+          "evidence": [
+            "config.py:74-84 read/update/write of Config().config_path (fixed server path)",
+            "input_control: content only; path is server-controlled"
+          ]
+        },
+        {
+          "id": "S021",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 121
+          },
+          "rationale": "PUT /api/config/integrations/<name>: request.json['params'] merged into params and passed to integration_controller.add(name, engine, params); ARG_TYPE.PATH values reach shutil.copy raw at integrations.py:68.",
+          "evidence": [
+            "config.py:120-122 params.update((request.json or {}).get('params', {}))",
+            "config.py:161 ca.integration_controller.add(name, engine, params)",
+            "integrations.py:60-69 raw PATH values shutil.copy'd before basenaming"
+          ]
+        },
+        {
+          "id": "S022",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.form",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 122
+          },
+          "rationale": "Form fields merged into the same integration params dict (config.py:121-122) and forwarded to IntegrationController.add; same raw PATH copy flow.",
+          "evidence": [
+            "config.py:121-122 params.update(request.form or {})",
+            "config.py:161 add(name, engine, params)"
+          ]
+        },
+        {
+          "id": "S023",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.files",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 127
+          },
+          "rationale": "Werkzeug upload items at the integration PUT route; file.filename flows into Path(file.filename) joined under a temp dir — this route applies an effective resolve+parents containment barrier (config.py:133-136), so the source is genuine but the traversal flow is blocked here.",
+          "evidence": [
+            "config.py:131-138 file_name = Path(file.filename); file_path = temp_dir_path.joinpath(file_name).resolve()",
+            "config.py:135-136 'if temp_dir_path not in file_path.parents: raise' — effective containment",
+            "config.py:137 file.save(file_path)",
+            "input_control: full control of filename; blocked by the parents check"
+          ]
+        },
+        {
+          "id": "S024",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 192
+          },
+          "rationale": "Integration.post (modify) flow: params are stored raw via IntegrationController.modify without the add-time basename; at handler creation PATH-typed values are replaced by fs_store.get_path(arg_name) storage paths, and no direct file operation on the raw stored value was confirmed — kept as candidate.",
+          "evidence": [
+            "config.py:192-193 params from request.json/form",
+            "integrations.py:84-94 modify stores data raw (no copy/basename)",
+            "integrations.py:286-294 get_handler replaces PATH values with storage paths",
+            "manual review point: whether any handler consumes the raw stored PATH value"
+          ]
+        },
+        {
+          "id": "S025",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.form",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 193
+          },
+          "rationale": "Same modify flow as config.py:192 with form fields merged into params; raw storage without a confirmed raw-value file consumer.",
+          "evidence": [
+            "config.py:192-193",
+            "integrations.py:84-94 modify stores raw"
+          ]
+        },
+        {
+          "id": "S026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 103
+          },
+          "rationale": "Content-Type header used only to select the multipart vs JSON branch and to configure the parser; the value never becomes a path.",
+          "evidence": [
+            "handlers.py:103-105 branch selection and parser headers",
+            "input_control: header string, no path consumer"
+          ]
+        },
+        {
+          "id": "S027",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 105
+          },
+          "rationale": "Content-Type header used only to select the multipart vs JSON branch and to configure the parser; the value never becomes a path.",
+          "evidence": [
+            "handlers.py:103-105 branch selection and parser headers",
+            "input_control: header string, no path consumer"
+          ]
+        },
+        {
+          "id": "S028",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.stream",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 117
+          },
+          "rationale": "Raw request body fed to the python-multipart parser; with UPLOAD_KEEP_FILENAME=True the library itself writes the upload into UPLOAD_DIR using the client filename — the library-internal write is out of repo scope, and the repo-visible path flow continues through on_file/file_name.",
+          "evidence": [
+            "handlers.py:116-121 parser.write(chunk) loop",
+            "handlers.py:108-113 UPLOAD_KEEP_FILENAME=True",
+            "coverage note: library-internal write is out of repo scope"
+          ]
+        },
+        {
+          "id": "S029",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 127
+          },
+          "rationale": "Non-multipart BYOM branch: data['file'] becomes os.path.join(temp_dir_path, data['file']) (handlers.py:129) and then the 'model_code' connection arg, an ARG_TYPE.PATH value shutil.copy'd raw in IntegrationController.add.",
+          "evidence": [
+            "handlers.py:127-129 file_path = os.path.join(temp_dir_path, data['file'])",
+            "handlers.py:131-134 connection_args = {'model_code': file_path} -> add(name, 'byom', ...)",
+            "byom_handler.py:111-116 model_code declared ARG_TYPE.PATH",
+            "integrations.py:68 shutil.copy(arg_value, files_dir) with the raw path"
+          ]
+        },
+        {
+          "id": "S030",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 56
+          },
+          "rationale": "Content-Type branch selector and parser headers only; no path flow.",
+          "evidence": [
+            "file.py:56-58"
+          ]
+        },
+        {
+          "id": "S031",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 58
+          },
+          "rationale": "Content-Type branch selector and parser headers only; no path flow.",
+          "evidence": [
+            "file.py:56-58"
+          ]
+        },
+        {
+          "id": "S032",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.stream",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 70
+          },
+          "rationale": "Raw body fed to the python-multipart parser (UPLOAD_KEEP_FILENAME=True); the filename-driven write happens library-internally, the repo-visible flow continues through on_file/file_name.",
+          "evidence": [
+            "file.py:69-75 parser.write(chunk) loop",
+            "file.py:61-66 UPLOAD_KEEP_FILENAME=True"
+          ]
+        },
+        {
+          "id": "S033",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 80
+          },
+          "rationale": "Non-multipart branch of PUT /api/files/<name>: data['file'] (or data['name'] in url mode) becomes os.path.join(temp_dir_path, data['file']) — an absolute value replaces the temp base and '..' escapes it — then reaches open 'wb', ZipFile/tarfile.open, and save_file/shutil.move.",
+          "evidence": [
+            "file.py:80 data = request.json",
+            "file.py:91 data['file'] = data['name'] in the url branch",
+            "file.py:122/129 file_path = os.path.join(temp_dir_path, data['file'])",
+            "file.py:123 open(file_path, 'wb')",
+            "file.py:133/136 ZipFile/tarfile.open(file_path)",
+            "file.py:149 save_file(mindsdb_file_name, file_path, ...)",
+            "input_control: full client control of the joined path segment"
+          ]
+        },
+        {
+          "id": "S034",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/projects.py",
+            "line": 49
+          },
+          "rationale": "Model prediction payload (data/params) consumed by the predictor; no filesystem path flow.",
+          "evidence": [
+            "projects.py:49-63 data/params forwarded to project_datanode.predict"
+          ]
+        },
+        {
+          "id": "S035",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/projects.py",
+            "line": 50
+          },
+          "rationale": "Model prediction payload (data/params) consumed by the predictor; no filesystem path flow.",
+          "evidence": [
+            "projects.py:49-63 data/params forwarded to project_datanode.predict"
+          ]
+        },
+        {
+          "id": "S036",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/sql.py",
+            "line": 22
+          },
+          "rationale": "Dominant SQL boundary: request.json['query'] is forwarded to FakeMysqlProxy.process_query; CREATE DATABASE ... PARAMETERS carries PATH-typed connection args that reach raw file operations (executor_commands.py:722-756, integrations.py:68).",
+          "evidence": [
+            "sql.py:22-33 query -> mysql_proxy.process_query(query)",
+            "executor_commands.py:800-816 answer_create_database passes statement.parameters",
+            "executor_commands.py:730-752 PATH args used raw for is_file check and create_tmp_handler"
+          ]
+        },
+        {
+          "id": "S037",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/sql.py",
+            "line": 23
+          },
+          "rationale": "Context dict (company/user ids) forwarded to set_context; no path flow.",
+          "evidence": [
+            "sql.py:23,31 context -> mysql_proxy.set_context(context)"
+          ]
+        },
+        {
+          "id": "S038",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/stream.py",
+            "line": 48
+          },
+          "rationale": "Stream setup params (predictor/stream_in/stream_out/integration/connection); no direct path consumer verified in this version — retained as a manual review point rather than a source.",
+          "evidence": [
+            "stream.py:48-72 params used for stream controller setup",
+            "manual review point: stream 'connection' args could reach handler connection_data in other versions"
+          ]
+        },
+        {
+          "id": "S039",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/tab.py",
+            "line": 45
+          },
+          "rationale": "Tab configuration payload stored via json storage (database); no path flow.",
+          "evidence": [
+            "tab.py:45 tabs payload"
+          ]
+        },
+        {
+          "id": "S040",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/default.py",
+            "line": 40
+          },
+          "rationale": "Login username/password values checked against config auth; no path flow.",
+          "evidence": [
+            "default.py:40-41"
+          ]
+        },
+        {
+          "id": "S041",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/default.py",
+            "line": 41
+          },
+          "rationale": "Login username/password values checked against config auth; no path flow.",
+          "evidence": [
+            "default.py:40-41"
+          ]
+        },
+        {
+          "id": "S042",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/analysis.py",
+            "line": 28
+          },
+          "rationale": "POST /api/analysis/query: data.get('query') is parsed and forwarded to FakeMysqlProxy.process_query — the same SQL boundary as /api/sql/query.",
+          "evidence": [
+            "analysis.py:28-48 query -> mysql_proxy.process_query(query)"
+          ]
+        },
+        {
+          "id": "S043",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/analysis.py",
+            "line": 83
+          },
+          "rationale": "Data analysis payload (column_names/data) analyzed in memory; no path flow.",
+          "evidence": [
+            "analysis.py:83-87 analyze_df(DataFrame(...))"
+          ]
+        },
+        {
+          "id": "S044",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/util.py",
+            "line": 71
+          },
+          "rationale": "Telemetry action and json_ai validation strings; no path flow.",
+          "evidence": [
+            "util.py:71-84"
+          ]
+        },
+        {
+          "id": "S045",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/util.py",
+            "line": 84
+          },
+          "rationale": "Telemetry action and json_ai validation strings; no path flow.",
+          "evidence": [
+            "util.py:71-84"
+          ]
+        },
+        {
+          "id": "S046",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/start.py",
+            "line": 120
+          },
+          "rationale": "company-id / user-class headers are int()-cast and used only inside f-string storage record names (file_{company_id}_{id}); numeric values give no path structure control, so this is a low-risk path-segment influence, not a source.",
+          "evidence": [
+            "start.py:120-137 int() casts and ctx assignment",
+            "file_controller.py:92 store_file_path = f'file_{ctx.company_id}_{file_record.id}'"
+          ]
+        },
+        {
+          "id": "S047",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.headers.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/start.py",
+            "line": 121
+          },
+          "rationale": "company-id / user-class headers are int()-cast and used only inside f-string storage record names (file_{company_id}_{id}); numeric values give no path structure control, so this is a low-risk path-segment influence, not a source.",
+          "evidence": [
+            "start.py:120-137 int() casts and ctx assignment",
+            "file_controller.py:92 store_file_path = f'file_{ctx.company_id}_{file_record.id}'"
+          ]
+        },
+        {
+          "id": "S048",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "werkzeug",
+            "module": "mindsdb.api.http.namespaces.config",
+            "type": "file",
+            "callable": "filename",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 133
+          },
+          "rationale": "Werkzeug FileStorage.filename is fully client-controlled and flows into Path(file.filename) joined under temp_dir — but this route applies an effective resolve+parents containment barrier before file.save, so the source is genuine while the traversal flow is blocked here.",
+          "evidence": [
+            "config.py:133 file_name = Path(file.filename)",
+            "config.py:134-136 file_path = temp_dir_path.joinpath(file_name).resolve(); parents containment check",
+            "config.py:137 file.save(file_path)",
+            "input_control: full control of the filename; blocked by the resolve+parents barrier"
+          ]
+        },
+        {
+          "id": "S049",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.file",
+            "type": "field",
+            "callable": "field_name",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 43
+          },
+          "rationale": "python-multipart on_field callback: decoded field names become keys of the data dict (original_file_name, source_type, source, name).",
+          "evidence": [
+            "file.py:42-45 data[name] = value"
+          ]
+        },
+        {
+          "id": "S050",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.file",
+            "type": "field",
+            "callable": "value",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 44
+          },
+          "rationale": "Decoded form values including original_file_name, which becomes save_file's file_name and the shutil.move destination path (file_dir.joinpath(file_name)).",
+          "evidence": [
+            "file.py:44 value = field.value.decode()",
+            "file.py:127 original_file_name = data.get('original_file_name')",
+            "file_controller.py:98-100 source = file_dir.joinpath(file_name); shutil.move(file_path, str(source))"
+          ]
+        },
+        {
+          "id": "S051",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.handlers",
+            "type": "field",
+            "callable": "field_name",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 90
+          },
+          "rationale": "BYOM on_field names populate the data dict, but this route consumes only data['file'] (from on_file); no path consumer for the field names — kept as candidate for recall.",
+          "evidence": [
+            "handlers.py:89-92 data[name] = value",
+            "handlers.py:129 only data['file'] is joined into a path"
+          ]
+        },
+        {
+          "id": "S052",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.handlers",
+            "type": "field",
+            "callable": "value",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 91
+          },
+          "rationale": "BYOM on_field values populate the data dict; only data['file'] is consumed at this route — candidate for recall.",
+          "evidence": [
+            "handlers.py:89-92",
+            "handlers.py:129"
+          ]
+        },
+        {
+          "id": "S053",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.file",
+            "type": "file",
+            "callable": "file_name",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 51
+          },
+          "rationale": "Client-supplied multipart filename decoded into data['file'] and joined as os.path.join(temp_dir_path, data['file']); an absolute value replaces the temp base and '..' segments escape it — the primary traversal primitive of the upload route.",
+          "evidence": [
+            "file.py:51 data['file'] = file.file_name.decode()",
+            "file.py:61-66 UPLOAD_KEEP_FILENAME=True / UPLOAD_KEEP_EXTENSIONS=True",
+            "file.py:129 file_path = os.path.join(temp_dir_path, data['file'])",
+            "input_control: full control of the path segment"
+          ]
+        },
+        {
+          "id": "S054",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.handlers",
+            "type": "file",
+            "callable": "file_name",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 98
+          },
+          "rationale": "Same client-filename pattern on the BYOM upload route: data['file'] joined under temp_dir_path and passed as the model_code PATH connection arg.",
+          "evidence": [
+            "handlers.py:98 data['file'] = file.file_name.decode()",
+            "handlers.py:129 file_path = os.path.join(temp_dir_path, data['file'])",
+            "handlers.py:131-134 model_code connection arg"
+          ]
+        },
+        {
+          "id": "S055",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.file",
+            "type": "file",
+            "callable": "file_object",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 52
+          },
+          "rationale": "The uploaded file content handle, not a path; for Pass 1 only the filename matters.",
+          "evidence": [
+            "file.py:52 file_object = file.file_object"
+          ]
+        },
+        {
+          "id": "S056",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.handlers",
+            "type": "file",
+            "callable": "file_object",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 99
+          },
+          "rationale": "File content handle, not a path.",
+          "evidence": [
+            "handlers.py:99"
+          ]
+        },
+        {
+          "id": "S057",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.file",
+            "type": null,
+            "callable": "on_field",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 42
+          },
+          "rationale": "python-multipart create_form_parser callback: receives decoded client form fields at the upload boundary.",
+          "evidence": [
+            "file.py:42-45",
+            "file.py:57-67 parser config"
+          ]
+        },
+        {
+          "id": "S058",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.handlers",
+            "type": null,
+            "callable": "on_field",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 89
+          },
+          "rationale": "Same multipart callback boundary on the BYOM route; only data['file'] is consumed, fields retained for recall.",
+          "evidence": [
+            "handlers.py:89-92"
+          ]
+        },
+        {
+          "id": "S059",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.file",
+            "type": null,
+            "callable": "on_file",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 49
+          },
+          "rationale": "python-multipart callback receiving the upload whose file_name is client-controlled (UPLOAD_KEEP_FILENAME=True); the direct origin of data['file'].",
+          "evidence": [
+            "file.py:49-52 on_file sets data['file'] from file.file_name",
+            "file.py:61-66 UPLOAD_KEEP_FILENAME=True"
+          ]
+        },
+        {
+          "id": "S060",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.http.namespaces.handlers",
+            "type": null,
+            "callable": "on_file",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 96
+          },
+          "rationale": "Same on_file boundary on the BYOM upload route.",
+          "evidence": [
+            "handlers.py:96-99"
+          ]
+        },
+        {
+          "id": "S061",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.mongo.classes.query_sql",
+            "type": null,
+            "callable": "run_sql_command",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/api/mongo/classes/query_sql.py",
+            "line": 5
+          },
+          "rationale": "Mongo wire-protocol boundary: commands are translated to a SQL AST and executed via ExecuteCommands.execute_command, reaching the same CREATE DATABASE / integration connection-arg flows as the HTTP SQL endpoints.",
+          "evidence": [
+            "query_sql.py:5-10 ExecuteCommands.execute_command(ast_query)",
+            "detection.json non_http_entry_surfaces: mongo wire-protocol server"
+          ]
+        },
+        {
+          "id": "S062",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "mindsdb",
+            "module": "mindsdb.api.mysql.mysql_proxy.mysql_proxy",
+            "type": "MysqlProxy",
+            "callable": "process_query",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/mysql_proxy.py",
+            "line": 432
+          },
+          "rationale": "Raw SQL text boundary reached from POST /api/sql/query and /api/analysis/query (FakeMysqlProxy) and from the native MySQL wire-protocol server; statement.parameters of CREATE DATABASE reach integration connection args (PATH-typed values used raw).",
+          "evidence": [
+            "sql.py:33 / analysis.py:48 FakeMysqlProxy.process_query",
+            "executor_commands.py:800-816 answer_create_database",
+            "mysql wire protocol: mysql_proxy.py startProxy path",
+            "input_control: full control of SQL text incl. PARAMETERS values"
+          ]
+        },
+        {
+          "id": "S063",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/db_handler_wrapper.py",
+            "line": 65
+          },
+          "rationale": "Internal handler-service RPC (spawned locally by DBServiceClient): get_handler(request.json) rebuilds a handler whose connection_data can carry raw ARG_TYPE.PATH values one hop from the public SQL/HTTP boundary (executor_commands.create_tmp_handler -> DBServiceClient). Modeled as a taint re-entry step, not a primary source.",
+          "evidence": [
+            "db_handler_wrapper.py:64-77 get_handler builds handler_class(**handler_kwargs)",
+            "executor_commands.py:754-757 create_tmp_handler forwards raw PATH values",
+            "network hop breaks intra-repo dataflow; needs a summary edge"
+          ]
+        },
+        {
+          "id": "S064",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/db_handler_wrapper.py",
+            "line": 160
+          },
+          "rationale": "Internal handler-service RPC (spawned locally by DBServiceClient): get_handler(request.json) rebuilds a handler whose connection_data can carry raw ARG_TYPE.PATH values one hop from the public SQL/HTTP boundary (executor_commands.create_tmp_handler -> DBServiceClient). Modeled as a taint re-entry step, not a primary source.",
+          "evidence": [
+            "db_handler_wrapper.py:64-77 get_handler builds handler_class(**handler_kwargs)",
+            "executor_commands.py:754-757 create_tmp_handler forwards raw PATH values",
+            "network hop breaks intra-repo dataflow; needs a summary edge"
+          ]
+        },
+        {
+          "id": "S065",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/db_handler_wrapper.py",
+            "line": 170
+          },
+          "rationale": "Internal handler-service RPC (spawned locally by DBServiceClient): get_handler(request.json) rebuilds a handler whose connection_data can carry raw ARG_TYPE.PATH values one hop from the public SQL/HTTP boundary (executor_commands.create_tmp_handler -> DBServiceClient). Modeled as a taint re-entry step, not a primary source.",
+          "evidence": [
+            "db_handler_wrapper.py:64-77 get_handler builds handler_class(**handler_kwargs)",
+            "executor_commands.py:754-757 create_tmp_handler forwards raw PATH values",
+            "network hop breaks intra-repo dataflow; needs a summary edge"
+          ]
+        },
+        {
+          "id": "S066",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/db_handler_wrapper.py",
+            "line": 181
+          },
+          "rationale": "Internal handler-service RPC (spawned locally by DBServiceClient): get_handler(request.json) rebuilds a handler whose connection_data can carry raw ARG_TYPE.PATH values one hop from the public SQL/HTTP boundary (executor_commands.create_tmp_handler -> DBServiceClient). Modeled as a taint re-entry step, not a primary source.",
+          "evidence": [
+            "db_handler_wrapper.py:64-77 get_handler builds handler_class(**handler_kwargs)",
+            "executor_commands.py:754-757 create_tmp_handler forwards raw PATH values",
+            "network hop breaks intra-repo dataflow; needs a summary edge"
+          ]
+        },
+        {
+          "id": "S067",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/db_handler_wrapper.py",
+            "line": 196
+          },
+          "rationale": "Internal handler-service RPC (spawned locally by DBServiceClient): get_handler(request.json) rebuilds a handler whose connection_data can carry raw ARG_TYPE.PATH values one hop from the public SQL/HTTP boundary (executor_commands.create_tmp_handler -> DBServiceClient). Modeled as a taint re-entry step, not a primary source.",
+          "evidence": [
+            "db_handler_wrapper.py:64-77 get_handler builds handler_class(**handler_kwargs)",
+            "executor_commands.py:754-757 create_tmp_handler forwards raw PATH values",
+            "network hop breaks intra-repo dataflow; needs a summary edge"
+          ]
+        },
+        {
+          "id": "S068",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/db_handler_wrapper.py",
+            "line": 245
+          },
+          "rationale": "Internal handler-service RPC (spawned locally by DBServiceClient): get_handler(request.json) rebuilds a handler whose connection_data can carry raw ARG_TYPE.PATH values one hop from the public SQL/HTTP boundary (executor_commands.create_tmp_handler -> DBServiceClient). Modeled as a taint re-entry step, not a primary source.",
+          "evidence": [
+            "db_handler_wrapper.py:64-77 get_handler builds handler_class(**handler_kwargs)",
+            "executor_commands.py:754-757 create_tmp_handler forwards raw PATH values",
+            "network hop breaks intra-repo dataflow; needs a summary edge"
+          ]
+        },
+        {
+          "id": "S069",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/db_handler_wrapper.py",
+            "line": 263
+          },
+          "rationale": "Internal handler-service RPC (spawned locally by DBServiceClient): get_handler(request.json) rebuilds a handler whose connection_data can carry raw ARG_TYPE.PATH values one hop from the public SQL/HTTP boundary (executor_commands.create_tmp_handler -> DBServiceClient). Modeled as a taint re-entry step, not a primary source.",
+          "evidence": [
+            "db_handler_wrapper.py:64-77 get_handler builds handler_class(**handler_kwargs)",
+            "executor_commands.py:754-757 create_tmp_handler forwards raw PATH values",
+            "network hop breaks intra-repo dataflow; needs a summary edge"
+          ]
+        },
+        {
+          "id": "S070",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/db_handler_wrapper.py",
+            "line": 80
+          },
+          "rationale": "before_request logging-only read of request.json; no dataflow into handlers.",
+          "evidence": [
+            "db_handler_wrapper.py:79-80 logger.info(... request.json)"
+          ]
+        },
+        {
+          "id": "S071",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/db_handler_wrapper.py",
+            "line": 194
+          },
+          "rationale": "native_query query string / get_columns table name read from the internal RPC; retained as a propagation step (path relevance only via handler kwargs).",
+          "evidence": [
+            "db_handler_wrapper.py:192-205, 257-265"
+          ]
+        },
+        {
+          "id": "S072",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/db_handler_wrapper.py",
+            "line": 259
+          },
+          "rationale": "native_query query string / get_columns table name read from the internal RPC; retained as a propagation step (path relevance only via handler kwargs).",
+          "evidence": [
+            "db_handler_wrapper.py:192-205, 257-265"
+          ]
+        },
+        {
+          "id": "S073",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/ml_handler_wrapper.py",
+            "line": 60
+          },
+          "rationale": "Internal ML handler-service RPC carrying handler kwargs (incl. connection_data with PATH values) one hop from the public boundary.",
+          "evidence": [
+            "ml_handler_wrapper.py:60"
+          ]
+        },
+        {
+          "id": "S074",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/ml_handler_wrapper.py",
+            "line": 151
+          },
+          "rationale": "Internal ML RPC reads (model/predict/create arguments and handler kwargs); propagation steps for the modular-mode architecture.",
+          "evidence": [
+            "ml_handler_wrapper.py:151-289"
+          ]
+        },
+        {
+          "id": "S075",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/ml_handler_wrapper.py",
+            "line": 152
+          },
+          "rationale": "Internal ML RPC reads (model/predict/create arguments and handler kwargs); propagation steps for the modular-mode architecture.",
+          "evidence": [
+            "ml_handler_wrapper.py:151-289"
+          ]
+        },
+        {
+          "id": "S076",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/ml_handler_wrapper.py",
+            "line": 177
+          },
+          "rationale": "Internal ML RPC reads (model/predict/create arguments and handler kwargs); propagation steps for the modular-mode architecture.",
+          "evidence": [
+            "ml_handler_wrapper.py:151-289"
+          ]
+        },
+        {
+          "id": "S077",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/ml_handler_wrapper.py",
+            "line": 214
+          },
+          "rationale": "Internal ML RPC reads (model/predict/create arguments and handler kwargs); propagation steps for the modular-mode architecture.",
+          "evidence": [
+            "ml_handler_wrapper.py:151-289"
+          ]
+        },
+        {
+          "id": "S078",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/ml_handler_wrapper.py",
+            "line": 234
+          },
+          "rationale": "Internal ML RPC reads (model/predict/create arguments and handler kwargs); propagation steps for the modular-mode architecture.",
+          "evidence": [
+            "ml_handler_wrapper.py:151-289"
+          ]
+        },
+        {
+          "id": "S079",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/ml_handler_wrapper.py",
+            "line": 258
+          },
+          "rationale": "Internal ML RPC reads (model/predict/create arguments and handler kwargs); propagation steps for the modular-mode architecture.",
+          "evidence": [
+            "ml_handler_wrapper.py:151-289"
+          ]
+        },
+        {
+          "id": "S080",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers_wrapper/ml_handler_wrapper.py",
+            "line": 289
+          },
+          "rationale": "Internal ML RPC reads (model/predict/create arguments and handler kwargs); propagation steps for the modular-mode architecture.",
+          "evidence": [
+            "ml_handler_wrapper.py:151-289"
+          ]
+        },
+        {
+          "id": "S081",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/executor/executor_wrapper.py",
+            "line": 124
+          },
+          "rationale": "Modular-mode executor RPC: carries serialized sessions/queries (SQL boundary data) into ExecutorService; re-entry step for the SQL flow, not a primary source.",
+          "evidence": [
+            "executor_wrapper.py:30-118 Flask routes over /query_execute, /do_execute, etc."
+          ]
+        },
+        {
+          "id": "S082",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/executor/executor_wrapper.py",
+            "line": 189
+          },
+          "rationale": "Modular-mode executor RPC: carries serialized sessions/queries (SQL boundary data) into ExecutorService; re-entry step for the SQL flow, not a primary source.",
+          "evidence": [
+            "executor_wrapper.py:30-118 Flask routes over /query_execute, /do_execute, etc."
+          ]
+        },
+        {
+          "id": "S083",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/executor/executor_wrapper.py",
+            "line": 199
+          },
+          "rationale": "Modular-mode executor RPC: carries serialized sessions/queries (SQL boundary data) into ExecutorService; re-entry step for the SQL flow, not a primary source.",
+          "evidence": [
+            "executor_wrapper.py:30-118 Flask routes over /query_execute, /do_execute, etc."
+          ]
+        },
+        {
+          "id": "S084",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/executor/executor_wrapper.py",
+            "line": 211
+          },
+          "rationale": "Modular-mode executor RPC: carries serialized sessions/queries (SQL boundary data) into ExecutorService; re-entry step for the SQL flow, not a primary source.",
+          "evidence": [
+            "executor_wrapper.py:30-118 Flask routes over /query_execute, /do_execute, etc."
+          ]
+        },
+        {
+          "id": "S085",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/executor/executor_wrapper.py",
+            "line": 224
+          },
+          "rationale": "Modular-mode executor RPC: carries serialized sessions/queries (SQL boundary data) into ExecutorService; re-entry step for the SQL flow, not a primary source.",
+          "evidence": [
+            "executor_wrapper.py:30-118 Flask routes over /query_execute, /do_execute, etc."
+          ]
+        },
+        {
+          "id": "S086",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/executor/executor_wrapper.py",
+            "line": 237
+          },
+          "rationale": "Modular-mode executor RPC: carries serialized sessions/queries (SQL boundary data) into ExecutorService; re-entry step for the SQL flow, not a primary source.",
+          "evidence": [
+            "executor_wrapper.py:30-118 Flask routes over /query_execute, /do_execute, etc."
+          ]
+        },
+        {
+          "id": "S087",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/executor/executor_wrapper.py",
+            "line": 273
+          },
+          "rationale": "Modular-mode executor RPC: carries serialized sessions/queries (SQL boundary data) into ExecutorService; re-entry step for the SQL flow, not a primary source.",
+          "evidence": [
+            "executor_wrapper.py:30-118 Flask routes over /query_execute, /do_execute, etc."
+          ]
+        },
+        {
+          "id": "S088",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/executor/executor_wrapper.py",
+            "line": 286
+          },
+          "rationale": "Modular-mode executor RPC: carries serialized sessions/queries (SQL boundary data) into ExecutorService; re-entry step for the SQL flow, not a primary source.",
+          "evidence": [
+            "executor_wrapper.py:30-118 Flask routes over /query_execute, /do_execute, etc."
+          ]
+        },
+        {
+          "id": "S089",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/executor/executor_wrapper.py",
+            "line": 299
+          },
+          "rationale": "Modular-mode executor RPC: carries serialized sessions/queries (SQL boundary data) into ExecutorService; re-entry step for the SQL flow, not a primary source.",
+          "evidence": [
+            "executor_wrapper.py:30-118 Flask routes over /query_execute, /do_execute, etc."
+          ]
+        },
+        {
+          "id": "S090",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/executor/executor_wrapper.py",
+            "line": 311
+          },
+          "rationale": "Modular-mode executor RPC: carries serialized sessions/queries (SQL boundary data) into ExecutorService; re-entry step for the SQL flow, not a primary source.",
+          "evidence": [
+            "executor_wrapper.py:30-118 Flask routes over /query_execute, /do_execute, etc."
+          ]
+        },
+        {
+          "id": "K001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "mkdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/utilities/fs.py",
+            "line": 13
+          },
+          "rationale": "create_directory() operates on operator/deployment-configured storage paths; no request-derived component.",
+          "evidence": [
+            "utilities/fs.py:11-13",
+            "utilities/config.py:77-91 config paths"
+          ]
+        },
+        {
+          "id": "K002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "mkdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/migrations/versions/2022-09-19_3d5e70105df7_content_storage.py",
+            "line": 33
+          },
+          "rationale": "Alembic migration reshaping server storage layout; migration code with fixed names — excluded by the global migration FP heuristic.",
+          "evidence": [
+            "migration upgrade() over config.paths['storage'] items"
+          ]
+        },
+        {
+          "id": "K003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "mkdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/lightwood_handler/lightwood_handler/functions.py",
+            "line": 33
+          },
+          "rationale": "Learn process mark directory under tempfile.gettempdir() with a fixed name pattern; not request-derived.",
+          "evidence": [
+            "functions.py:32-34"
+          ]
+        },
+        {
+          "id": "K004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "mkdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/utilities/fs.py",
+            "line": 64
+          },
+          "rationale": "Process-mark directory under the system temp dir; fixed name.",
+          "evidence": [
+            "utilities/fs.py:60-67"
+          ]
+        },
+        {
+          "id": "K005",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "mkdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/file/file_controller.py",
+            "line": 97
+          },
+          "rationale": "file_dir = content/file/file_{company_id}_{record_id}; company_id is an int()-cast header and the id is a DB serial — no path structure control.",
+          "evidence": [
+            "file_controller.py:92-97",
+            "start.py:123-128 company_id int() cast"
+          ]
+        },
+        {
+          "id": "K006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "mkdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 149
+          },
+          "rationale": "GUI static folder creation during the server-controlled static update; paths from operator config and a fixed S3 bucket URL.",
+          "evidence": [
+            "initialize.py:148-149"
+          ]
+        },
+        {
+          "id": "K007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "mkdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 189
+          },
+          "rationale": "FileStorage folder path built from resource group, company id and resource id — server-side naming.",
+          "evidence": [
+            "fs.py:181-189"
+          ]
+        },
+        {
+          "id": "K008",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "unlink",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 326
+          },
+          "rationale": "FileStorage.delete: the resolved path is unlinked; absolute paths are rejected and the root itself is protected by an equality check, but '..' segments are not contained (fs.py:314-316 checks equality, not containment). No tainted caller confirmed — candidate.",
+          "evidence": [
+            "fs.py:307-328 delete() logic",
+            "fs.py:314 path = (folder_path / relative_path).resolve()",
+            "fs.py:316 equality-only comparison with folder_path.resolve()"
+          ]
+        },
+        {
+          "id": "K009",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.unlink",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 136
+          },
+          "rationale": "BYOM upload route: os.unlink(file_path) where file_path = os.path.join(temp_dir_path, data['file']) and data['file'] is the client-controlled multipart filename or request.json['file']; an absolute value replaces the join base — arbitrary file delete.",
+          "evidence": [
+            "handlers.py:129 file_path = os.path.join(temp_dir_path, data['file'])",
+            "handlers.py:136 os.unlink(file_path)",
+            "dangerous_path_arg: 0",
+            "input_control: full client control of the deleted path"
+          ]
+        },
+        {
+          "id": "K010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.unlink",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/cache.py",
+            "line": 181
+          },
+          "rationale": "Cache eviction deletes files whose names are sha256 checksums under the operator-configured cache dir.",
+          "evidence": [
+            "cache.py:143-181 file_path from checksum names"
+          ]
+        },
+        {
+          "id": "K011",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "unlink",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/lightwood_handler/lightwood_handler/functions.py",
+            "line": 41
+          },
+          "rationale": "Learn process mark cleanup under the system temp dir; fixed names.",
+          "evidence": [
+            "functions.py:37-41"
+          ]
+        },
+        {
+          "id": "K012",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "unlink",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/utilities/fs.py",
+            "line": 80
+          },
+          "rationale": "Process-mark cleanup under the system temp dir; fixed names.",
+          "evidence": [
+            "utilities/fs.py:70-80"
+          ]
+        },
+        {
+          "id": "K013",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "unlink",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/util.py",
+            "line": 54
+          },
+          "rationale": "Stale process-mark cleanup under the system temp dir; mark names come from process ids.",
+          "evidence": [
+            "util.py:44-54"
+          ]
+        },
+        {
+          "id": "K014",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "write_text",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 76
+          },
+          "rationale": "Writes '{}' to the fixed server-side config.json path when absent; content is a literal.",
+          "evidence": [
+            "config.py:74-76"
+          ]
+        },
+        {
+          "id": "K015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "write_text",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/default.py",
+            "line": 117
+          },
+          "rationale": "First-launch marker file at a fixed root/gui_first_launch.txt path; literal content.",
+          "evidence": [
+            "default.py:113-117"
+          ]
+        },
+        {
+          "id": "K016",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "rmdir",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 328
+          },
+          "rationale": "FileStorage.delete directory branch: same partial-barrier logic as the unlink at fs.py:326 (equality-only root check, no '..' containment); no tainted caller confirmed.",
+          "evidence": [
+            "fs.py:307-328"
+          ]
+        },
+        {
+          "id": "K017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.rmdir",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 137
+          },
+          "rationale": "Removes the server-created tempfile.mkdtemp upload dir; not request-derived.",
+          "evidence": [
+            "handlers.py:101,137"
+          ]
+        },
+        {
+          "id": "K018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.rmdir",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 141
+          },
+          "rationale": "Removes the server-created tempfile.mkdtemp upload dir on error/cleanup paths; not request-derived.",
+          "evidence": [
+            "file.py:54,141,146,151"
+          ]
+        },
+        {
+          "id": "K019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.rmdir",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 146
+          },
+          "rationale": "Removes the server-created tempfile.mkdtemp upload dir on error/cleanup paths; not request-derived.",
+          "evidence": [
+            "file.py:54,141,146,151"
+          ]
+        },
+        {
+          "id": "K020",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.rmdir",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 151
+          },
+          "rationale": "Removes the server-created tempfile.mkdtemp upload dir on error/cleanup paths; not request-derived.",
+          "evidence": [
+            "file.py:54,141,146,151"
+          ]
+        },
+        {
+          "id": "K021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "touch",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/lightwood_handler/lightwood_handler/functions.py",
+            "line": 34
+          },
+          "rationale": "Learn process mark creation under the system temp dir; fixed name.",
+          "evidence": [
+            "functions.py:30-34"
+          ]
+        },
+        {
+          "id": "K022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "pathlib",
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "touch",
+            "arg_index": null,
+            "flow_kind": "receiver"
+          },
+          "location": {
+            "file": "mindsdb/utilities/fs.py",
+            "line": 66
+          },
+          "rationale": "Process-mark creation under the system temp dir; fixed name.",
+          "evidence": [
+            "utilities/fs.py:60-66"
+          ]
+        },
+        {
+          "id": "K023",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/wizards.py",
+            "line": 48
+          },
+          "rationale": "Writes a freshly generated self-signed cert to a tempfile.mkstemp path; not request-derived.",
+          "evidence": [
+            "wizards.py:41-49",
+            "mysql_proxy.py:766",
+            "mongo/server.py:258"
+          ]
+        },
+        {
+          "id": "K024",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/file_handler/file_handler.py",
+            "line": 158
+          },
+          "rationale": "open(file_path, 'rb') in _get_data_io: file_path arrives from FileController.save_file with the /api/files/<name> upload-route joined path (client-controlled segment) — arbitrary file read whose content is then returned as queryable table data via SELECT file.<table>.",
+          "evidence": [
+            "file_handler.py:142-163 _get_data_io",
+            "file_controller.py:75 _handle_source(file_path) from save_file",
+            "file.py:129 file_path = os.path.join(temp_dir_path, data['file'])",
+            "dangerous_path_arg: 0",
+            "input_control: full client control of the read path"
+          ]
+        },
+        {
+          "id": "K025",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/file_handler/file_handler.py",
+            "line": 295
+          },
+          "rationale": "_fetch_url writes downloaded content to the fixed join(temp_dir, 'file'); the URL itself is an SSRF concern (Pass 3), not a path traversal.",
+          "evidence": [
+            "file_handler.py:289-304"
+          ]
+        },
+        {
+          "id": "K026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 78
+          },
+          "rationale": "Reads/writes the fixed server-side config.json path; attacker controls content only.",
+          "evidence": [
+            "config.py:74-84"
+          ]
+        },
+        {
+          "id": "K027",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 83
+          },
+          "rationale": "Reads/writes the fixed server-side config.json path; attacker controls content only.",
+          "evidence": [
+            "config.py:74-84"
+          ]
+        },
+        {
+          "id": "K028",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/database/integrations.py",
+            "line": 346
+          },
+          "rationale": "Reads handler requirements.txt and icon files from scanned handler directories; both path components are server-side module metadata.",
+          "evidence": [
+            "integrations.py:342-349, 382-394"
+          ]
+        },
+        {
+          "id": "K029",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/database/integrations.py",
+            "line": 390
+          },
+          "rationale": "Reads handler requirements.txt and icon files from scanned handler directories; both path components are server-side module metadata.",
+          "evidence": [
+            "integrations.py:342-349, 382-394"
+          ]
+        },
+        {
+          "id": "K030",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/database/integrations.py",
+            "line": 393
+          },
+          "rationale": "Reads handler requirements.txt and icon files from scanned handler directories; both path components are server-side module metadata.",
+          "evidence": [
+            "integrations.py:342-349, 382-394"
+          ]
+        },
+        {
+          "id": "K031",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/utilities/functions.py",
+            "line": 35
+          },
+          "rationale": "download_file writes to the fixed join(temp_dir, 'file'); URL fetch is an SSRF concern, not traversal.",
+          "evidence": [
+            "functions.py:21-37"
+          ]
+        },
+        {
+          "id": "K032",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/cache.py",
+            "line": 155
+          },
+          "rationale": "Cache file read/write with checksum-derived names under the operator cache dir.",
+          "evidence": [
+            "cache.py:143-174"
+          ]
+        },
+        {
+          "id": "K033",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/cache.py",
+            "line": 171
+          },
+          "rationale": "Cache file read/write with checksum-derived names under the operator cache dir.",
+          "evidence": [
+            "cache.py:143-174"
+          ]
+        },
+        {
+          "id": "K034",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 123
+          },
+          "rationale": "URL-source branch of PUT /api/files/<name>: open(file_path, 'wb') where file_path = os.path.join(temp_dir_path, data['file']) and data['file'] = data['name'] from request.json — an absolute name replaces the temp base, giving an arbitrary file write with remotely fetched content.",
+          "evidence": [
+            "file.py:89-91 source_type == 'url' branch sets data['file'] = data['name']",
+            "file.py:122-125 file_path join + open(file_path, 'wb')",
+            "dangerous_path_arg: 0",
+            "input_control: full client control of the write path via request.json['name']"
+          ]
+        },
+        {
+          "id": "K035",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/model/model_controller.py",
+            "line": 179
+          },
+          "rationale": "Predictor export/import under fs_store.folder_path with 'predictor_{company_id}_{id}' names; server-side naming.",
+          "evidence": [
+            "model_controller.py:176-179, 226-229"
+          ]
+        },
+        {
+          "id": "K036",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/model/model_controller.py",
+            "line": 228
+          },
+          "rationale": "Predictor export/import under fs_store.folder_path with 'predictor_{company_id}_{id}' names; server-side naming.",
+          "evidence": [
+            "model_controller.py:176-179, 226-229"
+          ]
+        },
+        {
+          "id": "K037",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/telemetry.py",
+            "line": 17
+          },
+          "rationale": "Telemetry lock file and static index.html under operator-configured storage/static dirs.",
+          "evidence": [
+            "telemetry.py:7-44"
+          ]
+        },
+        {
+          "id": "K038",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/telemetry.py",
+            "line": 31
+          },
+          "rationale": "Telemetry lock file and static index.html under operator-configured storage/static dirs.",
+          "evidence": [
+            "telemetry.py:7-44"
+          ]
+        },
+        {
+          "id": "K039",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/telemetry.py",
+            "line": 43
+          },
+          "rationale": "Telemetry lock file and static index.html under operator-configured storage/static dirs.",
+          "evidence": [
+            "telemetry.py:7-44"
+          ]
+        },
+        {
+          "id": "K040",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/config.py",
+            "line": 54
+          },
+          "rationale": "Config file read from MINDSDB_CONFIG_PATH env / operator configuration.",
+          "evidence": [
+            "utilities/config.py:34-55"
+          ]
+        },
+        {
+          "id": "K041",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/bigquery_handler/bigquery_handler.py",
+            "line": 47
+          },
+          "rationale": "open(self.connection_data['service_account_keys']) during connect/check_connection: the raw PATH-typed connection arg from SQL CREATE DATABASE PARAMETERS or HTTP integration params is used here BEFORE IntegrationController.add basenames it (executor_commands runs create_tmp_handler + check_connection with the raw path) — arbitrary local file read.",
+          "evidence": [
+            "bigquery_handler.py:44-48",
+            "executor_commands.py:730-757 raw PATH values reach create_tmp_handler/check_connection",
+            "integrations.py:68-69 basename applied only later in add()",
+            "dangerous_path_arg: 0",
+            "input_control: full client control of the connection arg value"
+          ]
+        },
+        {
+          "id": "K042",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 116
+          },
+          "rationale": "Static GUI version.txt and downloaded dist files at operator-configured static paths.",
+          "evidence": [
+            "initialize.py:109-163"
+          ]
+        },
+        {
+          "id": "K043",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 140
+          },
+          "rationale": "Static GUI version.txt and downloaded dist files at operator-configured static paths.",
+          "evidence": [
+            "initialize.py:109-163"
+          ]
+        },
+        {
+          "id": "K044",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 160
+          },
+          "rationale": "Static GUI version.txt and downloaded dist files at operator-configured static paths.",
+          "evidence": [
+            "initialize.py:109-163"
+          ]
+        },
+        {
+          "id": "K045",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/__main__.py",
+            "line": 101
+          },
+          "rationale": "CLI --config path; operator input in service mode, not an attacker boundary.",
+          "evidence": [
+            "__main__.py:99-102"
+          ]
+        },
+        {
+          "id": "K046",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 39
+          },
+          "rationale": "md5 comparison inside copy(): src comes from storage-internal joins (os.path.join(self.storage, remote_name) or FileStorage.add path); no tainted caller confirmed — retained for recall only.",
+          "evidence": [
+            "fs.py:30-45 copy()",
+            "fs.py:93-105 LocalFSStore get/put joins"
+          ]
+        },
+        {
+          "id": "K047",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 39
+          },
+          "rationale": "md5 comparison inside copy(): dst is the storage-side join target; known callers pass server-derived names — retained for recall.",
+          "evidence": [
+            "fs.py:30-45",
+            "fs.py:236-271 FileStorage.add"
+          ]
+        },
+        {
+          "id": "K048",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 220
+          },
+          "rationale": "FileStorage.file_set: open(dest_abs_path, 'wb') with dest_abs_path = folder_path / name and NO absolute/'..' validation (unlike get_path/delete); known callers pass fixed or basenamed names, so candidate rather than tp.",
+          "evidence": [
+            "fs.py:214-221",
+            "fs.py:297/311 guards absent here",
+            "byom_handler.py:45 file_set('model_code', ...) fixed name"
+          ]
+        },
+        {
+          "id": "K049",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "builtins",
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 233
+          },
+          "rationale": "FileStorage.file_get: open(dest_abs_path, 'rb') with the same missing absolute/'..' validation; known byom caller passes a basenamed value — candidate.",
+          "evidence": [
+            "fs.py:226-234",
+            "byom_handler.py:49-50"
+          ]
+        },
+        {
+          "id": "K050",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/file/file_controller.py",
+            "line": 108
+          },
+          "rationale": "Cleanup of file_dir (content/file/file_{company}_{id}) in the finally block; server-side naming.",
+          "evidence": [
+            "file_controller.py:96-108"
+          ]
+        },
+        {
+          "id": "K051",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 150
+          },
+          "rationale": "Removes tempfile.mkdtemp integration upload dirs; server-created paths.",
+          "evidence": [
+            "config.py:130, 149-174"
+          ]
+        },
+        {
+          "id": "K052",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 170
+          },
+          "rationale": "Removes tempfile.mkdtemp integration upload dirs; server-created paths.",
+          "evidence": [
+            "config.py:130, 149-174"
+          ]
+        },
+        {
+          "id": "K053",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 174
+          },
+          "rationale": "Removes tempfile.mkdtemp integration upload dirs; server-created paths.",
+          "evidence": [
+            "config.py:130, 149-174"
+          ]
+        },
+        {
+          "id": "K054",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/migrations/versions/2022-09-19_3d5e70105df7_content_storage.py",
+            "line": 38
+          },
+          "rationale": "Alembic migration removing fixed legacy storage directories; migration FP heuristic.",
+          "evidence": [
+            "migration upgrade()/downgrade() fixed dir names"
+          ]
+        },
+        {
+          "id": "K055",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/migrations/versions/2022-09-19_3d5e70105df7_content_storage.py",
+            "line": 40
+          },
+          "rationale": "Alembic migration removing fixed legacy storage directories; migration FP heuristic.",
+          "evidence": [
+            "migration upgrade()/downgrade() fixed dir names"
+          ]
+        },
+        {
+          "id": "K056",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/migrations/versions/2022-09-19_3d5e70105df7_content_storage.py",
+            "line": 42
+          },
+          "rationale": "Alembic migration removing fixed legacy storage directories; migration FP heuristic.",
+          "evidence": [
+            "migration upgrade()/downgrade() fixed dir names"
+          ]
+        },
+        {
+          "id": "K057",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/migrations/versions/2022-09-19_3d5e70105df7_content_storage.py",
+            "line": 59
+          },
+          "rationale": "Alembic migration removing fixed legacy storage directories; migration FP heuristic.",
+          "evidence": [
+            "migration upgrade()/downgrade() fixed dir names"
+          ]
+        },
+        {
+          "id": "K058",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 155
+          },
+          "rationale": "GUI static update swapping server-controlled static/temp dirs.",
+          "evidence": [
+            "initialize.py:203-214"
+          ]
+        },
+        {
+          "id": "K059",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 206
+          },
+          "rationale": "GUI static update swapping server-controlled static/temp dirs.",
+          "evidence": [
+            "initialize.py:203-214"
+          ]
+        },
+        {
+          "id": "K060",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 210
+          },
+          "rationale": "GUI static update swapping server-controlled static/temp dirs.",
+          "evidence": [
+            "initialize.py:203-214"
+          ]
+        },
+        {
+          "id": "K061",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 212
+          },
+          "rationale": "GUI static update swapping server-controlled static/temp dirs.",
+          "evidence": [
+            "initialize.py:203-214"
+          ]
+        },
+        {
+          "id": "K062",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 214
+          },
+          "rationale": "GUI static update swapping server-controlled static/temp dirs.",
+          "evidence": [
+            "initialize.py:203-214"
+          ]
+        },
+        {
+          "id": "K063",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 35
+          },
+          "rationale": "copy() directory branch removes dst before copytree; dst comes from storage-internal joins (LocalFSStore put/get, FileStorage.add) with no containment validation, but no tainted caller confirmed — retained for recall.",
+          "evidence": [
+            "fs.py:30-36",
+            "fs.py:93-105, 236-271"
+          ]
+        },
+        {
+          "id": "K064",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.rmtree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 334
+          },
+          "rationale": "complete_removal removes the FileStorage folder itself; server-side naming.",
+          "evidence": [
+            "fs.py:333-335"
+          ]
+        },
+        {
+          "id": "K065",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.makedirs",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/cache.py",
+            "line": 123
+          },
+          "rationale": "Cache category dir under the operator cache path.",
+          "evidence": [
+            "cache.py:113-125"
+          ]
+        },
+        {
+          "id": "K066",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.makedirs",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/config.py",
+            "line": 69
+          },
+          "rationale": "Root storage dir from operator config/env.",
+          "evidence": [
+            "utilities/config.py:57-69"
+          ]
+        },
+        {
+          "id": "K067",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.makedirs",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 128
+          },
+          "rationale": "S3FSStore.get creates the server-provided base_dir before downloading the operator-configured S3 archive.",
+          "evidence": [
+            "fs.py:123-132"
+          ]
+        },
+        {
+          "id": "K068",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.makedirs",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 303
+          },
+          "rationale": "FileStorage.get_path creates ret_path = folder_path / relative_path; absolute paths are rejected but '..' segments are not contained (resolve is commented out), so a tainted relative_path could create directories outside the root; known callers pass fixed arg-name keys.",
+          "evidence": [
+            "fs.py:293-305",
+            "integrations.py:293-294 fixed key callers"
+          ]
+        },
+        {
+          "id": "K069",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.listdir",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/cache.py",
+            "line": 134
+          },
+          "rationale": "Cache dir listing for eviction; checksum-named files.",
+          "evidence": [
+            "cache.py:127-141"
+          ]
+        },
+        {
+          "id": "K070",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.listdir",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 139
+          },
+          "rationale": "Lists the server-created temp upload dir to enforce the single-file archive rule; the dir path is server-side.",
+          "evidence": [
+            "file.py:139-147"
+          ]
+        },
+        {
+          "id": "K071",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/mysql/mysql_proxy/mysql_proxy.py",
+            "line": 768
+          },
+          "rationale": "atexit removal of the mkstemp-generated or config-specified MySQL cert; operator config.",
+          "evidence": [
+            "mysql_proxy.py:762-768"
+          ]
+        },
+        {
+          "id": "K072",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 138
+          },
+          "rationale": "Removes the uploaded archive at file_path = os.path.join(temp_dir_path, data['file']) with the client-controlled segment — arbitrary file delete (an absolute data['file'] replaces the temp base).",
+          "evidence": [
+            "file.py:129,138",
+            "dangerous_path_arg: 0",
+            "input_control: full client control via multipart filename / request.json['file']"
+          ]
+        },
+        {
+          "id": "K073",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/telemetry.py",
+            "line": 11
+          },
+          "rationale": "Telemetry lock file at a fixed storage path.",
+          "evidence": [
+            "telemetry.py:7-11"
+          ]
+        },
+        {
+          "id": "K074",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/mongo/server.py",
+            "line": 260
+          },
+          "rationale": "atexit removal of the mkstemp-generated mongo cert.",
+          "evidence": [
+            "mongo/server.py:258-260"
+          ]
+        },
+        {
+          "id": "K075",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 157
+          },
+          "rationale": "GUI dist.zip removal after extraction; server-controlled download path.",
+          "evidence": [
+            "initialize.py:128-157"
+          ]
+        },
+        {
+          "id": "K076",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 42
+          },
+          "rationale": "copy() removes dst before copy2; dst is a storage-internal join target with no containment validation, but no tainted caller confirmed — retained for recall.",
+          "evidence": [
+            "fs.py:37-45"
+          ]
+        },
+        {
+          "id": "K077",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 132
+          },
+          "rationale": "S3FSStore.get removes the downloaded fixed-name tar.gz under base_dir.",
+          "evidence": [
+            "fs.py:123-132"
+          ]
+        },
+        {
+          "id": "K078",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "os",
+            "module": "os",
+            "type": "os",
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 149
+          },
+          "rationale": "S3FSStore.put removes the fixed-name archive join under base_dir.",
+          "evidence": [
+            "fs.py:134-149"
+          ]
+        },
+        {
+          "id": "K079",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.move",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/file/file_controller.py",
+            "line": 100
+          },
+          "rationale": "Move source: file_path from the upload route (client-controlled joined path) is read and unlinked by shutil.move — arbitrary file move/delete from the /api/files/<name> flow.",
+          "evidence": [
+            "file.py:129,149 join + save_file call",
+            "file_controller.py:100 shutil.move(file_path, str(source))",
+            "dangerous_path_arg: 0",
+            "input_control: full client control via data['file']"
+          ]
+        },
+        {
+          "id": "K080",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.move",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 153
+          },
+          "rationale": "GUI static update moving server-controlled dist files.",
+          "evidence": [
+            "initialize.py:152-155"
+          ]
+        },
+        {
+          "id": "K081",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.move",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 154
+          },
+          "rationale": "GUI static update moving server-controlled dist files.",
+          "evidence": [
+            "initialize.py:152-155"
+          ]
+        },
+        {
+          "id": "K082",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.move",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/file/file_controller.py",
+            "line": 100
+          },
+          "rationale": "Move destination: source = file_dir.joinpath(file_name) with file_name = original_file_name form field (or Path(file_path).name) — a client-supplied '../..' or absolute file_name escapes file_dir, giving an arbitrary file write/move destination.",
+          "evidence": [
+            "file.py:127 original_file_name from the multipart form",
+            "file_controller.py:70-71 file_name = Path(file_path).name when absent",
+            "file_controller.py:98-100 source = file_dir.joinpath(file_name); shutil.move(...)",
+            "dangerous_path_arg: 1",
+            "input_control: full client control of the destination filename"
+          ]
+        },
+        {
+          "id": "K083",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.move",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 153
+          },
+          "rationale": "GUI static update destination (static_folder); server-controlled.",
+          "evidence": [
+            "initialize.py:148-155"
+          ]
+        },
+        {
+          "id": "K084",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.move",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 154
+          },
+          "rationale": "GUI static update destination (static_folder); server-controlled.",
+          "evidence": [
+            "initialize.py:148-155"
+          ]
+        },
+        {
+          "id": "K085",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copytree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 211
+          },
+          "rationale": "GUI static swap copying server-controlled static/temp trees.",
+          "evidence": [
+            "initialize.py:209-214"
+          ]
+        },
+        {
+          "id": "K086",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copytree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 213
+          },
+          "rationale": "GUI static swap copying server-controlled static/temp trees.",
+          "evidence": [
+            "initialize.py:209-214"
+          ]
+        },
+        {
+          "id": "K087",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copytree",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 211
+          },
+          "rationale": "GUI static swap destination dirs; server-controlled.",
+          "evidence": [
+            "initialize.py:209-214"
+          ]
+        },
+        {
+          "id": "K088",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copytree",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 213
+          },
+          "rationale": "GUI static swap destination dirs; server-controlled.",
+          "evidence": [
+            "initialize.py:209-214"
+          ]
+        },
+        {
+          "id": "K089",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copytree",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 36
+          },
+          "rationale": "copy() directory branch source: storage-internal join; no tainted caller confirmed — retained for recall.",
+          "evidence": [
+            "fs.py:30-36"
+          ]
+        },
+        {
+          "id": "K090",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copytree",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 36
+          },
+          "rationale": "copy() directory branch destination: storage-internal join without containment validation; no tainted caller confirmed — retained for recall.",
+          "evidence": [
+            "fs.py:30-36"
+          ]
+        },
+        {
+          "id": "K091",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copy2",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 45
+          },
+          "rationale": "copy() file branch source: storage-internal join; no tainted caller confirmed.",
+          "evidence": [
+            "fs.py:37-45"
+          ]
+        },
+        {
+          "id": "K092",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copy2",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 45
+          },
+          "rationale": "copy() file branch destination: storage-internal join; no tainted caller confirmed.",
+          "evidence": [
+            "fs.py:37-45"
+          ]
+        },
+        {
+          "id": "K093",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copy",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/database/integrations.py",
+            "line": 68
+          },
+          "rationale": "ARG_TYPE.PATH connection arg is copied from the RAW request-supplied path (SQL CREATE DATABASE PARAMETERS or HTTP integration params) before the Path(arg_value).name baselining on the next line — arbitrary local file read (copied into the integration storage).",
+          "evidence": [
+            "integrations.py:60-69 copy(arg_value, files_dir) then connection_args[arg_name] = Path(arg_value).name",
+            "executor_commands.py:730-752, config.py:120-122, handlers.py:131-134 entry points",
+            "dangerous_path_arg: 0",
+            "input_control: full client control of PATH-typed connection arg values"
+          ]
+        },
+        {
+          "id": "K094",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copy",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/database/integrations.py",
+            "line": 68
+          },
+          "rationale": "Destination is the tempfile.mkdtemp files_dir; server-created.",
+          "evidence": [
+            "integrations.py:66-68"
+          ]
+        },
+        {
+          "id": "K095",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "zipfile",
+            "module": "zipfile",
+            "type": "zipfile",
+            "callable": "zipfile.ZipFile",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 133
+          },
+          "rationale": "ZipFile(file_path) opens the client-controlled joined path (os.path.join(temp_dir_path, data['file'])) for reading — arbitrary file read of zip-structured content; an absolute data['file'] replaces the temp base.",
+          "evidence": [
+            "file.py:129,133",
+            "dangerous_path_arg: 0",
+            "input_control: full client control via data['file']"
+          ]
+        },
+        {
+          "id": "K096",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "tarfile",
+            "module": "tarfile",
+            "type": "tarfile",
+            "callable": "tarfile.open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 136
+          },
+          "rationale": "tarfile.open(file_path) on the same client-controlled joined path — arbitrary file read of tar-structured content.",
+          "evidence": [
+            "file.py:129,136",
+            "dangerous_path_arg: 0",
+            "input_control: full client control via data['file']"
+          ]
+        },
+        {
+          "id": "K097",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "zipfile",
+            "module": "zipfile",
+            "type": "zipfile.ZipFile",
+            "callable": "extractall",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 134
+          },
+          "rationale": "Zip-slip: client-uploaded .zip is extracted with f.extractall(temp_dir_path) and no member-name inspection in repo code (no namelist filtering, no '..' rejection) — archive members named '../...' write outside temp_dir_path. The single-file os.listdir check at file.py:139-140 runs only after extraction.",
+          "evidence": [
+            "file.py:131-147 extraction block",
+            "no namelist/leading-'..' validation anywhere in the block",
+            "dangerous_path_arg: 0 (destination) with member names controlling written paths",
+            "input_control: full client control of archive member names"
+          ]
+        },
+        {
+          "id": "K098",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "tarfile",
+            "module": "tarfile",
+            "type": "tarfile.TarFile",
+            "callable": "extractall",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/file.py",
+            "line": 137
+          },
+          "rationale": "Zip-slip on the .tar.gz branch: tarfile.extractall(temp_dir_path) with no member-name validation; post-extraction checks run too late.",
+          "evidence": [
+            "file.py:135-147"
+          ]
+        },
+        {
+          "id": "K099",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "zipfile",
+            "module": "zipfile",
+            "type": "zipfile.ZipFile",
+            "callable": "extractall",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/initialize.py",
+            "line": 150
+          },
+          "rationale": "GUI dist archive downloaded from the fixed mindsdb S3 bucket URL and extracted into the static folder; the archive is server/operator-controlled, not client-uploaded.",
+          "evidence": [
+            "initialize.py:124-150 fixed bucket URL 'https://mindsdb-web-builds.s3.amazonaws.com/'"
+          ]
+        },
+        {
+          "id": "K100",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.unpack_archive",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 130
+          },
+          "rationale": "S3FSStore.get unpacks the archive downloaded from the operator-configured S3 bucket at a fixed local path; not a client-controlled archive.",
+          "evidence": [
+            "fs.py:123-132"
+          ]
+        },
+        {
+          "id": "K101",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "shutil",
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.make_archive",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/interfaces/storage/fs.py",
+            "line": 138
+          },
+          "rationale": "Archives a storage resource under a fixed join(base_dir, folder_name); server-side naming.",
+          "evidence": [
+            "fs.py:134-143"
+          ]
+        },
+        {
+          "id": "K102",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": null,
+            "callable": "send_file",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/handlers.py",
+            "line": 44
+          },
+          "rationale": "Handler icon path is built from registered handler module metadata (icon name + handler folder) plus the mindsdb package path; the route variable only selects which registered handler — both path components are server-side.",
+          "evidence": [
+            "handlers.py:32-44 icon_name/handler_folder from handlers_import_status metadata",
+            "no request-derived path component"
+          ]
+        },
+        {
+          "id": "K103",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": null,
+            "callable": "send_from_directory",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/start.py",
+            "line": 67
+          },
+          "rationale": "GET /<path:path> serves static assets with the path route variable as the relative path; werkzeug's safe_join inside send_from_directory rejects traversal (framework-internal barrier), and serving static files is the intended function — genuine sink shape but not a traversal vulnerability in this implementation.",
+          "evidence": [
+            "start.py:62-69 path.startswith('api/') guard + send_from_directory(static_root, path)",
+            "werkzeug safe_join barrier is framework-internal (outside repo code)",
+            "input_control: client controls the relative path; blocked by safe_join"
+          ]
+        },
+        {
+          "id": "K104",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": "flask",
+            "module": "flask",
+            "type": null,
+            "callable": "send_from_directory",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/start.py",
+            "line": 69
+          },
+          "rationale": "Serves the literal 'index.html' fallback; fixed filename.",
+          "evidence": [
+            "start.py:69"
+          ]
+        },
+        {
+          "id": "K105",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "sqlite3",
+            "module": "sqlite3",
+            "type": "sqlite3",
+            "callable": "sqlite3.connect",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/sqlite_handler/sqlite_handler.py",
+            "line": 60
+          },
+          "rationale": "sqlite3.connect(self.connection_data['db_file']) opens/creates an arbitrary database file: db_file is an ARG_TYPE.PATH connection arg used raw during create_tmp_handler/check_connection (executor_commands.py:754-757) before IntegrationController.add basenames the stored value.",
+          "evidence": [
+            "sqlite_handler.py:50-63",
+            "executor_commands.py:730-757 raw PATH values reach the handler",
+            "dangerous_path_arg: 0",
+            "input_control: full client control of the db_file connection arg"
+          ]
+        },
+        {
+          "id": "K106",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "sqlite3",
+            "module": "sqlite3",
+            "type": "sqlite3",
+            "callable": "sqlite3.connect",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/integrations/libs/storage_handler.py",
+            "line": 51
+          },
+          "rationale": "KVStorage sqlite path built from the handler's own config dict (name/path keys); no request-derived value confirmed at this site.",
+          "evidence": [
+            "storage_handler.py:45-52"
+          ]
+        },
+        {
+          "id": "K107",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "pandas",
+            "module": "pandas",
+            "type": "df",
+            "callable": "to_pickle",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/utilities/cache.py",
+            "line": 148
+          },
+          "rationale": "DataFrame pickled to a checksum-named cache path.",
+          "evidence": [
+            "cache.py:143-149"
+          ]
+        },
+        {
+          "id": "K108",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "lightwood",
+            "module": "lightwood",
+            "type": "predictor",
+            "callable": "save",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/lightwood_handler/lightwood_handler/functions.py",
+            "line": 96
+          },
+          "rationale": "lightwood predictor.save to fs.folder_path / fs.folder_name — server-side predictor storage naming.",
+          "evidence": [
+            "functions.py:91-97, 182-188"
+          ]
+        },
+        {
+          "id": "K109",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "lightwood",
+            "module": "lightwood",
+            "type": "predictor",
+            "callable": "save",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/integrations/handlers/lightwood_handler/lightwood_handler/functions.py",
+            "line": 187
+          },
+          "rationale": "lightwood predictor.save to fs.folder_path / fs.folder_name — server-side predictor storage naming.",
+          "evidence": [
+            "functions.py:91-97, 182-188"
+          ]
+        },
+        {
+          "id": "K110",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "werkzeug",
+            "module": "werkzeug",
+            "type": "file",
+            "callable": "save",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "mindsdb/api/http/namespaces/config.py",
+            "line": 137
+          },
+          "rationale": "werkzeug FileStorage.save writes the uploaded file, but the call site applies an effective resolve+parents containment barrier (config.py:133-136) before saving — genuine write sink whose traversal flow is blocked at this route.",
+          "evidence": [
+            "config.py:133-136 file_path = temp_dir_path.joinpath(Path(file.filename)).resolve(); parents check",
+            "config.py:137 file.save(file_path)",
+            "input_control: client controls the filename; blocked by the containment check"
+          ]
+        }
+      ]
+    }
+  ]
+}

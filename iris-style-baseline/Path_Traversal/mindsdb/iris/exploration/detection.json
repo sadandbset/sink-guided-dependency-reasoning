@@ -1,0 +1,242 @@
+{
+  "run": {
+    "timestamp": "2026-10-22",
+    "project": "mindsdb",
+    "project_version": "23.2.2.1",
+    "source_root": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\mindsdb_vuln",
+    "database": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\mindsdb_vuln\\mindsdb-db",
+    "codeql_cli_version": "2.25.1",
+    "python_pack": "codeql/python-all 7.1.1 (local package cache)",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\mindsdb\\iris",
+    "qlpack": "iris/mindsdb-cwe22 (exists, dependencies: codeql/python-all: *)",
+    "qlpack_install_status": "deferred to the execution stage; this run only generates detection.json and the two extraction queries",
+    "independence_note": "ground-truth artifacts present in the source root (CRITICAL_VULN_VERIFIED.md, CVE_application_report.md, CVE_application_unassigned_vulns.md, REAL_VULN_VERIFICATION.md, mindsdb_path_traversal_audit_report.md, path_traversal_sinks.csv, mindsdb_contest.md) were NOT opened; exploration was restricted to the mindsdb/ package source",
+    "db_exclusion_note": "mindsdb-db is a CodeQL database directory nested inside the source root; all exploration and both extraction queries restrict candidates to relative paths starting with 'mindsdb/', which structurally excludes mindsdb-db, top-level tests/, setup.py and handler-level setup.py/test files"
+  },
+  "pass_scope": {
+    "pass_id": 1,
+    "focus": "Path Traversal",
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"]
+  },
+  "language": {
+    "detected": "python",
+    "evidence": [
+      "codeql-database.yml primaryLanguage: python (cliVersion 2.25.1, sha e83cdc52f5ec7cd7def1e20e8973931f9cc98f60, baselineLinesOfCode 34485)",
+      "mindsdb/__about__.py: __package_name__ = 'mindsdb', __version__ = '23.2.2.1'",
+      "mindsdb/ package with 553 .py files; setup.py and pyproject.toml present",
+      "requirements.txt: flask >= 1.0, flask-restx >= 1.0.1, flask-compress, requests, lightwood"
+    ]
+  },
+  "frameworks": [
+    {
+      "name": "Flask (+ flask-restx)",
+      "role": "primary",
+      "confidence": 1.0,
+      "score_breakdown": {
+        "import_evidence": 0.45,
+        "route_decorator_evidence": 0.30,
+        "runtime_bootstrap_evidence": 0.20,
+        "layout_evidence": 0.05
+      },
+      "evidence": [
+        "import: 'from flask import request, current_app as ca' (mindsdb/api/http/namespaces/file.py:5)",
+        "import: 'from flask import Flask, url_for, make_response' + 'from flask_restx import Api' (mindsdb/api/http/initialize.py:16-18)",
+        "import: 'from flask_restx import Resource' (all 12 namespace modules under mindsdb/api/http/namespaces/)",
+        "routes: 36 '@ns_conf.route(...)' decorators on flask_restx Resource classes across mindsdb/api/http/namespaces/*.py and mindsdb/api/nlp/nlp.py:8",
+        "routes: 2 plain Flask '@app.route' decorators on root_index in mindsdb/api/http/start.py:61-62 ('/' and '/<path:path>')",
+        "bootstrap: 'app = Flask(__name__, **kwargs)' with static_folder/static_url_path (mindsdb/api/http/initialize.py:234-237)",
+        "bootstrap: 'api = Swagger_Api(app, ...)' with prefix='/api' (mindsdb/api/http/initialize.py:254-261)",
+        "runtime: waitress 'serve(app, ...)' / flask app.run / gunicorn StandaloneApplication (mindsdb/api/http/start.py:148-178)"
+      ],
+      "extensions": [
+        "flask-restx (Resource classes, ns_conf namespaces)",
+        "flask-compress (Compress(app), start.py:54)",
+        "python-multipart (multipart.create_form_parser, file.py:57, handlers.py:104)",
+        "waitress / gunicorn servers"
+      ]
+    }
+  ],
+  "non_http_entry_surfaces": [
+    {
+      "name": "MySQL wire-protocol server",
+      "evidence": "mindsdb/api/mysql/start.py starts a native MySQL protocol server; client query strings reach MysqlProxy.process_query(self, sql) (mindsdb/api/mysql/mysql_proxy/mysql_proxy.py:432), the same SQL boundary as the HTTP SQL endpoints"
+    },
+    {
+      "name": "Mongo wire-protocol server",
+      "evidence": "mindsdb/api/mongo/start.py + server.py; commands are translated to SQL AST and executed via run_sql_command(mindsdb_env, ast_query) -> ExecuteCommands.execute_command (mindsdb/api/mongo/classes/query_sql.py:5-10), reaching the same CREATE DATABASE / integration handlers"
+    },
+    {
+      "name": "CLI (python -m mindsdb)",
+      "evidence": "mindsdb/__main__.py + mindsdb/utilities/functions.py args_parse; operator-controlled, not treated as an attacker source for Pass 1"
+    }
+  ],
+  "reference_files_loaded": [
+    "references/patterns.md",
+    "references/python.md",
+    "references/flask.md"
+  ],
+  "route_inventory": [
+    {"route": "/api/analysis/query", "handler": "QueryAnalysis.post", "file": "mindsdb/api/http/namespaces/analysis.py", "line": 24, "request_body": "request.json['query'] -> FakeMysqlProxy.process_query"},
+    {"route": "/api/analysis/data", "handler": "DataAnalysis.post", "file": "mindsdb/api/http/namespaces/analysis.py", "line": 79, "request_body": "request.json column_names/data"},
+    {"route": "/api/config/logs", "handler": "GetLogs.get", "file": "mindsdb/api/http/namespaces/config.py", "line": 23, "request_body": "request.args min_timestamp/max_timestamp/context/level/log_from/limit"},
+    {"route": "/api/config/", "handler": "GetConfig.get/put", "file": "mindsdb/api/http/namespaces/config.py", "line": 39, "request_body": "request.json auth config"},
+    {"route": "/api/config/integrations", "handler": "ListIntegration.get", "file": "mindsdb/api/http/namespaces/config.py", "line": 89},
+    {"route": "/api/config/all_integrations", "handler": "AllIntegration.get", "file": "mindsdb/api/http/namespaces/config.py", "line": 98},
+    {"route": "/api/config/integrations/<name>", "handler": "Integration.get/put/delete/post", "file": "mindsdb/api/http/namespaces/config.py", "line": 107, "route_variable": true, "request_body": "request.json['params'] + request.form + request.files (werkzeug multipart upload with resolve+parents containment check at 133-136)"},
+    {"route": "/api/config/integrations/<name>/check", "handler": "Check.get", "file": "mindsdb/api/http/namespaces/config.py", "line": 215, "route_variable": true},
+    {"route": "/api/config/vars", "handler": "Vars.get", "file": "mindsdb/api/http/namespaces/config.py", "line": 226},
+    {"route": "/api/login", "handler": "LoginRoute.post", "file": "mindsdb/api/http/namespaces/default.py", "line": 24, "request_body": "request.json username/password"},
+    {"route": "/api/status", "handler": "StatusRoute.get", "file": "mindsdb/api/http/namespaces/default.py", "line": 70},
+    {"route": "/api/files/", "handler": "FilesList.get", "file": "mindsdb/api/http/namespaces/file.py", "line": 18},
+    {"route": "/api/files/<name>", "handler": "File.put/delete", "file": "mindsdb/api/http/namespaces/file.py", "line": 26, "route_variable": true, "request_body": "python-multipart form parser (on_field/on_file callbacks, UPLOAD_KEEP_FILENAME=True); URL source branch via request.json source/name; archive extractall for .zip/.tar.gz"},
+    {"route": "/api/handlers/", "handler": "HandlersList.get", "file": "mindsdb/api/http/namespaces/handlers.py", "line": 15},
+    {"route": "/api/handlers/<handler_name>/icon", "handler": "HandlerIcon.get", "file": "mindsdb/api/http/namespaces/handlers.py", "line": 29, "route_variable": true, "sink": "send_file(icon_path) at 44 (path built from server-side handler folder + module icon name)"},
+    {"route": "/api/handlers/<handler_name>/install", "handler": "InstallDependencies.post", "file": "mindsdb/api/http/namespaces/handlers.py", "line": 47, "route_variable": true},
+    {"route": "/api/handlers/byom/<name>", "handler": "BYOMUpload.put", "file": "mindsdb/api/http/namespaces/handlers.py", "line": 77, "route_variable": true, "request_body": "python-multipart upload; os.path.join(temp_dir_path, data['file']) at 129 becomes the 'model_code' connection arg"},
+    {"route": "/api/projects/", "handler": "ProjectsList.get", "file": "mindsdb/api/http/namespaces/projects.py", "line": 9},
+    {"route": "/api/projects/<project_name>/models", "handler": "ModelsList.get", "file": "mindsdb/api/http/namespaces/projects.py", "line": 23, "route_variable": true},
+    {"route": "/api/projects/<project_name>/models/<model_name>/predict", "handler": "ModelPredict.post", "file": "mindsdb/api/http/namespaces/projects.py", "line": 34, "route_variable": true, "request_body": "request.json['data']"},
+    {"route": "/api/sql/query", "handler": "Query.post", "file": "mindsdb/api/http/namespaces/sql.py", "line": 17, "request_body": "request.json['query'] -> FakeMysqlProxy.process_query"},
+    {"route": "/api/sql/list_databases", "handler": "ListDatabases.get", "file": "mindsdb/api/http/namespaces/sql.py", "line": 96},
+    {"route": "/api/stream/", "handler": "StreamList.get", "file": "mindsdb/api/http/namespaces/stream.py", "line": 28},
+    {"route": "/api/stream/<name>", "handler": "Stream.get/put/delete", "file": "mindsdb/api/http/namespaces/stream.py", "line": 35, "route_variable": true, "request_body": "request.json params (put)"},
+    {"route": "/api/tab/", "handler": "Tab.get/post", "file": "mindsdb/api/http/namespaces/tab.py", "line": 27, "request_body": "request.json tabs (post)"},
+    {"route": "/api/tree/", "handler": "GetRoot.get", "file": "mindsdb/api/http/namespaces/tree.py", "line": 10},
+    {"route": "/api/tree/<db_name>", "handler": "GetDB.get", "file": "mindsdb/api/http/namespaces/tree.py", "line": 25, "route_variable": true},
+    {"route": "/api/util/ping", "handler": "Ping.get", "file": "mindsdb/api/http/namespaces/util.py", "line": 20},
+    {"route": "/api/util/ping_native", "handler": "PingNative.get", "file": "mindsdb/api/http/namespaces/util.py", "line": 28},
+    {"route": "/api/util/telemetry", "handler": "Telemetry.get/post", "file": "mindsdb/api/http/namespaces/util.py", "line": 61, "request_body": "request.json['action'] (post)"},
+    {"route": "/api/util/validate_json_ai", "handler": "ValidateJsonAI.post", "file": "mindsdb/api/http/namespaces/util.py", "line": 81, "request_body": "request.json['json_ai']"},
+    {"route": "/api/util/update-gui", "handler": "UpdateGui.get", "file": "mindsdb/api/http/namespaces/util.py", "line": 95},
+    {"route": "/", "handler": "root_index", "file": "mindsdb/api/http/start.py", "line": 61, "methods": ["GET"]},
+    {"route": "/<path:path>", "handler": "root_index", "file": "mindsdb/api/http/start.py", "line": 62, "methods": ["GET"], "path_converter": true, "sink": "send_from_directory(static_root, path) at 67"},
+    {"route": "/nlp/<query>", "handler": "nlp query Resource", "file": "mindsdb/api/nlp/nlp.py", "line": 8, "route_variable": true}
+  ],
+  "source_evidence": {
+    "flask_route_path_variables": [
+      "File.put(name) / File.delete(name): '/api/files/<name>' route variable used as mindsdb file name (file.py:30-38, 156); combined with multipart 'file' field into os.path.join(temp_dir_path, data['file']) and save_file (file.py:129, 149)",
+      "BYOMUpload.put(name): '/api/handlers/byom/<name>' route variable used as integration name (handlers.py:81-134)",
+      "HandlerIcon.get(handler_name): '/api/handlers/<handler_name>/icon' selects a registered handler whose icon is served (handlers.py:32-44); icon path itself is server-side",
+      "Integration.get/put/delete/post(name), Check.get(name), Stream.get/put/delete(name), ModelsList.get(project_name), ModelPredict.post(project_name, model_name), GetDB.get(db_name): route variables reaching controllers by name lookup"
+    ],
+    "flask_request_accessors_observed": [
+      "request.json: file.py:80 (non-multipart branch), config.py:55 (auth config update), config.py:121/192 ('params' for integration put/post), analysis.py:28/83, default.py:40-41 (username/password), sql.py:22-23 ('query' and 'context'), projects.py:49-50, stream.py:48, util.py:71-84 ('action', 'json_ai')",
+      "request.args: config.py:28-33 (logs filter params)",
+      "request.form: config.py:122 (merged into integration params)",
+      "request.files: config.py:127 (werkzeug FileStorage items -> Path(file.filename) at 133)",
+      "request.headers: file.py:56 and handlers.py:103 (Content-Type), start.py:120-121 ('company-id', 'user-class')",
+      "request.stream: file.py:70 and handlers.py:117 (raw body fed to the python-multipart parser)",
+      "request.json['query'] is the dominant SQL source: POST /api/sql/query and POST /api/analysis/query forward it to FakeMysqlProxy.process_query"
+    ],
+    "multipart_upload_callbacks": [
+      "file.py:42-52 and handlers.py:89-99: python-multipart create_form_parser with UPLOAD_DIR=tempfile.mkdtemp, UPLOAD_KEEP_FILENAME=True, UPLOAD_KEEP_EXTENSIONS=True; on_field(field) yields decoded form fields; on_file(file) yields file.file_name.decode() (client-controlled filename, used as data['file']) and file.file_object",
+      "config.py:129-138: werkzeug request.files items; file_name = Path(file.filename); file_path = temp_dir_path.joinpath(file_name).resolve() with a parents containment check before file.save(file_path)"
+    ],
+    "sql_and_integration_boundary": [
+      "MysqlProxy.process_query(self, sql) (mysql_proxy.py:432): raw SQL text boundary; reached from FakeMysqlProxy (sql.py:33, analysis.py:48) and from the native MySQL wire server",
+      "answer_create_database (executor_commands.py:800-819): connection_args = statement.parameters from SQL 'CREATE DATABASE ... WITH ENGINE ... PARAMETERS {...}'; ARG_TYPE.PATH values are used raw in create_tmp_handler + check_connection (executor_commands.py:722-752) and only basenamed later inside IntegrationController.add",
+      "IntegrationController.add(self, name, engine, connection_args) (integrations.py:45-82): connection args from SQL PARAMETERS or HTTP PUT /api/config/integrations params; ARG_TYPE.PATH values are shutil.copy'd from the raw path and replaced with Path(arg_value).name",
+      "run_sql_command(mindsdb_env, ast_query) (mongo/classes/query_sql.py:5-10): mongo wire-protocol commands translated to SQL AST and executed via ExecuteCommands"
+    ],
+    "internal_boundary_receivers": [
+      "FileController.save_file(name, file_path, file_name=None) (file_controller.py:55-110): file_path is os.path.join(temp_dir_path, multipart client filename) from the /api/files/<name> upload route; file_name is the optional original_file_name form field; performs FileHandler._handle_source(file_path), shutil.move(file_path, source) where source = file_dir.joinpath(file_name)",
+      "FileController.get_file_path(name) (file_controller.py:122-128): file table name from SQL 'FROM file.<table>' selects; retrieval path applies Path(source_file_path).name",
+      "FileHandler._handle_source(file_path, ...) / _get_data_io(file_path) (file_handler.py:98, 141): opens file_path with open(file_path, 'rb') at 158; also reached from FileController.save_file",
+      "FileStorage.file_set/file_get/get_path/delete/push_path/pull_path (interfaces/storage/fs.py:214-331): name/relative_path/path is joined under folder_path and opened (open 'wb'/'rb' at 220/233); byom 'model_code' path argument flows through file_get",
+      "FileController.delete_file -> FsStore.delete -> LocalFSStore/S3FSStore operations on 'file_{company_id}_{id}' names (file_controller.py:112-120, fs.py:93-152)"
+    ],
+    "excluded_as_not_attacker_controlled": [
+      "os.environ reads: MINDSDB_CONFIG_PATH / config path resolution (utilities/config.py), FLASK_SECRET_KEY (initialize.py:239), MINDSDB_STORAGE_DIR / MINDSDB_DB_CON (interfaces/storage/db.py:19), CHECK_FOR_UPDATES (util.py:229, telemetry.py:24), MINDSDB_DEFAULT_SERVER (start.py:35): operator/deployment configuration, does not cross an untrusted boundary",
+      "CLI arguments via args_parse (utilities/functions.py, __main__.py): operator input in service mode",
+      "request headers 'company-id' / 'user-class' (start.py:120-137): int()-cast to numeric ids used only in f-string record names (file_{company_id}_{id}); no path structure control, recorded as low-risk path segment influence rather than a source",
+      "Config() paths['static']/'content'/'storage'/'cache': local operator configuration",
+      "cache keys in FileCache.set/get (utilities/cache.py:145-180): dataframe/json checksums, not request-derived paths"
+    ]
+  },
+  "sink_evidence": {
+    "actual_filesystem_operations": [
+      "open(): file.py:123 (os.path.join(temp_dir_path, data['file']) from URL-source branch, 'wb'), bigquery_handler.py:47 (open(self.connection_data['service_account_keys']) during check_connection, request-influenced), file_handler.py:158 (open(file_path, 'rb') in _get_data_io), file_handler.py:295 (fixed temp join, 'wb'), functions.py:35 (mysql proxy download_file, fixed temp path), fs.py:39 (md5 open in copy()), fs.py:220/233 (FileStorage file_set/file_get), model_controller.py:179/228 (predictor export/import under fs_store folder), integrations.py:346/390/393 (handler requirements.txt/icon files), cache.py:155/171 (cache files), config.py:78/83 (config.json read/write), initialize.py:116/140/160 (static GUI version/download files), telemetry.py:17/31/43 (telemetry lock and static index.html), wizards.py:48 (self-signed cert), __main__.py:101 (config), default.py:117 area (marker file via write_text), byom proc_wrapper.py:31/38 and ml_handler_proc.py:42/43 are integer-fd opens (excluded by the extraction query)",
+      "zipfile.ZipFile(file_path) + f.extractall(temp_dir_path): file.py:133-134 (client-uploaded archive extracted into temp dir)",
+      "tarfile.open(file_path) + f.extractall(temp_dir_path): file.py:136-137 (client-uploaded .tar.gz)",
+      "ZipFile(dist_zip_path).extractall(static_folder): initialize.py:150 (downloaded GUI archive)",
+      "shutil.unpack_archive(local_ziped_path, base_dir): fs.py:130 (S3 storage branch)",
+      "shutil.move(file_path, str(source)): file_controller.py:100 (source = file_dir.joinpath(file_name) where file_name is the original_file_name form field)",
+      "shutil.copy(arg_value, files_dir): integrations.py:68 (ARG_TYPE.PATH connection arg copied from the raw request-supplied path BEFORE basename normalization)",
+      "shutil.copy2 / copytree / rmtree: fs.py:36/45, initialize.py:153-155/206-214, config.py:150/170/174, file_controller.py:108",
+      "os.remove(file_path): file.py:138 (removes the uploaded archive); os.unlink(file_path): handlers.py:136 (removes byom upload); cache.py:181; telemetry.py:11",
+      "os.rmdir(temp_dir_path): file.py:141/146/151, handlers.py:137",
+      "os.listdir(temp_dir_path): file.py:139 (archive content listing)",
+      "os.makedirs: fs.py:128/303, cache.py:123, utilities/config.py:69",
+      "Path.mkdir: file_controller.py:97 (file_dir), initialize.py:149, lightwood_handler/functions.py:33",
+      "pathlib writes: marker_file.write_text('') (default.py:117), config_path.write_text('{}') (config.py:76), p.joinpath(mark).touch() (utilities/fs.py:66), path.unlink()/path.rmdir() (fs.py:326/328, utilities/fs.py:80)",
+      "sqlite3.connect(self.connection_data['db_file']): sqlite_handler.py:60 (db_file is an ARG_TYPE.PATH connection arg from SQL PARAMETERS / HTTP params); sqlite3.connect(path): storage_handler.py:51 (internal kv storage path)",
+      "file.save(file_path): config.py:137 (werkzeug FileStorage.save writes the uploaded file); predictor.save(fs.folder_path / fs.folder_name): lightwood_handler/functions.py:96/187",
+      "df.to_pickle(path): cache.py:147"
+    ],
+    "static_file_response_paths": [
+      "GET /<path:path> -> static_root.joinpath(path).is_file() check then send_from_directory(static_root, path) (start.py:66-67); containment is provided by werkzeug's safe_join inside send_from_directory (framework-internal, outside repo code)",
+      "GET /api/handlers/<handler_name>/icon -> send_file(icon_path) where icon_path = mindsdb_path/integrations/handlers/<handler_folder>/<icon_name> from registered handler metadata (handlers.py:37-44); both path components are server-side, not request-controlled"
+    ],
+    "archive_extraction": "present: client-uploaded .zip and .tar.gz are extracted with extractall into temp_dir_path with no member-name validation in repo code (file.py:131-147); single-file requirement is enforced by post-extraction os.listdir length check only; GUI dist.zip and S3 tar.gz extraction use server-controlled archives (initialize.py:150, fs.py:130)"
+  },
+  "sanitizer_and_validation_evidence": [
+    "integrations.py:60-69: for connection args declared ARG_TYPE.PATH, shutil.copy(arg_value, files_dir) then connection_args[arg_name] = Path(arg_value).name — basename neutralization at integration-add time; NOTE the copy at line 68 reads the raw path BEFORE the basename is applied",
+    "executor_commands.py:722-747 (answer path for SQL CREATE DATABASE): Path(path).is_file() existence check for PATH args (TOCTOU-adjacent check, not a containment barrier); create_tmp_handler + check_connection run with the RAW path before IntegrationController.add basenames it",
+    "config.py:133-136: file_name = Path(file.filename); file_path = temp_dir_path.joinpath(file_name).resolve(); 'if temp_dir_path not in file_path.parents: raise' — effective resolve+containment barrier for werkzeug integration uploads",
+    "file_controller.py:128: Path(file_record.source_file_path).name — basename applied when building the retrieval path for SQL file selects",
+    "interfaces/storage/fs.py:297-298 and 311-312: relative_path.is_absolute() -> TypeError in get_path()/delete() (absolute path rejection, partial barrier); fs.py:314-316: (folder_path / relative_path).resolve() compared against folder_path.resolve() in delete()",
+    "start.py:64: path.startswith('api/') routing check; send_from_directory relies on werkzeug safe_join (framework-internal barrier)",
+    "initialize.py:66 static update path checks and version.txt comparisons: fixed-literal comparisons, not request-derived",
+    "no secure_filename, safe_join, realpath or normpath usage exists anywhere in the mindsdb package (verified by grep); os.path.join sites (file.py:122/129, handlers.py:129, file_controller.py:18/96/98/128, fs.py joins, model_controller.py:178/228) are propagation nodes, not sanitizers",
+    "file.py:131-147: zip/tar extraction has NO entry-name inspection (no namelist filtering, no leading '..' rejection) — recorded as an unsanitized archive boundary"
+  ],
+  "wrapper_functions_needing_summary_steps": [
+    "File.put (file.py) -> FileController.save_file(name, file_path, file_name) -> FileHandler._handle_source(file_path) -> _get_data_io(file_path) -> open(file_path, 'rb')",
+    "FileController.save_file -> shutil.move(file_path, file_dir.joinpath(file_name)) and FsStore.put -> LocalFSStore.put -> copy() -> shutil.copy2/copytree",
+    "FileController.get_file_path(name) -> FsStore.get -> LocalFSStore.get -> copy() -> open(src/dst) + shutil.copy2/copytree",
+    "FileHandler._fetch_url(url) -> open(os.path.join(temp_dir, 'file'), 'wb')",
+    "utilities/functions.py download_file(url) -> open(temp_file_path, 'wb')",
+    "executor_commands._create_integration -> create_tmp_handler(engine, connection_data) -> handler.check_connection() -> e.g. BigQueryHandler.connect -> open(connection_data['service_account_keys'])",
+    "executor_commands._create_integration -> IntegrationController.add(name, engine, connection_args) -> shutil.copy(arg_value, files_dir) + Path(arg_value).name",
+    "FileStorage.file_set/file_get(name) -> open(folder_path / name, 'wb'/'rb')",
+    "BYOMUpload.put -> integration_controller.add(name, 'byom', {'model_code': file_path}) -> BYOMHandler.create_engine -> engine_storage.file_set; BYOMHandler._get_model_code -> engine_storage.file_get(file_name) (dormant: create() raises 'BYOM disabled yet')",
+    "FileHandler.query (SQL Select on file.<table>) -> file_controller.get_file_path(table_name) -> _handle_source(file_path) -> open"
+  ],
+  "coverage_gaps_and_dynamic_dispatch_notes": [
+    "python-multipart writes the uploaded file into UPLOAD_DIR using the client-supplied filename (UPLOAD_KEEP_FILENAME=True) inside the library itself; the repo-side os.path.join(temp_dir_path, data['file']) sites (file.py:122/129, handlers.py:129) are the visible propagation nodes — the library-internal write is out of repo scope",
+    "f.extractall(...) on zipfile/tarfile objects is dynamically dispatched; module inferred from the with-statement receiver, flagged as inferred in module_hint",
+    ".save (werkzeug FileStorage / lightwood predictor), .to_pickle (pandas), .write_text/.mkdir/.touch/.unlink/.rmdir (pathlib receivers) are dynamic method calls; receiver modules cannot be resolved syntactically and are marked as inferred",
+    "BigQueryHandler.open(connection_data['service_account_keys']) and SQLiteHandler.sqlite3.connect(connection_data['db_file']) run during create_tmp_handler + check_connection with the RAW request path; the Path(arg_value).name basename in IntegrationController.add happens only afterwards, so the connection-check flow is not protected by it",
+    "mysql/mysql wire protocol and mongo wire protocol both reach ExecuteCommands; the process_query(sql) source predicate covers the HTTP and mysql boundaries, run_sql_command(ast_query) covers the mongo AST boundary — deeper mongo command-field sources are not separately modeled",
+    "BYOM model_code -> FileStorage.file_get flow is dormant in this version (create() raises 'BYOM disabled yet', handlers.py byom_handler.py:38), but the connection arg and file_set call are live at upload time",
+    "HandlerIcon send_file path is built from registered handler metadata (server-side); extracted as a sink for completeness with context flagging that the path is not request-controlled",
+    "driver-level file reads (pymysql ssl_cert/ssl_key/ssl_ca, cassandra driver ssl paths, bigquery service_account_keys via json.load) happen inside third-party drivers; only repo-level open()/sqlite3.connect sites are extracted",
+    "os.path.isfile/isdir/exists checks (executor_commands.py, config.py, file_controller.py, fs.py, initialize.py) are existence/validation nodes (TOCTOU-adjacent), treated as neither sinks nor barriers",
+    "mindsdb-db is a nested CodeQL database directory inside the source root; both extraction queries restrict candidates to relative paths starting with 'mindsdb/' and additionally exclude '%/tests/%' and '%setup.py', structurally excluding mindsdb-db, top-level tests/ and handler test/setup files"
+  ],
+  "extraction_policy": {
+    "scope": "mindsdb/ package only (relative path 'mindsdb/%'), excluding '%/tests/%' and '%setup.py'",
+    "excluded": "mindsdb-db database directory, top-level tests/, handler-level tests/ and setup.py files, docker/docs/helm non-Python assets, ground-truth artifacts at the source root (never opened)",
+    "noise_controls": "only actual filesystem operations with an identifiable path parameter are extracted as sinks (path-construction nodes like os.path.join and existence checks are not sinks); request accessors restricted to the standard flask request object families plus the observed python-multipart/werkzeug upload callbacks; 'open' calls with integer file descriptors (byom proc_wrapper.py, ml_handler_proc.py) are excluded"
+  },
+  "extraction_query_contract": {
+    "usage": "codeql query run + codeql bqrs decode --format=csv (multi-column candidate table)",
+    "not_used_for": "database analyze / SARIF",
+    "metadata_note": "queries deliberately omit @kind (a @kind problem select shape would not support multi-column extraction, and no @kind table is assumed)",
+    "csv_columns": [
+      "node",
+      "role",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "module_hint",
+      "arg_index",
+      "file",
+      "line",
+      "context"
+    ],
+    "column_note": "column order matches the previous Path_Traversal projects (first 9 columns identical in order); the 10th column carries the context string requested for this run, and syntax-vs-api match distinctions are folded into context",
+    "flow_kind_vocabulary": ["param", "arg", "return", "receiver", "field"],
+    "arg_index_convention": "0-based positional parameter/argument index (including self for methods); -1 when not applicable (field reads or receiver-controlled paths)"
+  }
+}

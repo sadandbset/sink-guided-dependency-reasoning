@@ -1,0 +1,330 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "run_id": "openapi-python-client-pass1-llm-triage-20261022",
+    "generated_at": "2026-10-22",
+    "model": "glm-5.3 (independent LLM path re-review, Claude Code CLI)",
+    "project": "openapi-python-client",
+    "snapshot": "openapi-python-client_vuln (openapi_python_client 0.5.2, DB d6970d6)",
+    "reviewed_rule_ids": ["py/augur/openapi-python-client/pass1-path-traversal"],
+    "sarif": "results/pass1.sarif (1 run, tool.driver.rules contains ONLY the pass1 rule, 21 results, all with codeFlows)",
+    "independence": "No PyVul ground-truth files, fix commits, or CVE descriptions were read. The only vulnerability reference used is the commit metadata supplied by the user in the task prompt itself (used solely for the section-2 coverage question).",
+    "source_root": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln"
+  },
+  "summary": {
+    "total_findings": 21,
+    "likely_tp": 21,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "verdict_statement": "CodeQL 分析成功，且本轮 21 条 pass1-path-traversal 正式告警全部判定为 likely_tp：远程/本地 OpenAPI 文档的 info.title 在无任何路径净化/根目录约束的情况下决定了生成器的全部输出路径。"
+  },
+  "common_analysis": {
+    "q1_source_attacker_control": {
+      "answer": "yes",
+      "detail": "The codeFlow source node for ALL 21 findings is the attribute read `openapi.title` at openapi_python_client/__init__.py:94 (`self.project_name_override or f\"{openapi.title.replace(' ', '-').lower()}-client\"`). `openapi` is a GeneratorData whose title is copied verbatim from the parsed document at parser/openapi.py:311 (`title=openapi.info.title`), where the dict came from oai.OpenAPI.parse_obj(yaml.safe_load(yaml_bytes)) with yaml_bytes = httpx.get(url).content (fetched remote spec, __init__.py:71-72) or path.read_bytes() (a typically third-party downloaded spec, __init__.py:76). The document author is a genuine attacker boundary for this tool's core use case (generating a client from someone else's spec). schema/info.py:16 declares title as plain `str` — pydantic validates type only, no content restriction, so '/', backslash and '..' pass through."
+    },
+    "q2_source_reaches_sink": {
+      "answer": "yes",
+      "detail": "Real-source chain (manually verified line-by-line): cli.py:98/116 (--url/--path) → __init__.py:39/52 create_new_client / update_existing_client → __init__.py:30-36 _get_project_for_url_or_path → _get_document (:65-82, httpx.get / read_bytes / yaml.safe_load) → parser/openapi.py:300/311 parse_obj → GeneratorData(title=info.title) → __init__.py:36 Project(openapi=...) → __init__.py:94-98 (project_name/project_dir/package_name/package_dir stored on self) → build() (:104-117) / update() (:119-130) / _create_package (:145-154) / _build_metadata (:156-181) / _build_models (:183-208) / _build_api (:210-237). No async calls anywhere in the chain (all synchronous). The CodeQL codeFlows show: line 94 Attribute (source) → BoolExpr → line 95/97/98 joins → K06 field-flow edge (store at :94/:95/:97/:98, reads at :104/:112/:113/:114/:115/:119/:145/:148/:153/:156/:159/:170/:179/:183/:185/:210/:212/:217/:222/:227) → sink receiver. Every step line number was checked against the real file and matches. There are no wrapper hops without source evidence: the Project() construction at :36 and the build()/update() dispatch are real code. The one modeling caveat: the document→GeneratorData.title link (httpx.get → safe_load → parse_obj → info.title) is NOT inside the codeFlows — CodeQL cannot track pydantic/dataclass boundaries, so the labels anchored the source at the use site (:94). The label-side chain was independently re-verified in real source and is correct, so this is a path-explanation truncation, not a fabricated flow."
+    },
+    "q3_sink_is_real_file_operation": {
+      "answer": "yes",
+      "detail": "All 21 sink sites are actual filesystem effects, not mere path concatenation: shutil.rmtree (1, :125), Path.mkdir (5, :109/:146/:186/:218/:223), Path.write_text (15, :151/:154/:160/:172/:181/:192/:197/:204/:208/:214/:220/:225/:229/:235/:237). Path('/...') construction and the 20 '/' joins (:95/:98/:148/:153/:159/:170/:179/:185/:187/:191/:196/:203/:212/:217/:219/:222/:224/:227/:234/:236) are NOT sinks in the model — they are propagation steps only, consistent with the rubric."
+    },
+    "q4_allowed_root_and_escape": {
+      "answer": "escape is possible",
+      "detail": "The project's implied contract: all generated output goes under a new directory in the process CWD (project_dir = Path.cwd() / project_name, :95). No allow-root is ever declared or checked; the only implicit base is Path.cwd(). Attacker control: info.title = '../../evil' → project_name = '../../evil-client' → project_dir = <cwd>/../../evil-client (escapes CWD); info.title = '/tmp/evil' → project_name = '/tmp/evil-client' and Path.cwd() / '/tmp/evil-client' == Path('/tmp/evil-client') (pathlib: an absolute right operand replaces the base entirely). The f-string suffix '-client' and the preceding replace(' ','-')/lower() do not neutralize either form. On Windows, backslash separators behave the same for pathlib.PureWindowsPath."
+    },
+    "q5_traversal_mechanisms": {
+      "answer": "applicable",
+      "detail": "No percent/URL decoding, no double decoding, no separator re-encoding anywhere in the package (grep: no urllib/unquote) — the name flow is single-stage document→reshape→filename, so '..' and absolute paths arrive unsanitized and no decode bypass is even needed. Symlinks: none handled; pathlib mkdir/write_text and shutil.rmtree follow symlinks by default. Intermediate-directory precondition for mkdir (parents=False default) is satisfied for '../' escapes because cwd/.. always exists; write_text sites are always preceded by the corresponding mkdir in the same builder."
+    },
+    "q6_barriers": {
+      "answer": "none exist",
+      "detail": "Grep over openapi_python_client/ finds ZERO occurrences of os.path.*, resolve(, relative_to, startswith, basename, normpath, abspath, realpath, open(, zipfile/tarfile. No fixed mapping and no filename whitelist exist. The only guards on the paths are existence checks: FileExistsError catch at :110 (after mkdir) and package_dir.is_dir() at :122 — neither compares the path against any allowed root, and both run before, not after, any canonicalization (there is none). No check happens between the tainted name construction (:94-:98) and any file access."
+    },
+    "q7_misjudged_protections": {
+      "answer": "none misjudged",
+      "detail": "There is no Path.resolve/normpath/startswith-prefix check to over-credit, and no authentication layer at all (local CLI tool). replace(' ', '-')/lower()/replace('-','_') (title path) and snake_case/pascal_case (utils.py:6-13, regex + stringcase) reshape case and whitespace only — '/' and '..' survive. The tag reaches its filename completely raw (parser/openapi.py:51 → __init__.py:234/236). The report does not credit any of these as sanitization; correct."
+    },
+    "q8_not_authorized_static_service_or_test": {
+      "answer": "confirmed production vulnerability",
+      "detail": "openapi_python_client/__init__.py is the production generator core, reached from the shipped CLI commands generate/update (cli.py:90-130). It is not a static file server, not test code, not an unreachable path. The operator authorizes generation of a client from a document, not arbitrary file placement/deletion on disk — exactly the attacker model of a maliciously crafted OpenAPI document."
+    },
+    "q9_overgeneralization_fp": {
+      "answer": "no",
+      "detail": "Every modeled element was re-verified against real source: the 21 sink sites exist exactly at the reported lines with the reported APIs; the source node at :94 reads the remote-derived title; the Div-join edges correspond to the 20 real '/' expressions in __init__.py (no arithmetic division exists in the file); the field-flow edge (K06) matches real attribute stores/reads confined to Project methods in this module; the interprocedural Project()/:36/:46/:59 hops are real calls. Database coverage is fine (the package is fully extracted; httpx/yaml/pydantic/stringcase are external, which the AST-level module-restricted matching handles). One label-side gap (documented, not a FP cause): the raw tag chain (S24) is not connected, so findings 235/237 are explained via the title-derived api_dir base instead of the raw tag — the sink sites are still genuinely vulnerable via both inputs."
+    },
+    "q10_contamination": {
+      "answer": "none",
+      "detail": "The SARIF has exactly one run whose tool.driver.rules contains only 'py/augur/openapi-python-client/pass1-path-traversal' (ruleIndex 0); all 21 results carry that ruleId and full codeFlows. No CodeQL built-in security query results, no diagnostics-rule results, and no other CWE families are present in this file. The iris/diagnostics directory is empty. The 10 candidate labels (config-content sources, subprocess-cwd sinks) were excluded from the query and none of the 21 findings depends on them."
+    },
+    "shared_preconditions": [
+      "Operator runs `openapi-python-client generate --url <spec>` (or `--path <downloaded spec>`, or the `update` command) against a document authored or influenced by an attacker — the tool's core documented use case.",
+      "No --config file sets project_name_override / package_name_override (defaults are None at __init__.py:87-88), otherwise the title-derived project_name is replaced by the config value and the alerted chain is suppressed for that run.",
+      "For the rmtree sink (:125): the escaped package_dir must already exist as a directory (is_dir() at :122) — an arbitrary existing directory is then deleted recursively.",
+      "For mkdir sinks: intermediate parent directories of the escape target must exist (parents=False); cwd/.. always exists, so '../' escapes always satisfy this.",
+      "Impact matches the upstream advisory model: files written to arbitrary on-disk locations (write_text sinks) and arbitrary existing directories recursively deleted (rmtree sink)."
+    ]
+  },
+  "findings": [
+    {
+      "finding_id": "F01",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 109, "cols": "13-29", "api": "Path.mkdir", "receiver": "self.project_dir"},
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "operation": "Directory creation at project_dir = Path.cwd() / project_name where project_name = f\"{info.title...}-client\" (line 94-95). info.title = '../../evil' or an absolute path places this directory outside CWD.",
+      "taint_flow": "94 Attribute(title) → 94 BoolExpr(or) → 95 BinaryExpr(/) → [K06 field-flow :94→:104→:109] → 109 mkdir receiver",
+      "barrier_evidence": "FileExistsError catch at :110 is existence-only; no containment check.",
+      "preconditions": "common (see common_analysis.shared_preconditions)",
+      "rationale": "Real mkdir on a fully attacker-named path in the build() entry path; the escape requires only a crafted info.title."
+    },
+    {
+      "finding_id": "F02",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 125, "cols": "23-39", "api": "shutil.rmtree", "arg": "self.package_dir"},
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "operation": "Recursive directory deletion of package_dir = project_dir / package_name, both components title-derived. Highest-impact sink in the codebase.",
+      "taint_flow": "94 title → 95/97/98 joins → [field-flow via update() :119→:125] → rmtree arg0 (also second flow via Project() :36 → _get_project_for_url_or_path :59 → :62)",
+      "barrier_evidence": "is_dir() at :122 is an existence check (TOCTOU shape: check :122, delete :125, nothing between); no root containment.",
+      "preconditions": "The escaped package_dir must already exist as a directory; reachable via the CLI `update` command.",
+      "rationale": "A title of '../../important_dir-x_client'-shaped escape lets a malicious document recursively delete an arbitrary existing directory reachable from CWD."
+    },
+    {
+      "finding_id": "F03",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 146, "cols": "9-25", "api": "Path.mkdir", "receiver": "self.package_dir"},
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "operation": "Directory creation at package_dir (escaped base) in _create_package().",
+      "taint_flow": "94 title → 95/97/98 joins → [field-flow :104→:112→:145→:146] → mkdir receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Second-level directory creation under the escaped project root; enables the write_text sinks below it."
+    },
+    {
+      "finding_id": "F04",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 151, "api": "Path.write_text", "receiver": "package_init = package_dir / \"__init__.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (package __init__.py, jinja render) at the escaped package_dir base (literal filename, tainted base).",
+      "taint_flow": "94 title → 95/98 joins → [field-flow :104→:112→:145→:148] → 148 BinaryExpr(/) → 148 package_init → 151 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Real file write outside the intended root via the base directory; content injection is a separate concern, the path escape alone is CWE-22."
+    },
+    {
+      "finding_id": "F05",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 154, "api": "Path.write_text", "receiver": "pytyped = package_dir / \"py.typed\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (py.typed marker, fixed content) at the escaped package_dir base.",
+      "taint_flow": "94 title → joins → field-flow → 153 BinaryExpr(/) → 153 pytyped → 154 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Same base-escape pattern; fixed content does not mitigate the arbitrary location."
+    },
+    {
+      "finding_id": "F06",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 160, "api": "Path.write_text", "receiver": "pyproject_path = project_dir / \"pyproject.toml\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (pyproject.toml) at the escaped project_dir base.",
+      "taint_flow": "94 title → 95 BinaryExpr(/) → [field-flow :104→:113→:156→:159] → 159 BinaryExpr(/) → 159 pyproject_path → 160 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Direct write under the escaped project root; overwrite target is attacker-chosen to the granularity of the project_name."
+    },
+    {
+      "finding_id": "F07",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 172, "api": "Path.write_text", "receiver": "readme = project_dir / \"README.md\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (README.md) at the escaped project_dir base.",
+      "taint_flow": "94 title → 95 join → field-flow → 170 join → 170 readme → 172 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Same as F06."
+    },
+    {
+      "finding_id": "F08",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 181, "api": "Path.write_text", "receiver": "git_ignore_path = project_dir / \".gitignore\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (.gitignore) at the escaped project_dir base.",
+      "taint_flow": "94 title → 95 join → field-flow → 179 join → 179 git_ignore_path → 181 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Same as F06; fixed template content, arbitrary location."
+    },
+    {
+      "finding_id": "F09",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 186, "api": "Path.mkdir", "receiver": "models_dir = package_dir / \"models\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "Directory creation (models/) at the escaped package_dir base in _build_models().",
+      "taint_flow": "94 title → 95/98 joins → field-flow :104→:114→:183→:185 → 185 join → 185 models_dir → 186 mkdir receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Enables the model/enum module writes at :197/:204 under the escaped root."
+    },
+    {
+      "finding_id": "F10",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 192, "api": "Path.write_text", "receiver": "types_path = models_dir / \"types.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (types.py) at the escaped models_dir base.",
+      "taint_flow": "94 title → joins → field-flow → 185 join → 185 models_dir → 187 → 191 join → 191 types_path → 192 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Same base-escape pattern."
+    },
+    {
+      "finding_id": "F11",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 197, "api": "Path.write_text", "receiver": "module_path = models_dir / f\"{model.reference.module_name}.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "operation": "File write whose FILE NAME is the remote-derived module_name (schema title or #/components/schemas ref leaf, reshaped only by pascal_case/snake_case — case/whitespace conversion that preserves '/' and '..'). TWO independent attacker channels reach this sink: the title-derived models_dir base AND the module_name filename itself.",
+      "taint_flow": "flow 1: 196 Attribute(module_name, source S10) → 196 Fstring → 196 BinaryExpr(/) → 196 module_path → 197 write_text receiver; flow 2: 94 title → joins → field-flow → models_dir base chain → 196 join → 197",
+      "barrier_evidence": "None; utils.py:6-13 (re.sub + stringcase) verified to not strip separators or '..'; reference.py:28-30 ref.split('/')[-1] only splits the ref string, the schema TITLE path (openapi.py:230 `Reference.from_ref(data.title or name)`) is passed whole.",
+      "preconditions": "common; alternatively a malicious components.schemas title/ref leaf alone (module_name channel) even with a benign info.title.",
+      "rationale": "Filename-level traversal with a second independent source; strongest sink after rmtree. A title like '../../x' in a schema makes the generated model file land outside models_dir (a leading '/' makes the join absolute)."
+    },
+    {
+      "finding_id": "F12",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 204, "api": "Path.write_text", "receiver": "module_path = models_dir / f\"{enum.reference.module_name}.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "operation": "File write named by the enum-derived module_name (enum schema title, openapi.py:271 `title=data.title or name`) under the title-derived models_dir.",
+      "taint_flow": "flow 1: 203 Attribute(module_name, source S11) → 203 Fstring → 203 join → 203 module_path → 204 write_text receiver; flow 2: 94 title → joins → field-flow → models_dir base → 203 → 204",
+      "barrier_evidence": "None (same snake_case-only reshaping).",
+      "preconditions": "common; enum schema title channel independent of info.title.",
+      "rationale": "Same dual-channel pattern as F11."
+    },
+    {
+      "finding_id": "F13",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 208, "api": "Path.write_text", "receiver": "models_init = models_dir / \"__init__.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (models __init__.py) at the escaped models_dir base.",
+      "taint_flow": "94 title → joins → field-flow → 185 join → 187 models_init → 208 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Base-escape write."
+    },
+    {
+      "finding_id": "F14",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 214, "api": "Path.write_text", "receiver": "client_path = package_dir / \"client.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (client.py) at the escaped package_dir base in _build_api().",
+      "taint_flow": "94 title → joins → field-flow :104→:115→:210→:212 → 212 join → 212 client_path → 214 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Base-escape write."
+    },
+    {
+      "finding_id": "F15",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 218, "api": "Path.mkdir", "receiver": "api_dir = package_dir / \"api\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "Directory creation (api/) at the escaped package_dir base.",
+      "taint_flow": "94 title → joins → field-flow → 217 join → 217 api_dir → 218 mkdir receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Enables the tag-named writes at :235/:237 under the escaped root."
+    },
+    {
+      "finding_id": "F16",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 220, "api": "Path.write_text", "receiver": "api_init = api_dir / \"__init__.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (api __init__.py, fixed content) at the escaped api_dir base.",
+      "taint_flow": "94 title → joins → field-flow → 217/219 joins → 219 api_init → 220 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Base-escape write."
+    },
+    {
+      "finding_id": "F17",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 223, "api": "Path.mkdir", "receiver": "async_api_dir = package_dir / \"async_api\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "Directory creation (async_api/) at the escaped package_dir base.",
+      "taint_flow": "94 title → joins → field-flow → 222 join → 222 async_api_dir → 223 mkdir receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Base-escape directory creation."
+    },
+    {
+      "finding_id": "F18",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 225, "api": "Path.write_text", "receiver": "async_api_init = async_api_dir / \"__init__.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (async_api __init__.py, fixed content) at the escaped async_api_dir base.",
+      "taint_flow": "94 title → joins → field-flow → 222/224 joins → 224 async_api_init → 225 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Base-escape write."
+    },
+    {
+      "finding_id": "F19",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 229, "api": "Path.write_text", "receiver": "api_errors = package_dir / \"errors.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write (errors.py) at the escaped package_dir base.",
+      "taint_flow": "94 title → joins → field-flow :104→:115→:210→:227 → 227 join → 227 api_errors → 229 write_text receiver",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Base-escape write."
+    },
+    {
+      "finding_id": "F20",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 235, "api": "Path.write_text", "receiver": "module_path = api_dir / f\"{tag}.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write named by the COMPLETELY RAW remote operation tag (parser/openapi.py:51 `tag = (operation.tags or ['default'])[0]`, zero transformation to :234) under the title-derived api_dir base.",
+      "taint_flow": "codeFlows show the title-derived base chain: 94 title → joins → field-flow :104→:115→:210→:217 → 217 join → 217 api_dir → 219 → 234 join → 234 module_path → 235 write_text receiver. NOTE: the tag-specific source path (S24) is not connected in this run (documented label-side gap) — the alert fires on the title channel, but the sink site is independently vulnerable to the raw tag as well.",
+      "barrier_evidence": "None; the tag has no validation anywhere between document and filename (verified openapi.py:51 → __init__.py:233-235).",
+      "preconditions": "common; a tag of '../../x' or '/abs/x' (independent of info.title) also escapes via the filename channel.",
+      "rationale": "The alerted site is genuinely vulnerable on both channels; the delivered path explanation covers the title channel, which alone suffices for the TP verdict."
+    },
+    {
+      "finding_id": "F21",
+      "sink": {"file": "openapi_python_client/__init__.py", "line": 237, "api": "Path.write_text", "receiver": "async_module_path = async_api_dir / f\"{tag}.py\""},
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "operation": "File write named by the raw remote tag under the title-derived async_api_dir base (async mirror of F20).",
+      "taint_flow": "94 title → joins → field-flow :104→:115→:210→:222 → 222 join → 222 async_api_dir → 224 → 236 join → 236 async_module_path → 237 write_text receiver (tag channel present in source but not connected in codeFlows, same as F20).",
+      "barrier_evidence": "None.",
+      "preconditions": "common",
+      "rationale": "Same as F20."
+    }
+  ],
+  "real_vulnerability_coverage": {
+    "question": "用户提供的真实漏洞（commit 3e7dfae, GHSA-7wgr-7666-7pwj, CWE-22, 修复点：_build_api 中 tag 经 snake_case 净化、pascal_case/snake_case 增加 _sanitize）是否被本轮正式告警命中？",
+    "verdict": "命中 (hit)",
+    "detail": "The vulnerability — a maliciously crafted OpenAPI document causing generated files to be placed at arbitrary on-disk locations — is exactly the flow family alerted in this run. Mapping of the three fix functions to alerts:",
+    "mapping": [
+      {
+        "fixed_function": "_build_api (tag sanitization: `tag = utils.snake_case(tag)` added before `api_dir / f\"{tag}.py\"`)",
+        "vulnerable_lines": "openapi_python_client/__init__.py:234-237 (in the pre-fix snapshot: same lines, tag raw)",
+        "alert_hit": "F20 (sink :235) and F21 (sink :237) — yes, the exact write statements fed by the raw tag are alerted.",
+        "caveat": "The codeFlows for F20/F21 explain the flow via the title-derived api_dir/async_api_dir base rather than the raw tag itself (the tag source S24 is a documented unconnected label). The alerted SINK SITES nonetheless coincide with the lines the fix protects, and the title channel alone is a genuine traversal into those same sinks, so the site-level coverage is complete."
+      },
+      {
+        "fixed_function": "snake_case (_sanitize added; module_name names generated model/enum files)",
+        "vulnerable_lines": "openapi_python_client/__init__.py:196-197 and :203-204 via parser/reference.py:30 (module_name = utils.snake_case(class_name)) from parser/openapi.py:230/:271",
+        "alert_hit": "F11 (sink :197) and F12 (sink :204) — yes, and unlike the tag case these alerts DO carry the module_name taint path (source nodes at :196/:203 Attribute module_name → f-string → join → write_text) in addition to the title-derived base path.",
+        "caveat": "None material: the pascal_case sanitization (class_name channel) does not itself reach a file path — class_name flows into generated file CONTENT (imports/docstrings) — so the absence of a class_name-anchored alert is correct scoping, not a miss; the module_name that pascal_case feeds is covered."
+      },
+      {
+        "fixed_function": "pascal_case (_sanitize added; class_name from ref/title)",
+        "vulnerable_lines": "indirect via snake_case(class_name) → module_name → __init__.py:196-197/:203-204",
+        "alert_hit": "Covered through F11/F12 (module_name is derived from the pascal_case output); no separate alert needed since class_name never directly names a file.",
+        "caveat": "n/a"
+      }
+    ],
+    "title_channel_note": "The commit message ('All strings used as file/directory names are now sanitized') indicates the fix covers every name-bearing string, which includes the info.title → project_name/project_dir/package_name chain (__init__.py:94-98) that feeds the remaining 19 alerts (mkdir/rmtree/write_text at :109/:125/:146/:151/:154/:160/:172/:181/:186/:192/:208/:214/:218/:220/:223/:225/:229). All of those alerted sinks sit on that chain and are true positives.",
+    "conclusion": "真实漏洞（恶意 OpenAPI 文档 → 生成文件落在任意磁盘位置）与告警集完全对应：21/21 条告警均为该漏洞的真实污点路径；修复提交涉及的全部路径命名通道（tag、schema/enum title 的 module_name、以及总标题 title）分别被 F20/F21、F11/F12、F01-F19 命中。无漏报（就本 commit 修复的函数而言），无误报。"
+  }
+}

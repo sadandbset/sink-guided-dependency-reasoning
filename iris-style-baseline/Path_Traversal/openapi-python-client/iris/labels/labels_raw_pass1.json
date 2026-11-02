@@ -1,0 +1,2858 @@
+{
+  "run": {
+    "run_id": "openapi-python-client-pass1-labeling-20261022",
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "step": "Step 3: LLM API candidate labeling",
+    "generated": "2026-10-22T11:20:34+00:00",
+    "model": "glm-5.3 (LLM API labeling via Claude Code CLI, temperature 0)",
+    "pass": 1,
+    "focus": "Path Traversal",
+    "cwes": [
+      "CWE-022",
+      "CWE-023",
+      "CWE-036",
+      "CWE-073"
+    ],
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\openapi-python-client\\iris",
+    "target": "openapi-python-client 0.5.2 (openapi-python-client_vuln source tree)",
+    "prompt_contract": "Per-batch LLM payload: pass descriptor (pass_id/cwes/focus), the candidate CSV rows (node/callable/flowKind/receiver/moduleHint/argIndex/file/line), selected source snippets (the LLM read openapi_python_client/__init__.py, cli.py, config.py, utils.py, parser/openapi.py, parser/reference.py in full), and framework hints from references/python.md + references/patterns.md (typer CLI detected; no web framework, so HTTP-shaped families are N/A). Rubric: source = genuine untrusted input boundary; sink = actual file read/write/delete/unpack/file-response; sanitizer = proven containment neutralization; summary = helper flow step; none = unrelated. Conservative recall, JSON-only output, temperature 0.",
+    "batch_policy": "7 batches, stable sizes (11/12/7/15/19/17/7); all 88 candidate rows labeled in one pass each; no re-ask was needed because no final label fell below the 0.55 confidence threshold except entries intentionally recorded as candidate/unknown for human review (config-content sources at 0.50-0.55 and subprocess-cwd sinks at 0.55)."
+  },
+  "candidate_inventory": {
+    "sources_csv_rows": 30,
+    "sinks_csv_rows": 58,
+    "total_candidates": 88,
+    "exact_duplicate_rows": {
+      "sources": [],
+      "sinks": []
+    },
+    "excluded_rows": "none - the Phase 1 extraction queries already filtered /tests/, /end_to_end_tests/ and /openapi-python-client-db/; every emitted row sits in the openapi_python_client package and was labeled"
+  },
+  "batches": [
+    {
+      "batch_id": "B1",
+      "scope": "sources.csv rows 1-11: openapi_python_client/__init__.py source candidates",
+      "kind": "sources",
+      "sample_count": 11,
+      "rows": [
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "source_candidate",
+            "callableName": "get",
+            "flowKind": "http_fetch",
+            "receiver": "httpx",
+            "moduleHint": "httpx",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 71,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S01",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "return",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 71
+            },
+            "rationale": "Return value of httpx.get(url) in _get_document carries the remote OpenAPI document body (consumed as response.content, then yaml.safe_load). Fetching externally-authored specs over --url is the tool's core use case, so the response body is attacker-influenced document content. The URL itself is an operator-selected endpoint (Pass 3 material); the returned body is the Pass 1 input boundary.",
+            "evidence": [
+              "__init__.py:71-72  response = httpx.get(url); yaml_bytes = response.content",
+              "__init__.py:80  return yaml.safe_load(yaml_bytes)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "content",
+            "flowKind": "http_content",
+            "receiver": "response",
+            "moduleHint": "httpx",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 72,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S02",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.95,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 72
+            },
+            "rationale": "Attribute read of the remote response body: the fetched document bytes enter local flow as yaml_bytes and are parsed at :80. Direct untrusted content boundary; fully attacker-controlled when --url points at a server the operator does not control.",
+            "evidence": [
+              "__init__.py:72  yaml_bytes = response.content",
+              "__init__.py:80  return yaml.safe_load(yaml_bytes)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "source_candidate",
+            "callableName": "read_bytes",
+            "flowKind": "doc_read",
+            "receiver": "path",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 76,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S03",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.8,
+            "flow_kind": "return",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 76
+            },
+            "rationale": "Return value of path.read_bytes() is the --path OpenAPI document CONTENT. The file is operator-selected (the CLI user passes --path), but the document itself is typically authored by a third party (a downloaded spec), so its content is untrusted of the same shape as the URL case and flows straight into yaml.safe_load. The path VALUE is operator-trust and is not treated as attacker-controlled (see the sink labeling of :76).",
+            "evidence": [
+              "__init__.py:76  yaml_bytes = path.read_bytes()",
+              "__init__.py:80  return yaml.safe_load(yaml_bytes)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "source_candidate",
+            "callableName": "safe_load",
+            "flowKind": "yaml_load",
+            "receiver": "yaml",
+            "moduleHint": "yaml",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 80,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S04",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.95,
+            "flow_kind": "return",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 80
+            },
+            "rationale": "Primary document parse boundary: every remote document field (info.title, components.schemas names+titles, paths -> operations -> tags) enters local flow as the returned dict and later determines generated filesystem names. safe_load is safe for deserialization (Pass 6), but the parsed VALUES are untrusted for Pass 1 path construction.",
+            "evidence": [
+              "__init__.py:80  return yaml.safe_load(yaml_bytes)",
+              "parser/openapi.py:300  openapi = oai.OpenAPI.parse_obj(d)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "project_name_override",
+            "flowKind": "config_field",
+            "receiver": "self",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 94,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S05",
+            "role": "source",
+            "classification": "candidate",
+            "confidence": 0.5,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 94
+            },
+            "rationale": "Class-attribute read feeding project_name (line 94 'self.project_name_override or <title f-string>'), which becomes Path.cwd() / project_name at :95. The value originates from the --config YAML (config.py:29 sets Project.project_name_override). The config file is operator-selected (same trust domain as the CLI user), but a shared/committed config consumed in CI can be externally authored: retained as source with candidate classification for human review; downgrade to fp if the config file is deemed fully trusted. MANUAL REVIEW POINT.",
+            "evidence": [
+              "__init__.py:94  self.project_name: str = self.project_name_override or f\"{openapi.title.replace(' ', '-').lower()}-client\"",
+              "__init__.py:95  self.project_dir: Path = Path.cwd() / self.project_name",
+              "config.py:29  Project.project_name_override = self.project_name_override"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "title",
+            "flowKind": "openapi_field",
+            "receiver": "openapi",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 94,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S06",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.95,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 94
+            },
+            "rationale": "Remote info.title (copied into GeneratorData.title at openapi.py:311) is read inside the project_name f-string. Only cosmetic shaping follows (replace(' ', '-'), lower(), '-client' suffix) - no '/', backslash or '..' handling - so a title containing '../' or a leading '/' fully controls project_dir = Path.cwd() / project_name and every mkdir/write_text/rmtree below it. Strongest Pass 1 source.",
+            "evidence": [
+              "__init__.py:94  ... or f\"{openapi.title.replace(' ', '-').lower()}-client\"",
+              "__init__.py:95  self.project_dir: Path = Path.cwd() / self.project_name",
+              "parser/openapi.py:311  title=openapi.info.title"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "package_name_override",
+            "flowKind": "config_field",
+            "receiver": "self",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 97,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S07",
+            "role": "source",
+            "classification": "candidate",
+            "confidence": 0.5,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 97
+            },
+            "rationale": "Config-derived override replacing package_name ('self.package_name_override or project_name.replace(\"-\", \"_\")'); package_name -> project_dir / package_name -> package_dir, which is the shutil.rmtree target in update() (:125). Same operator-trust config caveat as project_name_override; candidate pending review. MANUAL REVIEW POINT.",
+            "evidence": [
+              "__init__.py:97  self.package_name: str = self.package_name_override or self.project_name.replace(\"-\", \"_\")",
+              "__init__.py:98  self.package_dir: Path = self.project_dir / self.package_name",
+              "config.py:30  Project.package_name_override = self.package_name_override"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "title",
+            "flowKind": "openapi_field",
+            "receiver": "openapi",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 99,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S08",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.75,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 99
+            },
+            "rationale": "This title read builds package_description, which flows only into generated file CONTENT (README.md / pyproject.toml template renders at :151/:160/:172) - never into a filesystem path. Not a Pass 1 source (content injection would be a different concern, out of Pass 1 scope).",
+            "evidence": [
+              "__init__.py:99  self.package_description: str = f\"A client library for accessing {self.openapi.title}\"",
+              "__init__.py:160-176  pyproject_path / readme write_text(template.render(..., description=self.package_description, ...))"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "version",
+            "flowKind": "openapi_field",
+            "receiver": "openapi",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 100,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S09",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.75,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 100
+            },
+            "rationale": "self.version is used only as pyproject.toml template content (version=self.version at :160-165); it never influences any filesystem path.",
+            "evidence": [
+              "__init__.py:100  self.version: str = openapi.version",
+              "__init__.py:160-165  pyproject_path.write_text(pyproject_template.render(..., version=self.version, ...))"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "module_name",
+            "flowKind": "name_field",
+            "receiver": "model",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 196,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S10",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 196
+            },
+            "rationale": "Remote-derived module name read inside the file-name f-string models_dir / f\"{...}.py\" at :196. The name originates from a remote schema title or #/components/schemas ref leaf (Reference.from_ref) and passes only through pascal_case/snake_case (case and whitespace reshaping; neither the regexes in utils.py nor stringcase strip '/' or '..'), so it can carry path separators and traversal segments into the written file path at :197.",
+            "evidence": [
+              "__init__.py:196  module_path = models_dir / f\"{model.reference.module_name}.py\"",
+              "parser/reference.py:30  Reference(class_name=class_name, module_name=utils.snake_case(class_name))",
+              "utils.py:6-9  snake_case = case/whitespace regexes + stringcase.snakecase (no separator or '..' handling)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "module_name",
+            "flowKind": "name_field",
+            "receiver": "enum",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 203,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "S11",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 203
+            },
+            "rationale": "Same as the model case: enum reference module_name is read inside models_dir / f\"{enum.reference.module_name}.py\" at :203 and directly names the file written at :204. The enum title comes from the remote schema (data.title or schema-map key, openapi.py:271).",
+            "evidence": [
+              "__init__.py:203  module_path = models_dir / f\"{enum.reference.module_name}.py\"",
+              "parser/openapi.py:271  title=data.title or name"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "batch_id": "B2",
+      "scope": "sources.csv rows 12-23: cli.py + config.py source candidates",
+      "kind": "sources",
+      "sample_count": 12,
+      "rows": [
+        {
+          "candidate": {
+            "node": "path",
+            "col1": "source_candidate",
+            "callableName": "_process_config",
+            "flowKind": "cli_param",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.cli",
+            "argIndex": 0,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/cli.py",
+            "line": 20,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/cli.py"
+          },
+          "label": {
+            "id": "S12",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.85,
+            "flow_kind": "param",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/cli.py",
+              "line": 20
+            },
+            "rationale": "typer Option callback parameter carrying the --config PATH VALUE. The CLI user selects the config file themselves - same trust domain, authorized local file access; a local CLI's own option value is not an attacker-controlled input boundary for CWE-22/23/36/073. The config CONTENT boundary is labeled separately (config.py:34 rows). The param->read propagation is still modeled as a summary (see sink rows).",
+            "evidence": [
+              "cli.py:36-38  config: Optional[pathlib.Path] = typer.Option(None, callback=_process_config, ...)",
+              "cli.py:27  Config.load_from_path(path=path)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "config",
+            "col1": "source_candidate",
+            "callableName": "cli",
+            "flowKind": "cli_param",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.cli",
+            "argIndex": 1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/cli.py",
+            "line": 36,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/cli.py"
+          },
+          "label": {
+            "id": "S13",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.85,
+            "flow_kind": "param",
+            "arg_index": 1,
+            "location": {
+              "file": "openapi_python_client/cli.py",
+              "line": 36
+            },
+            "rationale": "typer app-callback parameter for --config; operator-trust CLI boundary (the invoking user chooses the value), not an untrusted source for path traversal. Content boundary labeled separately at config.py:34.",
+            "evidence": [
+              "cli.py:33-38  @app.callback(name=\"openapi-python-client\") ... config: Optional[pathlib.Path] = typer.Option(None, callback=_process_config)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "url",
+            "col1": "source_candidate",
+            "callableName": "generate",
+            "flowKind": "cli_param",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.cli",
+            "argIndex": 0,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/cli.py",
+            "line": 98,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/cli.py"
+          },
+          "label": {
+            "id": "S14",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.8,
+            "flow_kind": "param",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/cli.py",
+              "line": 98
+            },
+            "rationale": "The --url VALUE is an operator-selected endpoint (SSRF / Pass 3 material, not Pass 1). The Pass 1 untrusted input is the fetched document CONTENT, labeled at httpx.get / response.content / yaml.safe_load (__init__.py:71/72/80).",
+            "evidence": [
+              "cli.py:98  url: Optional[str] = typer.Option(None, help=\"A URL to read the JSON from\")",
+              "__init__.py:71-72  response = httpx.get(url); yaml_bytes = response.content"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "path",
+            "col1": "source_candidate",
+            "callableName": "generate",
+            "flowKind": "cli_param",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.cli",
+            "argIndex": 1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/cli.py",
+            "line": 99,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/cli.py"
+          },
+          "label": {
+            "id": "S15",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.85,
+            "flow_kind": "param",
+            "arg_index": 1,
+            "location": {
+              "file": "openapi_python_client/cli.py",
+              "line": 99
+            },
+            "rationale": "Operator-selected local document file (--path): the CLI user is authorized to read files they choose, so the path value is not attacker-controlled. The document CONTENT boundary is labeled at read_bytes/yaml.safe_load (__init__.py:76/80) instead.",
+            "evidence": [
+              "cli.py:99  path: Optional[pathlib.Path] = typer.Option(None, help=\"A path to the JSON file\")",
+              "__init__.py:76  yaml_bytes = path.read_bytes()"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "url",
+            "col1": "source_candidate",
+            "callableName": "update",
+            "flowKind": "cli_param",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.cli",
+            "argIndex": 0,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/cli.py",
+            "line": 116,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/cli.py"
+          },
+          "label": {
+            "id": "S16",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.8,
+            "flow_kind": "param",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/cli.py",
+              "line": 116
+            },
+            "rationale": "Same judgment as the generate --url row: operator-selected endpoint, Pass 3 material; the fetched document content is the Pass 1 input (labeled at __init__.py:71/72/80).",
+            "evidence": [
+              "cli.py:116  url: Optional[str] = typer.Option(None, ...)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "path",
+            "col1": "source_candidate",
+            "callableName": "update",
+            "flowKind": "cli_param",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.cli",
+            "argIndex": 1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/cli.py",
+            "line": 117,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/cli.py"
+          },
+          "label": {
+            "id": "S17",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.85,
+            "flow_kind": "param",
+            "arg_index": 1,
+            "location": {
+              "file": "openapi_python_client/cli.py",
+              "line": 117
+            },
+            "rationale": "Operator-selected local document file; authorized read; content boundary labeled at read_bytes/yaml.safe_load instead.",
+            "evidence": [
+              "cli.py:117  path: Optional[pathlib.Path] = typer.Option(None, ...)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "class_overrides",
+            "flowKind": "config_field",
+            "receiver": "self",
+            "moduleHint": "openapi_python_client.config",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/config.py",
+            "line": 21,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/config.py"
+          },
+          "label": {
+            "id": "S18",
+            "role": "source",
+            "classification": "candidate",
+            "confidence": 0.5,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/config.py",
+              "line": 21
+            },
+            "rationale": "Config class_overrides map read; each entry becomes a Reference(class_name, module_name) stored into reference.class_overrides (config.py:25), and module_name later names generated module files (Reference.from_ref returns the override, reference.py:27-28). Config content is operator-trust with the shared-config caveat; candidate for review. MANUAL REVIEW POINT.",
+            "evidence": [
+              "config.py:21-25  if self.class_overrides is not None: ... reference.class_overrides[class_name] = reference.Reference(**dict(class_data))",
+              "parser/reference.py:27-28  if class_name in class_overrides: return class_overrides[class_name]"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "class_overrides",
+            "flowKind": "config_field",
+            "receiver": "self",
+            "moduleHint": "openapi_python_client.config",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/config.py",
+            "line": 24,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/config.py"
+          },
+          "label": {
+            "id": "S19",
+            "role": "source",
+            "classification": "candidate",
+            "confidence": 0.5,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/config.py",
+              "line": 24
+            },
+            "rationale": "Second read of the class_overrides map (loop source at the iteration site); same trust judgment as config.py:21 - config-derived module_name values directly become generated file names if a shared config is attacker-influenced. MANUAL REVIEW POINT.",
+            "evidence": [
+              "config.py:24  for class_name, class_data in self.class_overrides.items():"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "project_name_override",
+            "flowKind": "config_field",
+            "receiver": "self",
+            "moduleHint": "openapi_python_client.config",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/config.py",
+            "line": 29,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/config.py"
+          },
+          "label": {
+            "id": "S20",
+            "role": "source",
+            "classification": "candidate",
+            "confidence": 0.5,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/config.py",
+              "line": 29
+            },
+            "rationale": "Config value assigned onto the Project class attribute; when set it REPLACES the title-derived project_name and reaches Path.cwd() / project_name. Operator-trust config caveat (see S05); candidate pending review.",
+            "evidence": [
+              "config.py:29  Project.project_name_override = self.project_name_override",
+              "__init__.py:94-95  project_name ... / Path.cwd() / self.project_name"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "package_name_override",
+            "flowKind": "config_field",
+            "receiver": "self",
+            "moduleHint": "openapi_python_client.config",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/config.py",
+            "line": 30,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/config.py"
+          },
+          "label": {
+            "id": "S21",
+            "role": "source",
+            "classification": "candidate",
+            "confidence": 0.5,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/config.py",
+              "line": 30
+            },
+            "rationale": "Config value assigned onto Project.package_name_override; replaces package_name and reaches package_dir, the shutil.rmtree target in update(). Operator-trust config caveat; candidate pending review.",
+            "evidence": [
+              "config.py:30  Project.package_name_override = self.package_name_override",
+              "__init__.py:97-98  package_name ... / self.project_dir / self.package_name"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "source_candidate",
+            "callableName": "safe_load",
+            "flowKind": "config_load",
+            "receiver": "yaml",
+            "moduleHint": "yaml",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/config.py",
+            "line": 34,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/config.py"
+          },
+          "label": {
+            "id": "S22",
+            "role": "source",
+            "classification": "candidate",
+            "confidence": 0.55,
+            "flow_kind": "return",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/config.py",
+              "line": 34
+            },
+            "rationale": "Config-file parse boundary: the returned dict feeds Config(**config_data) whose project_name_override / package_name_override / class_overrides fields reach generated filesystem names. The --config file is operator-selected; its content can nevertheless be externally authored when a shared config is consumed (e.g. CI). Conservative recall: source with candidate classification and a human-review flag; downgrade to fp if the config file is deemed fully trusted. MANUAL REVIEW POINT.",
+            "evidence": [
+              "config.py:34  config_data = yaml.safe_load(path.read_text())",
+              "config.py:35  Config(**config_data).load_config()"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "source_candidate",
+            "callableName": "read_text",
+            "flowKind": "config_read",
+            "receiver": "path",
+            "moduleHint": "openapi_python_client.config",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/config.py",
+            "line": 34,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/config.py"
+          },
+          "label": {
+            "id": "S23",
+            "role": "source",
+            "classification": "candidate",
+            "confidence": 0.55,
+            "flow_kind": "return",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/config.py",
+              "line": 34
+            },
+            "rationale": "Config file CONTENT read feeding yaml.safe_load at the same line; the returned text is the config content boundary with the same trust judgment as the safe_load row (operator-selected file, possibly externally-authored content). Candidate pending review.",
+            "evidence": [
+              "config.py:34  config_data = yaml.safe_load(path.read_text())"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "batch_id": "B3",
+      "scope": "sources.csv rows 24-30: parser/openapi.py source candidates",
+      "kind": "sources",
+      "sample_count": 7,
+      "rows": [
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "tags",
+            "flowKind": "openapi_field",
+            "receiver": "operation",
+            "moduleHint": "openapi_python_client.parser.openapi",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/parser/openapi.py",
+            "line": 51,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/parser/openapi.py"
+          },
+          "label": {
+            "id": "S24",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.95,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/parser/openapi.py",
+              "line": 51
+            },
+            "rationale": "tag = (operation.tags or ['default'])[0] is taken COMPLETELY RAW from the remote document (no case reshaping, no separator handling, no validation anywhere) and later becomes the module file name api_dir / f\"{tag}.py\" and async_api_dir / f\"{tag}.py\". A tag containing '../' escapes the api directory; a tag starting with '/' produces an absolute path via pathlib '/' join semantics. Strongest raw-name source.",
+            "evidence": [
+              "parser/openapi.py:51  tag = (operation.tags or [\"default\"])[0]",
+              "__init__.py:234  module_path = api_dir / f\"{tag}.py\"",
+              "__init__.py:236  async_module_path = async_api_dir / f\"{tag}.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "title",
+            "flowKind": "openapi_field",
+            "receiver": "data",
+            "moduleHint": "openapi_python_client.parser.openapi",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/parser/openapi.py",
+            "line": 230,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/parser/openapi.py"
+          },
+          "label": {
+            "id": "S25",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/parser/openapi.py",
+              "line": 230
+            },
+            "rationale": "Model schema title (or the components.schemas map key) passed to Reference.from_ref; becomes class_name/module_name after pascal_case/snake_case (case conversion only - separators and '..' survive) and then the models module file name at __init__.py:196.",
+            "evidence": [
+              "parser/openapi.py:230  ref = Reference.from_ref(data.title or name)",
+              "parser/reference.py:23-30  ref_value = ref.split(\"/\")[-1]; class_name = utils.pascal_case(...); module_name = utils.snake_case(class_name)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "title",
+            "flowKind": "openapi_field",
+            "receiver": "data",
+            "moduleHint": "openapi_python_client.parser.openapi",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/parser/openapi.py",
+            "line": 271,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/parser/openapi.py"
+          },
+          "label": {
+            "id": "S26",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/parser/openapi.py",
+              "line": 271
+            },
+            "rationale": "Enum schema title (or schema-map key) -> EnumProperty title -> enum reference module_name -> models file name at __init__.py:203. Same pascal/snake case-only reshaping; traversal segments survive.",
+            "evidence": [
+              "parser/openapi.py:269-275  EnumProperty(name=name, title=data.title or name, ...)",
+              "__init__.py:203  module_path = models_dir / f\"{enum.reference.module_name}.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "source_candidate",
+            "callableName": "parse_obj",
+            "flowKind": "parse_obj",
+            "receiver": "oai.OpenAPI",
+            "moduleHint": "openapi_python_client.parser.openapi",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/parser/openapi.py",
+            "line": 300,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/parser/openapi.py"
+          },
+          "label": {
+            "id": "S27",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "return",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/parser/openapi.py",
+              "line": 300
+            },
+            "rationale": "External pydantic parse of the remote dict: all document fields (info.title/version/description, paths -> operation.tags, components.schemas titles) emerge from this call's return value. CodeQL cannot track flow through pydantic, so the call return is labeled as a source to guarantee recall; the downstream field-read rows (title/tags at use sites) provide redundant anchoring for the same gap.",
+            "evidence": [
+              "parser/openapi.py:300  openapi = oai.OpenAPI.parse_obj(d)",
+              "parser/openapi.py:310-313  GeneratorData(title=openapi.info.title, description=..., version=openapi.info.version, ...)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "title",
+            "flowKind": "openapi_field",
+            "receiver": "info",
+            "moduleHint": "openapi_python_client.parser.openapi",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/parser/openapi.py",
+            "line": 311,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/parser/openapi.py"
+          },
+          "label": {
+            "id": "S28",
+            "role": "source",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/parser/openapi.py",
+              "line": 311
+            },
+            "rationale": "openapi.info.title is copied into GeneratorData.title and read in Project.__init__ (:94) to build project_name -> project_dir (the root of every generated path). Same root cause as the S06 row, labeled at the parse-side copy point for redundancy across the pydantic boundary.",
+            "evidence": [
+              "parser/openapi.py:311  title=openapi.info.title",
+              "__init__.py:94-95  project_name f-string / Path.cwd() / self.project_name"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "description",
+            "flowKind": "openapi_field",
+            "receiver": "info",
+            "moduleHint": "openapi_python_client.parser.openapi",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/parser/openapi.py",
+            "line": 312,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/parser/openapi.py"
+          },
+          "label": {
+            "id": "S29",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.75,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/parser/openapi.py",
+              "line": 312
+            },
+            "rationale": "GeneratorData.description flows only into generated file content (model docstrings / package_description template renders); it never reaches a filesystem path.",
+            "evidence": [
+              "parser/openapi.py:312  description=openapi.info.description"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute",
+            "col1": "source_candidate",
+            "callableName": "version",
+            "flowKind": "openapi_field",
+            "receiver": "info",
+            "moduleHint": "openapi_python_client.parser.openapi",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/parser/openapi.py",
+            "line": 313,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/parser/openapi.py"
+          },
+          "label": {
+            "id": "S30",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.75,
+            "flow_kind": "field",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/parser/openapi.py",
+              "line": 313
+            },
+            "rationale": "info.version flows only into pyproject.toml template content (self.version, __init__.py:100 and :160-165); never a path component.",
+            "evidence": [
+              "parser/openapi.py:313  version=openapi.info.version",
+              "__init__.py:100  self.version: str = openapi.version"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "batch_id": "B4",
+      "scope": "sinks.csv rows 1-15: __init__.py API defs, document fetch, core FS ops (mkdir/rmtree/is_dir/subprocess)",
+      "kind": "sinks",
+      "sample_count": 15,
+      "rows": [
+        {
+          "candidate": {
+            "node": "path",
+            "col1": "sink_candidate",
+            "callableName": "_get_project_for_url_or_path",
+            "flowKind": "file_api_def",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": 1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 29,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K01",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.75,
+            "flow_kind": "param",
+            "arg_index": 1,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 29
+            },
+            "rationale": "Keyword-only param path forwards verbatim to _get_document(url=url, path=path) at :30, which reads the file at :76. Faithful wrapper propagation step (the value itself is operator-trust; the step keeps CLI -> read propagation connected for taint tracking).",
+            "evidence": [
+              "__init__.py:29-30  def _get_project_for_url_or_path(*, url, path): data_dict = _get_document(url=url, path=path)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "path",
+            "col1": "sink_candidate",
+            "callableName": "create_new_client",
+            "flowKind": "file_api_def",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": 1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 39,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K02",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.75,
+            "flow_kind": "param",
+            "arg_index": 1,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 39
+            },
+            "rationale": "Keyword-only param path forwards to _get_project_for_url_or_path(url=url, path=path) at :46. Wrapper propagation step from the CLI boundary (generate --path) toward the read_bytes receiver.",
+            "evidence": [
+              "__init__.py:39-46  def create_new_client(*, url, path): project = _get_project_for_url_or_path(url=url, path=path)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "path",
+            "col1": "sink_candidate",
+            "callableName": "update_existing_client",
+            "flowKind": "file_api_def",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": 1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 52,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K03",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.75,
+            "flow_kind": "param",
+            "arg_index": 1,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 52
+            },
+            "rationale": "Keyword-only param path forwards to _get_project_for_url_or_path at :59. Wrapper propagation step from the CLI boundary (update --path).",
+            "evidence": [
+              "__init__.py:52-59  def update_existing_client(*, url, path): project = _get_project_for_url_or_path(url=url, path=path)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "path",
+            "col1": "sink_candidate",
+            "callableName": "_get_document",
+            "flowKind": "file_api_def",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": 1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 65,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K04",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.8,
+            "flow_kind": "param",
+            "arg_index": 1,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 65
+            },
+            "rationale": "Keyword-only param path reaches the file-read receiver of path.read_bytes() at :76 - the closest wrapper step to the actual file access; models param -> receiver propagation.",
+            "evidence": [
+              "__init__.py:65-76  def _get_document(*, url, path): ... yaml_bytes = path.read_bytes()"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "read_bytes",
+            "flowKind": "file_read",
+            "receiver": "path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 76,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K05",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.8,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 76
+            },
+            "rationale": "A real file read, but the receiver path is exclusively the operator-selected --path document file: no attacker-controlled value flows into the path (the remote document influences only the returned CONTENT). Reading a file the invoking CLI user chose is authorized access, not CWE-22/23/36/073. Kept out of the Pass 1 sink model to avoid a guaranteed false-positive flow; the content boundary is labeled as a source instead.",
+            "evidence": [
+              "__init__.py:76  yaml_bytes = path.read_bytes()",
+              "cli.py:99/117  path: Optional[pathlib.Path] = typer.Option(None, ...)  # operator-selected"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "openapi",
+            "col1": "sink_candidate",
+            "callableName": "__init__",
+            "flowKind": "name_api_def",
+            "receiver": "Project",
+            "moduleHint": "openapi_python_client.__init__",
+            "argIndex": 0,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 90,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K06",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.8,
+            "flow_kind": "param",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 90
+            },
+            "rationale": "Constructor param openapi determines project_name / project_dir / package_name / package_dir stored on self and consumed by build()/update() in OTHER methods (:109/:125/:146 and all write sites). Cross-method field flow is not tracked by default, so this object-boundary summary is the essential bridge from the parse-side sources (title) to every file-effect sink.",
+            "evidence": [
+              "__init__.py:90-98  def __init__(self, *, openapi): self.project_name = ...; self.project_dir = Path.cwd() / self.project_name; self.package_dir = self.project_dir / self.package_name"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "<expr>",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 95,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K07",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 95
+            },
+            "rationale": "Path.cwd() / self.project_name: the appended component (arg 0 of __truediv__) is the title/config-derived project_name. pathlib '/' semantics: an absolute right operand REPLACES the base and '..' segments escape the CWD. The join itself is not a file access (sink rubric), so it is modeled as the propagation step into the mkdir/write_text/rmtree/subprocess-cwd sinks.",
+            "evidence": [
+              "__init__.py:95  self.project_dir: Path = Path.cwd() / self.project_name",
+              "__init__.py:94  project_name = override or f\"{openapi.title.replace(' ', '-').lower()}-client\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "cwd",
+            "flowKind": "path_ctor",
+            "receiver": "Path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 95,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K08",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.7,
+            "flow_kind": "return",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 95
+            },
+            "rationale": "CWD base acquisition: fixed process state, not attacker-controlled, and not itself a file access. Recorded to document that the base contributes no sanitization of the tainted appended component.",
+            "evidence": [
+              "__init__.py:95  self.project_dir: Path = Path.cwd() / self.project_name"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "project_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 98,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K09",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 98
+            },
+            "rationale": "project_dir / self.package_name: appended component is the title/config-derived package_name (or the title-derived project_name reshaped). The result package_dir is the base of every package file and the shutil.rmtree target in update(); propagation step, not a file access.",
+            "evidence": [
+              "__init__.py:97-98  self.package_name = ...; self.package_dir: Path = self.project_dir / self.package_name",
+              "__init__.py:125  shutil.rmtree(self.package_dir)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "mkdir",
+            "flowKind": "dir_create",
+            "receiver": "project_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 109,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K10",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 109
+            },
+            "rationale": "Actual directory creation at the title/config-derived project_dir with NO containment validation (the FileExistsError handler at :110 is an existence guard only). A project_name bearing '../' or an absolute prefix creates directories outside the intended CWD root; parents are not created, but any existing reachable directory is a valid target.",
+            "evidence": [
+              "__init__.py:108-111  self.project_dir.mkdir() except FileExistsError: ...",
+              "__init__.py:94-95  project_name <- openapi.title (cosmetic shaping only)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "is_dir",
+            "flowKind": "path_stat",
+            "receiver": "package_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 122,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K11",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.75,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 122
+            },
+            "rationale": "Existence/stat check only: it gates the rmtree at :125 but performs no file effect itself and provides NO root containment - it is explicitly NOT a sanitizer (it validates existence, not the path against any base directory; classic check-then-act TOCTOU shape).",
+            "evidence": [
+              "__init__.py:122-125  if not self.package_dir.is_dir(): raise FileNotFoundError ... shutil.rmtree(self.package_dir)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "rmtree",
+            "flowKind": "dir_delete",
+            "receiver": "shutil",
+            "moduleHint": "shutil",
+            "argIndex": 0,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 125,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K12",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.95,
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 125
+            },
+            "rationale": "Recursive directory deletion: argument 0 is package_dir = project_dir / package_name, both components title/config-derivable from the remote document. The sole preceding check is is_dir() (:122) - an existence check, not containment. A '../'-bearing or absolute project/package name deletes arbitrary reachable directories recursively. Highest-impact Pass 1 sink in this codebase.",
+            "evidence": [
+              "__init__.py:125  shutil.rmtree(self.package_dir)",
+              "__init__.py:95-98  project_dir/package_dir construction from title/config-derived names"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "run",
+            "flowKind": "process_cwd",
+            "receiver": "subprocess",
+            "moduleHint": "subprocess",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 133,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K13",
+            "role": "sink",
+            "classification": "candidate",
+            "confidence": 0.55,
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 133
+            },
+            "rationale": "subprocess.run('isort .', cwd=self.project_dir, shell=True): the cwd keyword (no positional index, hence flow_kind unknown) receives the title-derived project_dir, and isort rewrites/deletes/creates files under the Python-supplied cwd. The command string is a literal (no Pass 2 command injection), so this is an INDIRECT file-effect channel scoped by a tainted cwd. Candidate: whether formatter-cwd scoping should count as a Pass 1 sink needs human judgment. MANUAL REVIEW POINT.",
+            "evidence": [
+              "__init__.py:133-135  subprocess.run(\"isort .\", cwd=self.project_dir, shell=True, ...)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "run",
+            "flowKind": "process_cwd",
+            "receiver": "subprocess",
+            "moduleHint": "subprocess",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 136,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K14",
+            "role": "sink",
+            "classification": "candidate",
+            "confidence": 0.55,
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 136
+            },
+            "rationale": "subprocess.run('black .', cwd=self.project_dir): black rewrites files under the tainted title-derived cwd - same indirect file-effect judgment as the isort row. MANUAL REVIEW POINT.",
+            "evidence": [
+              "__init__.py:136  subprocess.run(\"black .\", cwd=self.project_dir, shell=True, ...)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "mkdir",
+            "flowKind": "dir_create",
+            "receiver": "package_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 146,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K15",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 146
+            },
+            "rationale": "Actual directory creation at package_dir (project_dir / package_name) - the base is title/config-derived, so an escaped project/package name places this directory outside the intended root. No containment validation.",
+            "evidence": [
+              "__init__.py:146  self.package_dir.mkdir()"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "batch_id": "B5",
+      "scope": "sinks.csv rows 16-34: __init__.py path joins and write_text/mkdir sites (package/metadata/models)",
+      "kind": "sinks",
+      "sample_count": 19,
+      "rows": [
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "package_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 148,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K16",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 148
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the package_init receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:148  package_init = self.package_dir / \"__init__.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "package_init",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 151,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K17",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 151
+            },
+            "rationale": "Actual file write (package __init__.py) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:148-151  package_init = self.package_dir / \"__init__.py\"; package_init.write_text(package_init_template.render(description=self.package_description))"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "package_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 153,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K18",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 153
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the pytyped receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:153  pytyped = self.package_dir / \"py.typed\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "pytyped",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 154,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K19",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 154
+            },
+            "rationale": "Actual file write (py.typed marker) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:153-154  pytyped = self.package_dir / \"py.typed\"; pytyped.write_text(\"# Marker file for PEP 561\")"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "project_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 159,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K20",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 159
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the pyproject_path receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:159  pyproject_path = self.project_dir / \"pyproject.toml\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "pyproject_path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 160,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K21",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 160
+            },
+            "rationale": "Actual file write (pyproject.toml (content includes remote title/version - a content concern, not a path concern)) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:159-167  pyproject_path = self.project_dir / \"pyproject.toml\"; pyproject_path.write_text(pyproject_template.render(project_name=..., package_name=..., version=..., description=...))"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "project_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 170,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K22",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 170
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the readme receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:170  readme = self.project_dir / \"README.md\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "readme",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 172,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K23",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 172
+            },
+            "rationale": "Actual file write (README.md) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:170-176  readme = self.project_dir / \"README.md\"; readme.write_text(readme_template.render(...))"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "project_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 179,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K24",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 179
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the git_ignore_path receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:179  git_ignore_path = self.project_dir / \".gitignore\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "git_ignore_path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 181,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K25",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 181
+            },
+            "rationale": "Actual file write (.gitignore) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:179-181  git_ignore_path = self.project_dir / \".gitignore\"; git_ignore_path.write_text(git_ignore_template.render())"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "package_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 185,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K26",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 185
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the models_dir receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:185  models_dir = self.package_dir / \"models\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "mkdir",
+            "flowKind": "dir_create",
+            "receiver": "models_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 186,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K27",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 186
+            },
+            "rationale": "Actual directory creation (models/) under the tainted package_dir/models_dir base; no containment validation of the base against any root.",
+            "evidence": [
+              "__init__.py:185-186  models_dir = self.package_dir / \"models\"; models_dir.mkdir()"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "models_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 187,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K28",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 187
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the models_init receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:187  models_init = models_dir / \"__init__.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "models_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 191,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K29",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 191
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the types_path receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:191  types_path = models_dir / \"types.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "types_path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 192,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K30",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 192
+            },
+            "rationale": "Actual file write (types.py) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:191-192  types_path = models_dir / \"types.py\"; types_path.write_text(types_template.render())"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "models_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 196,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K31",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 196
+            },
+            "rationale": "models_dir / f\"{model.reference.module_name}.py\": the appended component (arg 0 of __truediv__) is the remote-derived module_name (schema title / ref leaf reshaped by snake_case, which preserves '/' and '..'). Propagation step into the write_text at :197.",
+            "evidence": [
+              "__init__.py:196  module_path = models_dir / f\"{model.reference.module_name}.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "module_path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 197,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K32",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.95,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 197
+            },
+            "rationale": "Actual file write whose file NAME is the remote schema-derived module_name: a module_name containing '/' writes into a subdirectory/outside models_dir, '..' escapes the package, and a leading '/' yields an absolute path (pathlib '/' join semantics). No validation on the name anywhere in the package.",
+            "evidence": [
+              "__init__.py:196-197  module_path = models_dir / f\"{model.reference.module_name}.py\"; module_path.write_text(model_template.render(model=model))"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "models_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 203,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K33",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 203
+            },
+            "rationale": "models_dir / f\"{enum.reference.module_name}.py\": the appended component (arg 0) is the remote enum title-derived module_name (same case-only reshaping). Propagation step into :204.",
+            "evidence": [
+              "__init__.py:203  module_path = models_dir / f\"{enum.reference.module_name}.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "module_path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 204,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K34",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.95,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 204
+            },
+            "rationale": "Actual file write named by the remote enum-derived module_name; same traversal semantics as the model module write at :197.",
+            "evidence": [
+              "__init__.py:203-204  module_path = models_dir / f\"{{enum.reference.module_name}}.py\"; module_path.write_text(enum_template.render(enum=enum))"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "batch_id": "B6",
+      "scope": "sinks.csv rows 35-51: __init__.py remaining joins and writes (client/api/async_api, raw-tag modules)",
+      "kind": "sinks",
+      "sample_count": 17,
+      "rows": [
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "models_init",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 208,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K35",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 208
+            },
+            "rationale": "Actual file write (models __init__.py) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:187+207-208  models_init.write_text(models_init_template.render(imports=imports))"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "package_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 212,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K36",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 212
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the client_path receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:212  client_path = self.package_dir / \"client.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "client_path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 214,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K37",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 214
+            },
+            "rationale": "Actual file write (client.py) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:212-214  client_path = self.package_dir / \"client.py\"; client_path.write_text(client_template.render())"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "package_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 217,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K38",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 217
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the api_dir receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:217  api_dir = self.package_dir / \"api\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "mkdir",
+            "flowKind": "dir_create",
+            "receiver": "api_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 218,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K39",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 218
+            },
+            "rationale": "Actual directory creation (api/) under the tainted package_dir/models_dir base; no containment validation of the base against any root.",
+            "evidence": [
+              "__init__.py:217-218  api_dir = self.package_dir / \"api\"; api_dir.mkdir()"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "api_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 219,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K40",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 219
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the api_init receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:219  api_init = api_dir / \"__init__.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "api_init",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 220,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K41",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 220
+            },
+            "rationale": "Actual file write (api __init__.py) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:219-220  api_init = api_dir / \"__init__.py\"; api_init.write_text('\"\"\" Contains synchronous methods for accessing the API \"\"\"')"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "package_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 222,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K42",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 222
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the async_api_dir receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:222  async_api_dir = self.package_dir / \"async_api\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "mkdir",
+            "flowKind": "dir_create",
+            "receiver": "async_api_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 223,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K43",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 223
+            },
+            "rationale": "Actual directory creation (async_api/) under the tainted package_dir/models_dir base; no containment validation of the base against any root.",
+            "evidence": [
+              "__init__.py:222-223  async_api_dir = self.package_dir / \"async_api\"; async_api_dir.mkdir()"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "async_api_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 224,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K44",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 224
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the async_api_init receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:224  async_api_init = async_api_dir / \"__init__.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "async_api_init",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 225,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K45",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 225
+            },
+            "rationale": "Actual file write (async_api __init__.py) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:224-225  async_api_init = async_api_dir / \"__init__.py\"; async_api_init.write_text('\"\"\" Contains async methods for accessing the API \"\"\"')"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "package_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 227,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K46",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 227
+            },
+            "rationale": "Pathlib '/' join with a literal appended component but a TAINTED BASE (the api_errors receiver / left operand is the title/config-derived project_dir/package_dir/models_dir/api_dir chain), so the join propagates the escaped base to the write/mkdir receiver. The join itself is not a file access (sink rubric); propagation step.",
+            "evidence": [
+              "__init__.py:227  api_errors = self.package_dir / \"errors.py\""
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "api_errors",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 229,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K47",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.85,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 229
+            },
+            "rationale": "Actual file write (errors.py) under the title/config-derived project_dir/package_dir/models_dir/api_dir base: the path escapes the intended root via the base directory; the written content is rendered template output.",
+            "evidence": [
+              "__init__.py:227-229  api_errors = self.package_dir / \"errors.py\"; api_errors.write_text(errors_template.render())"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "api_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 234,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K48",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 234
+            },
+            "rationale": "The appended component (arg 0) is the COMPLETELY RAW remote operation tag (no transformation of any kind between document and file name; tag = operation.tags[0] at openapi.py:51). Propagation step into the write at the next line.",
+            "evidence": [
+              "__init__.py:234  module_path = api_dir / f\"{tag}.py\"",
+              "parser/openapi.py:51  tag = (operation.tags or [\"default\"])[0]"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "module_path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 235,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K49",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.95,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 235
+            },
+            "rationale": "Actual file write named by the raw remote tag: a tag like '../../x' escapes the api directory (and the project root), and a tag starting with '/' makes the pathlib '/' join yield an absolute path. There is no validation of the tag anywhere in the package.",
+            "evidence": [
+              "__init__.py:234-235  module_path = api_dir / f\"{tag}.py\"; module_path.write_text(endpoint_template.render(collection=collection))"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "BinaryExpr",
+            "col1": "sink_candidate",
+            "callableName": "__truediv__",
+            "flowKind": "path_join",
+            "receiver": "async_api_dir",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 236,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K50",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.9,
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 236
+            },
+            "rationale": "The appended component (arg 0) is the COMPLETELY RAW remote operation tag (no transformation of any kind between document and file name; tag = operation.tags[0] at openapi.py:51). Propagation step into the write at the next line.",
+            "evidence": [
+              "__init__.py:236  async_module_path = async_api_dir / f\"{tag}.py\"",
+              "parser/openapi.py:51  tag = (operation.tags or [\"default\"])[0]"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "write_text",
+            "flowKind": "file_write",
+            "receiver": "async_module_path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/__init__.py",
+            "line": 237,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/__init__.py"
+          },
+          "label": {
+            "id": "K51",
+            "role": "sink",
+            "classification": "tp",
+            "confidence": 0.95,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/__init__.py",
+              "line": 237
+            },
+            "rationale": "Actual file write named by the raw remote tag: a tag like '../../x' escapes the api directory (and the project root), and a tag starting with '/' makes the pathlib '/' join yield an absolute path. There is no validation of the tag anywhere in the package.",
+            "evidence": [
+              "__init__.py:236-237  async_module_path = async_api_dir / f\"{tag}.py\"; async_module_path.write_text(async_endpoint_template.render(collection=collection))"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "batch_id": "B7",
+      "scope": "sinks.csv rows 52-58: cli.py / config.py / utils.py sink candidates",
+      "kind": "sinks",
+      "sample_count": 7,
+      "rows": [
+        {
+          "candidate": {
+            "node": "path",
+            "col1": "sink_candidate",
+            "callableName": "_process_config",
+            "flowKind": "file_api_def",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.cli",
+            "argIndex": 0,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/cli.py",
+            "line": 20,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/cli.py"
+          },
+          "label": {
+            "id": "K52",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "param",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/cli.py",
+              "line": 20
+            },
+            "rationale": "CLI --config path value -> Config.load_from_path(path=path) -> path.read_text() receiver (config.py:34). Faithful param->read propagation step (the value is operator-trust; the config CONTENT boundary is labeled separately).",
+            "evidence": [
+              "cli.py:20-27  def _process_config(path): ... Config.load_from_path(path=path)",
+              "config.py:33-34  def load_from_path(path): config_data = yaml.safe_load(path.read_text())"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "config",
+            "col1": "sink_candidate",
+            "callableName": "cli",
+            "flowKind": "file_api_def",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.cli",
+            "argIndex": 1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/cli.py",
+            "line": 36,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/cli.py"
+          },
+          "label": {
+            "id": "K53",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "param",
+            "arg_index": 1,
+            "location": {
+              "file": "openapi_python_client/cli.py",
+              "line": 36
+            },
+            "rationale": "typer app-callback --config parameter dispatches into _process_config (registered as the Option callback); propagation step from the CLI boundary.",
+            "evidence": [
+              "cli.py:33-38  @app.callback ... config: Optional[pathlib.Path] = typer.Option(None, callback=_process_config, ...)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "path",
+            "col1": "sink_candidate",
+            "callableName": "generate",
+            "flowKind": "file_api_def",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.cli",
+            "argIndex": 1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/cli.py",
+            "line": 99,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/cli.py"
+          },
+          "label": {
+            "id": "K54",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "param",
+            "arg_index": 1,
+            "location": {
+              "file": "openapi_python_client/cli.py",
+              "line": 99
+            },
+            "rationale": "generate --path forwards to create_new_client(url=url, path=path) at :110; propagation step toward the read_bytes receiver.",
+            "evidence": [
+              "cli.py:99-110  path: Optional[pathlib.Path] = typer.Option(None, ...); errors = create_new_client(url=url, path=path)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "path",
+            "col1": "sink_candidate",
+            "callableName": "update",
+            "flowKind": "file_api_def",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.cli",
+            "argIndex": 1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/cli.py",
+            "line": 117,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/cli.py"
+          },
+          "label": {
+            "id": "K55",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "param",
+            "arg_index": 1,
+            "location": {
+              "file": "openapi_python_client/cli.py",
+              "line": 117
+            },
+            "rationale": "update --path forwards to update_existing_client(url=url, path=path) at :129; propagation step toward the read_bytes receiver.",
+            "evidence": [
+              "cli.py:117-129  path: Optional[pathlib.Path] = typer.Option(None, ...); errors = update_existing_client(url=url, path=path)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "Attribute()",
+            "col1": "sink_candidate",
+            "callableName": "read_text",
+            "flowKind": "file_read",
+            "receiver": "path",
+            "moduleHint": "pathlib",
+            "argIndex": -1,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/config.py",
+            "line": 34,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/config.py"
+          },
+          "label": {
+            "id": "K56",
+            "role": "none",
+            "classification": "fp",
+            "confidence": 0.8,
+            "flow_kind": "receiver",
+            "arg_index": null,
+            "location": {
+              "file": "openapi_python_client/config.py",
+              "line": 34
+            },
+            "rationale": "A real file read, but the receiver is exclusively the operator-selected --config file (no attacker-controlled value flows into the path). Authorized local access, not CWE-22/23/36/073; the config CONTENT boundary is labeled as a source instead.",
+            "evidence": [
+              "config.py:34  config_data = yaml.safe_load(path.read_text())",
+              "cli.py:36-38  config: Optional[pathlib.Path] = typer.Option(None, ...)  # operator-selected"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "value",
+            "col1": "sink_candidate",
+            "callableName": "snake_case",
+            "flowKind": "name_api_def",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.utils",
+            "argIndex": 0,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/utils.py",
+            "line": 6,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/utils.py"
+          },
+          "label": {
+            "id": "K57",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "param",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/utils.py",
+              "line": 6
+            },
+            "rationale": "Name-reshaping step between remote schema titles/ref leafs and module file names. The two re.sub calls rewrite only case/whitespace patterns and stringcase.snakecase performs case/underscore conversion - NEITHER strips '/', backslash or '..' (a ref leaf 'a/../b' survives as a path-bearing module_name). Explicitly NOT a sanitizer; modeled as a taint-propagating summary so from_ref -> module_name flows stay connected.",
+            "evidence": [
+              "utils.py:6-9  def snake_case(value): value = re.sub(...); value = re.sub(...); return stringcase.snakecase(value)",
+              "parser/reference.py:30  module_name=utils.snake_case(class_name)"
+            ]
+          }
+        },
+        {
+          "candidate": {
+            "node": "value",
+            "col1": "sink_candidate",
+            "callableName": "pascal_case",
+            "flowKind": "name_api_def",
+            "receiver": "",
+            "moduleHint": "openapi_python_client.utils",
+            "argIndex": 0,
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/openapi-python-client_vuln/openapi_python_client/utils.py",
+            "line": 12,
+            "matchKind": "ast",
+            "relfile": "openapi_python_client/utils.py"
+          },
+          "label": {
+            "id": "K58",
+            "role": "summary",
+            "classification": "tp",
+            "confidence": 0.7,
+            "flow_kind": "param",
+            "arg_index": 0,
+            "location": {
+              "file": "openapi_python_client/utils.py",
+              "line": 12
+            },
+            "rationale": "stringcase.pascalcase performs case conversion only and preserves path separators; NOT a sanitizer. Propagation step: ref_value.replace(' ', '') -> pascal_case -> class_name -> snake_case -> module_name -> file name.",
+            "evidence": [
+              "utils.py:12-13  def pascal_case(value): return stringcase.pascalcase(value)",
+              "parser/reference.py:25  class_name = utils.pascal_case(ref_value.replace(\" \", \"\"))"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

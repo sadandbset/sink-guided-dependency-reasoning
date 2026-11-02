@@ -1,0 +1,172 @@
+{
+  "triage_id": "mlflow-pt-pass1-llm-triage-20261022",
+  "reviewer": "independent LLM path re-review (Claude Code / glm-5.3)",
+  "reviewed_at": "2026-10-22",
+  "inputs": {
+    "sarif": "results/pass1.sarif",
+    "report": "report/iris_report.md",
+    "labels": "labels/labels.json (343 entries, pass1)",
+    "query_notes": "report/query_generation_notes.md",
+    "source_tree": "dataset/codeql_databases/path_traversal_dbs/mlflow_vuln"
+  },
+  "independence_statement": "未读取 PyVul 真值文件、修复提交内容或 CVE 描述；仅基于 SARIF codeFlows 与 mlflow_vuln 源码逐行核对。用户在指令中另行提供的 commit ac4b697 信息仅用于第二项覆盖性分析任务。",
+  "sarif_overview": {
+    "runs": 1,
+    "total_results": 5,
+    "rule_ids_present": ["py/augur/mlflow/pass1-path-traversal"],
+    "diagnostics_or_builtin_mixed_in": false,
+    "q10_cross contamination check": "SARIF 仅含一个 run、5 条结果，全部 ruleId = py/augur/mlflow/pass1-path-traversal；无 diagnostics 条目、无 CodeQL 内置安全查询（如 py/paths-in-...）结果混入。run 仅有 tool/invocations/artifacts/results/columnKind/properties 键。"
+  },
+  "source_state_check": "grep 全源码树确认 `validate_path_is_safe` 不存在——数据库对应修复前（漏洞存在）版本。",
+  "common_context": {
+    "allowed_roots": "各 artifact repository 的 artifact 根（LocalArtifactRepository._artifact_dir，来自 --default-artifact-root / --artifacts-destination；HdfsArtifactRepository.path 来自 hdfs:// URI）。声明语义：请求 path 应是相对该根的 POSIX 相对路径。",
+    "auth_model": "tracking server 默认无鉴权（无 auth middleware 于 handlers 路由）；/get-artifact、/model-versions/get-artifact 为公开路由（server/__init__.py:52-60）；/mlflow-artifacts/* 仅受 --serve-artifacts 开关门控（_disable_unless_serve_artifacts），无鉴权。",
+    "barriers_verified": {
+      "verify_artifact_path / path_not_unique": {
+        "location": "mlflow/store/artifact/artifact_repo.py:302-306; mlflow/utils/validation.py:82-84",
+        "effective": true,
+        "scope": "仅 log_artifact(log_artifacts) 上传链（local_artifact_repo.py:27,48; http_artifact_repo）在文件访问前调用；download/list/delete 链完全无此守卫。path_not_unique 拒绝 norm!=原文、'.'、前导'..'、前导'/'——是真实的规范+包含性守卫（不是单纯 normpath）。",
+        "note": "query 将其建为 X01/X02 barrier，摆放位置（log_artifact 的 artifact_path 参数节点）与真实时序一致。"
+      },
+      "non barriers": "local_artifact_repo.py:31/77/86/103 的 os.path.normpath 只是文本规范化，normpath('../../x')=='../../x'，前导 .. 存活；os.path.join 遇绝对路径第二参直接替换基址。均不构成防护。全库无 realpath/islink 符号链接处理（透明，与真实行为一致）。"
+    }
+  },
+  "alerts": [
+    {
+      "alert_index": 0,
+      "sink": "mlflow/store/artifact/hdfs_artifact_repo.py:235 — open(local_file_path, \"wb\") in _download_hdfs_file (label K175, candidate)",
+      "sources_in_codeflows": {
+        "cf0": "handlers.py:539 run.info.artifact_uri（二阶，标签 S27-S30 candidate）",
+        "cf1": "handlers.py:540 request_dict[\"path\"]（/get-artifact 查询参数，标签 S03 tp）",
+        "cf2": "handlers.py:544 request_dict[\"path\"]（非代理分支直传，标签 S04 tp）",
+        "cf3": "handlers.py:1282 request_dict[\"path\"]（/model-versions/get-artifact，标签 S05 tp）"
+      },
+      "q1_source_attacker_controlled": "是。cf1/cf2/cf3 的 request_dict['path'] 来自 request.query_string 经 querystring_parser 解析（handlers.py:531-544、1272-1286），为公开无鉴权端点的查询参数，完全攻击者可控。cf0 为二阶源（run.info.artifact_uri ← CreateExperiment artifact_location），需实验创建权限，仅候选。",
+      "q2_path_real": "是。逐跳核对：_send_artifact(artifact_repo, path)（handlers.py:437-438，download_artifacts(path)）→ HdfsArtifactRepository.download_artifacts artifact_path（hdfs:114）→ local_path = os.path.join(local_dir, os.path.normpath(artifact_path))（hdfs:142，dst_path=None 时 local_dir=tempfile.mkdtemp()）→ _download_hdfs_file(hdfs, hdfs_base_path, local_path)（hdfs:143）→ open(local_file_path,'wb')（hdfs:235）。无异步断链（thread_pool 不在此链上），全部为真实源码行。",
+      "q3_sink_sensitive": "是。open(local_file_path,'wb')（hdfs:235）真实写入磁盘；同函数 hdfs:236 hdfs.open(remote_file_path,'rb') 为 HDFS 远端读。非纯拼接。",
+      "q4_escape_allowed_root": "能。local_file_path = join(tmpdir, normpath(path))：前导 ../../ 经 normpath 存活并逃逸 mkdtemp 临时目录；绝对路径经 join 语义直接替换基址。远端 hdfs_base_path = posixpath.join(self.path, path)（hdfs:204-209）同样逃逸 HDFS artifact 根。允许根为 self.path（hdfs:// URI 的 path 部分）与本地 tmpdir。",
+      "q5_traversal_factors": "有效。'..' 段与绝对路径均在 join 后存活；无百分号二次解码放大点（query_string 单次 decode）；符号链接未防护也未依赖。",
+      "q6_guard_before_access": "无。download 链（hdfs:114-155、230-236）无任何 verify/包含性检查；verify_artifact_path 只存在于 log_artifact/log_artifacts。",
+      "q7_misjudged_guards": "否。本链上没有 normpath/startsWith/resolve 被当作防护；normpath 确实不阻断（已在 q2/q4 证实）。",
+      "q8_normal_static_service": "否。非测试代码、非固定常量、非授权静态服务。",
+      "q9_overgeneralization": "部分。repoMethodDispatchStep 按方法名把 handlers.py:438 的 download_artifacts 调用连到 mlflow/store/artifact/** 全部同名方法——现实中只有当 run 的 artifact_uri 为 hdfs:// 时才实例化 HdfsArtifactRepository。但该类是受支持部署（docstring 明示 'can only be used together with the RestStore'），非虚构可达。cf0（代理分支）要求 _is_servable_proxied_run_artifact_root 为真，对 hdfs 根实际为假，该 codeFlow 展示的代理分支对 hdfs sink 是过近似；cf1-cf3 的非代理分支（544 → get_artifact_repository(artifact_uri)）是真实路径。",
+      "verdict": "likely_tp",
+      "confidence": 0.7,
+      "preconditions": "tracking server 的 run/model-version artifact 根为 hdfs:// URI（HDFS 后端部署）；攻击者知道一个有效 run_id/name+version。写原语内容受限于 HDFS 上已存在的文件字节（远端读侧同时是 HDFS 任意读）。",
+      "reason": "污点源（/get-artifact 与 /model-versions/get-artifact 的 path 查询参数）直接可控，中间每一跳均有真实源码行，sink 为真实文件写，download 链无任何守卫，join+normpath 语义放行前导 ../绝对路径。唯一折扣是仅 HDFS 后端部署可达且 codeFlow 0 的代理分支属过近似，故降为 0.7 信心。"
+    },
+    {
+      "alert_index": 1,
+      "sink": "mlflow/store/artifact/local_artifact_repo.py:38 — shutil.copyfile(local_file, os.path.join(artifact_dir, basename(local_file))) in log_artifact（label K086, fp, 保留以激活 barrier）",
+      "sources_in_codeflows": "handlers.py:1456 _upload_artifact(artifact_path)（PUT /mlflow-artifacts/artifacts/<path:artifact_path> URL 变量，标签 S39 tp）",
+      "q1_source_attacker_controlled": "是。Flask <path:converter> URL 变量，攻击者控制路径文本。",
+      "q2_path_real": "是但流入的是错误参数。路径：artifact_path → posixpath.split（1461）→ tail（单一分量，不含'/'）→ tmp_path = os.path.join(tmp_dir, tail)（1463）→ artifact_repo.log_artifact(tmp_path, artifact_path=head)（1473）→ dispatch → LocalArtifactRepository.log_artifact 的 local_file 形参（local:26）→ copyfile arg 0（local:38）。注意污点到达的是 copyfile 的【读侧 local_file】（即请求体刚写入 tmp_dir 的临时文件），而非目的路径。",
+      "q3_sink_sensitive": "copyfile 本身是真实文件操作，但此处受污的是源参数：读的是攻击者刚刚 PUT 的临时文件自身，无越权读。",
+      "q4_escape_allowed_root": "不能。tmp_path = join(tmp_dir, tail)，tail 为单一路径分量：POSIX 下不含 '/' 无法遍历（tail='..' 时 open(1464) 先抛 IsADirectoryError，copyfile 读目录亦失败）；Windows 下含反斜杠的 tail 可逃逸 tmp_dir——但那是被排除的 K166 sink（handlers.py:1464 的 open 写）的原语，不是本告警的 copyfile:38 读侧（读攻击者自己刚写的文件无安全影响）。目的侧 join(artifact_dir, basename(local_file)) 被 X01 barrier 完全覆盖。",
+      "q5_traversal_factors": "'..' 经 posixpath.split 被截为 head（被 barrier 阻断）或孤立 tail（目录，不可读）；绝对路径无法出现在 tail（含'/'会被 split）。",
+      "q6_guard_before_access": "有且真实生效：verify_artifact_path（local:27，X01 barrier）先于 normpath/join/copyfile 执行，head 中的 ..、绝对路径、非规范写法全部抛 MlflowException；文件名再经 basename 收敛。守卫时序正确。",
+      "q7_misjudged_guards": "否——此处守卫不是被误判的 normpath，而是真实的 path_not_unique 语义守卫。",
+      "q8_normal_static_service": "属于正常的（已防护的）授权上传功能。",
+      "q9_overgeneralization": "是——这正是告警成因：barrier 只建在 log_artifact 的 artifact_path 形参上，而污点经 local_file 形参（tmp_path，tail 分量）旁路到达 K086。K086 本身标签分类为 fp，MySinks 注释明言保留它是'让 barrier 被实际执行'，其预期被阻断的流是 artifact_path 一侧；本告警是 local_file 一侧的旁路流。runs_artifact_repo.py:73/83 的 codeFlow 1 dispatch 边对 PUT 端点实际仓库类型（_get_artifact_repo_mlflow_artifacts 返回 Local/其他）为过近似，不改变结论。",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "preconditions": "PUT /mlflow-artifacts/artifacts/<path>（--serve-artifacts 开启）；无论何种 payload，读侧均无越权效果。",
+      "reason": "污点到达 copyfile 的读参数（tmp_dir 下单分量临时文件），逃逸不可能（POSIX）/无意义（Windows 下读的是攻击者自写内容）；写目的侧被 verify_artifact_path barrier 在访问前真实阻断。与标签 K086 的 fp 分类一致——查询把该 fp sink 留在模型里导致此告警，属'为激活 barrier 而保留 fp sink'的已知代价。"
+    },
+    {
+      "alert_index": 2,
+      "sink": "mlflow/store/artifact/local_artifact_repo.py:38（同 alert 1，第二份报告，codeFlow 节点略异：终点为 Attribute 节点、含 runs_artifact_repo.py:73/83 中转）",
+      "sources_in_codeflows": "同 alert 1：handlers.py:1456 _upload_artifact(artifact_path)（S39）",
+      "analysis": "与 alert 1 完全相同的 source-sink 对（同一 copyfile:38 arg 0），仅 codeFlow 中间表示不同（Tuple/IterableElement 拆分与 RunsArtifactRepository dispatch 中转）。逐项判定同 alert 1：q1 可控、q2 流入读侧参数、q3 无越权读、q4 不可逃逸（X01+basename 守卫 + tail 单分量约束）、q6 守卫真实且先于访问、q9 dispatch 过近似不影响结论。",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "reason": "alert 1 的重复报告（SARIF 生成器对不同 codeFlow 证据路径去重不完全）。同源同 sink，判定一致。"
+    },
+    {
+      "alert_index": 3,
+      "sink": "mlflow/store/artifact/local_artifact_repo.py:104 — shutil.copyfile(remote_file_path, local_path) in _download_file（labels K087 读侧 tp / K094 写侧 tp）",
+      "sources_in_codeflows": {
+        "cf0": "handlers.py:539 run.info.artifact_uri（二阶 candidate）",
+        "cf1": "handlers.py:540 request_dict['path']（S03 tp）",
+        "cf2": "handlers.py:544 request_dict['path']（S04 tp）",
+        "cf3": "handlers.py:1282 request_dict['path']（S05 tp）"
+      },
+      "q1_source_attacker_controlled": "是。/get-artifact 与 /model-versions/get-artifact 的 path 查询参数（handlers.py:531-546、1272-1288），公开无鉴权路由（server/__init__.py:52-60 直接注册）。cf0 二阶源为候选补充。",
+      "q2_path_real": "核心链真实：request_dict['path'] → _send_artifact(artifact_repo, path)（handlers.py:437-438 download_artifacts(path)）→ 基类 ArtifactRepository.download_artifacts artifact_path（artifact_repo.py:108/245）→ async_download_artifact src_artifact_path（artifact_repo.py:136/157）→ thread_pool.submit(self._download_file, remote_file_path=…)（artifact_repo.py:155-158，submit 关键字分发边已建模）→ LocalArtifactRepository._download_file remote_file_path（local:100）→ join(self.artifact_dir, normpath(remote_file_path))（local:103）→ copyfile（local:104）。异步 submit 有真实源码与建模证据。注意：dispatch 边（handlers.py:438 → artifact_repo.py:108 基类方法）为按名过近似——现实中 /get-artifact 调 LocalArtifactRepository.download_artifacts(path, dst_path=None) 走 local:77 分支（返回绝对路径给 send_file），基类+copyfile 链在 /get-artifact 场景不执行；但同一 source-sink 漏洞端到端真实存在：(a) /get-artifact + 本地根 → local:77 join(artifact_dir, normpath(path)) 返回任意文件路径 → send_file（K126/K127，该告警未在 SARIF 出现——返回值流未建模，召回缺口）；(b) GET /mlflow-artifacts/artifacts/<artifact_path>（S37，handlers.py:1430-1438 download_artifacts(artifact_path, tmp_dir.name) 带 dst_path）真实走基类 → _download_file → local:104 任意文件读 → handlers.py:1441 open 流式回传客户端。即本告警 sink 的可打性与源的真实性均成立，展示路径的 dispatch 段是过近似但每跳均有真实代码。",
+      "q3_sink_sensitive": "是。copyfile(join(artifact_dir, normpath(攻击者path)), local_path) 真实读取磁盘文件并复制；下游 open(dst,'rb')（handlers.py:1441）将内容流回 HTTP 响应。任意文件读原语。",
+      "q4_escape_allowed_root": "能。normpath 保留前导 '..'（normpath('../../etc/passwd')=='../../etc/passwd'），join(artifact_dir, '../../x') 逃逸；绝对路径第二参直接替换 artifact_dir。允许根为 artifact_dir（默认 ./mlruns 或 --default-artifact-root/--artifacts-destination）。",
+      "q5_traversal_factors": "有效。'..' 与绝对路径均存活；查询串单次 UTF-8 decode 无二次解码；无符号链接防护。",
+      "q6_guard_before_access": "无。download 链（local:60-112、artifact_repo.py:108-272、handlers.py:437-445/1430-1451）经逐行核对不存在任何 startswith/relative_to/包含性判断/白名单。verify_artifact_path 只在上传链。",
+      "q7_misjudged_guards": "否。链上无被误当防护的 resolve/startsWith/鉴权；normpath 明确不阻断。",
+      "q8_normal_static_service": "否。是核心 artifact 下载 API 的越权读，非静态服务/测试/固定常量。",
+      "q9_overgeneralization": "见 q2：codeFlow 中 handlers.py:438 → artifact_repo.py:108 的 dispatch 段为按名过近似（对 /get-artifact+本地根实际走 local:77），但 (a) 源头三处均为真实 tp 源，(b) sink local:104 经 GET /mlflow-artifacts 端点（S37→同一 download_artifacts 调用族）真实可达，(c) 即使按最保守读法，同一输入的任意读漏洞在同一链的 send_file 处成立（仅返回值建模缺失）。过近似影响的是路径展示，不影响漏洞真实性。",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "preconditions": "run_id 有效且可列举（默认无鉴权可 list-runs 获取）；artifact 根为本地路径（LocalArtifactRepository——默认部署）或 --serve-artifacts + 本地 artifacts-destination。",
+      "reason": "这是 mlflow /get-artifact 家族目录穿越（任意文件读）的核心告警：攻击者控制的 path 查询参数经 _send_artifact → download_artifacts → _download_file 的 join(artifact_dir, normpath(path))，normpath 不消除前导 ..，无任何包含性守卫，copyfile 读取根外文件并（经 1441 open）回传。与修复提交在该三处 handler 添加 validate_path_is_safe 的意图完全对应。"
+    },
+    {
+      "alert_index": 4,
+      "sink": "mlflow/store/artifact/local_artifact_repo.py:112 — shutil.rmtree(artifact_path) in delete_artifacts（label K073 tp）",
+      "sources_in_codeflows": {
+        "cf0": "handlers.py:1502 _delete_artifact_mflflow_artifacts(artifact_path)（DELETE /mlflow-artifacts/artifacts/<path:artifact_path> URL 变量，标签 S38 tp）",
+        "cf1": "同上，经 runs_artifact_repo.py:138-139（RunsArtifactRepository.delete_artifacts 中转）"
+      },
+      "q1_source_attacker_controlled": "是。Flask <path:converter> URL 变量，DELETE 请求的路径段完全攻击者可控（经 handlers.get_endpoints 注册的 /api/2.0/mlflow-artifacts/artifacts/<...> DELETE 路由，handlers.py:1500-1509）。",
+      "q2_path_real": "是。1502 artifact_path → 1509 artifact_repo.delete_artifacts(artifact_path) → dispatch（cf1 经 runs_artifact_repo.py:138/139）→ local_artifact_repo.py:106 形参 → local_file_uri_to_path(os.path.join(self._artifact_dir, artifact_path))（local:107-108）→ shutil.rmtree（local:112）。全链真实源码行，无异步断链。",
+      "q3_sink_sensitive": "是。shutil.rmtree 递归删除目录树——真实破坏性文件系统操作。",
+      "q4_escape_allowed_root": "能。local:108 的 join 连 normpath 都没有（对比 log_artifact:31 与 download:103），'../../' 直接逃逸 _artifact_dir；绝对路径替换基址。允许根为 _artifact_dir。",
+      "q5_traversal_factors": "有效。'..'、绝对路径全部存活；无解码放大；无链接防护。",
+      "q6_guard_before_access": "无。delete_artifacts 是唯一连 normpath 都不做的链；verify_artifact_path 不在删除路径上。",
+      "q7_misjudged_guards": "否。",
+      "q8_normal_static_service": "否。DELETE 端点默认无鉴权（--serve-artifacts 门控下）。",
+      "q9_overgeneralization": "cf1 的 RunsArtifactRepository 中转要求 runs:/ 形态仓库，对本端点（_get_artifact_repo_mlflow_artifacts）为过近似；cf0 直连真实。不影响判定。",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "preconditions": "--serve-artifacts 启用（mlflow server 默认开启 serve-artifacts）且 artifacts destination 为本地路径；攻击者可发起 DELETE 请求。需知根外目标目录存在（os.path.exists 检查后 rmtree）。",
+      "reason": "URL 路径变量未经任何规范化/校验直接 join 进 artifact 根并 rmtree——任意目录递归删除原语，防护缺失程度甚至高于读链（连 normpath 都没有）。"
+    }
+  ],
+  "summary_counts": {
+    "likely_tp": 3,
+    "likely_fp": 2,
+    "uncertain": 0
+  },
+  "ten_point_conclusions": {
+    "1_source_attacker_controlled": "全部 5 条告警的源（/get-artifact、/model-versions/get-artifact 的 path 查询参数；PUT/DELETE /mlflow-artifacts 的 <path:artifact_path> URL 变量）均为 HTTP 请求直接可控字段，属真实 Source（cf0 的 run.info.artifact_uri 二阶源为候选级补充）。",
+    "2_source_reaches_sink": "4 条链（alert 0/3/4 及 alert 3 的全部 codeFlow）中间每一跳均有真实源码行；submit 异步分发、posixpath.split、join/normpath 变换均有实码与建模证据。唯一过近似段是 repoMethodDispatchStep 的按名 dispatch（影响 alert 0 的 HDFS 可达条件与 alert 3 展示路径，不影响源/汇真实性）。",
+    "3_sink_is_sensitive": "hdfs:235 open('wb') 写、local:104 copyfile 读+1441 open 流式回传、local:112 rmtree 删除均为真实敏感文件操作。local:38 copyfile 受污的是读侧临时文件参数——不构成敏感越权访问。",
+    "4_allowed_root_escape": "download/list/delete 链的允许根（artifact_dir / HDFS path / mkdtemp 临时目录）均可被前导 '..' 或绝对路径逃逸（join 语义）。",
+    "5_traversal_factors": "'..' 与绝对路径真实生效；无二次百分号解码；无符号链接防护也无依赖；分隔符仅在 Windows+tail 反斜杠场景影响被排除的 K166 sink，不影响本轮告警判定。",
+    "6_real_guards": "唯一真实守卫是 verify_artifact_path/path_not_unique（上传链，先于访问执行，X01 barrier 建模正确）；download/list/delete 链无任何守卫。",
+    "7_misjudged_guards": "无。查询与标签均未把 normpath/resolve/startsWith/鉴权误判为防护（normpath 被明确论证为不阻断）。",
+    "8_normal_service_fp": "alert 1/2 属已防护的正常上传功能读侧旁路（likely_fp），非越权访问。",
+    "9_fp_root_cause": "alert 1/2 的 FP 根因：为'激活 barrier'而在 sink 模型中保留了标签为 fp 的 K086，污点经 barrier 未覆盖的 local_file 形参（tail→tmp_path）到达该 sink。属已知建模代价，非标签错误。",
+    "10_contamination": "无。SARIF 只含 pass1 单规则 5 条结果，无 diagnostics、无 CodeQL 内置查询、无其他 CWE 混入。"
+  },
+  "known_vulnerability_coverage_check": {
+    "task": "核对用户提供的真实漏洞（commit ac4b697bb0bb8a331944dca63f4235b4bf602ab8，'Validate path parameter is safe'，CWE-22）是否被本轮正式告警命中",
+    "fixed_functions": {
+      "get_artifact_handler (handlers.py:528-546)": {
+        "hit": true,
+        "evidence": "alert 3（local_artifact_repo.py:104）codeFlow 1/2 起点为 handlers.py:540/544 request_dict['path']——正是该 handler 的 path 查询参数；alert 0（hdfs:235）cf1/cf2 同源。/get-artifact 任意文件读链（_send_artifact → download_artifacts → join(artifact_dir, normpath(path)) → 读/回传）被 alert 3 覆盖。注意：该链在本地根部署下的字面终点 send_file（K126/K127）未产生告警（download_artifacts 返回值→abspath→send_file 的流未被建模），告警落在同一污点链中段的 copyfile:104 sink 上，漏洞本体（该 handler 的 path 未校验）已命中。",
+        "caveat": "无 validate_path_is_safe（源码为修复前状态，已 grep 确认）。"
+      },
+      "get_model_version_artifact_handler (handlers.py:1269-1288)": {
+        "hit": true,
+        "evidence": "alert 3 codeFlow 3 与 alert 0 codeFlow 3 起点为 handlers.py:1282 request_dict['path']——该 handler 的 path 参数，经 _send_artifact 流入同一未守卫 download 链。"
+      },
+      "_list_artifacts (handlers.py:887-916)": {
+        "hit": false,
+        "evidence": "5 条告警的所有 codeFlow 均无起点位于 handlers.py:897-898（ListArtifacts 的 request_message.path）。预测的 S01/S02 → list_artifacts → list_all → os.listdir（K042）链未在本轮 SARIF 出现——该函数的穿越（修复提交同样覆盖）未被正式告警命中，属召回缺口（可能因 request_message.path 的 proto 字段读取建模/传播断链）。"
+      }
+    },
+    "conclusion": "真实漏洞（/get-artifact 家族 path 目录穿越）被正式告警命中：3 个被修复函数中 get_artifact_handler 与 get_model_version_artifact_handler 由 alert 3（主链，likely_tp 0.9）与 alert 0（HDFS 条件链，likely_tp 0.7）覆盖；_list_artifacts 未命中（漏报）。补充：alert 4（DELETE 端点 rmtree 任意目录删除）不在 commit ac4b697 的修复范围内，但属同族真实 CWE-22 漏洞；alert 1/2 为误报。"
+  },
+  "final_conclusion": "CodeQL 分析成功：本轮 pass1 正式查询命中 5 条路径穿越污点路径告警（非零告警，无需输出'未命中'声明）。独立复核判定：likely_tp 3 条（hdfs:235 条件性写/HDFS读、local:104 任意文件读、local:112 任意目录删除——三者 download/delete 链均无守卫、join+normpath 放行 ..）、likely_fp 2 条（local:38 上传链读侧旁路，X01 barrier 真实生效但未覆盖 local_file 形参）。SARIF 无诊断/内置查询混入。修复提交 ac4b697 涉及的三个 handler 中两个被命中、_list_artifacts 为召回缺口。",
+  "limitations": [
+    "alert 0 的 HDFS 链可达性依赖部署使用 hdfs:// artifact 根（模型过近似按名 dispatch），无法从静态告警单独证实部署事实，故信心 0.7。",
+    "alert 3 展示路径中 handlers.py:438 → artifact_repo.py:108 的基类 dispatch 段为过近似；真实 /get-artifact+本地根的字面 sink 是 send_file（未告警），本告警 sink 的真实可达路径为 GET /mlflow-artifacts 端点（S37 源），两者为同一漏洞族。",
+    "Windows 反斜杠逃逸（tail 分量）影响的是被排除的 K166 sink（handlers.py:1464），不在本轮告警内，未计入 TP。"
+  ]
+}

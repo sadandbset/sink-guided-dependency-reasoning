@@ -1,0 +1,313 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-22",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\nltk\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL query execution, no LLM labeling in this round) against the nltk_vuln source tree (NLTK 3.4.4). WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database nltk-db sits INSIDE the source root as a SIBLING of the nltk/ package directory; the positive scope %/nltk/% of both generated queries excludes it by construction (the path component 'nltk-db' never matches '/nltk/'), and a defensive path filter is documented in the exclusions. All exploration, file traversal and grep evidence collection stayed inside nltk/ and never descended into nltk-db. Source-location ground truth present in the source root (CVE-Report-NLTK-PathTraversal.md, NLTK-CVE-Application-Report.md, NLTK-CVE-Application-Report-CAND02.md, NLTK-Final-Vulnerability-Report.md, NLTK-Vulnerability-Verification-Report.md, SECURITY_DISCLOSURE_EMAIL.md, path_traversal_sinks.csv) was deliberately NOT opened, per the experimental-independence constraint."
+  },
+  "target": {
+    "project": "nltk (Natural Language Toolkit 3.4.4)",
+    "projectDescription": "NLTK 3.4.4 (nltk/VERSION '3.4.4', 2019-era py2/py3-compatible library; 343 .py files, ~103921 baseline LOC in the database). nltk is a LIBRARY, not a web application: the audit target is the nltk/ package tree. Input surfaces observed first-hand: (1) nltk/app/wordnet_app.py contains a real HTTP surface - the wordnet browser server: class MyServerHandler(BaseHTTPRequestHandler) (:92) with do_GET (:96) taking sp = self.path[1:] (:98) from the raw request path, percent-decoding it via unquote_plus (:99, :118 - CWE-36 mixed decoder), and passing it to open(usp, 'r') (:122, guarded by an exact literal equality against 'NLTK Wordnet Browser Database Info.html') and to get_static_page_by_path (:138 -> :813, an exact-literal dispatch that never touches the filesystem); the server is started as server = HTTPServer(('', port), MyServerHandler) (:247) - binds ALL interfaces, so the request-path source is remotely reachable whenever the demo browser app runs; logfile = open(logfilename, 'a') (:229) with logfilename from the getopt -l/--logfile CLI option (:980-:1000). (2) nltk/downloader.py - the NLTK data downloader: downloads package zips from a data server (urlopen(info.url) :717 -> open(filepath, 'wb') :718, filepath = os.path.join(download_dir, info.filename) :700 where Package.filename/subdir come from the XML index downloaded over the network: ElementTree.parse(urlopen(self._url)) :962 -> Package.fromxml attrib :282-:288 -> self.filename = os.path.join(subdir, id + ext) :270); then unpacks them with _unzip_iter (:2249-:2300): zf = zipfile.ZipFile(filename) :2255, namelist = zf.namelist() :2264 (NETWORK-controlled entry names), dirpath = os.path.join(root, *pieces[:i+1]) :2281 + os.mkdir(dirpath) :2283, filepath = os.path.join(root, *filename.split('/')) :2287 -> open(filepath, 'wb') :2290 - os.path.join keeps '..' lexically and an ABSOLUTE entry name REPLACES root entirely; NO entry-name filtering, NO containment check, NO resolve/realpath anywhere in the unpack loop (hand-rolled zip-slip shape, CWE-22 archive-extraction channel; the download server URL is operator-configurable via the interactive 'New URL>' input :1284 or NLTK_DOWNLOAD_URL env :2568, so the trust boundary of the entry names is the data server). (3) nltk/data.py - the resource-path resolution machinery: find(resource_name, paths) (:589) normalizes the name with os.path.normpath (normalize_resource_name :222-:267 - normpath KEEPS a leading '..'; no '..' rejection) and joins it onto every search-path directory with p = os.path.join(path_, url2pathname(resource_name)) (:650, :657 - url2pathname percent-decodes %XX sequences, CWE-36), then os.path.exists (:651) / FileSystemPathPointer(p) -> abspath (:331) -> open(self._path, 'rb') (:345); _open (:975) routes 'file:'/'nltk:' protocols into find and http: to urlopen (:998); retrieve(resource_url, filename) (:704) derives the write target filename from the URL (:718/:720) and writes open(filename, 'wb') (:732); the search path list itself is built from os.environ.get('NLTK_DATA') (:91), APPDATA (:102), sys.prefix and ~/nltk_data (operator trust). (4) corpus readers (nltk/corpus/reader/): CorpusReader.__init__(root, fileids) (:47) converts a string root via a .zip regex into ZipFilePathPointer/FileSystemPathPointer (:81-:84); CorpusReader.open(file) (:204) -> self._root.join(file).open() -> FileSystemPathPointer.join (_path = os.path.join(self._path, fileid) data.py:354, NO containment) -> open (:345); the corpus reader tree also contains hand-rolled root+fileid joins feeding direct opens (crubadan.py:78/:97 path.join(self.root, ...) -> open :83/:104 with from os import path :25; mte.py:269... MTEFileReader(os.path.join(self._root, f)); nkjp.py:253/:258; framenet.py:1403/:1488/:1832 locpath joins; panlex_lite.py:46 sqlite3.connect(os.path.join(root, 'db.sqlite'))); StreamBackedCorpusView.__init__(fileid) (util.py:131) opens the fileid (open(self._fileid, 'rb') :218/:221) after os.stat (:181); find_corpus_fileids (util.py:797) walks root with followlinks=True (:820) and scans zipfile namelists (:807). (5) external-tool wrappers driven by env vars (operator trust): internals.py find_binary_iter/find_jar_iter (:540-:597, :702-:862) search os.environ[env_var]/CLASSPATH/WEKAHOME/STANFORD_SEGMENTER dirs with os.path.join + os.path.isfile + os.listdir; classify/weka.py WEKAHOME :48-:49, tempfile.mkdtemp + join + listdir + remove + rmdir cleanup; classify/senna.py path.normpath(environ['SENNA']) :62/:71. (6) twitter helper surface: Authenticate.load_creds(creds_file, subdir) (twitter/util.py:47, creds_fullpath = os.path.normpath(os.path.join(subdir, creds_file)) :84-:86 -> open :91 read / :138 append; TWITTER env :41), TweetWriter(fprefix, subdir) (twitterclient.py:442, os.mkdir(subdir) :497, fname = os.path.join(subdir, fprefix) :499 -> open/gzip.open write :518/:520), json2csv(fp, outfile) / json2csv_entities / outf_writer_compat (twitter/common.py:92/:156/:137 -> open/gzip.open outfile write :144/:150). (7) model save/load channels (Pass-6-adjacent pickle, path parameter is the pass-1 concern): perceptron.py save/load(path) :109/:114, PerceptronTagger.load(loc) :239 -> open wb/rb; transitionparser.py train/parse(modelfile) :505/:546; stanford wrappers (tag/stanford.py:48 __init__(model_filename, path_to_jar)). (8) CLI/interactive (operator trust): downloader __main__ optparse -d/--dir download dir + NLTK_DOWNLOAD_URL default (:2529-:2568); DownloaderShell interactive Config menu: new_dl_dir = input('  New Directory> ') (:1276 - THE interactive download-dir boundary), new_url = input('  New URL> ') (:1284), package-identifier inputs (:1154/:1195/:1232); metrics/agreement.py:468 demo open(options.file); app/chartparser_app.py + chunkparser_app.py tkinter asksaveasfilename/askopenfilename dialog filenames -> open (:799/:820/:2278/:2301/:2316/:2319/:2333/:2336, :1398/:1419/:1434). No FastAPI/Django/Flask; no pathlib; no os.rename/os.symlink/os.chmod/shutil path operations; no glob; no extractall (the zip unpack is hand-rolled join+mkdir+open); six is the compatibility layer (external to this database).",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\nltk_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (nltk-db/codeql-database.yml)",
+      "source layout: the audit target is the python package tree nltk/ (343 .py files: corpus/reader, tokenize, tag, parse, classify, sem, inference, app, draw, twitter, stem, translate, ...)",
+      "build manifests: setup.py (reads nltk/VERSION for the version, packages the nltk/ tree) + setup.cfg + pip-req.txt (requests, twython, matplotlib, python-crfsuite...)"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\nltk_vuln\\nltk-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\nltk_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "2554ff48feed878ba7e830ada9825196f3eaa86a",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:55:48.422806600Z"
+    },
+    "baselineLinesOfCode": 103921,
+    "finalised": true,
+    "locationNote": "nltk-db is nested in the source tree root as a SIBLING of the nltk/ package (not inside it); the positive scope %/nltk/% of both queries therefore excludes it by construction (the path component 'nltk-db' never matches '/nltk/'), and all exploration greps pruned it. Both queries scope positively to %/nltk/% (the shipped python package). Out of scope by that positive filter: repo-root build/site tooling (setup.py, setup.cfg, Makefile, tox.ini, jenkins*, tools/ and web/ - dev/website scripts). Within nltk/ the queries additionally exclude %/nltk/test/ (the package's test tree). In-package demo mains (tbl/demo.py, stem/snowball.py bottom, downloader.py __main__) stay in scope - they are shipped package code; the labeling step classifies their trust level."
+  },
+  "toolchain": {
+    "qlpack": "iris/nltk-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace from Step 0",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all, proven by the prior projects of this series on this machine)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1; local CLI verified on disk in prior projects of this series on this machine; no query was executed in this round)",
+    "compatibilityBasis": "API facts used by the generated queries reuse only structural shapes already proven by the queries of this series that RAN on this same CLI + pack family (ganga ran both sources and sinks to BQRS/CSV; ansible, coderedcms, copyparty, dfetch, django, fides, mindsdb, mlflow, gradio generated with the same contract): AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), AstNode.getScope() and Scope.getEnclosingModule() (semmle/python/AstExtended.qll), Module.getName() and Module.getFile().getShortName() (semmle/python/Module.qll), Call.getFunc()/getArg(int)/getAnArg() (semmle/python/Exprs.qll), Attribute.getName()/getObject(), Subscript.getObject(), Function.getName()/getAnArg()/getEnclosingScope() (semmle/python/Function.qll), Parameter.isSelf()/getPosition()/getName(), Class.getName() (semmle/python/Class.qll). The two queries define no QL classes (only predicates), never assign API::Node values to DataFlow::Node variables, keep every variable bound through a positive body, keep resolved-API matching out entirely (all families are AST syntax matches; the match_kind column is kept 'ast' for cross-project contract consistency), name the module-path variable moduleHint (never `module`), and leave no {{...}} template placeholders. Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no unbound `this`. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "none (pure library - no web/micro framework)",
+          "confidence": 0.0,
+          "evidence": [
+            "no `from flask import`, no `from django`, no `from fastapi import`, no `import tornado`, no `from aiohttp import` anywhere in nltk/ (grep over the whole package tree)",
+            "nltk is an importable NLP library; its shipped executables are demo scripts and interactive CLI shells, not service deployments"
+          ]
+        },
+        {
+          "name": "stdlib http.server (BaseHTTPRequestHandler) - NOT a framework, the only HTTP service surface",
+          "confidence": 0.95,
+          "evidence": [
+            "import/package: `from http.server import HTTPServer, BaseHTTPRequestHandler` (app/wordnet_app.py:73, py3 branch of a conditional import)",
+            "route/handler: class MyServerHandler(BaseHTTPRequestHandler) (:92) overriding do_HEAD (:93) and do_GET (:96) - the request dispatcher",
+            "runtime/bootstrap: server = HTTPServer(('', port), MyServerHandler) (:247) - binds ALL interfaces (empty host string), port default 8000, started by wnb() which the app() CLI (getopt) launches; webbrowser.open points a browser at it (:270)",
+            "directory/layout: nltk/app/ (demo applications)"
+          ],
+          "referenceNote": "No references/http-server.md exists in the Augur installation; treated as stdlib infrastructure, not a framework. Its do_GET is the only remote-reachable input boundary of the codebase (self.path read :98) and is emitted as the http_request_path source family."
+        },
+        {
+          "name": "optparse/getopt + interactive input() shells (CLI boundary)",
+          "confidence": 0.75,
+          "evidence": [
+            "import/package: `from optparse import OptionParser` (downloader.py:2530 __main__; metrics/agreement.py demo), `import getopt` (app/wordnet_app.py:981)",
+            "route/registration: parser.add_option('-d','--dir') for the download directory (downloader.py:2533-2539); getopt '-l/--logfile' for the browser logfile (wordnet_app.py:983)",
+            "runtime/bootstrap: parser.parse_args() in the __main__ blocks; DownloaderShell.run() interactive menu with input('Downloader>') (:1154) and the Config menu input('  New Directory>') (:1276) / input('  New URL>') (:1284)",
+            "directory/layout: downloader.py bottom, app/wordnet_app.py bottom"
+          ],
+          "referenceNote": "No references/optparse.md exists; the CLI is an OPERATOR-trust boundary (the person invoking the tool owns the tree it reads/writes). The optparse dest names and getopt values are keyword/string-literal-shaped, NOT Parameter nodes, so they are not emitted as cli_param source rows - the flows are documented in inputBoundaryInventory and uncoveredCases. The interactive input() calls ARE emitted as cli_input source rows (8 in downloader.py: :575, :798, :1154, :1195, :1232, :1272, :1276, :1284 - of which only :1276 New Directory and :1284 New URL are path/URL-relevant)."
+        },
+        {
+          "name": "tkinter demo GUI apps (app/chartparser_app.py, chunkparser_app.py, wordnet_app wx fallback)",
+          "confidence": 0.6,
+          "evidence": [
+            "import/package: `from tkinter import asksaveasfilename, askopenfilename` style imports in app/chartparser_app.py and app/chunkparser_app.py",
+            "handler: asksaveasfilename/askopenfilename dialogs returning local filenames (:795-:799, :809-:820 in chartparser_app.py; chunkparser_app.py:1398/:1419/:1434)",
+            "runtime: demo mainloops started by hand"
+          ],
+          "referenceNote": "Local-GUI trust level (the desktop user picks the file); no references/tkinter.md exists. The dialog-derived filenames are anchored by their consuming open() sink rows, not emitted as source rows (dialog return values are not Parameter/attribute shapes)."
+        }
+      ],
+      "nonPythonCandidates": ["Gin/Echo (go), Spring (java), Express (javascript), ASP.NET Core (csharp): not applicable, database language is python"],
+      "result": "NO web framework detected (nltk is a library). The only remote-reachable surface is the stdlib BaseHTTPRequestHandler mini-server of the wordnet browser demo (app/wordnet_app.py), whose do_GET reads self.path - emitted as the http_request_path source family; the tkinter GUIs and the optparse/getopt/interactive CLI shells are operator/local trust boundaries. Per WORKFLOW.md 4.2.3 (no framework match), source/sink shapes were derived from repository code via references/python.md + references/patterns.md only."
+    }
+  },
+  "inputBoundaryInventory": {
+    "summary": "nltk 3.4.4 is a library with one stdlib HTTP mini-server, a downloader that fetches and unpacks network archives, a resource-path resolver, and a large corpus-reader API surface. The untrusted-input boundaries are: (1) the wordnet browser HTTP request path - do_GET's sp = self.path[1:] (app/wordnet_app.py:98, server binds ALL interfaces at :247), percent-decoded by unquote_plus (:99/:118); its only file-system reach is open(usp, 'r') :122 which is guarded by an EXACT literal equality ('NLTK Wordnet Browser Database Info.html') and get_static_page_by_path :813 which is an exact-literal dispatch - so the observed http->fs chain is guarded, but the request-path node itself is the genuine remote source; (2) the downloader's network inputs - the XML index (ElementTree.parse(urlopen(self._url)) downloader.py:962 -> Package.fromxml attrib :286-:288 -> Package(id, url, subdir,...) whose self.filename = os.path.join(subdir, id + ext) :270 feeds filepath = os.path.join(download_dir, info.filename) :700 -> open(filepath, 'wb') :718 write and os.mkdir(os.path.join(download_dir, info.subdir)) :710) and the package zip ENTRY NAMES (namelist = zf.namelist() :2264 -> dirpath/filepath = os.path.join(root, *pieces) :2281/:2287 -> os.mkdir :2283 + open(filepath, 'wb') :2290 - NO entry-name filtering, no containment: '..' survives os.path.join lexically and an ABSOLUTE entry name replaces root entirely - hand-rolled zip-slip, the strongest CWE-22 channel of this target); (3) the library's public API parameters - the application-facing boundary of a library: data.find(resource_name) (normpath KEEPS leading '..'; os.path.join(path_, url2pathname(resource_name)) :650 percent-decodes; NO containment, NO '..' rejection), data.load/_open/retrieve(resource_url, filename) (:589/:780/:975/:704 - retrieve writes open(filename, 'wb') :732 with filename derived from the URL :718/:720), FileSystemPathPointer/ZipFilePathPointer constructors and .join(fileid) (data.py:324/:354/:497/:567 - join has no containment), CorpusReader(root, fileids) + .open(file)/.abspath(fileid) (corpus/reader/api.py:47/:204/:159 -> root.join -> open), StreamBackedCorpusView(fileid) (corpus/reader/util.py:131 -> open :218/:221), LazyCorpusLoader(name) (corpus/util.py:53), unzip/_unzip_iter(filename, root) (downloader.py:2239/:2249), Downloader.download/incr_download/_download_package(..., download_dir) (:753/:622/:684), twitter Authenticate.load_creds(creds_file, subdir) / TweetWriter(fprefix, subdir) / json2csv*(outfile) (twitter/util.py:47, twitterclient.py:442, common.py:92/:156/:137), perceptron/transitionparser/stanford model-file params (tag/perceptron.py:109/:114/:239, parse/transitionparser.py:505/:546, tag/stanford.py:48) - emitted as lib_api_param source rows (definition-side Parameter nodes) so the labeling step can classify which wrapper entries are true boundaries; (4) environment variables - NLTK_DATA (data.py:91 - the resource search path list), NLTK_DOWNLOAD_URL (downloader.py:2568 - the data server URL), TWITTER (twitter/util.py:41, corpus/reader/twitter.py docstring), WEKAHOME (classify/weka.py:48), SENNA (classify/senna.py:69/:71), MALT_PARSER/MALT_MODEL + CLASSPATH + STANFORD_SEGMENTER (internals.py:562-:567/:745-:784, tokenize/stanford_segmenter.py:138), APPDATA (data.py:102, downloader.py:1086) - OPERATOR trust level, emitted (os.environ.get form only) for labeling to classify; (5) interactive CLI inputs - downloader.py input() calls (:1276 New Directory - the download dir, :1284 New URL - the data server; :1154/:1195/:1232 package identifiers, :575/:798 confirmations). The sink side funnels through: builtin open() (~60 in-scope sites), GzipFile/BufferedGzipFile/gzip.open (7), zipfile.ZipFile/OpenOnDemandZipFile (4), os.mkdir (5), os.remove/unlink/rmdir (22), os.listdir (6), os.walk (7), sqlite3.connect (4), and the os.path join/stat/normalize/decode propagation nodes scoped to the traversal-relevant modules (data.py, downloader.py, twitter/, corpus/reader/, internals.py, classify/weka.py + senna.py, tokenize/stanford_segmenter.py, tag/mapping.py, sem/chat80.py, app/wordnet_app.py).",
+    "sourceFamilies": [
+      {
+        "family": "http_request_path",
+        "shape": "the `self.path` attribute read inside MyServerHandler.do_GET",
+        "trustChain": "app/wordnet_app.py:98 sp = self.path[1:] -> :99 unquote_plus(sp) == 'SHUTDOWN THE SERVER' / :118 usp = unquote_plus(sp) -> :121-:122 isfile + open(usp, 'r') (guarded by the exact literal 'NLTK Wordnet Browser Database Info.html' at :119) and :138 get_static_page_by_path(usp) (exact-literal dispatch :813-:832, no fs access). HTTPServer(('', port), MyServerHandler) at :247 binds ALL interfaces - remotely reachable. Also :139-:153 the query-string word and href channels (content, not paths). BaseHTTPRequestHandler is stdlib, external to this database.",
+        "evidenceSites": ["nltk/app/wordnet_app.py:96-:98, :118-:122, :138, :247"]
+      },
+      {
+        "family": "net_fetch",
+        "shape": "bare-name urlopen(...) calls (from six.moves.urllib.request import urlopen)",
+        "trustChain": "downloader.py:717 infile = urlopen(info.url) -> :718-:723 open(filepath, 'wb') write of the response body (the downloaded package); downloader.py:962 ElementTree.parse(urlopen(self._url)) - the XML index download (feeds net_xml_attr); data.py:998 return urlopen(resource_url) in _open - the http:-protocol resource read. The URLs come from the XML index (info.url) / the configured data server / the caller's resource_url.",
+        "evidenceSites": ["nltk/downloader.py:717, :962", "nltk/data.py:998"]
+      },
+      {
+        "family": "net_xml_attr",
+        "shape": "the `xml.attrib` attribute reads inside Package.fromxml / Collection.fromxml",
+        "trustChain": "downloader.py:962 the index XML is downloaded from the data server -> :282-:288 Package.fromxml iterates xml.attrib and passes **xml.attrib to Package(id, url, subdir, ...) -> :270 self.filename = os.path.join(subdir, id + ext) -> _download_package :700 filepath = os.path.join(download_dir, info.filename) -> :710 mkdir, :718 open write, :740 zipdir = os.path.join(download_dir, info.subdir) -> :745 _unzip_iter destination. XML attributes are DATA-SERVER-controlled path components (id, subdir, url); the attribute propagation through Package.__dict__ is dynamic and needs a MySummaries step in Phase 2.",
+        "evidenceSites": ["nltk/downloader.py:286-:288, :327-:330, :270, :700, :710, :718, :740"]
+      },
+      {
+        "family": "archive_entry",
+        "shape": ".namelist() member calls on zipfile handles",
+        "trustChain": "downloader.py:2264 namelist = zf.namelist() in _unzip_iter (zf opened on the DOWNLOADED package :2255) -> :2266-:2271 dirlist/filelist derived from entry names -> :2281/:2287 os.path.join(root, *pieces) -> :2283 os.mkdir(dirpath) / :2290 open(filepath, 'wb') write - the entry names are network-controlled and unfiltered (zip-slip). Also the index-builder side :2410/:2491 (operator tooling reading local corpus dirs) and data.py:522 (ZipFilePathPointer entry existence scan) / corpus/reader/util.py:807 (find_corpus_fileids zip scan - corpus-content-origin).",
+        "evidenceSites": ["nltk/downloader.py:2255, :2264, :2281, :2283, :2287, :2290", "nltk/data.py:522", "nltk/corpus/reader/util.py:807"]
+      },
+      {
+        "family": "lib_api_param",
+        "shape": "definition-side Parameter nodes of the library's path-taking public APIs (the application-facing boundary of a library)",
+        "trustChain": "the entries an APPLICATION can steer into filesystem access: data.find(resource_name) data.py:589 pos 0 (normpath keeps leading '..'; join + url2pathname percent-decode; no containment); data.retrieve(resource_url, filename) :704 pos 0/1 (write target; filename derived from the URL when not given :718/:720); data.load(resource_url) :780 pos 0; FileSystemPathPointer(_path) data.py:324 pos 1 (abspath only - no confinement); FileSystemPathPointer.join(fileid) :353 pos 1; ZipFilePathPointer(zipfile, entry) :497 pos 1/2; ZipFilePathPointer.join(fileid) :567 pos 1; CorpusReader(root, fileids) corpus/reader/api.py:47 pos 1/2; CorpusReader.abspath(fileid) :159 pos 1; CorpusReader.open(file) :204 pos 1; StreamBackedCorpusView(fileid) corpus/reader/util.py:131 pos 1; LazyCorpusLoader(name) corpus/util.py:53 pos 1; unzip(filename, root) downloader.py:2239 pos 0/1; _unzip_iter(filename, root) :2249 pos 0/1; Downloader.download/incr_download/_download_package download_dir pos 2 (:753/:622/:684); build_index(root) :2309 pos 0; Authenticate.load_creds(creds_file, subdir) twitter/util.py:47 pos 1/2; add_access_token(creds_file) :123 pos 0; TweetWriter(fprefix, subdir) twitterclient.py:442 pos 4/5; json2csv(outfile) common.py:92 pos 1; json2csv_entities(outfile) :156 pos 1; outf_writer_compat(outfile) :137 pos 0; AveragedPerceptron.save/load(path) perceptron.py:109/:114 pos 1; PerceptronTagger.load(loc) :239 pos 1; TransitionParser.train/parse modelfile pos 2 (:505/:546); StanfordTagger(model_filename, path_to_jar) tag/stanford.py:48 pos 1/2; sql_query/cities2table(dbname) sem/chat80.py:450/:410 pos 0. These rows give the labeling step the boundary definitions between caller-controlled values and the concrete file operations.",
+        "evidenceSites": ["nltk/data.py:324, :353, :497, :567, :589, :704, :780", "nltk/corpus/reader/api.py:47, :159, :204", "nltk/corpus/reader/util.py:131", "nltk/corpus/util.py:53", "nltk/downloader.py:622, :684, :753, :2239, :2249, :2309", "nltk/twitter/util.py:47, :123", "nltk/twitter/twitterclient.py:442", "nltk/twitter/common.py:92, :137, :156", "nltk/tag/perceptron.py:109, :114, :239", "nltk/parse/transitionparser.py:505, :546", "nltk/tag/stanford.py:48", "nltk/sem/chat80.py:410, :450"]
+      },
+      {
+        "family": "env",
+        "shape": "os.environ.get(...) calls",
+        "trustChain": "operator-configured environment: NLTK_DATA (data.py:91 - the resource search-path list, split on os.pathsep), APPDATA (data.py:102 - Windows nltk_data location), NLTK_DOWNLOAD_URL (downloader.py:2568 - the __main__ default for the data server URL). OPERATOR trust level - emitted for labeling to classify, not assumed attacker sources. The os.environ[...] SUBSCRIPT reads (downloader.py:1086-:1087 APPDATA, twitter/util.py:41 TWITTER, weka.py:48-:49 WEKAHOME membership + subscript, senna.py:69/:71 SENNA, internals.py:562-:567/:745/:747/:784 MALT_PARSER/CLASSPATH/jar envs, data.py:93 APPENGINE_RUNTIME) are NOT emitted - the AST Subscript node is identical for read and write targets (same shape-ambiguity policy as the prior projects of this series); they are documented here and in uncoveredCases.",
+        "evidenceSites": ["nltk/data.py:91, :102", "nltk/downloader.py:2568"]
+      },
+      {
+        "family": "cli_input",
+        "shape": "bare-name input(...) calls in downloader.py",
+        "trustChain": "the DownloaderShell interactive menu (operator/local terminal trust): :1276 new_dl_dir = input('  New Directory> ') - THE interactive download-dir boundary (feeds _download_dir -> mkdir/open/extractall-destination); :1284 new_url = input('  New URL> ') - the data-server URL (feeds the XML index download); :1154/:1195/:1232 package-identifier inputs (select what to download, not where); :575/:798 y/n confirmations. INTERACTIVE trust level - emitted for labeling to classify, not assumed attacker sources.",
+        "evidenceSites": ["nltk/downloader.py:575, :798, :1154, :1195, :1232, :1272, :1276, :1284"]
+      }
+    ],
+    "sinkChannels": [
+      {
+        "channel": "builtin open()",
+        "argIndex": 0,
+        "evidenceSites": ["~60 in-scope Name-form sites. Traversal-relevant: data.py:345 open(self._path, 'rb') - FileSystemPathPointer.open, THE central resource read (fed by find() joins and .join(fileid)); downloader.py:2290 open(filepath, 'wb') - the zip-slip WRITE (filepath = os.path.join(root, *filename.split('/')) :2287 from a namelist entry); downloader.py:718 open(filepath, 'wb') - the package download write (filepath from XML-index filename :700); data.py:732 open(filename, 'wb') - retrieve() write (filename from resource_url :718/:720); app/wordnet_app.py:122 open(usp, 'r') - HTTP request path (exact-literal-guarded); twitter/util.py:91/:138 - the twitter credentials read/append; corpus/reader/crubadan.py:83/:104, ipipan.py:72/:203, lin.py:44, nkjp.py:258, pl196x.py:114, xmldocs.py:173, util.py:218/:221, perceptron.py:111/:235/:322, transitionparser.py:542/:556, weka.py:282, agreement.py:468 (CLI demo), app dialogs (chartparser_app 8, chunkparser_app 3, wordnet_app 1), tbl/demo.py 5, maxent/malt/stanford-family tempfiles, tree.py:821, draw/util.py:1871, metrics/distance.py:265, util.py:208, __init__.py:31 (fixed VERSION read), punkt.py:1492 (fixed /tmp/punkt.new), gale_church.py:272 (commented), sem/chat80.py:683 (fixed literal)"]
+      },
+      {
+        "channel": "GzipFile / BufferedGzipFile / gzip.open",
+        "argIndex": 0,
+        "evidenceSites": ["data.py:484 GzipFile(self._path, 'rb') and :482 BufferedGzipFile(self._path, 'rb') inside GzipFileSystemPathPointer.open (:477) - the gz-variant of the central resource read; data.py:557/:559 BufferedGzipFile/GzipFile(self._entry, ...) inside ZipFilePathPointer.open (in-zip entry names, content read); data.py:135 GzipFile(filename, mode, ...) inside BufferedGzipFile.__init__; twitter/twitterclient.py:518 gzip.open(self.fname, 'w') and twitter/common.py:144/:150 gzip.open(outfile, ...) - the tweet output writes"]
+      },
+      {
+        "channel": "zipfile.ZipFile / OpenOnDemandZipFile",
+        "argIndex": 0,
+        "evidenceSites": ["downloader.py:2255 zf = zipfile.ZipFile(filename) in _unzip_iter - opens the DOWNLOADED package (entry names then drive the extraction writes); downloader.py:2471 ZipFile(zipfilename) in the index builder; data.py:506 OpenOnDemandZipFile(os.path.abspath(zipfile)) in ZipFilePathPointer.__init__; classify/weka.py:74 ZipFile(jar) - the WEKAHOME jar check"]
+      },
+      {
+        "channel": "os.mkdir (directory creation)",
+        "argIndex": 0,
+        "evidenceSites": ["downloader.py:708 os.mkdir(download_dir) and :710 os.mkdir(os.path.join(download_dir, info.subdir)) - the package install dirs (subdir from the XML index); downloader.py:2275 os.mkdir(root) and :2283 os.mkdir(dirpath) with dirpath = os.path.join(root, *pieces[:i+1]) :2281 from zip entry names - the zip-slip DIRECTORY writes; twitter/twitterclient.py:497 os.mkdir(subdir) - TweetWriter output dir"]
+      },
+      {
+        "channel": "os.remove / os.unlink / os.rmdir (file removal)",
+        "argIndex": 0,
+        "evidenceSites": ["downloader.py:704 os.remove(filepath) - stale package removal (filepath from the XML-index filename join :700); corpus/reader/util.py:540 PickleCorpusView GC delete; corpus/reader/nkjp.py:282; classify/maxent.py:1493/:1560/:1561, classify/weka.py:140-:141/:247-:248 (temp dir teardown); parse/malt.py:225/:226/:299, parse/stanford.py:273, sem/boxer.py:241, tag/stanford.py:121, tokenize/stanford.py:117, tokenize/stanford_segmenter.py:277 (tempfile cleanup); tree.py:823/:824"]
+      },
+      {
+        "channel": "os.listdir / os.walk (directory listing/walk)",
+        "argIndex": 0,
+        "evidenceSites": ["internals.py:770/:788/:809 listdir + :862 walk - the find_binary/find_jar search over env-var dirs; corpus/reader/util.py:821 os.walk(root.path, followlinks=True) - corpus fileid discovery (followlinks=True symlink traversal); chunk/named_entity.py:215; downloader.py:923 walk (status size check), :2443/:2464 walk (index builder); classify/weka.py:139/:246 listdir"]
+      },
+      {
+        "channel": "sqlite3.connect",
+        "argIndex": 0,
+        "evidenceSites": ["corpus/reader/panlex_lite.py:46 sqlite3.connect(os.path.join(root, 'db.sqlite')) - the PanLex corpus DB (root is a CorpusReader param); sem/chat80.py:431 sqlite3.connect(dbname) and :462 sqlite3.connect(str(nltk.data.find(dbname))) - chat80 query DB; sem/relextract.py:329 sqlite3.connect(':memory:') (constant, non-path)"]
+      },
+      {
+        "channel": "os.path.join (propagation, scoped to traversal-relevant modules)",
+        "argIndex": "0",
+        "evidenceSites": ["data.py:650/:657 os.path.join(path_, url2pathname(resource_name)) - THE unchecked resource join; :354 _path = os.path.join(self._path, fileid) - the pointer join; :99-:112 search-path list joins (sys.prefix/APPDATA constants); downloader.py:270 (XML-index filename), :700, :710, :740, :888, :2281, :2287 (zip-slip), :922; corpus/reader joins: crubadan.py:78/:97 (bare path.join from `from os import path`), mte.py (9 sites), framenet.py:1403/:1488/:1832, nkjp.py:68/:253, panlex_lite.py:46; twitter/util.py:85/:130, twitterclient.py:499; internals.py:540/:553/:576/:586/:597/:763/:767/:777/:781/:787/:810/:818/:861; classify/weka.py:52/:53/:106/:223; classify/senna.py:91-:97 (bare path.join); tokenize/stanford_segmenter.py:139; tag/mapping.py:60 (bare join from `from os.path import join`) -> nltk data load with the fileid parameter"]
+      },
+      {
+        "channel": "os.path.exists/isfile/isdir/isabs + os.stat/os.access (guard reads, TOCTOU shape)",
+        "argIndex": 0,
+        "evidenceSites": ["data.py:640/:648/:651/:658 (find() path checks - separate syscalls from the :345 open), :721/:732 (retrieve), :332 (FileSystemPathPointer existence check vs the :345 open); downloader.py:701/:707/:709/:716/:743, :897/:902 (os.stat), :916/:918; twitter/util.py:88 (creds isfile); internals.py:763 (isfile), senna.py:67/:73/:126 (bare path.isfile); corpus/reader/util.py:181 (os.stat on the fileid); sem/chat80.py:638/:817 (os.access on dbname)"]
+      },
+      {
+        "channel": "os.path.abspath/normpath/realpath/expanduser (normalization WITHOUT containment)",
+        "argIndex": 0,
+        "evidenceSites": ["data.py:331 abspath in FileSystemPathPointer.__init__ (normalizes '..' but confines to NOTHING), :506 abspath(zipfile), :257 normpath in normalize_resource_name (KEEPS leading '..'), :261 abspath(join(relative_path, resource_name)), :575 normpath, :722 abspath in retrieve, :94/:103 expanduser; twitter/util.py:84 normpath (creds path), :152 expanduser (guess_path); classify/senna.py:62/:71 path.normpath (SENNA executable dir)"]
+      },
+      {
+        "channel": "url2pathname / unquote_plus (percent-decode nodes, CWE-36 mixed decoder)",
+        "argIndex": 0,
+        "evidenceSites": ["data.py:650 p = os.path.join(path_, url2pathname(resource_name)) and :657 - resource names are percent-decoded BEFORE the join (%2e%2e%2f decodes to '../', bypassing any naive '..' string check); app/wordnet_app.py:118 usp = unquote_plus(sp) - the HTTP request path decode (also :99)"]
+      },
+      {
+        "channel": "shutil.copyfileobj (stream copy)",
+        "argIndex": "not a path parameter (file objects)",
+        "evidenceSites": ["downloader.py:2291 shutil.copyfileobj(srcfile, dstfile) inside _unzip_iter - copies zip entry content into the open(filepath, 'wb') destination; arguments are STREAMS, so the path-bearing rows are the :2290 open() row and the :2287 join row"]
+      }
+    ],
+    "guardsAndEvidence": [
+      {
+        "guard": "_unzip_iter: NO entry-name filtering, NO containment (CWE-22 primary - hand-rolled zip-slip)",
+        "evidence": "downloader.py:2249-:2300: namelist entries are split on '/' and joined onto root with os.path.join(root, *pieces) (:2281) and os.path.join(root, *filename.split('/')) (:2287). os.path.join keeps '..' segments lexically (they resolve at the mkdir/open syscalls) and an ABSOLUTE entry name (e.g. 'C:/x' or '/etc/x') REPLACES root entirely. There is no filter=, no member allowlist, no '..' rejection, no prefix/startswith check, no resolve/realpath anywhere in the loop. The zip is the package downloaded from the data server (:717/:718), so entry names are data-server-controlled (server URL is operator-configurable: DEFAULT_URL, NLTK_DOWNLOAD_URL :2568, or the interactive 'New URL>' :1284).",
+        "cwe": "CWE-022 / CWE-023 / CWE-036 (archive entry name -> filesystem path)"
+      },
+      {
+        "guard": "_download_package: XML-index-controlled filename/subdir with NO validation",
+        "evidence": "downloader.py:700 filepath = os.path.join(download_dir, info.filename) where Package.filename = os.path.join(subdir, id + ext) (:270) with subdir/id from the downloaded index XML (Package.fromxml :282-:288); :710 os.mkdir(os.path.join(download_dir, info.subdir)); :740 zipdir = os.path.join(download_dir, info.subdir) as the extraction destination. No character validation, no '..' rejection, no containment on any of the XML-derived components.",
+        "cwe": "CWE-022 / CWE-023 / CWE-073 (externally-controlled filename)"
+      },
+      {
+        "guard": "data.find/normalize_resource_name: normpath normalization WITHOUT containment",
+        "evidence": "data.py:222-:267 normalize_resource_name applies os.path.normpath (allow_relative) which resolves INTERIOR '..' but PRESERVES a leading '../..'; :650/:657 the name is percent-decoded (url2pathname) and joined onto each search dir; :649-:651 existence check only. FileSystemPathPointer.__init__ (:331) applies abspath (resolves '..' after the fact) but confines to nothing. No startswith(base) check, no realpath containment, no basename extraction anywhere in the resource-resolution path. resource_name is a public library-API parameter (application-supplied), so the trust level is 'caller of nltk.data.find' - for the labeling step to weigh.",
+        "cwe": "CWE-023 / CWE-036 / CWE-022"
+      },
+      {
+        "guard": "CorpusReader root+fileid join: NO containment",
+        "evidence": "corpus/reader/api.py:204 open(file) -> self._root.join(file).open() -> data.py:354 _path = os.path.join(self._path, fileid) (a fileid containing '..' or an absolute path escapes the corpus root; join semantics again) -> :345 open. Several readers bypass the pointer layer entirely with hand-rolled joins: crubadan.py:78/:97 path.join(self.root, ...) -> open :83/:104; mte.py:269+ MTEFileReader(os.path.join(self._root, f)); framenet.py:1403/:1488/:1832; nkjp.py:253/:258. fileids/root are public corpus-API parameters.",
+        "cwe": "CWE-023 / CWE-022"
+      },
+      {
+        "guard": "wordnet browser do_GET: exact-literal guards on the only fs-reaching branches",
+        "evidence": "app/wordnet_app.py:116-:138: the .html branch requires sp.endswith('.html'); open(usp, 'r') at :122 executes only when usp == 'NLTK Wordnet Browser Database Info.html' (EXACT string equality - the open argument is therefore the constant-checked literal, not a traversable value); get_static_page_by_path (:813-:832) is an exact-literal dispatch returning built-in strings or error text, never touching the filesystem. The request-path node (:98) is still emitted as the genuine remote source (server binds all interfaces :247) for the labeling step to judge the reach of the unquote_plus decode (:118) and the sp-dependent branches; the os.path.isfile guard at :121 and the open at :122 are separate syscalls (TOCTOU shape, though the equality guard dominates here).",
+        "cwe": "CWE-022 / CWE-036 (guarded chain, evidence recorded)"
+      },
+      {
+        "guard": "retrieve(): filename derived from the resource URL",
+        "evidence": "data.py:704-:740: filename defaults to the last path component of resource_url (:718 file: protocol, :720 regex strip of the protocol+path prefix) - a basename-like derivation, but resource_url is caller-controlled and the explicit filename parameter is unrestricted; open(filename, 'wb') :732. No containment relative to any base directory.",
+        "cwe": "CWE-022 (write channel, caller-controlled target)"
+      },
+      {
+        "guard": "symlink traversal in corpus discovery",
+        "evidence": "corpus/reader/util.py:818-:821 find_corpus_fileids walks the corpus root with os.walk(root.path, followlinks=True) (the py25 workaround kwargs) - symlinked subdirectories are followed during fileid discovery; wordnet corpus zips are opened by entry prefix (data.py:522). No realpath canonicalization anywhere in the corpus layer.",
+        "cwe": "CWE-059/CWE-022-adjacent (recorded as evidence)"
+      },
+      {
+        "guard": "external-library boundaries (cannot be verified from this DB)",
+        "evidence": "six.moves.urllib.request.urlopen internals, ElementTree parsing, the zipfile module's name handling, http.server request decoding and gzip/gzip.open internals are all outside the nltk repo and thus outside this CodeQL database; their behavior is recorded as an evidence gap rather than assumed either way.",
+        "cwe": "CWE-022 (evidence gap)"
+      }
+    ],
+    "notObserved": [
+      "no web framework (flask/django/fastapi/aiohttp/tornado) anywhere in nltk/; the only HTTP surface is the stdlib BaseHTTPRequestHandler mini-server of app/wordnet_app.py",
+      "no tarfile usage and no .extractall()/.extract() calls anywhere in the tree (the downloader unpack is a HAND-ROLLED join + mkdir + open loop - which is precisely the zip-slip shape observed at downloader.py:2281/:2287/:2290)",
+      "no pathlib (no `import pathlib`, no Path(...) / .resolve() / .read_text() member chains anywhere in nltk/)",
+      "no os.rename, no os.symlink, no os.chmod, no os.open, no shutil path operations (the single shutil call is copyfileobj on streams at downloader.py:2291), no glob.glob in the package tree",
+      "no multipart upload handling, no request.json/form/cookies (no framework to provide them); the wordnet browser query-string word (:139-:148) is CONTENT, not a path",
+      "no explicit '..' string rejection, no startswith(base_dir) containment, no resolve()/realpath-based confinement anywhere in the data.py / downloader.py / corpus-reader flows; realpath does not appear at all (normpath 3 + abspath 6 + expanduser 4 sites in data.py/twitter/senna are normalization WITHOUT confinement)",
+      "no message-queue consumers, no DB-content-to-path flows, no XML config file parsing (ElementTree is used only for the downloader index and corpus content)",
+      "no stdin-reading path channels beyond the interactive input() shells (chatbot text in chat/util.py:122 and the snowball demo language prompt are not path inputs)",
+      "sem/chat80.py:683 writes a fixed literal filename; tokenize/punkt.py:1492 writes the fixed '/tmp/punkt.new'; gale_church.py:272 sys.argv open is COMMENTED OUT; collocations.py:394/:398 sys.argv eval is Pass-4 material, not a path channel",
+      "the wordnet_app logfile open (:229) and the agreement.py demo open (:468) take their filenames from getopt/optparse CLI values (operator trust; keyword-shaped, not Parameter nodes - see uncoveredCases)"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql (this run, generated)",
+      "iris/extraction/sinks.ql (this run, generated)"
+    ],
+    "executionPlan": [
+      "cd iris && codeql pack install (qlpack.yml already present: iris/nltk-cwe22, codeql/python-all: \"*\")",
+      "codeql query run extraction/sources.ql --database C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/nltk_vuln/nltk-db --output extraction/sources.bqrs",
+      "codeql bqrs decode extraction/sources.bqrs --format=csv --output=extraction/sources.csv",
+      "codeql query run extraction/sinks.ql --database <same db> --output extraction/sinks.bqrs",
+      "codeql bqrs decode extraction/sinks.bqrs --format=csv --output=extraction/sinks.csv",
+      "sequential execution only (WORKFLOW.md 3.2-3.3); no database analyze, no SARIF in this round"
+    ],
+    "metadataForm": "plain multi-column select queries (10 columns) for codeql query run + bqrs decode; @kind problem is intentionally NOT set (wrong shape for candidate tables - it requires exactly element+string) and @kind table is not assumed to exist",
+    "columnContract": ["node", "role (source_candidate|sink_candidate)", "callableName", "flowKind", "receiver", "moduleHint", "argIndex", "file", "line", "matchKind (api|ast)"],
+    "matchKindSemantics": "every family in both queries is an AST syntax-level shape match (match_kind 'ast'): http.server/urllib/zipfile/gzip/sqlite3/os are stdlib and six is external, none of them are part of this database (only the nltk/ tree is), so no API-graph resolution is possible or needed; the match_kind column is kept for cross-project contract consistency with the prior projects of this series (aiohttp/airflow/ansible/coderedcms/copyparty/dfetch/django/fides/ganga/...).",
+    "flowKinds": {
+      "sources": ["http_request_path", "net_fetch", "net_xml_attr", "archive_entry", "lib_api_param", "env", "cli_input"],
+      "sinks": ["file_open", "codecs_open", "gzip_open", "archive_open", "db_open", "dir_create", "file_remove", "dir_list", "dir_walk", "path_join", "path_stat", "path_normalize", "path_decode"]
+    },
+    "exclusions": [
+      "positive scope %/nltk/% in both queries; nltk-db (nested in the source ROOT as a sibling of nltk/) is outside that scope by construction and additionally never matched via the defensive %/nltk-db/% filter; repo-root build/site tooling (setup.py, tools/, web/, Makefile, jenkins*) and doc/ are never candidates",
+      "%/nltk/test/ excluded from every row as the package's test tree",
+      "in-package demo mains (tbl/demo.py, downloader.py __main__, app/ dialogs) stay in scope as shipped package code - the labeling step classifies their trust level"
+    ],
+    "expectedVolume": {
+      "sources": "roughly 55 rows: http_request_path 1 (wordnet_app.py:98), net_fetch 3 (urlopen data.py:998 + downloader.py:717/:962), net_xml_attr ~5 (xml.attrib reads in Package.fromxml/Collection.fromxml), archive_entry 5 (namelist downloader.py:2264/:2410/:2491, data.py:522, corpus/reader/util.py:807), lib_api_param ~30 (Parameter nodes of the 28 curated wrapper definitions listed in sourceFamilies), env 3 (os.environ.get data.py:91/:102, downloader.py:2568), cli_input 8 (input() calls in downloader.py: :575, :798, :1154, :1195, :1232, :1272, :1276, :1284)",
+      "sinks": "roughly 180 rows: file_open ~60 (builtin open Name form, all in-scope files), gzip_open 7 (GzipFile/BufferedGzipFile Name forms in data.py + gzip.open Attribute calls in twitter), archive_open 4 (zipfile.ZipFile x3 + OpenOnDemandZipFile x1), db_open 4 (sqlite3.connect), dir_create 5 (os.mkdir), file_remove 22 (os.remove/unlink/rmdir), dir_list 6 (os.listdir), dir_walk 7 (os.walk), path_join ~50 (os.path.join scoped to the traversal-relevant module set + the bare path.join/join forms of crubadan/senna/tag-mapping), path_stat ~40 (exists/isfile/isdir/isabs/os.stat/os.access within the same scope), path_normalize ~12 (abspath/normpath/expanduser within the same scope), path_decode 3 (url2pathname x2 data.py + unquote_plus x1 wordnet_app.py, plus the :99 unquote_plus)",
+      "note": "volumes estimated from grep counts over the explored tree (343 .py files, 342 in scope after the test exclusion); the CSV decode of the next round yields the exact numbers. The os.remove/unlink of tempfile paths and the app-dialog open() sites are operator/local trust plumbing - they enter the candidate table because the task requires real filesystem operations with controllable path parameters, and the labeling step classifies their trust level."
+    }
+  },
+  "uncoveredCases": [
+    "lib_api_param is a source-side family that has no direct counterpart in the prior web-app projects of this series (they emitted handler parameters as http_*_param): for a library, the application-facing API parameters (resource_name/fileid/filename/root/subdir/download_dir/...) are the input boundary, so the wrapper definitions are emitted as definition-side Parameter rows in sources.ql. If the labeling step prefers them as summary/propagation material, the same rows can be reclassified into MySummaries; the column contract is unchanged.",
+    "the optparse/getopt CLI values (downloader.py __main__ -d/--dir dest 'dir' :2533-:2539 and NLTK_DOWNLOAD_URL default :2568; wordnet_app.py -l/--logfile :983; metrics/agreement.py options.file) are NOT emitted as source rows: the dest names are keyword-string literals inside parser.add_option(...) calls and getopt loop variables, not Parameter nodes; keyword-argument string matching would be fragile (same rationale as the ganga project of this series). The flows are documented in inputBoundaryInventory (the -d/--dir value feeds download_dir -> mkdir/open writes; logfilename feeds open(logfilename, 'a') :229).",
+    "os.environ[...] SUBSCRIPT reads (data.py:93 APPENGINE_RUNTIME membership check, downloader.py:1086/:1087 APPDATA, twitter/util.py:41 TWITTER, classify/weka.py:48/:49 WEKAHOME membership + subscript, classify/senna.py:69/:71 SENNA, internals.py:562/:565/:567/:745/:747/:784 MALT_PARSER/CLASSPATH/jar envs) are NOT emitted: the AST Subscript node is identical for read and write targets, so a positive read-only match is not reliably expressible (same policy as the prior projects). The os.environ.get forms that matter are emitted; the subscript flows are documented in inputBoundaryInventory.",
+    "the XML-attribute propagation into Package fields (xml.attrib -> Package(**attrib) -> self.subdir/self.filename at downloader.py:270) crosses a **kwargs boundary and self-attribute reads; syntax-level extraction emits the fromxml attrib reads and the consuming join/open rows, but a Phase-2 MySummaries step is needed to trace info.filename/info.subdir end-to-end.",
+    "the zip-slip entry-name flow (namelist :2264 -> filelist loop variable :2286 -> join :2287 -> open :2290) flows through local loop variables; the namelist row and the join/open rows anchor both ends, and a MySummaries step over _unzip_iter is needed for a single-source-to-sink path in Phase 2.",
+    "tkinter dialog return values (asksaveasfilename/askopenfilename in app/chartparser_app.py:795-:820 and app/chunkparser_app.py) are local-GUI trust; they are anchored by their consuming open() sink rows, not emitted as sources (dialog Call results are not Parameter/attribute shapes).",
+    "dynamic dispatch: CorpusReader.root pointer polymorphism (FileSystemPathPointer vs ZipFilePathPointer joined via the .zip regex at corpus/reader/api.py:81-:84), LazyCorpusLoader's *args pass-through (corpus/util.py:53), the downloader message-yield generator plumbing, and the nltk.corpus __getattr__ lazy-loading indirection propagate through shapes that syntax-level extraction cannot follow; the lib_api_param definition rows anchor the entry points and consuming sink rows anchor the file operations.",
+    "receiver-name scoping: the http family matches the `self.path` attribute read scoped to app/wordnet_app.py (the only BaseHTTPRequestHandler subclass in the tree); the net families match bare names (urlopen/input) scoped by file, and the bare path.join/join forms are scoped to the three files whose import statements were verified (crubadan.py:25 `from os import path`, senna.py:43 `from os import path, sep, environ`, tag/mapping.py:34 `from os.path import join`). A module aliasing these imports differently would be missed.",
+    "module-level code (data.py:91-:112 search-path construction, downloader.py:2513 module-level Downloader()) yields env rows and join rows without an enclosing function; the enclosing module is reported in moduleHint.",
+    "the source tree contains pre-existing ground-truth artifacts (CVE-Report-NLTK-PathTraversal.md, NLTK-CVE-Application-Report.md, NLTK-CVE-Application-Report-CAND02.md, NLTK-Final-Vulnerability-Report.md, NLTK-Vulnerability-Verification-Report.md, SECURITY_DISCLOSURE_EMAIL.md, path_traversal_sinks.csv at the repo root); they were neither opened nor used - all evidence above comes from first-hand source reading of nltk/ only."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction contract in 4.3; Python pitfalls in section 9 - no Decorator class, no StrConst; migration/test FP heuristics in 5.3.2)",
+    "augur-0.3.0/references/patterns.md (always loaded per 4.2.3; cross-language candidate-row contract and pass-1 sink families - file open/read/write APIs with user-controlled path, resource loader methods taking path strings: BOTH matched by this codebase's open()/FileSystemPathPointer/find() shapes)",
+    "augur-0.3.0/references/python.md (always loaded per 4.2.3; pass-1 sink families: open/Path/os.path/shutil - Path and shutil are NOT used in this tree, open/os.path ARE; archive extraction destination handling - matched by the hand-rolled _unzip_iter; source families: HTTP request path values - matched by the wordnet browser self.path read, CLI args in service-mode tools - matched by the downloader __main__ boundary, environment variables - matched by NLTK_DATA et al.)",
+    "augur-0.3.0/assets/extraction/README.md, python_sources.ql.tmpl, python_sinks.ql.tmpl, extract_sources.ql.tmpl, extract_sinks.ql.tmpl (starter template contract and minimum output columns; the @kind problem metadata of the stubs is intentionally dropped because the multi-column select is the wrong shape for problem queries)",
+    "no framework reference loaded: no references/<framework>.md applies (no web framework detected; stdlib http.server, optparse, tkinter have no reference files in the Augur installation - documented in framework.candidates referenceNote fields)"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": "The source root contains audit/ground-truth artifacts (CVE-Report-NLTK-PathTraversal.md, NLTK-CVE-Application-Report.md, NLTK-CVE-Application-Report-CAND02.md, NLTK-Final-Vulnerability-Report.md, NLTK-Vulnerability-Verification-Report.md, SECURITY_DISCLOSURE_EMAIL.md, path_traversal_sinks.csv) and the nltk/test tree. None of them was opened or read; all evidence above comes from first-hand source reading of nltk/ only. The nltk_vuln tree, nltk-db, the Augur installation and the sibling project workspaces (aiohttp, airflow, ansible, coderedcms, copyparty, dfetch, django, fides, ganga, gradio, mindsdb, mlflow, ...) were read where needed for cross-project column-contract consistency (the 10-column CSV contract and the proven QL shapes) but never modified; only the three files of this run were written into this project's iris workspace.",
+    "notes": "No CodeQL query execution, no BQRS decode, and no LLM labeling were performed in this round (Step 1-2 only); the queries are compile-ready for the local toolchain (CLI 2.25.1 + codeql/python-all) but their execution is deferred to the next round per the task contract."
+  }
+}

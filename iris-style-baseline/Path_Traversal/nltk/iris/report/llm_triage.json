@@ -1,0 +1,485 @@
+{
+  "meta": {
+    "task": "Independent LLM path re-review of Augur IRIS Pass 1 Path Traversal (CWE-22/23/36/73) formal SARIF results for nltk",
+    "reviewer": "glm-5.3 via Claude Code CLI",
+    "date": "2026-10-22",
+    "run_id": "nltk-iris-pass1-step3-20261022",
+    "query_id": "py/augur/nltk/pass1-path-traversal",
+    "inputs_read": [
+      "results/pass1.sarif (38 results, all ruleId py/augur/nltk/pass1-path-traversal, codeFlows extracted)",
+      "report/iris_report.md",
+      "labels/labels.json (337 entries: 46 source / 128 sink / 0 sanitizer / 92 summary / 71 none - matches report)",
+      "report/query_generation_notes.md",
+      "nltk source tree under dataset/codeql_databases/path_traversal_dbs/nltk_vuln/nltk (first-hand reading of every alert-referenced line)"
+    ],
+    "independence": "Ground-truth artifacts at the source root (CVE-Report-NLTK-PathTraversal.md, NLTK-*-Report*.md, SECURITY_DISCLOSURE_EMAIL.md, path_traversal_sinks.csv), nltk/test, PyVul truth, fix commits and CVE descriptions were NOT opened. The only ground-truth material used is the commit/code block supplied in the task prompt itself, and only for the separate ground-truth hit analysis in section 'ground_truth_analysis'. SARIF, labels and formal queries were not modified; this file is the only new artifact (plus the two analysis helper scripts report/extract_sarif_for_triage.py and its outputs report/sarif_triage_dump.json / report/sarif_flows_readable.txt)."
+  },
+
+  "rule_scope_check": {
+    "sarif_rules_present": ["py/augur/nltk/pass1-path-traversal"],
+    "result_count": 38,
+    "other_rule_ids": "none - no CodeQL built-in security queries, no diagnostics queries, no other CWE results are mixed into pass1.sarif (question 10: clean)",
+    "kind_level_values": "all 38 results have kind/level absent (formal alerts of the single Augur rule)"
+  },
+
+  "triage_policy": {
+    "likely_tp": "Source is attacker-controllable inside nltk's own default data flow (network: XML index / package zip content / HTTP request path), OR the flow contains a genuine in-library escape primitive (a relative-name parameter joined onto a base without any containment check: find(resource_name), corpus fileid joins, creds_file join, zip entry names), AND the sink performs a real filesystem operation.",
+    "likely_fp": "Sink is pure path construction (os.path.join / os.path.abspath - rubric Q3), or an effective fixed-value guard precedes the access, or the operation is exactly the documented authorized contract on the caller's own designated directory.",
+    "uncertain": "Taint path and sink are real, but the only source is a caller-designated FULL-path public API parameter and the operation is that parameter's documented contract (write to outfile, save model to path, connect to dbname): exploitability depends entirely on the embedding application passing attacker-controlled values (the standard library-CVE pattern). No in-library escape primitive and no attacker channel within nltk's own usage.",
+    "note_on_library_model": "The Pass-1 audited trust model (query_generation_notes.md section 2, consistent with the frozen labels) treats public API parameters as the application-facing boundary. That convention is respected below: such flows are not dismissed, they are recorded with their embedding-application precondition as either likely_tp (when an in-library join/escape primitive exists) or uncertain (when the parameter is a full path used per contract)."
+  },
+
+  "general_evidence": {
+    "allowed_roots_q4": "The project's implied roots are: the Downloader's download_dir (nltk_data dir), the nltk.data.path search dirs, and each CorpusReader's root. NONE is enforced at any use site - no startswith/relative_to/realpath containment check exists anywhere in the audited flows (verified by grep and first-hand reading).",
+    "traversal_factors_q5": "os.path.join keeps '..' lexically and an absolute later component REPLACES the base (data.py:650/:657/:354, downloader.py:2281/:2287/:700/:709/:740); os.path.normpath preserves leading '../..' (data.py:257); url2pathname runs AFTER normalize_resource_name in find() (data.py:626 then :650/:657 - '%2e%2e%2f' decodes to '../' post-normalization, CWE-36 mixed-decoder ordering); unquote_plus decodes the wordnet HTTP request path (:99/:118); expanduser/join('~', pth) at twitter/util.py:152 lets a relative subdir escape the home dir; zip member names reach join(root, *pieces) unfiltered (downloader.py:2281/:2287). All of these genuinely change the final access target. Symlinks: no os.symlink in the tree; followlinks=True exists at corpus/reader/util.py:821 (not in this alert set); no realpath canonicalization anywhere.",
+    "barriers_q6_q7": "The only effective guard in the whole alert set is wordnet_app.py:119 'usp == \"NLTK Wordnet Browser Database Database Info.html\"' exact literal equality, executed before the open at :122 (single fixed filename - effective whitelist of size 1). All other checks on the paths (os.path.exists/isfile/isdir at data.py:332/:651/:721, downloader.py:701/:707/:709/:743/:916, twitter/util.py:88, ipipan fileids membership) are existence probes that do not neutralize traversal. Nobody mistook normpath/abspath/exists/startswith for barriers: the labels model normpath/abspath as propagation (summary) and existence checks as role none - consistent with the first-hand source reading; the query's MySanitizers is none(), which is correct for this codebase."
+  },
+
+  "findings": [
+    {
+      "index": 0,
+      "sarif_location": "nltk/sem/chat80.py:431 (sqlite3.connect)",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "sources": ["nltk/sem/chat80.py:410 - dbname parameter of public utility cities2table(filename, rel_name, dbname, ...)"],
+      "taint_flow": "dbname (param) -> sqlite3.connect(dbname) at :431 (direct, 2-step flow; verified at chat80.py:430-431)",
+      "operation": "sqlite3.connect creates/opens a database file (read+write channel)",
+      "allowed_root": "none declared",
+      "barrier_evidence": "none - no path validation between param and sink",
+      "preconditions": "embedding application passes an attacker-controlled dbname to cities2table",
+      "rationale": "Real sink and real param->sink flow, but dbname is by documented contract the full output DB path designated by the caller ('filename of persistent store'); there is no in-library join or escape primitive on this route. (The same dbname reaches nltk.data.find via sql_query at :461 - that channel is triaged under finding 9.) Q1: attacker control only via embedding app; Q8: authorized per contract."
+    },
+    {
+      "index": 1,
+      "sarif_location": "nltk/twitter/common.py:143 (open, PY3 plain)",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "sources": ["nltk/twitter/common.py:93 - outfile param of json2csv", "nltk/twitter/common.py:158 - outfile param of json2csv_entities"],
+      "taint_flow": "outfile -> outf_writer_compat (:126 or :206) -> :137 -> open(outfile,'w') at :143 (verified common.py:126/:137/:141-145)",
+      "operation": "file write (CSV/gzip output of tweet conversion)",
+      "allowed_root": "none",
+      "barrier_evidence": "none",
+      "preconditions": "embedding app passes attacker-controlled outfile to json2csv/json2csv_entities",
+      "rationale": "Real write sink, direct full-path parameter, no in-library join. Caller designates the exact output file (documented contract), so per Q8 this is authorized usage unless the app itself forwards untrusted input."
+    },
+    { "index": 2, "sarif_location": "nltk/twitter/common.py:145 (gzip.open, PY3)", "verdict": "uncertain", "confidence": "medium", "same_as": 1, "rationale": "Same channel as finding 1, gzip branch (common.py:143). PY3 gzip/plain pair." },
+    { "index": 3, "sarif_location": "nltk/twitter/common.py:149 (gzip.open, PY2)", "verdict": "uncertain", "confidence": "medium", "same_as": 1, "rationale": "Same channel as finding 1, Python2 branch (common.py:148-152)." },
+    { "index": 4, "sarif_location": "nltk/twitter/common.py:151 (open, PY2)", "verdict": "uncertain", "confidence": "medium", "same_as": 1, "rationale": "Same channel as finding 1, Python2 branch." },
+    {
+      "index": 5,
+      "sarif_location": "nltk/corpus/reader/crubadan.py:83 (open mapper_file, PY3)",
+      "verdict": "uncertain",
+      "confidence": "medium-low",
+      "sources": ["nltk/corpus/reader/api.py:47 - root parameter of CorpusReader.__init__ (E2 handoff to self.root)"],
+      "taint_flow": "root -> self.root -> crubadan.py:78 path.join(self.root, 'table.txt') -> open(mapper_file,'r') at :83 (verified crubadan.py:71-85)",
+      "operation": "file read",
+      "allowed_root": "the corpus root is the implied root; not enforced anywhere",
+      "barrier_evidence": "crubadan.py:79 membership check '_LANG_MAPPER_FILE not in self.fileids()' raises - a corpus-membership check, not path containment; no other barrier",
+      "preconditions": "embedding app / corpus configuration passes an attacker-controlled root to CrubadanCorpusReader",
+      "rationale": "root is the caller-designated corpus installation dir (full path by contract). Attacker-controlled root yields arbitrary read of {root}/table.txt and {root}/{code}-3grams.txt (fixed/constrained suffixes). No in-library escape primitive on this route, so uncertain rather than tp."
+    },
+    { "index": 6, "sarif_location": "nltk/corpus/reader/crubadan.py:85 (open mapper_file, PY2)", "verdict": "uncertain", "confidence": "medium-low", "same_as": 5 },
+    { "index": 7, "sarif_location": "nltk/corpus/reader/crubadan.py:104 (open ngram_file, PY3)", "verdict": "uncertain", "confidence": "medium-low", "same_as": 5, "rationale": "Same channel via ngram_file = path.join(self.root, crubadan_code + '-3grams.txt') at :97; crubadan_code derives from the corpus's own table.txt mapping, suffix is constrained; isfile check at :99 is existence only." },
+    { "index": 8, "sarif_location": "nltk/corpus/reader/crubadan.py:106 (open ngram_file, PY2)", "verdict": "uncertain", "confidence": "medium-low", "same_as": 7 },
+    {
+      "index": 9,
+      "sarif_location": "nltk/data.py:345 (open(self._path,'rb') - FileSystemPathPointer.open, central resource read)",
+      "verdict": "likely_tp",
+      "confidence": "high (channel validity; exploitability is library-boundary dependent)",
+      "sources": [
+        "nltk/data.py:589 - resource_name param of find() (concrete public feeder: chat80.py:450/461 sql_query(dbname) calls nltk.data.find(dbname))",
+        "nltk/data.py:324 - _path param of FileSystemPathPointer.__init__ (E1 handoff to self._path)",
+        "nltk/data.py:353 - fileid param of FileSystemPathPointer.join",
+        "nltk/corpus/reader/api.py:47 - CorpusReader root -> api.py:85 FileSystemPathPointer(root)"
+      ],
+      "taint_flow": "resource_name -> :626 normalize_resource_name (normpath; leading '../..' preserved) -> :634/:635 zip-name split -> :650 p = os.path.join(path_, url2pathname(resource_name)) (decode AFTER normalize; absolute component replaces base) -> :653/:655 GzipFileSystemPathPointer/FileSystemPathPointer(p) -> _path -> :345 open(self._path,'rb') (verified data.py:626-655, :324-:345)",
+      "operation": "file read - the central nltk resource-loading channel",
+      "allowed_root": "nltk.data.path search dirs - NOT enforced (join escape + decode-after-normalize both bypass any nominal base)",
+      "barrier_evidence": "only existence checks: data.py:651 (os.path.exists(p)) and :332 (in FileSystemPathPointer.__init__) - not traversal barriers",
+      "preconditions": "application passes attacker-controlled resource_name to nltk.data.find/load (e.g. chat80.sql_query user dbname), or attacker-controlled PathPointer path",
+      "rationale": "Genuine in-library escape primitive: find() is documented for posix-style RELATIVE resource names, but normpath preserves leading '..', url2pathname decodes %2e%2e%2f AFTER normalization (CWE-36), and join's absolute-component replacement all let resource_name escape the data dirs; the sink is a real read. Q1/Q2/Q5/Q6 all satisfied."
+    },
+    { "index": 10, "sarif_location": "nltk/data.py:482 (BufferedGzipFile(self._path,'rb') - GzipFileSystemPathPointer.open, PY2.7/3.4 branch)", "verdict": "likely_tp", "confidence": "high", "same_as": 9, "rationale": "Same find/pointer channel as finding 9 reaching the gzip variant of the central read (verified data.py:475-484)." },
+    { "index": 11, "sarif_location": "nltk/data.py:484 (GzipFile(self._path,'rb'))", "verdict": "likely_tp", "confidence": "high", "same_as": 9 },
+    {
+      "index": 12,
+      "sarif_location": "nltk/data.py:506 col 59-66 (sink node = zipfile argument of os.path.abspath - label p1-k-122 'abspath file open')",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "sources": ["same as finding 13 (find resource_name -> m -> zipfile var; CorpusReader root -> api.py:80-83 ZipFilePathPointer)"],
+      "taint_flow": "identical source chain, but the ALERTED SINK NODE is the argument of os.path.abspath at :506 - a pure lexical normalization call",
+      "operation": "none - os.path.abspath performs no filesystem access (it is even documented in the notes as a propagation/summary step)",
+      "rationale": "Rubric Q3: pure path construction/normalization is not a Sink. This alert is the documented same-line label artifact (query_generation_notes.md 6.5: abspath at data.py:506 inherited the same-line sink decision). The real archive open on the same line is correctly alerted as finding 13. Q9: FP caused by label collision, not by an untrue taint path."
+    },
+    {
+      "index": 13,
+      "sarif_location": "nltk/data.py:506 col 43-67 (sink = OpenOnDemandZipFile(os.path.abspath(zipfile)) - ZipFilePathPointer.__init__)",
+      "verdict": "likely_tp",
+      "confidence": "medium-high",
+      "sources": [
+        "nltk/data.py:589 find resource_name -> :634 m -> :635 zipfile -> :657 join(path_, url2pathname(zipfile)) -> :660 ZipFilePathPointer(p, zipentry)",
+        "nltk/corpus/reader/api.py:47 root -> :80-:83 ZipFilePathPointer(zipfile, zipentry) (CorpusReader on a .zip root)"
+      ],
+      "taint_flow": "resource_name (relative-by-contract) -> regex split -> join onto a data-path dir (absolute/.. escape) -> ZipFilePathPointer -> OpenOnDemandZipFile at :506 -> zipfile.ZipFile.__init__ (data.py:1055) opens the archive file",
+      "operation": "archive file open/read (ZipFile.__init__ reads the zip header; verified data.py:1040-1057)",
+      "allowed_root": "nltk.data.path - not enforced",
+      "barrier_evidence": "ZipFilePathPointer entry checks (:509-:529) validate the ENTRY name inside the archive, not the archive path; :506 has no containment",
+      "preconditions": "attacker-controlled resource_name with a .zip component (or attacker-controlled CorpusReader root)",
+      "rationale": "Real sink (archive open) fed by the same in-library escape primitive as finding 9. Escape from the data dirs via join/decode is genuine."
+    },
+    {
+      "index": 14,
+      "sarif_location": "nltk/data.py:732 (open(filename,'wb') in retrieve)",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "sources": ["nltk/data.py:704 - resource_url and filename parameters of retrieve()"],
+      "taint_flow": "flow 3: filename param -> :732 direct. flows 0-2: resource_url -> :715 normalize_resource_url -> name -> :718 os.path.split(resource_url)[-1] / :720 re.sub(r'(^[A-Za-z0-9]+:)?.*/','',resource_url) -> filename -> :732 open(filename,'wb') writing _open(resource_url) content (verified data.py:704-737)",
+      "operation": "file write of fetched (potentially network) content",
+      "allowed_root": "none",
+      "barrier_evidence": "data.py:721-:723 exists -> ValueError - an anti-overwrite check only, does not confine the path",
+      "preconditions": "attacker-controlled explicit filename param (URL-derived filename alone cannot traverse: split[-1] and the regex strip all separator-bearing prefixes; residual mixed-separator hazard on Windows where os.path.split also splits on backslash)",
+      "rationale": "The URL-derived filename channel is effectively basename-only, and the explicit filename is the caller-designated destination per the documented contract ('Copy the given resource to a local file'), so this sits between authorized usage and a library-CVE pattern - uncertain. The written content comes from the network when a non-nltk: URL is given, which raises severity if the filename is attacker-influenced."
+    },
+    {
+      "index": 15,
+      "sarif_location": "nltk/downloader.py:704 (os.remove(filepath) in _download_package)",
+      "verdict": "likely_tp",
+      "confidence": "medium-high",
+      "sources": [
+        "nltk/downloader.py:288 / :330 - XML index attributes (Package(**xml.attrib) / Collection.fromxml) from the network-downloaded index (urlopen(self._url) at :962; DEFAULT_URL https, but NLTK_DOWNLOAD_URL / interactive :1288-:1289 also allow http and arbitrary hosts)",
+        "nltk/downloader.py:622/:684/:756 - download_dir public params (candidate sources)"
+      ],
+      "taint_flow": "xml.attrib id/subdir -> Package.__init__ :215/:218 -> self.filename = os.path.join(subdir, id+ext) (:270) -> :700 filepath = os.path.join(download_dir, info.filename) -> :704 os.remove(filepath) (verified downloader.py:269-270, :700-704)",
+      "operation": "arbitrary file DELETE (stale-package removal)",
+      "allowed_root": "download_dir (nltk_data) - NOT enforced; '..' or absolute subdir/id escapes it via join",
+      "barrier_evidence": "os.path.exists(filepath) at :701 - existence probe only",
+      "preconditions": "attacker controls the package index (malicious mirror, compromised data server, or victim pointed at an attacker URL) - the same trust boundary the project itself treats as untrusted (cf. the downloader security history); download_dir param variant requires an embedding app",
+      "rationale": "Network-derived XML fields flow unvalidated into a join and then a real delete. Q1: yes (network source within nltk's own default flow). Q2: handoff edge A/B1 (kwargs expansion :288, info.filename load :700) matches real code. Q4: download_dir not enforced. This is a genuine CWE-22 channel."
+    },
+    {
+      "index": 16,
+      "sarif_location": "nltk/downloader.py:708 (os.mkdir(download_dir))",
+      "verdict": "likely_fp",
+      "confidence": "medium",
+      "sources": ["nltk/downloader.py:622/:684/:756 - download_dir parameters ONLY (no network source reaches this operand)"],
+      "taint_flow": "download_dir param -> :708 os.mkdir(download_dir) ('# Ensure the download_dir exists')",
+      "operation": "directory creation of the caller's own designated download root",
+      "allowed_root": "the operand IS the root the caller designated",
+      "barrier_evidence": "os.path.exists(download_dir) at :707",
+      "preconditions": "only exploitable if an embedding app passes an attacker-controlled download_dir - in which case creating that exact directory is still the operation the caller asked for",
+      "rationale": "Q8: this is the documented authorized contract ('Ensure the download_dir exists') executed on the caller's own designated directory; there is no attacker channel inside nltk's own usage (the XML/network sources do not reach this operand) and no escape primitive (no join). Labeled-source candidates only. Minimal standalone impact (mkdir of a designated dir)."
+    },
+    {
+      "index": 17,
+      "sarif_location": "nltk/downloader.py:710 col 35-47 (sink node = download_dir argument of os.path.join - label p1-k-156 'join file open')",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "sources": ["download_dir params (:622/:756/:684) and XML subdir (flows 2/3 route download_dir through :700/:709)"],
+      "taint_flow": "taint reaches an ARGUMENT of os.path.join at :710; the alerted sink node is the join call's argument, i.e. path construction",
+      "operation": "none - os.path.join performs no filesystem access",
+      "rationale": "Rubric Q3: pure concatenation is not a Sink. This is the documented same-line label artifact (notes 6.5: join at downloader.py:710 inherited the mkdir sink decision). The real mkdir on the same line is alerted as finding 18. Duplicate alert, no independent file access."
+    },
+    {
+      "index": 18,
+      "sarif_location": "nltk/downloader.py:710 col 22-61 (sink = os.mkdir(os.path.join(download_dir, info.subdir)))",
+      "verdict": "likely_tp",
+      "confidence": "medium-high",
+      "sources": [
+        "nltk/downloader.py:288/:330 XML index subdir attribute -> :218 Package.__init__ subdir param -> info.subdir load at :710 (handoff edge B3)",
+        "download_dir params (:622/:684/:756)"
+      ],
+      "taint_flow": "xml.attrib subdir -> Package fields -> :710 os.mkdir(os.path.join(download_dir, info.subdir)) (verified downloader.py:709-710)",
+      "operation": "directory creation at an XML-derived path",
+      "allowed_root": "download_dir - not enforced; subdir='../..' or absolute escapes via join",
+      "barrier_evidence": "os.path.exists(join(download_dir, info.subdir)) at :709 - existence only",
+      "preconditions": "attacker controls the package index (same data-server trust boundary as finding 15)",
+      "rationale": "Network-derived subdir reaches a real mkdir through an unvalidated join - genuine CWE-22 write primitive (weaker impact than file write, but same channel as findings 15/19)."
+    },
+    {
+      "index": 19,
+      "sarif_location": "nltk/downloader.py:718 (open(filepath,'wb') - package download write)",
+      "verdict": "likely_tp",
+      "confidence": "high (channel validity)",
+      "sources": ["XML index id (:288/:330 -> :215 -> filename :270) and download_dir params"],
+      "taint_flow": "info.filename -> :700 join(download_dir, info.filename) -> :718 open(filepath,'wb'); content written is urlopen(info.url) network bytes read at :717/:722-723 (verified downloader.py:716-728)",
+      "operation": "arbitrary-path file WRITE of network-controlled content",
+      "allowed_root": "download_dir - not enforced",
+      "barrier_evidence": "none between join and open",
+      "preconditions": "attacker controls the index (malicious mirror / compromised or attacker-chosen data server)",
+      "rationale": "Strongest XML-index channel: network-derived path + network-derived content + real write sink. Same trust model under which the project accepted CVE-2019-14751."
+    },
+    {
+      "index": 20,
+      "sarif_location": "nltk/downloader.py:923 (os.walk(unzipdir) in _pkg_status)",
+      "verdict": "likely_tp",
+      "confidence": "low-medium",
+      "sources": ["XML index id/subdir -> :888 join(download_dir, info.filename) -> filepath -> :909 md5_hexdigest / :915 unzipdir = filepath[:-4]"],
+      "taint_flow": "info.filename -> :888 filepath -> :915 unzipdir -> :923 os.walk(unzipdir) with os.stat(os.path.join(d,f)) at :922 (verified downloader.py:886-926)",
+      "operation": "directory enumeration + stat (read-only metadata; result only feeds a size sum)",
+      "allowed_root": "download_dir - not enforced",
+      "barrier_evidence": "os.path.exists/isdir at :916/:918 - existence only",
+      "preconditions": "attacker controls the index",
+      "rationale": "Technically a real filesystem access (walk/stat) on an XML-derived unvalidated path, so a valid CWE-22/CWE-73 taint path; impact is limited to existence/size disclosure. Kept likely_tp with low impact; borderline vs uncertain."
+    },
+    {
+      "index": 21,
+      "sarif_location": "nltk/downloader.py:2221 (open(file,'rb') in md5_hexdigest)",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "sources": ["XML-derived filepath via _pkg_status :909 md5_hexdigest(filepath)"],
+      "taint_flow": "info.filename -> :888/:890/:909 -> md5_hexdigest(file) -> :2221 open(file,'rb') (verified downloader.py:2215-2223)",
+      "operation": "file read (content only hashed and compared - existence/content oracle, low impact)",
+      "allowed_root": "download_dir - not enforced",
+      "barrier_evidence": "os.path.exists at :897 and os.stat at :902 - existence probes",
+      "preconditions": "attacker controls the index",
+      "rationale": "Real read on an unvalidated XML-derived path. Valid taint path; impact limited to checksum comparison, so a weak TP."
+    },
+    {
+      "index": 22,
+      "sarif_location": "nltk/downloader.py:2275 (os.mkdir(root) in _unzip_iter)",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "sources": ["XML index subdir -> :740 zipdir = os.path.join(download_dir, info.subdir) -> :745 _unzip_iter(filepath, zipdir) -> :2249 root param"],
+      "taint_flow": "xml subdir -> zipdir -> root -> :2274/:2275 os.mkdir(root) (verified downloader.py:739-745, 2273-2275)",
+      "operation": "directory creation at XML-derived extraction root (inside the CVE-2019-14751 function)",
+      "allowed_root": "download_dir - not enforced",
+      "barrier_evidence": "os.path.exists(root) at :2274",
+      "preconditions": "attacker controls the index",
+      "rationale": "Same channel as finding 18, materialized inside _unzip_iter."
+    },
+    {
+      "index": 23,
+      "sarif_location": "nltk/downloader.py:2283 (os.mkdir(dirpath) - directory-structure loop of _unzip_iter)",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "sources": [
+        "XML subdir -> root (as in finding 22)",
+        "zip entry names (network-controlled package content): namelist :2264 -> dirlist :2265-:2270 -> pieces :2279 (this operand's taint is real in the code although the reported codeFlows trace the root operand)"
+      ],
+      "taint_flow": "root (XML-derived) + pieces (from zf.namelist() entry names) -> :2281 dirpath = os.path.join(root, *pieces[:i+1]) -> :2283 os.mkdir(dirpath) (verified downloader.py:2277-2283)",
+      "operation": "directory creation at attacker-influenced path - the mkdir half of the zip-slip primitive",
+      "allowed_root": "extraction root - NOT enforced; entry names containing '..' (or an absolute first piece) escape it",
+      "barrier_evidence": "os.path.exists(dirpath) at :2282 - existence only; NO filtering of entry names anywhere",
+      "preconditions": "attacker-crafted package zip (CVE-2019-14751 vector) or malicious index for the root operand",
+      "rationale": "Inside the exact vulnerable function fixed by CVE-2019-14751; the join at :2281 with unvalidated zip member pieces is the genuine traversal primitive."
+    },
+    {
+      "index": 24,
+      "sarif_location": "nltk/downloader.py:2255 (zipfile.ZipFile(filename) in _unzip_iter)",
+      "verdict": "likely_tp",
+      "confidence": "medium-high",
+      "sources": ["XML id/subdir -> :700 filepath -> :745 _unzip_iter(filepath, ...) -> :2249 filename param"],
+      "taint_flow": "info.filename -> :700 join -> filepath -> :2255 zipfile.ZipFile(filename) (verified downloader.py:745, 2254-2255)",
+      "operation": "archive open/read",
+      "allowed_root": "download_dir - not enforced",
+      "barrier_evidence": "none (try/except only catches open errors)",
+      "preconditions": "attacker controls the index",
+      "rationale": "Real archive open at XML-derived path; same channel as findings 15/19."
+    },
+    {
+      "index": 25,
+      "sarif_location": "nltk/downloader.py:2290 (open(filepath,'wb') + shutil.copyfileobj - the zip-slip WRITE sink of CVE-2019-14751)",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "sources": [
+        "REPORTED in codeFlows: XML index subdir (:288/:330 -> :218) -> :740 zipdir -> :745 -> :2249 root -> :2287 join operand; download_dir params (flows 2/3)",
+        "PRESENT IN CODE BUT NOT IN REPORTED FLOWS: zip entry names - zf.namelist() :2264 -> filelist :2271 -> loop filename :2286 -> :2287 filename.split('/') (labeled source p1-s-046, tp, but it produced no alert path - see ground_truth_analysis)"
+      ],
+      "taint_flow": "root + entry names -> :2287 filepath = os.path.join(root, *filename.split('/')) -> :2290 open(filepath,'wb') writing zf.open(filename) bytes (verified downloader.py:2285-2294; matches the CVE-2019-14751 vulnerable code exactly)",
+      "operation": "arbitrary file WRITE of attacker-controlled content (zip member bytes) - the write primitive of the CVE",
+      "allowed_root": "extraction root zipdir - NOT enforced; '../'-bearing or absolute member names escape (os.path.join semantics)",
+      "barrier_evidence": "NONE - no entry-name filtering, no prefix check, no realpath; the upstream fix replaced this manual extraction with zf.extractall(root) precisely because zipfile sanitizes member names",
+      "preconditions": "victim downloads an attacker-crafted NLTK package zip (malicious mirror / attacker-controlled package URL from a crafted index / MITM on a non-https package URL); for the reported root-operand channel, a malicious index suffices",
+      "rationale": "The alert lands exactly on the vulnerable sink line of the real CVE (see ground_truth_analysis): the function, the join and the open('wb') are the zip-slip primitive, the reported taint (root <- XML subdir) is a genuine attacker-controllable channel under the same trust model, and there is no barrier. likely_tp."
+    },
+    {
+      "index": 26,
+      "sarif_location": "nltk/corpus/reader/ipipan.py:203 (open(f,'r') in _get_tag)",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "sources": [
+        "nltk/corpus/reader/api.py:159 - fileid param of CorpusReader.abspath (RELATIVE name by contract, joined via _root.join)",
+        "nltk/corpus/reader/api.py:47 - root param"
+      ],
+      "taint_flow": "root -> api.py:168 self._root.join(fileid) -> data.py:354 join(self._path, fileid) -> ipipan.py:192 self.abspath(f) -> :193 _get_tag(fp, tag) -> :203 open(f,'r') (f is the FileSystemPathPointer, a str subclass; verified ipipan.py:188-203)",
+      "operation": "file read",
+      "allowed_root": "corpus root - not enforced; fileid carrying '../..' escapes via join",
+      "barrier_evidence": "none on the join path (fileids originate from the reader's regexp expansion over root)",
+      "preconditions": "app passes attacker-controlled fileid or corpus root",
+      "rationale": "The fileid operand is a relative name by contract, and _root.join performs an unvalidated os.path.join - a genuine in-library escape primitive (same class as finding 9's fileid flow)."
+    },
+    {
+      "index": 27,
+      "sarif_location": "nltk/corpus/reader/lin.py:44 (open(path) in LinThesaurusCorpusReader.__init__)",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "sources": ["api.py:47 root + api.py:47 fileids (regexp r'sim[A-Z]\\.lsp' expanded over root via find_corpus_fileids)"],
+      "taint_flow": "root/fileids -> api.py:93-:97 self._root/_fileids -> api.py:193 paths = [self._root.join(f) for f in fileids] -> lin.py:41 abspaths -> :44 open(path) (verified lin.py:38-44)",
+      "operation": "file read",
+      "allowed_root": "corpus root - not enforced",
+      "barrier_evidence": "none",
+      "preconditions": "app passes attacker-controlled root or fileids",
+      "rationale": "Same join-escape channel class as findings 26/9: relative fileids joined onto the root without containment."
+    },
+    {
+      "index": 28,
+      "sarif_location": "nltk/tag/perceptron.py:111 (open(path,'wb') in AveragedPerceptron.save)",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "sources": ["nltk/tag/perceptron.py:109 - path param of save()"],
+      "taint_flow": "path -> :111 open(path,'wb') -> pickle.dump (verified perceptron.py:109-112)",
+      "operation": "file write (pickled model)",
+      "barrier_evidence": "none",
+      "preconditions": "app passes attacker-controlled save path",
+      "rationale": "Full-path param used per documented contract ('Save the pickled model weights' to the given path); no in-library join/escape. Standard library-CVE pattern only if the app forwards untrusted input."
+    },
+    {
+      "index": 29,
+      "sarif_location": "nltk/parse/transitionparser.py:542 (open(modelfile,'wb') in Parser.train)",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "sources": ["nltk/parse/transitionparser.py:505 - modelfile param of train()"],
+      "taint_flow": "modelfile -> :542 pickle.dump(model, open(modelfile,'wb')) (verified transitionparser.py:541-542)",
+      "operation": "file write (pickled model)",
+      "barrier_evidence": "none",
+      "preconditions": "app passes attacker-controlled modelfile",
+      "rationale": "Same caller-designated-path class as finding 28."
+    },
+    {
+      "index": 30,
+      "sarif_location": "nltk/parse/transitionparser.py:556 (open(modelFile,'rb') in Parser.parse)",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "sources": ["nltk/parse/transitionparser.py:546 - modelFile param of parse()"],
+      "taint_flow": "modelFile -> :556 pickle.load(open(modelFile,'rb')) (verified transitionparser.py:555-556)",
+      "operation": "file read + deserialization (the unsafe-deserialization aspect is CWE-502, out of Pass-1 scope; the CWE-22 aspect is the read path)",
+      "barrier_evidence": "none",
+      "preconditions": "app passes attacker-controlled modelFile",
+      "rationale": "Same caller-designated-path class; noted because read+unpickle of an attacker path would be higher impact, but the path itself is app-designated."
+    },
+    {
+      "index": 31,
+      "sarif_location": "nltk/twitter/twitterclient.py:497 (os.mkdir(subdir) in TweetHandler output setup)",
+      "verdict": "likely_fp",
+      "confidence": "medium",
+      "sources": ["nltk/twitter/twitterclient.py:448 - subdir constructor param (default 'twitter-files')"],
+      "taint_flow": "subdir -> :481 self.subdir = guess_path(subdir) (twitter/util.py:142-152: absolute passthrough, else expanduser(join('~',pth))) -> :493/:497 os.mkdir(subdir) (verified twitterclient.py:480-497)",
+      "operation": "directory creation of the caller-designated tweet-storage dir",
+      "allowed_root": "caller-designated subdir (or home dir for relative values)",
+      "barrier_evidence": "os.path.exists(subdir) at :496",
+      "preconditions": "app passes attacker-controlled subdir; note join('~','../..') would resolve outside the home dir, but the caller still designated that subdir value",
+      "rationale": "Q8: authorized contract - the parameter is the caller's designated output directory and mkdir is its documented setup step; no attacker channel within nltk's own usage; standalone impact is directory creation only. Same class as finding 16."
+    },
+    {
+      "index": 32,
+      "sarif_location": "nltk/corpus/reader/util.py:218 (open(self._fileid,'rb') in StreamBackedCorpusView._open, encoding branch)",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "sources": ["nltk/corpus/reader/util.py:131 - fileid param (documented: 'The path to the file... string or PathPointer'), fed by opinion_lexicon.py:42/:44, bnc.py:199/:202, xmldocs.py:129 via XMLCorpusView"],
+      "taint_flow": "fileid -> :159 self._fileid -> :208/:218 open(self._fileid,'rb') inside SeekableUnicodeStreamReader (verified util.py:208-221)",
+      "operation": "file read",
+      "barrier_evidence": "os.stat at :181 (existence/size probe during init)",
+      "preconditions": "app passes attacker-controlled fileid string (the PathPointer branch is the finding-9 channel, alerted separately)",
+      "rationale": "The string branch takes a full path per contract (caller-designated), so no in-library escape primitive on THIS branch; the corpus fileid escape channels appear via the PathPointer/join routes (findings 9/26/27/37)."
+    },
+    { "index": 33, "sarif_location": "nltk/corpus/reader/util.py:221 (open(self._fileid,'rb'), no-encoding branch)", "verdict": "uncertain", "confidence": "medium", "same_as": 32 },
+    {
+      "index": 34,
+      "sarif_location": "nltk/twitter/util.py:91 (open(self.creds_fullpath) in credsfromfile.load_creds)",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "sources": [
+        "nltk/twitter/util.py:47 - creds_file and subdir params of load_creds",
+        "nltk/twitter/util.py:123 - creds_file param of add_access_token (via :131 credsfromfile(creds_file=...))"
+      ],
+      "taint_flow": "creds_file/subdir -> :84/:85 self.creds_fullpath = os.path.normpath(os.path.join(self.creds_subdir, self.creds_file)) -> :91 open(self.creds_fullpath) (verified twitter/util.py:71-91)",
+      "operation": "file read of a credentials-format file (parsed as key=value into self.oauth)",
+      "allowed_root": "creds_subdir - NOT enforced: normpath does not confine and join lets '../..' or an absolute creds_file escape",
+      "barrier_evidence": "os.path.isfile at :88 - existence only",
+      "preconditions": "app passes attacker-controlled creds_file (a FILENAME-style param joined onto a base - the escape primitive) or subdir",
+      "rationale": "Unlike the full-path params, creds_file is joined onto a base directory without containment - a genuine in-library join-escape; reading and parsing an arbitrary file as credentials is a real arbitrary-read channel."
+    },
+    {
+      "index": 35,
+      "sarif_location": "nltk/twitter/util.py:138 (open(creds_file,'a') in add_access_token)",
+      "verdict": "uncertain",
+      "confidence": "medium",
+      "sources": ["nltk/twitter/util.py:123 - creds_file param (default when None: fixed join(dirname(__file__),'credentials2.txt'))"],
+      "taint_flow": "creds_file -> :131 credsfromfile(creds_file=...) (read side is finding 34) and directly -> :138 open(creds_file,'a') appending the access token (verified twitter/util.py:123-139)",
+      "operation": "file append write (access token)",
+      "barrier_evidence": "none",
+      "preconditions": "app passes attacker-controlled creds_file",
+      "rationale": "Direct full-path param append per contract (store the retrieved token in the credentials file the caller named); no in-library join on this route. The load side (finding 34) is the stronger channel."
+    },
+    {
+      "index": 36,
+      "sarif_location": "nltk/app/wordnet_app.py:122 (open(usp,'r') in MyServerHandler.do_GET)",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "sources": ["nltk/app/wordnet_app.py:98 - sp = self.path[1:] (HTTP request path; the demo server binds all interfaces, so any network peer controls it)"],
+      "taint_flow": "self.path -> :98 sp -> :118 usp = unquote_plus(sp) -> :122 open(usp,'r') (verified wordnet_app.py:96-123)",
+      "operation": "file read - BUT gated to a single fixed filename",
+      "allowed_root": "fixed literal filename",
+      "barrier_evidence": "EFFECTIVE BARRIER at :119: exact literal equality 'usp == \"NLTK Wordnet Browser Database Info.html\"' (plus :116 endswith('.html') and :121 os.path.isfile) - the only value that can reach open(usp) is the constant string; this is a real whitelist-of-one executed before the access",
+      "preconditions": "none - the guard removes attacker control of the opened path",
+      "rationale": "Q6: a genuinely effective fixed-filename mapping precedes the access, so despite a fully attacker-controlled HTTP source and percent-decoding, the opened path is a constant. This matches the Phase-1 label p1-k-335 (classification fp, guard cited) and the plan to filter it in Step 6. Note the module is also a local demo browser app."
+    },
+    {
+      "index": 37,
+      "sarif_location": "nltk/corpus/reader/xmldocs.py:173 (open(fileid,'rb') in XMLCorpusView._detect_encoding)",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "sources": [
+        "nltk/corpus/reader/api.py:47 root -> api.py:168 _root.join -> framenet.py:1252/:1261 XMLCorpusView(self.abspath('frameIndex.xml'/'fulltextIndex.xml'), ...)",
+        "nltk/corpus/reader/api.py:159 fileid param -> mte.py:269 join(self._root, f) -> MTEFileReader(:52) -> mte.py:122/:124 -> xmldocs.py:129 XMLCorpusView fileid param"
+      ],
+      "taint_flow": "root/fileid -> _root.join (data.py:354 unvalidated join) -> XMLCorpusView(fileid) at :129 -> :162 _detect_encoding(fileid) -> :173 open(fileid,'rb') (verified xmldocs.py:129-174, framenet.py:1252-1261, mte.py:52-53/:122-124/:269)",
+      "operation": "file read (encoding sniff)",
+      "allowed_root": "corpus root - not enforced",
+      "barrier_evidence": "none (the PathPointer branch at :166-:171 opens via fileid.open() - the finding-9 channel)",
+      "preconditions": "app passes attacker-controlled corpus root/fileids",
+      "rationale": "Same join-escape channel class as findings 26/27: relative corpus identifiers joined without containment, reaching a real read."
+    }
+  ],
+
+  "rubric_answers_summary": {
+    "q1_sources_attacker_controlled": "Three real classes: (a) network - XML package-index attributes (downloader.py:286-288/:327-330, fetched via urlopen at :962) and downloaded package zip content (member names :2264, bytes :717-723); (b) wordnet_app.py:98 HTTP request path (network peer; but neutralized by the :119 literal guard); (c) public library API parameters (37 labels) - attacker-controllable only when the embedding application forwards untrusted values (library-CVE pattern). Findings 15/18/19/20/21/22/23/24/25 use class (a); 9-11/13/26/27/34/37 use genuine in-library join-escape primitives; the remainder are class (c) without escape primitives (uncertain).",
+    "q2_source_reaches_sink": "Verified for all 38 alerts by first-hand reading: every codeFlow step corresponds to a real statement (Package field writes :230-:270, self._path :334, self._root api.py:97, _unzip_iter call :745, guess_path util.py:142-152, MTEFileReader/Framenet plumbing). No async calls on any path; the downloader coroutine yields are message plumbing that the alerts do not depend on. The handoff edges (kwargs expansion :288/:330, info.filename/info.subdir loads, constructor field loads) all match real assignments.",
+    "q3_real_sinks": "36/38 alerts anchor real filesystem operations (open/gzip.open/sqlite3.connect/ZipFile/OpenOnDemandZipFile/mkdir/remove/walk). 2 alerts are pure path-construction sinks and are triaged likely_fp: [12] data.py:506 (os.path.abspath argument) and [17] downloader.py:710 (os.path.join argument) - both documented same-line label artifacts (notes 6.5).",
+    "q4_allowed_roots": "Implied roots: download_dir (nltk_data), nltk.data.path dirs, corpus reader roots, extraction root zipdir. None is enforced at any use site; no startswith/relative_to/realpath containment exists in the audited code.",
+    "q5_traversal_factors": "All genuinely effective: leading-'..' preserved by normpath (data.py:257); absolute component replaces join base (data.py:650/:657/:354, downloader.py:2281/:2287/:700/:740); url2pathname decodes AFTER normalize (CWE-36 ordering hazard, data.py:650/:657); unquote_plus on the HTTP path (wordnet :118, but guard-gated); expanduser/join('~',...) escapes home (twitter/util.py:152); unfiltered zip member names (downloader.py:2281/:2287). No symlinks created anywhere; walk(followlinks=True) at corpus/reader/util.py:821 is outside this alert set.",
+    "q6_effective_guards": "Exactly one effective guard exists in the alert set: wordnet_app.py:119 exact literal equality, executed at :118-:122 BEFORE the open - a fixed single-filename mapping. All other checks (exists/isfile/isdir/stat/fileids-membership) are existence probes occurring on the path but not confining it.",
+    "q7_mistaken_barriers": "No. The query models normpath/abspath as propagation (summary) and existence checks as role none; MySanitizers is none() - consistent with the source. No startsWith-prefix or auth-only pseudo-barrier was credited anywhere.",
+    "q8_authorized_or_unreachable": "[16]/[31] mkdir of the caller's own designated download/output dir (documented contract); [36] fixed-literal filename (and a local demo app); [0]/[1-4]/[14]/[28]/[29]/[30]/[32]/[33]/[35] caller-designated full-path parameters used per documented contract - kept uncertain (not dismissed) because the library-CVE pattern makes them exploitable only via the embedding application.",
+    "q9_fp_causes": "Two documented same-line sink label artifacts ([12]/[17], notes 6.5); one expected guard-filter case ([36], Step-6 fixed-filename heuristic). No database-coverage or wrong-diagnostic-path FPs observed; no over-generalized sources beyond the documented candidate download_dir params.",
+    "q10_scope_purity": "pass1.sarif contains exactly one rule (py/augur/nltk/pass1-path-traversal) and 38 results; no CodeQL built-in baseline queries, diagnostics, or other-CWE results are mixed in. Diagnostics artifacts are kept outside the results file."
+  },
+
+  "ground_truth_analysis": {
+    "task": "Determine whether the real vulnerability (commit f59d7ed8df2e0e957f7f247fe218032abdbe9a10, CVE-2019-14751, CWE-22, nltk Downloader zip-slip in _unzip_iter) is hit by the formal Pass-1 alerts",
+    "vulnerable_code": "nltk/downloader.py:2249-2300 _unzip_iter: namelist = zf.namelist() (:2264) -> filelist (:2271) -> loop filename (:2286) -> filepath = os.path.join(root, *filename.split('/')) (:2287) -> os.mkdir(dirpath) (:2283, dirpath from entry-name pieces :2281) -> open(filepath,'wb') + shutil.copyfileobj (:2290-2291). No filtering of entry names. The source snapshot in the database matches the pre-fix code_before exactly (verified line-by-line).",
+    "alerts_on_the_vulnerable_function": [
+      "[22] downloader.py:2275 (os.mkdir(root))",
+      "[23] downloader.py:2283 (os.mkdir(dirpath) - directory-structure loop)",
+      "[24] downloader.py:2255 (zipfile.ZipFile(filename))",
+      "[25] downloader.py:2290 (open(filepath,'wb') - THE zip-slip write sink)"
+    ],
+    "sink_hit": "YES - alert [25] lands precisely on the vulnerable write primitive (join + open('wb') + copyfileobj) and alert [23] on the directory-creation half of the same primitive; both are inside _unzip_iter, which is reached from _download_package (:745) on every zip package download with unzip=True. The alerts correctly establish that no sanitization exists on this path (no entry-name filter, no containment check) - consistent with the CVE.",
+    "source_channel_fidelity": "PARTIAL - the reported codeFlows for [22]/[23]/[25] taint the `root` operand (XML index `subdir` -> :740 zipdir = join(download_dir, info.subdir) -> :745 -> root; plus download_dir candidate params), NOT the canonical CVE source (zip member names from zf.namelist() at :2264, labeled source p1-s-046 = tp). The namelist source produced NO alert path: the chain namelist (:2264) -> dirlist/filelist comprehensions (:2265-:2271) -> enumerate loop unpacking (:2286) -> filename.split('/') -> *star-args into join (:2287) was not tracked by the analysis. The root-operand channel is nonetheless genuinely attacker-controllable under the same malicious-data-server trust model, so the alerts are true positives at the vulnerable sink, not coincidental FPs.",
+    "verdict": "HIT at sink level: the formal Pass-1 result set contains likely_tp alerts at the exact vulnerable function and sink lines of CVE-2019-14751 (notably [25] downloader.py:2290). If the grading standard is 'the reported source->sink path reproduces the CVE's exact taint (member-name ../ -> arbitrary write)', the hit is partial: sink and primitive fully reproduced, source channel covered via the sibling XML-subdir/root operand while the namelist member-name channel (the CVE POC vector) itself generated no path - a source-to-sink coverage gap in this pass (candidate for a Pass-2 summary edge across the list comprehension / *args unpacking at :2287).",
+    "preconditions_for_the_reported_channel": "attacker controls index.xml (subdir) - malicious mirror / compromised or attacker-chosen data server / victim pointed at an attacker URL; for the CVE's canonical channel, an attacker-crafted package zip (the historically accepted vector)."
+  },
+
+  "summary": {
+    "total_formal_alerts": 38,
+    "likely_tp": 17,
+    "likely_fp": 5,
+    "uncertain": 16,
+    "likely_tp_list": [9, 10, 11, 13, 15, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 34, 37],
+    "likely_fp_list": [12, 16, 17, 31, 36],
+    "uncertain_list": [0, 1, 2, 3, 4, 5, 6, 7, 8, 14, 28, 29, 30, 32, 33, 35],
+    "fp_breakdown": "2 pure-path-construction sink artifacts (labels notes 6.5), 1 fixed-literal-guard case (wordnet_app.py:119), 2 authorized caller-designated mkdir contracts",
+    "official_conclusion": "CodeQL 分析成功，本轮正式命中 38 条 Pass-1 路径穿越污点路径（ruleId py/augur/nltk/pass1-path-traversal）。其中 17 条复核为 likely_tp（含 CVE-2019-14751 的 _unzip_iter zip-slip sink 精确命中），5 条 likely_fp，16 条为依赖宿主应用传入不可信参数的 uncertain。",
+    "formal_pass1_alerts_present": true
+  }
+}

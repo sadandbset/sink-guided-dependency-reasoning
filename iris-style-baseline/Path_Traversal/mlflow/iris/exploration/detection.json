@@ -1,0 +1,204 @@
+{
+  "run": {
+    "target_project": "mlflow",
+    "project_version": "2.0.0.dev0 (mlflow/version.py VERSION = \"2.0.0.dev0\")",
+    "source_root": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\mlflow_vuln",
+    "database": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\mlflow_vuln\\mlflow-db",
+    "database_metadata": {
+      "primaryLanguage": "python",
+      "cliVersion": "2.25.1",
+      "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\mlflow_vuln",
+      "baselineLinesOfCode": 122335
+    },
+    "toolchain": {
+      "codeql_cli": "2.25.1 (E:\\codeql\\codeql)",
+      "python_pack": "codeql/python-all 7.1.2 (resolved locally from qlpack.yml codeql/python-all: \"*\")",
+      "note": "WORKFLOW.md validated baseline is python-all 6.1.x; the locally resolved pack is 7.1.2. API names used in the extraction queries (getArgByName, getADecorator, asName, getLocation().getFile().getRelativePath, getPositionalArg) were verified against the installed 7.1.2 library sources before query generation."
+    },
+    "pass": {
+      "pass_id": 1,
+      "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"],
+      "focus": "Path Traversal",
+      "pass1_query_note": "WORKFLOW.md section 5.2.1 defines iris/queries/Pass1_PathTraversal.ql as a Phase 2 Step 5 artifact rendered from assets/taint_query.ql.tmpl. It does not pre-exist in this workspace and is out of scope for Phase 1 Steps 1-2; only CWE mapping was verified against WORKFLOW.md section 2 (Pass 1 = 022, 023, 036, 073)."
+    },
+    "phase": "1 (Step 1 explore/detect + Step 2 extraction query generation)",
+    "timestamp": "2026-10-22"
+  },
+  "language": {
+    "detected": "python",
+    "evidence": [
+      "database metadata primaryLanguage: python",
+      "mlflow/ package is pure Python (mlflow/server/handlers.py, mlflow/store/**, mlflow/utils/**)",
+      "setup.py + pyproject.toml (black target-version py37) at repo root"
+    ]
+  },
+  "frameworks": [
+    {
+      "name": "Flask",
+      "confidence": 1.0,
+      "role": "primary",
+      "evidence": [
+        {
+          "kind": "import",
+          "score": 0.45,
+          "snippets": [
+            "mlflow/server/__init__.py:6: from flask import Flask, send_from_directory, Response",
+            "mlflow/server/handlers.py:12: from flask import Response, request, current_app, send_file",
+            "mlflow/pyfunc/scoring_server/__init__.py: uses flask.request / flask.Flask"
+          ]
+        },
+        {
+          "kind": "route/decorator",
+          "score": 0.30,
+          "snippets": [
+            "mlflow/server/__init__.py:29: app = Flask(__name__, static_folder=REL_STATIC_DIR)",
+            "mlflow/server/__init__.py:33-34: for http_path, handler, methods in handlers.get_endpoints(): app.add_url_rule(http_path, handler.__name__, handler, methods=methods)",
+            "mlflow/server/__init__.py:46,52,58,65,71: @app.route decorators for /health, /get-artifact, /model-versions/get-artifact, /static-files/<path:path>, /"
+          ]
+        },
+        {
+          "kind": "runtime/bootstrap",
+          "score": 0.20,
+          "snippets": [
+            "mlflow/server/__init__.py:99: waitress-serve ... mlflow.server:app",
+            "mlflow/server/__init__.py:106: gunicorn ... mlflow.server:app"
+          ]
+        },
+        {
+          "kind": "directory/layout",
+          "score": 0.05,
+          "snippets": ["mlflow/server/handlers.py (1610 lines, all service endpoint handlers)"]
+        }
+      ]
+    }
+  ],
+  "reference_files_loaded": [
+    "references/patterns.md",
+    "references/python.md",
+    "references/flask.md (loaded because Flask is the detected primary framework)",
+    "assets/extraction/python_sources.ql.tmpl and python_sinks.ql.tmpl (read; they are stubs, so candidate bodies were generated from repo evidence per WORKFLOW.md 4.3.1)",
+    "assets/extraction/extract_sources.ql.tmpl and extract_sinks.ql.tmpl (read for the column contract)"
+  ],
+  "scope_and_exclusions": {
+    "included": ["mlflow/** (Python package)"],
+    "excluded": [
+      "tests/, examples/, docs/, dev/, docker/ (noise per Augur candidate strategy; also outside the mlflow/ package)",
+      "mlflow/protos/** (generated protobuf code)",
+      "mlflow-db/ (nested CodeQL database directory inside the source root - excluded from all code exploration and structurally excluded from candidate extraction via the mlflow/ path filter)",
+      "mlflow_vuln/, baseline-info.json, path_traversal_sinks.csv at the repo root (PyVul ground-truth artifacts - NOT read, experiment independence)",
+      "mlflow/server/js/** (JavaScript UI; Python DB contains no .py there)"
+    ]
+  },
+  "untrusted_boundaries": {
+    "http_server": {
+      "summary": "mlflow.server:app Flask application. Two distinct request-input mechanisms: (a) proto-service endpoints registered via app.add_url_rule from get_endpoints(), where handlers parse the body/query via _get_request_message/_get_request_json; (b) flask @app.route endpoints in mlflow/server/__init__.py.",
+      "path_relevant_handlers": [
+        {
+          "handler": "_download_artifact(artifact_path)",
+          "location": "mlflow/server/handlers.py:1430",
+          "route": "/mlflow-artifacts/artifacts/<path:artifact_path> GET (mlflow/protos/mlflow_artifacts.proto:23-26, registered via app.add_url_rule at mlflow/server/__init__.py:33-34)",
+          "flow": "URL path-converter variable -> artifact_repo.download_artifacts(artifact_path) -> open(dst, 'rb') at handlers.py:1441 -> streamed HTTP response"
+        },
+        {
+          "handler": "_upload_artifact(artifact_path)",
+          "location": "mlflow/server/handlers.py:1456",
+          "route": "/mlflow/artifacts route /mlflow-artifacts/artifacts/<path:artifact_path> PUT (proto:36-38)",
+          "flow": "URL path variable -> posixpath.split(artifact_path) -> os.path.join(tmp_dir, tail) -> open(tmp_path, 'wb') at handlers.py:1464 (request body written), then artifact_repo.log_artifact(tmp_path, artifact_path=head)"
+        },
+        {
+          "handler": "_delete_artifact_mflflow_artifacts(artifact_path)",
+          "location": "mlflow/server/handlers.py:1502",
+          "route": "/mlflow-artifacts/artifacts/<path:artifact_path> DELETE (proto:60-62)",
+          "flow": "URL path variable -> artifact_repo.delete_artifacts(artifact_path) -> LocalArtifactRepository.delete_artifacts: os.path.join(artifact_dir, artifact_path) -> shutil.rmtree (mlflow/store/artifact/local_artifact_repo.py:106-112, no normpath and no verify_artifact_path on this path)"
+        },
+        {
+          "handler": "get_artifact_handler()",
+          "location": "mlflow/server/handlers.py:528",
+          "route": "/get-artifact (mlflow/server/__init__.py:52-54)",
+          "flow": "request.query_string -> querystring_parser.parser.parse -> request_dict['path'] -> _send_artifact -> artifact_repository.download_artifacts(path) -> os.path.abspath -> send_file (handlers.py:437-445)"
+        },
+        {
+          "handler": "get_model_version_artifact_handler()",
+          "location": "mlflow/server/handlers.py:1269",
+          "route": "/model-versions/get-artifact (mlflow/server/__init__.py:58-60)",
+          "flow": "request.query_string -> request_dict['path'] -> same _send_artifact chain"
+        },
+        {
+          "handler": "_list_artifacts()",
+          "location": "mlflow/server/handlers.py:887",
+          "route": "ListArtifacts proto endpoint (/api/2.0/mlflow/runs/list-artifacts + ajax-api alias)",
+          "flow": "request JSON/query parsed into ListArtifacts proto -> request_message.path (handlers.py:898) -> artifact repo list_artifacts(path)"
+        },
+        {
+          "handler": "_list_artifacts_mlflow_artifacts()",
+          "location": "mlflow/server/handlers.py:1480",
+          "route": "/mlflow-artifacts/artifacts GET (proto:48-50)",
+          "flow": "proto ListArtifactsMlflowArtifacts.path (handlers.py:1486) -> artifact_repo.list_artifacts(path)"
+        },
+        {
+          "handler": "serve_static_file(path)",
+          "location": "mlflow/server/__init__.py:66",
+          "route": "/static-files/<path:path> (mlflow/server/__init__.py:65)",
+          "flow": "URL path-converter variable -> send_from_directory(STATIC_DIR, path) (Flask safe_join applies)"
+        },
+        {
+          "handler": "_create_experiment()",
+          "location": "mlflow/server/handlers.py:560",
+          "route": "CreateExperiment proto endpoint",
+          "flow": "request artifact_location -> stored experiment artifact root (second-order input; later read back as run.info.artifact_uri by the artifact download/list handlers)"
+        }
+      ]
+    },
+    "scoring_server": {
+      "summary": "mlflow/pyfunc/scoring_server/__init__.py is a second Flask app, but its HTTP surface only reads flask.request.data / flask.request.content_type (prediction payload and mime type, handlers at lines 211-254); no request field reaches a file path. Its file opens (lines 286, 300) use CLI-supplied --input-path/--output-path in _predict, a local-trusted boundary. Not treated as a path-traversal source boundary."
+    },
+    "cli": {
+      "summary": "mlflow/cli.py (click) and _predict(model_uri, input_path, output_path) take paths from the local invoking user; mlflow projects _fetch_project/_unzip_repo URIs likewise come from the CLI/API caller, not from a remote untrusted party. Not extracted as attacker sources; the unzip extractall sink is still extracted because zip entry names are archive-internal untrusted content."
+    },
+    "environment_variables": {
+      "summary": "_MLFLOW_SERVER_FILE_STORE / _MLFLOW_SERVER_ARTIFACT_ROOT / _MLFLOW_SERVER_ARTIFACT_DESTINATION / _MLFLOW_STATIC_PREFIX etc. (mlflow/server/__init__.py:19-25) are deployment-admin configuration set by the mlflow CLI before the server forks; not treated as attacker sources."
+    }
+  },
+  "source_candidate_families": [
+    "F1: Flask @app.route handler parameters with <path:...> converter (mlflow/server/__init__.py serve_static_file)",
+    "F2: proto-registered handler parameters bound to /mlflow-artifacts/artifacts/<path:artifact_path> URL rules (_download_artifact, _upload_artifact, _delete_artifact_mflflow_artifacts in mlflow/server/handlers.py)",
+    "F3: query-string-parsed dict field reads request_dict['path'] / request_dict.get('run_id'|'run_uuid'|'name'|'version') inside get_artifact_handler and get_model_version_artifact_handler",
+    "F4: request.query_string / flask_request.query_string attribute reads (raw untrusted URL query)",
+    "F5: flask_request.get_json() whole-body accessor (mlflow/server/handlers.py:372)",
+    "F6: parsed proto request-message .path field reads in _list_artifacts and _list_artifacts_mlflow_artifacts",
+    "F7: second-order run.info.artifact_uri attribute reads (stored experiment artifact_location from the CreateExperiment API)",
+    "F8: internal boundary parameters that directly carry request-derived paths (summary-step candidates): _send_artifact.path, _get_proxied_run_artifact_destination_path.relative_path, _list_artifacts_for_proxied_run_artifact_root.relative_path, and ArtifactRepository/LocalArtifactRepository {log_artifact, log_artifacts, download_artifacts, list_artifacts, delete_artifacts, _download_file} path parameters"
+  ],
+  "sink_candidate_families": [
+    "S1: open() / codecs.open() (path argument 0, mode recorded in context)",
+    "S2: Flask send_file (arg 0) and send_from_directory (arg 1, base dir is arg 0)",
+    "S3: shutil.copyfile/copy/copytree/move (args 0 and 1) and shutil.rmtree (arg 0)",
+    "S4: os.remove / os.rmdir / os.makedirs / os.mkdir / os.listdir / os.walk / os.scandir (arg 0) and os.path.getsize (arg 0)",
+    "S5: distutils dir_util.copy_tree (args 0 and 1)",
+    "S6: zipfile.ZipFile (arg 0) and tarfile.open (arg 0) archive opens",
+    "S7: dynamic .extractall(...) calls (archive-entry write targets; zipfile extractall)",
+    "S8: dynamic pathlib-style .mkdir / .read_text / .write_text method calls (receiver module inferred)"
+  ],
+  "sanitizer_and_validation_evidence": [
+    "mlflow/store/artifact/artifact_repo.py:302-306 verify_artifact_path(artifact_path) rejects non-normalized, '..'-prefixed, '.' and absolute paths via path_not_unique; applied in LocalArtifactRepository.log_artifact / log_artifacts and HttpArtifactRepository.log_artifact, but NOT on the download/list/delete artifact paths",
+    "mlflow/utils/validation.py:82-84 path_not_unique (posixpath.normpath comparison + '..' and '/' prefix rejection)",
+    "mlflow/utils/validation.py:15-22 _VALID_PARAM_AND_METRIC_NAMES / _RUN_ID_REGEX / _EXPERIMENT_ID_REGEX; _validate_param_name/_validate_tag_name/_validate_run_id/_validate_experiment_id guard FileStore path components (mlflow/store/tracking/file_store.py:194-229)",
+    "Flask send_from_directory applies safe_join base-directory containment for serve_static_file",
+    "LocalArtifactRepository.download_artifacts/list_artifacts apply os.path.normpath (normalization only, not containment - traversal via '..' segments survives normpath)",
+    "TOCTOU note: _send_artifact computes os.path.abspath(artifact_repository.download_artifacts(path)) then send_file reads the path again (handlers.py:438-445)"
+  ],
+  "coverage_gaps": [
+    "Dynamic dispatch: the server calls artifact_repo.download_artifacts/delete_artifacts/list_artifacts on a base-typed receiver (get_artifact_repository returns whichever repository class the artifact URI scheme resolves to). The extraction captures the concrete LocalArtifactRepository method definitions as boundary params, but flow through other repo subclasses (http, s3, dbfs, ...) is only partially covered by their open/ FS calls.",
+    "External-library decoding: querystring_parser.parser.parse and google.protobuf json_format parse_dict are unmodeled external calls; sources are placed at the request.query_string/get_json boundary reads and at the parsed dict/proto field reads instead of modeling taint through these libraries.",
+    "Percent-decoding: the raw query string is decoded with .decode('utf-8') and re.sub('%5B%5D',...) before parsing; URL-encoded traversal payloads (e.g. %2e%2e%2f) are not separately modeled.",
+    "Alias imports: sinks matched by dotted callee name (open, os.path.getsize, shutil.move, ...) can be missed when a project module re-exports or aliases a stdlib callable (no from X import Y as Z indirection is resolved). No concrete aliasing of FS APIs was observed in the mlflow package.",
+    "os.path.join / posixpath.join / os.path.normpath / os.path.abspath / Path.resolve are treated as propagation/validation nodes, NOT sinks, per the extraction policy; they are recorded here as intermediate-node evidence, not candidates.",
+    "Path() construction calls (mlflow/artifacts/__init__.py:53, mlflow/models/evaluation/base.py:122,148) use .name/.mkdir on pathlib objects; only the dynamic .mkdir/.read_text/.write_text method-call families are extracted, with inferred module hints.",
+    "distutils dir_util.copy_tree receiver 'dir_util' is matched syntactically (from distutils import dir_util at local_artifact_repo.py:1 and projects/utils.py:8)."
+  ],
+  "notes": [
+    "No route uses Flask Blueprint wrappers; all tracking/registry/artifacts endpoints are registered centrally from proto definitions via app.add_url_rule (mlflow/server/__init__.py:33-34), so source family F2 is keyed on the three concrete handler function names bound to <path:artifact_path> URL rules plus the proto endpoint evidence.",
+    "CSV column order matches the previous Path_Traversal projects (gradio et al.): nodeRepr, role, callableName, flowKind, receiver, moduleHint, argIndex, filePath, line, context.",
+    "Extraction queries carry no @kind annotation: they are multi-column candidate tables for `codeql query run` + `codeql bqrs decode --format=csv`, not @kind problem queries and not @kind table queries."
+  ]
+}

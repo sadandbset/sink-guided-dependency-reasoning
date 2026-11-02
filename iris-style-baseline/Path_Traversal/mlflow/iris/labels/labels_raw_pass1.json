@@ -1,0 +1,2567 @@
+{
+  "run_id": "mlflow-pt-pass1-20261022",
+  "pass_id": 1,
+  "focus": "Path Traversal",
+  "cwes": [
+    "CWE-22",
+    "CWE-23",
+    "CWE-36",
+    "CWE-73"
+  ],
+  "model": "glm-5.3 (Claude Code CLI, inline batch labeling; deterministic, no temperature sampling)",
+  "batch_policy": {
+    "batch_size": "40 (B1 = all 43 source candidates as one domain batch)",
+    "num_batches": 9,
+    "re_ask_threshold": 0.55,
+    "re_ask_note": "Entries with confidence < 0.55 (hdfs/sftp remote-repo candidates) were re-checked once against the real repo code (hdfs_artifact_repo.py, sftp_artifact_repo.py) during batch B9/B2 review; uncertainty was confirmed and classification kept as candidate rather than re-classified."
+  },
+  "inputs": {
+    "sources_csv": "iris/extraction/sources.csv (43 rows)",
+    "sinks_csv": "iris/extraction/sinks.csv (298 rows)",
+    "references_loaded": [
+      "references/patterns.md",
+      "references/python.md",
+      "references/flask.md"
+    ],
+    "code_context": "per-candidate +/-2 line context extracted from mlflow_vuln source tree (candidate_context.txt, 341 candidates)"
+  },
+  "prompt_contract": {
+    "system": "Classify candidate APIs for CWE pass 1 (path traversal); prefer conservative recall; mark sanitizers only with concrete evidence; roles: source/sink/sanitizer/summary/none.",
+    "user_payload_fields": [
+      "pass_id",
+      "cwes",
+      "language",
+      "framework",
+      "candidates",
+      "context_snippets"
+    ],
+    "output": "JSON only (labels entries with role/classification/confidence/signature/rationale/evidence)."
+  },
+  "batches": [
+    {
+      "batch_id": "B1",
+      "sample_count": 43,
+      "candidate_range": "S01..S43",
+      "decisions": [
+        {
+          "id": "S01",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "ListArtifacts proto request field parsed from the request JSON/query body (handlers.py:888-898); flows into list_artifacts -> LocalArtifactRepository.list_artifacts, which only normpaths before the join."
+        },
+        {
+          "id": "S02",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "ListArtifactsMlflowArtifacts request field from _get_request_message (handlers.py:1485-1486) reached via GET /mlflow-artifacts/artifacts; flows into list_artifacts with normpath-only handling."
+        },
+        {
+          "id": "S03",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "request_dict['path'] from the query string of /get-artifact (handlers.py:531-544); the proxied branch joins it onto the proxied artifact root via posixpath.join (no containment)."
+        },
+        {
+          "id": "S04",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "request_dict['path'] passed directly to _send_artifact -> LocalArtifactRepository.download_artifacts (normpath only, no containment) -> send_file; the primary /get-artifact traversal input."
+        },
+        {
+          "id": "S05",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "request_dict['path'] from /model-versions/get-artifact query string joined onto the proxied artifact root (handlers.py:1280-1283)."
+        },
+        {
+          "id": "S06",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "request_dict['path'] passed directly to _send_artifact (handlers.py:1285-1288); same unguarded download chain as /get-artifact."
+        },
+        {
+          "id": "S07",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.6,
+          "rationale": "Abstract base dispatch of log_artifact(local_file, artifact_path); carries the request-derived upload destination head from _upload_artifact to concrete repo implementations (dynamic dispatch glue)."
+        },
+        {
+          "id": "S08",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "rationale": "Carries the request-derived upload path; guarded at entry by verify_artifact_path (artifact_repo.py:302-306) which rejects non-normalized / '..'-prefixed / '.' / absolute paths, then joins onto artifact_dir."
+        },
+        {
+          "id": "S09",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.6,
+          "rationale": "Abstract base dispatch of log_artifacts(local_dir, artifact_path); same dynamic-dispatch glue as log_artifact."
+        },
+        {
+          "id": "S10",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.75,
+          "rationale": "Propagates the attacker-controlled artifact path into local destination construction: posixpath.dirname + os.path.join(dst_local_dir_path, ...) and os.path.join(dst, src_artifact_path) (artifact_repo.py:100-106)."
+        },
+        {
+          "id": "S11",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "rationale": "Base download_artifacts(artifact_path, dst_path) implementation: _is_directory/list_artifacts then _create_download_destination + _download_file dispatch; propagates the request path to FS operations."
+        },
+        {
+          "id": "S12",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "rationale": "LocalArtifactRepository.download_artifacts: os.path.join(artifact_dir, os.path.normpath(artifact_path)) then os.path.abspath (local_artifact_repo.py:77-80); normpath keeps leading '..' so the join escapes the artifact root."
+        },
+        {
+          "id": "S13",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "rationale": "posixpath.join(proxied_run_artifact_root_path, relative_path) (handlers.py:230-234): a relative_path containing absolute or '../' segments escapes the proxied root; needed step for the proxied /get-artifact flow."
+        },
+        {
+          "id": "S14",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "rationale": "_send_artifact(artifact_repository, path) -> download_artifacts(path) -> os.path.abspath -> send_file (handlers.py:438-445); core propagation step from request field to served file."
+        },
+        {
+          "id": "S15",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.75,
+          "rationale": "Propagates the ListArtifacts request path into _get_proxied_run_artifact_destination_path and artifact_destination_repo.list_artifacts (handlers.py:935-939)."
+        },
+        {
+          "id": "S16",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "rationale": "list_artifacts: normpath + os.path.join(artifact_dir, path) + os.path.isdir + list_all (local_artifact_repo.py:85-89); normpath does not contain leading '..'."
+        },
+        {
+          "id": "S17",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "rationale": "_download_file: os.path.join(artifact_dir, os.path.normpath(remote_file_path)) then shutil.copyfile (local_artifact_repo.py:103-104); uncontained propagation to the copy source path."
+        },
+        {
+          "id": "S18",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.9,
+          "rationale": "delete_artifacts: os.path.join(self._artifact_dir, artifact_path) with NO normalization and NO verify_artifact_path (local_artifact_repo.py:107-112) before shutil.rmtree; fully unguarded propagation."
+        },
+        {
+          "id": "S19",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "rationale": "Raw query string of GET requests to every proto-registered endpoint, parsed by querystring_parser into request_dict and protobuf (handlers.py:378-399); includes the ListArtifacts 'path' field."
+        },
+        {
+          "id": "S20",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "rationale": "Decoded query string re.sub('%5B%5D',...) then parser.parse (handlers.py:384-385); raw untrusted URL query feeding proto request messages."
+        },
+        {
+          "id": "S21",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "request.query_string of /get-artifact decoded and parsed into request_dict whose 'path' key is the artifact download path (handlers.py:531-544)."
+        },
+        {
+          "id": "S22",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "request.query_string of /model-versions/get-artifact parsed into request_dict (handlers.py:1272-1286)."
+        },
+        {
+          "id": "S23",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "Value is only appended to a search-results pandas frame (fluent.py:1471); client-side display, no file path use. Client-side library read of run metadata (fluent API / tracking client / CLI); not a service input boundary for the mlflow server, no HTTP-untrusted path flow."
+        },
+        {
+          "id": "S24",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Scheme assertion in the client-side get_artifact_uri helper (artifact_utils.py:47-53). Client-side library read of run metadata (fluent API / tracking client / CLI); not a service input boundary for the mlflow server, no HTTP-untrusted path flow."
+        },
+        {
+          "id": "S25",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Return of the run artifact URI in the client helper. Client-side library read of run metadata (fluent API / tracking client / CLI); not a service input boundary for the mlflow server, no HTTP-untrusted path flow."
+        },
+        {
+          "id": "S26",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "append_to_uri_path(run.info.artifact_uri, artifact_path) in the client helper. Client-side library read of run metadata (fluent API / tracking client / CLI); not a service input boundary for the mlflow server, no HTTP-untrusted path flow."
+        },
+        {
+          "id": "S27",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "rationale": "_is_servable_proxied_run_artifact_root(run.info.artifact_uri) branch selection in get_artifact_handler. Second-order source: run.info.artifact_uri is the stored experiment/run artifact location originally supplied via the CreateExperiment API; it selects the artifact repository root on the server (get_artifact_repository / _get_artifact_repo_mlflow_artifacts), but requires experiment-creation privileges, so direct attacker control of the *path* argument is not established."
+        },
+        {
+          "id": "S28",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "rationale": "Passed as proxied_artifact_root in the proxied download branch. Second-order source: run.info.artifact_uri is the stored experiment/run artifact location originally supplied via the CreateExperiment API; it selects the artifact repository root on the server (get_artifact_repository / _get_artifact_repo_mlflow_artifacts), but requires experiment-creation privileges, so direct attacker control of the *path* argument is not established."
+        },
+        {
+          "id": "S29",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "rationale": "Proxied-listing branch selection in _list_artifacts. Second-order source: run.info.artifact_uri is the stored experiment/run artifact location originally supplied via the CreateExperiment API; it selects the artifact repository root on the server (get_artifact_repository / _get_artifact_repo_mlflow_artifacts), but requires experiment-creation privileges, so direct attacker control of the *path* argument is not established."
+        },
+        {
+          "id": "S30",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "rationale": "Proxied artifact root for _list_artifacts_for_proxied_run_artifact_root. Second-order source: run.info.artifact_uri is the stored experiment/run artifact location originally supplied via the CreateExperiment API; it selects the artifact repository root on the server (get_artifact_repository / _get_artifact_repo_mlflow_artifacts), but requires experiment-creation privileges, so direct attacker control of the *path* argument is not established."
+        },
+        {
+          "id": "S31",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "Echoed into the JSON response as root_uri (handlers.py:913); not used as a file path."
+        },
+        {
+          "id": "S32",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "rationale": "_get_artifact_repo(run) = get_artifact_repository(run.info.artifact_uri) selects the artifact repository root for /get-artifact. Second-order source: run.info.artifact_uri is the stored experiment/run artifact location originally supplied via the CreateExperiment API; it selects the artifact repository root on the server (get_artifact_repository / _get_artifact_repo_mlflow_artifacts), but requires experiment-creation privileges, so direct attacker control of the *path* argument is not established."
+        },
+        {
+          "id": "S33",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "MlflowClient download helper (client.py:389-393); client-side boundary. Client-side library read of run metadata (fluent API / tracking client / CLI); not a service input boundary for the mlflow server, no HTTP-untrusted path flow."
+        },
+        {
+          "id": "S34",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "mlflow gc CLI local maintenance command (cli.py:573-574). Client-side library read of run metadata (fluent API / tracking client / CLI); not a service input boundary for the mlflow server, no HTTP-untrusted path flow."
+        },
+        {
+          "id": "S35",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "rationale": "Flask <path:path> URL converter variable of /static-files/<path:path>; genuinely untrusted, but its only consumer send_from_directory(STATIC_DIR, path) is contained by werkzeug safe_join."
+        },
+        {
+          "id": "S36",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "rationale": "flask_request.get_json(force=True, silent=True) whole-body accessor (handlers.py:371-372); the parsed body feeds proto request messages incl. ListArtifacts.path via _get_request_message (handlers.py:402-417)."
+        },
+        {
+          "id": "S37",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "URL path-converter variable of GET /mlflow-artifacts/artifacts/<artifact_path> (proto route registered via app.add_url_rule); passed to download_artifacts(artifact_path, tmp_dir) and the result is opened and streamed (handlers.py:1435-1451)."
+        },
+        {
+          "id": "S38",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "URL path-converter variable of DELETE /mlflow-artifacts/artifacts/<artifact_path>; passed to LocalArtifactRepository.delete_artifacts which joins it without any validation before shutil.rmtree (local_artifact_repo.py:106-112)."
+        },
+        {
+          "id": "S39",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "rationale": "URL path-converter variable of PUT /mlflow-artifacts/artifacts/<artifact_path>; split into head/tail, tail written into a temp dir, head passed to log_artifact where verify_artifact_path applies (handlers.py:1461-1473)."
+        },
+        {
+          "id": "S40",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "rationale": "Untrusted run_id lookup key from /get-artifact query string; selects the run whose artifact repository is used (indirect path influence; FileStore validates run_id against _RUN_ID_REGEX)."
+        },
+        {
+          "id": "S41",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "rationale": "Untrusted run_uuid fallback key from /get-artifact query string; same indirect influence as run_id."
+        },
+        {
+          "id": "S42",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "rationale": "Untrusted registered-model name from /model-versions/get-artifact; selects the model version download URI (indirect path influence)."
+        },
+        {
+          "id": "S43",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "rationale": "Untrusted model version string; same indirect influence as name."
+        }
+      ],
+      "role_classification_counts": {
+        "none/fp": 7,
+        "source/candidate": 5,
+        "source/tp": 19,
+        "summary/tp": 12
+      }
+    },
+    {
+      "batch_id": "B2",
+      "sample_count": 40,
+      "candidate_range": "K001..K040",
+      "decisions": [
+        {
+          "id": "K001",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K002",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K003",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K004",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K005",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K006",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K007",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "rationale": "Download side: _download_hdfs_file receives local_file_path = os.path.join(local_dir, os.path.normpath(artifact_path)) (hdfs_artifact_repo.py:137-141); leading '..' survives normpath and makedirs creates directories outside the local destination. Requires an hdfs:// run artifact root (second-order via CreateExperiment artifact_location)."
+        },
+        {
+          "id": "K008",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K009",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K010",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K011",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K012",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K013",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K014",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K015",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K016",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K017",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K018",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K019",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K020",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K021",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K022",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K023",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K024",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K025",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K026",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K027",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K028",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K029",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K030",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K031",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K032",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "rationale": "Server-reachable makedirs: _create_download_destination builds local_dir_path = os.path.join(dst_local_dir_path, posixpath.dirname(src_artifact_path)) from the URL-supplied artifact_path of GET /mlflow-artifacts/artifacts/<path>; '../' segments in the artifact path escape the destination directory."
+        },
+        {
+          "id": "K033",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.65,
+          "rationale": "Directory-download branch: local_dir = os.path.join(dst_local_dir_path, src_artifact_dir_path) then makedirs (artifact_repo.py:193-202); same uncontained join of the request-derived artifact path (reached when _is_directory(artifact_path) holds)."
+        },
+        {
+          "id": "K034",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K035",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K036",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "URL-derived path reaches a genuine file-serving sink, but Flask send_from_directory applies werkzeug safe_join, which rejects any path trying to escape STATIC_DIR (404 on '../'); traversal is neutralized at this site."
+        },
+        {
+          "id": "K037",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "Fixed string literal 'index.html'; no attacker-controlled path component."
+        },
+        {
+          "id": "K038",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K039",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K040",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        }
+      ],
+      "role_classification_counts": {
+        "none/fp": 1,
+        "sink/candidate": 1,
+        "sink/fp": 36,
+        "sink/tp": 2
+      }
+    },
+    {
+      "batch_id": "B3",
+      "sample_count": 40,
+      "candidate_range": "K041..K080",
+      "decisions": [
+        {
+          "id": "K041",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K042",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "rationale": "list_all's os.listdir(root) is called by LocalArtifactRepository.list_artifacts with list_dir = os.path.join(artifact_dir, os.path.normpath(path)) where path is the ListArtifacts / /mlflow-artifacts/artifacts request field; normpath keeps leading '..' so the listing escapes the artifact root (directory listing disclosure, CWE-22/73)."
+        },
+        {
+          "id": "K043",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K044",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K045",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K046",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K047",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K048",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K049",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K050",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K051",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K052",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "FileStore call site: path components are built from regex-validated run_id/experiment_id (_RUN_ID_REGEX/_EXPERIMENT_ID_REGEX, mlflow/utils/validation.py:18-22, applied in file_store.py:194-232) and validated param/tag/metric names, on the local tracking-store boundary; no unvalidated HTTP path reaches this site."
+        },
+        {
+          "id": "K053",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K054",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K055",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K056",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K057",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "FileStore call site: path components are built from regex-validated run_id/experiment_id (_RUN_ID_REGEX/_EXPERIMENT_ID_REGEX, mlflow/utils/validation.py:18-22, applied in file_store.py:194-232) and validated param/tag/metric names, on the local tracking-store boundary; no unvalidated HTTP path reaches this site."
+        },
+        {
+          "id": "K058",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K059",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K060",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K061",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K062",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K063",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K064",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K065",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K066",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K067",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K068",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K069",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K070",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K071",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K072",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K073",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "rationale": "Arbitrary directory deletion: delete_artifacts computes os.path.join(self._artifact_dir, artifact_path) with NO normpath and NO verify_artifact_path (contrast log_artifact at line 27), then rmtree; DELETE /mlflow-artifacts/artifacts/<path> with '../' segments deletes any existing directory the server can access."
+        },
+        {
+          "id": "K074",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K075",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K076",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K077",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K078",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "FileStore call site: path components are built from regex-validated run_id/experiment_id (_RUN_ID_REGEX/_EXPERIMENT_ID_REGEX, mlflow/utils/validation.py:18-22, applied in file_store.py:194-232) and validated param/tag/metric names, on the local tracking-store boundary; no unvalidated HTTP path reaches this site."
+        },
+        {
+          "id": "K079",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "FileStore call site: path components are built from regex-validated run_id/experiment_id (_RUN_ID_REGEX/_EXPERIMENT_ID_REGEX, mlflow/utils/validation.py:18-22, applied in file_store.py:194-232) and validated param/tag/metric names, on the local tracking-store boundary; no unvalidated HTTP path reaches this site."
+        },
+        {
+          "id": "K080",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        }
+      ],
+      "role_classification_counts": {
+        "sink/fp": 38,
+        "sink/tp": 2
+      }
+    },
+    {
+      "batch_id": "B4",
+      "sample_count": 40,
+      "candidate_range": "K081..K120",
+      "decisions": [
+        {
+          "id": "K081",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K082",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K083",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K084",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K085",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K086",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.8,
+          "rationale": "Upload write path: artifact_dir was already guarded by verify_artifact_path + normpath at log_artifact entry (local_artifact_repo.py:27-35), and the destination filename is os.path.basename(local_file); traversal is blocked on this flow (arg0 is the server-side temp file from the upload)."
+        },
+        {
+          "id": "K087",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "rationale": "Read side of _download_file: remote_file_path = os.path.join(self.artifact_dir, os.path.normpath(remote_file_path)) - normpath preserves leading '..' - then copyfile reads the file outside the artifact root; reached from GET /mlflow-artifacts/artifacts/<path> via the base download implementation."
+        },
+        {
+          "id": "K088",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K089",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K090",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K091",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K092",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K093",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.8,
+          "rationale": "Destination join(artifact_dir, basename(local_file)) with artifact_dir covered by the verify_artifact_path/normpath guard; traversal blocked."
+        },
+        {
+          "id": "K094",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.65,
+          "rationale": "Write side of _download_file: local_path comes from _create_download_destination = os.path.join(dst_local_dir_path, src_artifact_path), which embeds the attacker-controlled artifact path into the local write destination ('../' escapes the dst dir)."
+        },
+        {
+          "id": "K095",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K096",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "CLI-supplied path (click option / local command invocation); local-trusted boundary, not a remote input."
+        },
+        {
+          "id": "K097",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site. Archive is written from local model content into a tempfile.mkstemp path."
+        },
+        {
+          "id": "K098",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K099",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K100",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K101",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K102",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K103",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K104",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K105",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K106",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K107",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K108",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K109",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "FileStore call site: path components are built from regex-validated run_id/experiment_id (_RUN_ID_REGEX/_EXPERIMENT_ID_REGEX, mlflow/utils/validation.py:18-22, applied in file_store.py:194-232) and validated param/tag/metric names, on the local tracking-store boundary; no unvalidated HTTP path reaches this site."
+        },
+        {
+          "id": "K110",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K111",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K112",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K113",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K114",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K115",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "FileStore call site: path components are built from regex-validated run_id/experiment_id (_RUN_ID_REGEX/_EXPERIMENT_ID_REGEX, mlflow/utils/validation.py:18-22, applied in file_store.py:194-232) and validated param/tag/metric names, on the local tracking-store boundary; no unvalidated HTTP path reaches this site."
+        },
+        {
+          "id": "K116",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "FileStore call site: path components are built from regex-validated run_id/experiment_id (_RUN_ID_REGEX/_EXPERIMENT_ID_REGEX, mlflow/utils/validation.py:18-22, applied in file_store.py:194-232) and validated param/tag/metric names, on the local tracking-store boundary; no unvalidated HTTP path reaches this site."
+        },
+        {
+          "id": "K117",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K118",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K119",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K120",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        }
+      ],
+      "role_classification_counts": {
+        "sink/fp": 38,
+        "sink/tp": 2
+      }
+    },
+    {
+      "batch_id": "B5",
+      "sample_count": 40,
+      "candidate_range": "K121..K160",
+      "decisions": [
+        {
+          "id": "K121",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K122",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K123",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K124",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K125",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K126",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "rationale": "Arbitrary file read served as HTTP response: _send_artifact serves os.path.abspath(download_artifacts(path)) where path is the /get-artifact (or /model-versions/get-artifact) request 'path' field; LocalArtifactRepository.download_artifacts only normpaths before the join, so '../' traversal resolves outside the artifact root."
+        },
+        {
+          "id": "K127",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "rationale": "Same unguarded _send_artifact flow, non-text-extension branch (handlers.py:445); path argument 'filename' is the abspath of the traversed download result."
+        },
+        {
+          "id": "K128",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K129",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K130",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K131",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K132",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "rationale": "zipfile extractall with no member-name sanitization (zip-slip is possible in principle); however the archive is SparkFiles.get(archive_path_basename) distributed by the job author, not an HTTP request field - semi-trusted source, kept for human review."
+        },
+        {
+          "id": "K133",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "rationale": "zip_in.extractall(dst_dir) with no member filtering: a malicious project zip could write outside dst_dir (zip-slip); the zip URI is chosen by the local CLI/API user running the project (mlflow run <uri>), not by a remote attacker; also dst_dir is a fresh tempfile.mkdtemp dir. Candidate, not confirmed pass-1 flow."
+        },
+        {
+          "id": "K134",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "rationale": "sftp.mkdir(remote_path) with remote_path = posixpath.join(remote_dir, entry); in the server upload flow remote_dir descends from the untrusted artifact_path head and SftpArtifactRepository does NOT call verify_artifact_path; but the sftp repo is only engaged when the deployment artifact destination is sftp:// (admin configuration) - reachability uncertain."
+        },
+        {
+          "id": "K135",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "rationale": "hdfs.mkdir(hdfs_base_path) with hdfs_base_path = posixpath.join(self.path, artifact_path) (via _resolve_base_path, no verify_artifact_path in HdfsArtifactRepository.log_artifacts); an untrusted upload head could traverse the remote HDFS namespace, but only when the deployment artifact root is hdfs://."
+        },
+        {
+          "id": "K136",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "rationale": "Same unverified hdfs_base_path join in log_artifacts' subdir creation (hdfs_artifact_repo.py:45-70); remote-FS traversal candidate under hdfs:// deployment."
+        },
+        {
+          "id": "K137",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K138",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K139",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K140",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K141",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K142",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K143",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K144",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K145",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K146",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K147",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K148",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K149",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K150",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K151",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K152",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K153",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K154",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K155",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K156",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K157",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K158",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K159",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K160",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        }
+      ],
+      "role_classification_counts": {
+        "sink/candidate": 5,
+        "sink/fp": 33,
+        "sink/tp": 2
+      }
+    },
+    {
+      "batch_id": "B6",
+      "sample_count": 40,
+      "candidate_range": "K161..K200",
+      "decisions": [
+        {
+          "id": "K161",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K162",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K163",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K164",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K165",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "rationale": "open(dst, 'rb') where dst = artifact_repo.download_artifacts(artifact_path, tmp_dir.name) with artifact_path the URL path-converter variable of GET /mlflow-artifacts/artifacts/<path>; the file content is streamed to the client (stream_and_remove_file), so a traversal in artifact_path reads arbitrary files."
+        },
+        {
+          "id": "K166",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.8,
+          "rationale": "tmp_path = os.path.join(tmp_dir, tail) where (head, tail) = posixpath.split(artifact_path) (handlers.py:1461-1463): tail is a single path component (no '/'), and the only traversal-shaped value '..' resolves to the existing tmp_dir itself (open 'wb' fails with IsADirectoryError); the residual traversal risk in head flows into log_artifact, which is guarded by verify_artifact_path."
+        },
+        {
+          "id": "K167",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K168",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K169",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K170",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K171",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K172",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K173",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K174",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K175",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "rationale": "open(local_file_path, 'wb') in _download_hdfs_file with the same uncontained join(normpath(artifact_path)) destination; writes downloaded bytes outside the local dst under traversal; same second-order hdfs:// precondition as the makedirs candidate."
+        },
+        {
+          "id": "K176",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K177",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K178",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "pkg_resources.resource_filename(mlflow.__name__, 'pypi_package_index.json') - packaged resource, fixed path."
+        },
+        {
+          "id": "K179",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K180",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K181",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K182",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K183",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K184",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K185",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K186",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K187",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K188",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K189",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K190",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K191",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K192",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K193",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K194",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K195",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K196",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K197",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K198",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K199",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K200",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        }
+      ],
+      "role_classification_counts": {
+        "none/fp": 1,
+        "sink/candidate": 1,
+        "sink/fp": 37,
+        "sink/tp": 1
+      }
+    },
+    {
+      "batch_id": "B7",
+      "sample_count": 40,
+      "candidate_range": "K201..K240",
+      "decisions": [
+        {
+          "id": "K201",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K202",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K203",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K204",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K205",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K206",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K207",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K208",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K209",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K210",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "conda/pip environment file handling on locally-supplied or package-generated paths; local-trusted boundary."
+        },
+        {
+          "id": "K211",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K212",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K213",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K214",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K215",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K216",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K217",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K218",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K219",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K220",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K221",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K222",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K223",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K224",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K225",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K226",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K227",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K228",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K229",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K230",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K231",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "opens os.devnull twice to probe DBFS FUSE availability; fixed device path."
+        },
+        {
+          "id": "K232",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K233",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K234",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "get_conda_yaml_path() returns the mlflow package's own conda.yaml resource path; fixed."
+        },
+        {
+          "id": "K235",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K236",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K237",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K238",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K239",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K240",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        }
+      ],
+      "role_classification_counts": {
+        "none/fp": 2,
+        "sink/fp": 38
+      }
+    },
+    {
+      "batch_id": "B8",
+      "sample_count": 40,
+      "candidate_range": "K241..K280",
+      "decisions": [
+        {
+          "id": "K241",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K242",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "CLI-supplied path (click option / local command invocation); local-trusted boundary, not a remote input."
+        },
+        {
+          "id": "K243",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "CLI-supplied path (click option / local command invocation); local-trusted boundary, not a remote input."
+        },
+        {
+          "id": "K244",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K245",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K246",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K247",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K248",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K249",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K250",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K251",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K252",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K253",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K254",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K255",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K256",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "FileStore call site: path components are built from regex-validated run_id/experiment_id (_RUN_ID_REGEX/_EXPERIMENT_ID_REGEX, mlflow/utils/validation.py:18-22, applied in file_store.py:194-232) and validated param/tag/metric names, on the local tracking-store boundary; no unvalidated HTTP path reaches this site."
+        },
+        {
+          "id": "K257",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "FileStore call site: path components are built from regex-validated run_id/experiment_id (_RUN_ID_REGEX/_EXPERIMENT_ID_REGEX, mlflow/utils/validation.py:18-22, applied in file_store.py:194-232) and validated param/tag/metric names, on the local tracking-store boundary; no unvalidated HTTP path reaches this site."
+        },
+        {
+          "id": "K258",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K259",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K260",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K261",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "rationale": "os.path.expanduser('~/.ssh/config') - fixed user config path, not request-influenced."
+        },
+        {
+          "id": "K262",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K263",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K264",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K265",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K266",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow pyfunc scoring server _predict uses CLI --input-path/--output-path supplied by the local operator; the HTTP surface of this app only reads request.data/content_type, so these paths are local-trusted."
+        },
+        {
+          "id": "K267",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow pyfunc scoring server _predict uses CLI --input-path/--output-path supplied by the local operator; the HTTP surface of this app only reads request.data/content_type, so these paths are local-trusted."
+        },
+        {
+          "id": "K268",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K269",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K270",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K271",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K272",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K273",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "rationale": "resource_filename(mlflow.__name__, 'ml-package-versions.yml') - packaged resource, fixed path."
+        },
+        {
+          "id": "K274",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K275",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K276",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K277",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K278",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K279",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "mlflow.models.evaluation local artifact save/load: paths are evaluation-output directories chosen by the local API caller; no HTTP boundary."
+        },
+        {
+          "id": "K280",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        }
+      ],
+      "role_classification_counts": {
+        "none/fp": 2,
+        "sink/fp": 38
+      }
+    },
+    {
+      "batch_id": "B9",
+      "sample_count": 20,
+      "candidate_range": "K281..X02",
+      "decisions": [
+        {
+          "id": "K281",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K282",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K283",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K284",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K285",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K286",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K287",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K288",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K289",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Artifact-repository implementation detail: the walked/opened path is the local temp or caller-supplied side (tempfile.mkdtemp/mkdtemp destination or local upload file); remote segments derive from deployment-config artifact URIs, not from a request field at this site."
+        },
+        {
+          "id": "K290",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K291",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K292",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K293",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K294",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K295",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K296",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K297",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "K298",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.85,
+          "rationale": "Local model-flavor/pipeline/utility file I/O: the path argument is supplied by the local Python API caller (save/load path, conda env path, config path) or a tempfile; no untrusted HTTP boundary reaches this call site."
+        },
+        {
+          "id": "X01",
+          "role": "sanitizer",
+          "classification": "tp",
+          "confidence": 0.9,
+          "rationale": "Real pre-use guard on the artifact upload path: verify_artifact_path raises for any artifact_path where path_not_unique holds (normpath differs from input, equals '.', starts with '..' or '/'); applied at LocalArtifactRepository.log_artifact/log_artifacts entry (local_artifact_repo.py:27,48) and HttpArtifactRepository.log_artifact (http_artifact_repo.py:19) - i.e. before the join + copyfile. It does NOT guard download/list/delete paths."
+        },
+        {
+          "id": "X02",
+          "role": "sanitizer",
+          "classification": "tp",
+          "confidence": 0.9,
+          "rationale": "Underlying validation predicate: norm = posixpath.normpath(name); returns True when norm != name, norm == '.', norm.startswith('..') or norm.startswith('/'). Correctly rejects non-normalized, dot-prefixed and absolute inputs, so no traversal-shaped artifact_path passes verify_artifact_path."
+        }
+      ],
+      "role_classification_counts": {
+        "sanitizer/tp": 2,
+        "sink/fp": 18
+      }
+    }
+  ],
+  "counts": {
+    "total_entries": 343,
+    "csv_candidates_processed": 341,
+    "duplicates_removed": 0,
+    "added_sanitizer_entries": 2,
+    "by_role": {
+      "source": 24,
+      "summary": 12,
+      "none": 13,
+      "sink": 292,
+      "sanitizer": 2
+    },
+    "by_classification": {
+      "tp": 42,
+      "fp": 289,
+      "candidate": 12
+    }
+  }
+}
