@@ -1,0 +1,413 @@
+{
+  "run_id": "paddle-iris-pass2-llm-triage-20261016",
+  "pass_id": 2,
+  "cwes": ["078"],
+  "generated_at": "2026-10-16T00:00:00+00:00",
+  "model": "glm-5.3",
+  "task": "Independent LLM path re-review (Augur WORKFLOW.md contextual path triage) of every formal CWE-78 taint path in the Paddle IRIS/Augur Pass-2 SARIF, verified directly against the real Python source, plus a ground-truth hit check for the known get_online_pass_interval command-injection vulnerability (commit 49bec176).",
+  "inputs": [
+    "iris/results/pass2.sarif (formal query py/augur/Paddle/pass2-command-injection; 10 results, invocation executionSuccessful=true)",
+    "iris/report/iris_report.md (10 candidate findings, 0 likely TP, 0 likely FP by heuristics)",
+    "iris/labels/labels.json (11 source / 13 sink / 2 summary entries, all classification=candidate, 0 sanitizer)",
+    "iris/report/query_generation_notes.md (source/sink/summary modeling, diagnostics-vs-formal split)",
+    "Paddle source tree: C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/Paddle_vuln (sha e64a054ff6b3964070fb2eb24c9aace4db5965eb; python/paddle/utils/cpp_extension/extension_utils.py, python/paddle/utils/cpp_extension/cpp_extension.py, python/paddle/incubate/distributed/fleet/fleet_util.py)"
+  ],
+  "provenance": {
+    "ground_truth_usage": "none during per-alert triage. The 10 formal alerts were judged solely from the SARIF codeFlows and direct reading of the Python source. PyVul vulnerability ground truth (confirmed_vulns.json, vulnerability_audit_report.md in the source root), fix commits and CVE advisories were NOT read. The ground-truth hit check in section ground_truth_hit_check uses only the commit record supplied verbatim in the task prompt (commit 49bec176, get_online_pass_interval); the pre-fix code it shows was independently re-verified in the tree at fleet_util.py:1290-1340.",
+    "modifications": "none. pass2.sarif, labels/, queries/, libraries/ and diagnostics/ were not touched; the only file written is this report/llm_triage.json. A temporary codeflow dump (iris/codeflows_dump.txt) created during analysis was deleted afterwards."
+  },
+  "formal_query_triage": {
+    "sarif": "iris/results/pass2.sarif",
+    "rule_id": "py/augur/Paddle/pass2-command-injection",
+    "alert_count": 10,
+    "analysis_status": "CodeQL 分析成功 (invocations[0].executionSuccessful = true), 本轮命中 10 条正式 CWE-78 污点路径 (SARIF 每条均带 codeFlows, 无一为纯解析诊断)。10 条全部为 candidate 级告警, 且全部聚集在 python/paddle/utils/cpp_extension 的两条链上: (A) PADDLE_EXTENSION_DIR 环境变量 -> build 目录 -> _jit_compile/run_cmd -> check_call(shell=True); (B) CXX 环境变量 -> check_abi_compatibility -> check_output。",
+    "source_model": "MySources::envReadSource (Tier-A env reads): os.environ.get('PADDLE_EXTENSION_DIR') at extension_utils.py:915; os.environ.get('CXX', ...) at cpp_extension.py:684 (Windows) / :686 (POSIX)",
+    "sink_model": "MySinks: exec-API sinks (subprocess.check_call arg0 shell=True at extension_utils.py:1390/:1393; subprocess.check_output arg0/argv-list at :1409/:1434/:1441) + wrapper-param sinks (_jit_compile file_path :1325, run_cmd command :1379, check_abi_compatibility compiler :1399)",
+    "verdict": "all_10_likely_fp",
+    "reason": "两条链的污点传播机制在代码层面均真实存在 (每个 hop 都经手工核对), 但所有 10 条告警的 source 都是本地进程环境变量 (PADDLE_EXTENSION_DIR / CXX), 由启动训练进程的同一用户设置。能写该用户环境变量的攻击者已经拥有该机器上的任意代码执行权, 不存在受害者/攻击者分离, 不构成真实的 CWE-78 攻击边界。两个变量本身都是文档化的配置开关 (构建目录选择 / 编译器选择), 属于项目正常支持的预定义功能。CXX 链的 sink 还全部不带 shell (argv 列表或程序名), 连 shell 元字符注入的形态都不具备。10 条告警均与本项目已知真实漏洞 (fleet_util.get_online_pass_interval) 无关。"
+  },
+  "records": [
+    {
+      "alert_id": "pass2-001",
+      "rule_id": "py/augur/Paddle/pass2-command-injection",
+      "sarif_index": 0,
+      "location": "python/paddle/utils/cpp_extension/extension_utils.py:1325",
+      "source": {
+        "kind": "environment_variable",
+        "label_family": "p2-src-environ-get (Tier-A env read)",
+        "env_var": "PADDLE_EXTENSION_DIR",
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:915"
+      },
+      "sink": {
+        "kind": "wrapper_parameter (_jit_compile file_path, label p2-snk-jit-compile)",
+        "terminal_exec": "f'cd {ext_dir} && {interpreter} {setup_file} build' -> run_cmd -> subprocess.check_call(shell=True) at :1390/:1393",
+        "shell": true,
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:1325"
+      },
+      "code_flow": [
+        "extension_utils.py:915 - root_extensions_directory = os.environ.get('PADDLE_EXTENSION_DIR') [source]",
+        "extension_utils.py:936 - return root_extensions_directory (get_build_directory)",
+        "cpp_extension.py:894 - build_directory = get_build_directory(verbose)  (load() 内, build_directory 参数为 None 的默认分支)",
+        "cpp_extension.py:897 - build_directory = os.path.abspath(build_directory) (不清洗元字符)",
+        "cpp_extension.py:901 - file_path = os.path.join(build_directory, f'{name}_setup.py')",
+        "cpp_extension.py:939 - _jit_compile(file_path, verbose)",
+        "extension_utils.py:1325 - _jit_compile(file_path) 形参 [报告的 sink 节点]"
+      ],
+      "checklist": {
+        "q1_source_attacker_controlled": "否。PADDLE_EXTENSION_DIR 是本地进程环境变量, 由启动进程的用户自己 export; 不是网络消息、请求参数或任何外部输入边界。按 labels 的宽威胁模型 ('调用用户即边界') 名义在模内, 但设置环境变量的人本就拥有任意代码执行, 无攻击者/受害者分离。",
+        "q2_propagation_real": "是。每个 hop 均为真实代码: 915 env 读 -> 936 返回 -> 894 调用 -> 897 abspath (不中和元字符) -> 901 os.path.join -> 939 传参 -> 1325 形参。无模型虚构边。",
+        "q3_sink_executes_command": "是 (间接)。报告节点 1325 是 _jit_compile 的 file_path 形参 (wrapper sink); 终端执行在 :1390/:1393 check_call(compile_cmd, shell=True), compile_cmd = f'cd {ext_dir} && {interpreter} {setup_file} build' (:1349/:1351), 确实经 /bin/sh 解释执行。",
+        "q4_command_influenced": "是。ext_dir/setup_file 由 env 控制的 build 目录派生, f-string 内无任何引号/转义; PADDLE_EXTENSION_DIR='/x; cmd' 中的元字符会被 shell 解释。",
+        "q5_protections": "无。全链路无 shlex.quote/白名单/元字符过滤 (MySanitizers 为 none()); get_build_directory 仅做 os.path.exists/makedirs, abspath 不清洗 shell 元字符。",
+        "q6_predefined_feature": "基本是。PADDLE_EXTENSION_DIR 是文档化配置 ('export PADDLE_EXTENSION_DIR=XXX', docstring :899), 用于选择自定义算子构建目录; 在用户选定的目录里执行 setup.py build 是设计功能。注入成立需要用户在自己的环境变量里放 shell 元字符 —— 自伤场景。",
+        "q7_over_approximation": "路径真实可达 (cpp_extension.load() 默认分支, 常规用法即触发), 但 'attacker-influenced' 前提来自 Tier-A env-read 源模型的宽近似, 而非真实外部边界。"
+      },
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": false,
+      "confidence": 0.7,
+      "reason": "污点传播与终端 shell=True 执行均真实 (q2/q3/q4 均为是), 但作为 CWE-78 漏洞不成立: 唯一可控输入是用户自己设置的本机环境变量, 能设它的人无需注入即可执行任意命令, 不存在越权边界; 且该变量是文档化的构建目录配置, 属正常支持功能 (q1/q6)。判定 likely_fp。",
+      "residual_risk": "潜在注入点: 若未来代码把不可信数据写入该 env 或在共享/受限环境中运行 (如多租户容器、由远端配置下发 env 的平台), f-string 无转义 + shell=True 的注入立即成立。建议对 ext_dir/setup_file 使用 shlex.quote 或列表参数去掉 shell=True。",
+      "formal_query_status": "正式 pass2.sarif 结果 (10 条之一)。"
+    },
+    {
+      "alert_id": "pass2-002",
+      "rule_id": "py/augur/Paddle/pass2-command-injection",
+      "sarif_index": 1,
+      "location": "python/paddle/utils/cpp_extension/extension_utils.py:1379",
+      "source": {
+        "kind": "environment_variable",
+        "label_family": "p2-src-environ-get (Tier-A env read)",
+        "env_var": "PADDLE_EXTENSION_DIR",
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:915"
+      },
+      "sink": {
+        "kind": "wrapper_parameter (run_cmd command, label p2-snk-run-cmd)",
+        "terminal_exec": "subprocess.check_call(command, shell=True) at :1390 (verbose) / :1393 (非 verbose)",
+        "shell": true,
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:1379"
+      },
+      "code_flow": "与 pass2-001 相同的源链 (915 -> 936 -> cpp_extension.py:894/897/901/939 -> 1325), 之后 1325 file_path -> 1329 ext_dir / 1330 setup_file -> 1349/1351 compile_cmd f-string -> 1354 run_cmd(compile_cmd) -> 1379 command 形参 (3 条 codeFlow 分别对应直接 compile_cmd、经 ext_dir、经 setup_file 三条汇聚边)",
+      "checklist": {
+        "q1_source_attacker_controlled": "否 (同 pass2-001: 本地 env, 无外部边界)。",
+        "q2_propagation_real": "是。3 条 codeFlow 的每一步都有真实代码对应: dirname/basename (1329/1330)、f-string 插值 (1349/1351)、run_cmd 传参 (1354->1379); jitCompileStep 桥接的正是文档过的 dirname/basename hop, 与真实代码一致。",
+        "q3_sink_executes_command": "是 (间接)。1379 是 run_cmd 的 command 形参 (wrapper sink); 终端 check_call(command, shell=True) 在 :1390/:1393 单独告警 (pass2-004/005)。",
+        "q4_command_influenced": "是 (compile_cmd 的 ext_dir/setup_file 部分)。",
+        "q5_protections": "无 (同 pass2-001)。",
+        "q6_predefined_feature": "是。run_cmd 是 cpp_extension 的内部构建命令执行器, 执行的是固定的 'cd {ext_dir} && {interpreter} {setup_file} build' 骨架, 属正常支持功能。",
+        "q7_over_approximation": "同 pass2-001: 传播真实, 攻击者前提来自 env 源模型宽近似。"
+      },
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": false,
+      "confidence": 0.7,
+      "reason": "与 pass2-001 同一条链在 run_cmd 形参层的重复报告 (同一 source、同一终端执行, 只是 sink 节点取在 wrapper 参数上)。判定理由相同: 传播真实, 但唯一可控输入是用户本机 env, 无越权边界, 属文档化配置功能。likely_fp。",
+      "residual_risk": "同 pass2-001; 另注: 本条与 pass2-001/004/005 实为同一污点链的 4 个不同 sink 节点, 汇报时应合并为 1 个问题。",
+      "formal_query_status": "正式 pass2.sarif 结果 (10 条之一)。"
+    },
+    {
+      "alert_id": "pass2-003",
+      "rule_id": "py/augur/Paddle/pass2-command-injection",
+      "sarif_index": 2,
+      "location": "python/paddle/utils/cpp_extension/extension_utils.py:1390",
+      "source": {
+        "kind": "environment_variable",
+        "label_family": "p2-src-environ-get (Tier-A env read)",
+        "env_var": "PADDLE_EXTENSION_DIR",
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:915"
+      },
+      "sink": {
+        "kind": "subprocess.check_call(arg 0, shell=True, verbose 分支) — 终端执行",
+        "shell": true,
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:1389-1391",
+        "snippet": "return subprocess.check_call(command, shell=True, stderr=subprocess.STDOUT)"
+      },
+      "code_flow": "同 pass2-001 源链 -> 1325 -> 1349/1351 compile_cmd -> 1354 run_cmd(compile_cmd) -> 1379 command -> 1390 check_call(command, shell=True) [终端 sink]",
+      "checklist": {
+        "q1_source_attacker_controlled": "否 (本地 env, 同前)。",
+        "q2_propagation_real": "是 (全链真实代码, 同 pass2-001)。",
+        "q3_sink_executes_command": "是。check_call(command, shell=True) 经 shell 解释执行整个命令字符串, 是真实的系统命令执行点。",
+        "q4_command_influenced": "是。command = f'cd {ext_dir} && {interpreter} {setup_file} build', ext_dir/setup_file 由 PADDLE_EXTENSION_DIR 派生且无转义; 元字符 (;/&&/反引号/$()) 会被解释。这是 10 条告警中机制上最强的一条。",
+        "q5_protections": "无。无 quoting、无白名单、无元字符过滤; 命令骨架固定但插值段未净化。",
+        "q6_predefined_feature": "是。这是 cpp_extension JIT 编译自定义算子的标准流程, 在用户自己配置的构建目录中运行 setup.py build。",
+        "q7_over_approximation": "路径真实且默认可达; 攻击者可控性来自 env-read 源模型对 '本地用户=攻击者' 的宽近似。"
+      },
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": false,
+      "confidence": 0.65,
+      "reason": "机制层面是最强的一条: 真实 shell=True 终端 + 无转义的 env 派生插值 (q3/q4/q5 全部成立)。但 end-to-end 攻击不成立: 唯一污点入口 PADDLE_EXTENSION_DIR 是本机环境变量, 设置者已拥有任意代码执行, 不存在受害者/受害者分离, 且为文档化配置功能 (q1/q6)。按判定准则记 likely_fp, 置信度略低 (0.65) 以反映其真实的未转义 shell 形态 —— 若实验采用 'env 即不可信源' 的严格策略, 本条会是模内 TP 候选。",
+      "residual_risk": "真实潜在注入点 (latent): 一旦 env 值可被非本机用户影响 (配置下发平台、多租户共享环境、CI 注入), 注入立即成立。建议 shlex.quote(ext_dir)/shlex.quote(setup_file) 或列表参数去 shell。",
+      "formal_query_status": "正式 pass2.sarif 结果 (10 条之一)。"
+    },
+    {
+      "alert_id": "pass2-004",
+      "rule_id": "py/augur/Paddle/pass2-command-injection",
+      "sarif_index": 3,
+      "location": "python/paddle/utils/cpp_extension/extension_utils.py:1393",
+      "source": {
+        "kind": "environment_variable",
+        "label_family": "p2-src-environ-get (Tier-A env read)",
+        "env_var": "PADDLE_EXTENSION_DIR",
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:915"
+      },
+      "sink": {
+        "kind": "subprocess.check_call(arg 0, shell=True, 非 verbose 分支) — 终端执行",
+        "shell": true,
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:1393",
+        "snippet": "return subprocess.check_call(command, shell=True, stdout=DEVNULL)"
+      },
+      "code_flow": "同 pass2-003, 仅 run_cmd 的非 verbose 分支 (1393)。",
+      "checklist": {
+        "q1_source_attacker_controlled": "否 (同 pass2-003)。",
+        "q2_propagation_real": "是 (同 pass2-003)。",
+        "q3_sink_executes_command": "是 (check_call shell=True)。",
+        "q4_command_influenced": "是 (同 pass2-003)。",
+        "q5_protections": "无 (同 pass2-003; stdout=DEVNULL 只是静默, 非净化)。",
+        "q6_predefined_feature": "是 (同 pass2-003)。",
+        "q7_over_approximation": "同 pass2-003。"
+      },
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": false,
+      "confidence": 0.65,
+      "reason": "与 pass2-003 为同一终端 sink 的 verbose/非 verbose 两个分支 (1389-1391 与 1393), 判定与置信度完全相同: 真实的未转义 shell 执行, 但污点入口是用户本机 env, 无攻击边界。likely_fp。",
+      "residual_risk": "同 pass2-003。",
+      "formal_query_status": "正式 pass2.sarif 结果 (10 条之一)。"
+    },
+    {
+      "alert_id": "pass2-005",
+      "rule_id": "py/augur/Paddle/pass2-command-injection",
+      "sarif_index": 4,
+      "location": "python/paddle/utils/cpp_extension/extension_utils.py:1399",
+      "source": {
+        "kind": "environment_variable",
+        "label_family": "p2-src-environ-get (Tier-A env read)",
+        "env_var": "CXX (默认 'cl' on Windows / 'c++' on POSIX)",
+        "location": "python/paddle/utils/cpp_extension/cpp_extension.py:684 (Windows) / :686 (POSIX)"
+      },
+      "sink": {
+        "kind": "wrapper_parameter (check_abi_compatibility compiler, label p2-snk-check-abi)",
+        "terminal_exec": "subprocess.check_output(['which', compiler]) :1408-1410 / [compiler, '-dumpfullversion', '-dumpversion'] :1433-1435 / (Windows) check_output(compiler) :1440-1442 — 全部不带 shell",
+        "shell": false,
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:1399"
+      },
+      "code_flow": [
+        "cpp_extension.py:684/686 - compiler = os.environ.get('CXX', 'cl'/'c++') [source, _check_abi 内]",
+        "cpp_extension.py:688 - check_abi_compatibility(compiler)",
+        "extension_utils.py:1399 - check_abi_compatibility(compiler) 形参 [报告的 sink 节点]"
+      ],
+      "checklist": {
+        "q1_source_attacker_controlled": "否。CXX 是标准编译器选择环境变量, 由本机用户设置; 能设它的人本可直接运行任意程序。",
+        "q2_propagation_real": "是。684/686 env 读 -> 688 调用 -> 1399 形参, 每步真实代码; _check_abi 由构建命令 run() (cpp_extension.py:408) 调用, 在 cpp_extension.load() 触发的 setup.py build 子进程中执行, 可达性真实。",
+        "q3_sink_executes_command": "是, 但均为不带 shell 的 check_output (argv 列表或程序名)。报告节点 1399 是 wrapper 形参, 终端在 :1409/:1434/:1441 (另 5 条告警)。",
+        "q4_command_influenced": "是 — compiler 值 (argv[0] 程序名或 which 的参数) 来自 CXX。",
+        "q5_protections": "无 shell 即无元字符解释; PADDLE_SKIP_CHECK_ABI (:1404) 可整体跳过检查但非净化。真正的 '保护' 是语义: 控制的是选择哪个程序, 而这正是 CXX 的文档化用途。",
+        "q6_predefined_feature": "是。用 CXX 选择编译器再对其执行 which/-dumpfullversion 是该函数的全部设计目的, 属正常支持的预定义功能。",
+        "q7_over_approximation": "路径真实可达; 'attacker-influenced' 完全来自 env 源模型的宽近似。"
+      },
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": true,
+      "confidence": 0.8,
+      "reason": "source 为本机 env (无边界), sink 无 shell (无元字符注入形态), 且 '控制 compiler 值' 等于 '用 CXX 选择编译器' —— 这正是文档化功能本身。即使按最宽威胁模型, 也只是 '让用户运行自己指定的程序', 不构成命令注入。q1 否 + q6 是, 判定 likely_fp。",
+      "residual_risk": "低。若存在 env 由不可信方下发的部署场景, CXX 直接指定被执行程序 (argv[0] 于 :1434, Windows :1441 直接执行) —— 属任意程序执行而非 shell 注入; 防御上可对 compiler 做白名单校验 (_expected_compiler_current_platform 已存在类似机制, 仅用于告警)。",
+      "formal_query_status": "正式 pass2.sarif 结果 (10 条之一)。"
+    },
+    {
+      "alert_id": "pass2-006",
+      "rule_id": "py/augur/Paddle/pass2-command-injection",
+      "sarif_index": 5,
+      "location": "python/paddle/utils/cpp_extension/extension_utils.py:1409",
+      "source": {
+        "kind": "environment_variable",
+        "env_var": "CXX",
+        "location": "python/paddle/utils/cpp_extension/cpp_extension.py:684/686"
+      },
+      "sink": {
+        "kind": "subprocess.check_output argv 元素 (['which', compiler] 的 compiler, POSIX 分支) — 终端执行",
+        "shell": false,
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:1408-1410",
+        "snippet": "cmd_out = subprocess.check_output(['which', compiler], stderr=subprocess.STDOUT)"
+      },
+      "code_flow": "cpp_extension.py:684/686 (env CXX) -> 688 -> extension_utils.py:1399 形参 -> 1409 ['which', compiler] 的 compiler 元素 [终端 sink]",
+      "checklist": {
+        "q1_source_attacker_controlled": "否 (本机 env CXX, 同 pass2-005)。",
+        "q2_propagation_real": "是 (684/686 -> 688 -> 1399 -> 1409, 全真实代码)。",
+        "q3_sink_executes_command": "是, 但无 shell: check_output 的 argv 列表, compiler 只是 which 的参数, 不被任何 shell 解释。",
+        "q4_command_influenced": "是 (which 的查询参数)。",
+        "q5_protections": "无 shell 即无元字符注入; which 只回显路径。",
+        "q6_predefined_feature": "是 (CXX 编译器选择的组成部分)。",
+        "q7_over_approximation": "路径真实; 攻击者前提为 env 源模型宽近似。"
+      },
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": true,
+      "confidence": 0.85,
+      "reason": "污点值只是无 shell 的 which 的查询参数, 既无元字符解释面, 也无程序选择面; 即使 CXX 完全受控, 'which <任意串>' 最多回显一个路径。加上 source 无攻击边界, 判定 likely_fp, 置信度高。",
+      "residual_risk": "可忽略。",
+      "formal_query_status": "正式 pass2.sarif 结果 (10 条之一)。"
+    },
+    {
+      "alert_id": "pass2-007",
+      "rule_id": "py/augur/Paddle/pass2-command-injection",
+      "sarif_index": 6,
+      "location": "python/paddle/utils/cpp_extension/extension_utils.py:1409",
+      "source": {
+        "kind": "environment_variable",
+        "env_var": "CXX",
+        "location": "python/paddle/utils/cpp_extension/cpp_extension.py:684/686"
+      },
+      "sink": {
+        "kind": "subprocess.check_output 的 List 节点 (['which', compiler] 整个列表 — containerStep 元素->列表污点建模)",
+        "shell": false,
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:1408-1410"
+      },
+      "code_flow": "与 pass2-006 完全相同, 仅 sink 节点取列表整体而非 compiler 元素。",
+      "checklist": {
+        "q1_source_attacker_controlled": "否 (同 pass2-006)。",
+        "q2_propagation_real": "是 (同 pass2-006)。",
+        "q3_sink_executes_command": "是, 无 shell (argv 列表)。",
+        "q4_command_influenced": "是 (列表的第 2 个元素)。",
+        "q5_protections": "无 shell。",
+        "q6_predefined_feature": "是。",
+        "q7_over_approximation": "本条是 pass2-006 的建模性重复: 查询对同一 sink 调用同时匹配 '列表元素' 与 '列表节点' 两种危险参数形态, 产生同位置双告警。"
+      },
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": true,
+      "confidence": 0.85,
+      "reason": "与 pass2-006 为同一代码位置、同一污点的重复告警 (列表节点 vs 列表元素双建模), 判定相同; 建议在汇总时与 pass2-006 合并。likely_fp。",
+      "residual_risk": "可忽略。",
+      "formal_query_status": "正式 pass2.sarif 结果 (10 条之一); 与 pass2-006 重复。"
+    },
+    {
+      "alert_id": "pass2-008",
+      "rule_id": "py/augur/Paddle/pass2-command-injection",
+      "sarif_index": 7,
+      "location": "python/paddle/utils/cpp_extension/extension_utils.py:1434",
+      "source": {
+        "kind": "environment_variable",
+        "env_var": "CXX",
+        "location": "python/paddle/utils/cpp_extension/cpp_extension.py:684/686"
+      },
+      "sink": {
+        "kind": "subprocess.check_output argv[0] 程序名 ([compiler, '-dumpfullversion', '-dumpversion'], Linux 分支) — 终端执行",
+        "shell": false,
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:1433-1435",
+        "snippet": "version_info = subprocess.check_output([compiler, '-dumpfullversion', '-dumpversion'])"
+      },
+      "code_flow": "cpp_extension.py:684/686 (env CXX) -> 688 -> extension_utils.py:1399 形参 -> 1434 列表首元素 [终端 sink]",
+      "checklist": {
+        "q1_source_attacker_controlled": "否 (本机 env CXX)。",
+        "q2_propagation_real": "是 (全真实代码)。",
+        "q3_sink_executes_command": "是, 但无 shell: compiler 是被执行的程序名, 参数固定为 -dumpfullversion/-dumpversion。",
+        "q4_command_influenced": "是 — 程序选择受 CXX 影响 (而非命令内容/元字符)。",
+        "q5_protections": "无 shell, 无元字符面; 后续仅对输出做正则版本解析。",
+        "q6_predefined_feature": "是。'运行 CXX 指定的编译器以查询版本' 正是该函数的设计目的; CXX 是编译器选择的文档化机制。",
+        "q7_over_approximation": "路径真实; 攻击模型为 env 宽近似。"
+      },
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": true,
+      "confidence": 0.85,
+      "reason": "受控值决定的是 '运行哪个程序' 而非 '注入什么命令', 且这正是 CXX 的文档化用途; source 又无攻击边界 (用户能设 CXX 就能直接运行任意程序)。不构成 CWE-78 注入。likely_fp。",
+      "residual_risk": "低。极端场景 (env 由不可信方下发) 下等于让该方指定任意可执行文件, 属信任 env 的问题而非本代码缺陷。",
+      "formal_query_status": "正式 pass2.sarif 结果 (10 条之一)。"
+    },
+    {
+      "alert_id": "pass2-009",
+      "rule_id": "py/augur/Paddle/pass2-command-injection",
+      "sarif_index": 8,
+      "location": "python/paddle/utils/cpp_extension/extension_utils.py:1434",
+      "source": {
+        "kind": "environment_variable",
+        "env_var": "CXX",
+        "location": "python/paddle/utils/cpp_extension/cpp_extension.py:684/686"
+      },
+      "sink": {
+        "kind": "subprocess.check_output 的 List 节点 ([compiler, '-dumpfullversion', '-dumpversion'] 整体)",
+        "shell": false,
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:1433-1435"
+      },
+      "code_flow": "与 pass2-008 完全相同, 仅 sink 节点取列表整体。",
+      "checklist": "同 pass2-008 (q1 否, q2 是, q3 是-无 shell, q4 是-程序名, q5 无 shell, q6 是, q7 列表节点/元素双建模重复)",
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": true,
+      "confidence": 0.85,
+      "reason": "pass2-008 的列表节点重复告警, 判定相同; 汇总时应合并。likely_fp。",
+      "residual_risk": "同 pass2-008。",
+      "formal_query_status": "正式 pass2.sarif 结果 (10 条之一); 与 pass2-008 重复。"
+    },
+    {
+      "alert_id": "pass2-010",
+      "rule_id": "py/augur/Paddle/pass2-command-injection",
+      "sarif_index": 9,
+      "location": "python/paddle/utils/cpp_extension/extension_utils.py:1441",
+      "source": {
+        "kind": "environment_variable",
+        "env_var": "CXX (Windows 默认 'cl')",
+        "location": "python/paddle/utils/cpp_extension/cpp_extension.py:684"
+      },
+      "sink": {
+        "kind": "subprocess.check_output(compiler) — Windows 分支, 标量程序名, 无 shell — 终端执行",
+        "shell": false,
+        "location": "python/paddle/utils/cpp_extension/extension_utils.py:1440-1442",
+        "snippet": "compiler_info = subprocess.check_output(compiler, stderr=subprocess.STDOUT)"
+      },
+      "code_flow": "cpp_extension.py:684 (env CXX, Windows 分支) -> 688 -> extension_utils.py:1399 形参 -> 1441 check_output(compiler) [终端 sink]",
+      "checklist": {
+        "q1_source_attacker_controlled": "否 (本机 env CXX)。",
+        "q2_propagation_real": "是 (684 -> 688 -> 1399 -> 1441, Windows-only 分支, 真实代码)。",
+        "q3_sink_executes_command": "是, 但无 shell=True: Windows 下 check_output(标量) 将其作为程序名/命令行交给 CreateProcess, 无 cmd.exe 元字符解释。",
+        "q4_command_influenced": "是 — 被执行的程序名受 CXX 影响。",
+        "q5_protections": "无 shell 元字符面; 输出仅做版本正则解析。",
+        "q6_predefined_feature": "是 (运行 CXX 指定的编译器取版本信息, 设计目的)。",
+        "q7_over_approximation": "路径真实 (Windows 分支); 攻击模型为 env 宽近似。"
+      },
+      "verdict": "likely_fp",
+      "source_is_false_positive": true,
+      "sink_is_false_positive": true,
+      "confidence": 0.8,
+      "reason": "与 pass2-008 同理: 受控的是程序选择而非命令内容, 且这正是 CXX 的文档化用途; source 无攻击边界。Windows 标量形式虽直接把 compiler 当命令行, 但无 shell 解释, 不构成注入。likely_fp。",
+      "residual_risk": "同 pass2-008 (信任 env 问题)。",
+      "formal_query_status": "正式 pass2.sarif 结果 (10 条之一)。"
+    }
+  ],
+  "ground_truth_hit_check": {
+    "task": "检验本项目真实存在的漏洞 (commit 49bec176053595975c1941cff9749c55f7203ea9, CWE-78, FleetUtil.get_online_pass_interval) 是否被本轮候选路径命中。",
+    "target": {
+      "commit": "https://github.com/PaddlePaddle/Paddle/commit/49bec176053595975c1941cff9749c55f7203ea9",
+      "cwe": "CWE-78",
+      "function": "FleetUtil.get_online_pass_interval",
+      "vulnerable_location": "python/paddle/incubate/distributed/fleet/fleet_util.py:1320-1321",
+      "vulnerable_code_verified_in_tree": "days = os.popen(\"echo -n \" + days).read().split(\" \")  /  hours = os.popen(\"echo -n \" + hours).read().split(\" \")  — 树中代码与 commit 的 code_before 逐字一致 (预修复状态, 修复加入的 assert 在树中不存在)。函数完整定义于 fleet_util.py:1290-1355。",
+      "attack_surface": "公开 API 形参 days/hours (文档示例 days='{20190720..20190729}') 直接拼接进 os.popen 的 shell 字符串, 无任何转义/白名单。"
+    },
+    "verdict": "miss",
+    "candidate_paths_hit": false,
+    "analysis": [
+      "未命中: 正式 SARIF 的 10 条告警全部位于 python/paddle/utils/cpp_extension/ (extension_utils.py / cpp_extension.py), 唯一涉及的两个文件即该模块 (codeFlows 全量核对); 无任何告警位于 fleet_util.py, 无任何污点路径触及 get_online_pass_interval 的 days/hours。",
+      "命中失败的第一原因 (源侧覆盖缺口, 已被实验自身记录): days/hours 是公开 API 的函数形参, Phase-1 语法抽取无法将其提取为 source 候选 (labels.json metadata 'Source-side coverage gaps' 明确列有 fleet_util.get_online_pass_interval days/hours); 按任务指令它们仅作为 diagnostics-only 种子 (MySources publicApiParamSource, 限 command_injection_diagnostics key), 永不进入正式查询。",
+      "第二原因 (无库内传播路径): 全仓库 grep 确认 get_online_pass_interval 在树内只有定义 (fleet_util.py:1290) 与 docstring 示例 (:1312) 两处出现, 没有任何库内调用点; 因此 7 类正式源 (sys.argv / argparse / Tier-A env / getenv_or_backup / json 配置 / etcd / socket.recv) 与该 sink 之间不存在可达数据流 —— 污点只能经由仓库外的下游用户代码以参数形式传入, 超出 CodeQL DB 的分析范围。",
+      "第三原因 (诊断查询未运行/未保存): 能覆盖该路径的唯一手段是 diagnostics 查询 (其 publicApiParamSource 显式 seed 了 days/hours 形参, 预期产出 fleet_util.py:1320/:1321 的 wrapper 参数传播告警); 但 results/ 目录下只有 pass2.sarif, 没有 pass2_diagnostics.sarif —— 本轮诊断结果缺失 (且即使存在也按约定不计入正式检出)。",
+      "sink 侧本身是覆盖到的: labels.json p2-snk-os-popen 明确收录 fleet_util.py:1320/:1321 (逐行判定 tp 0.7, labels_raw_pass2.json), MySinks 的 os.popen 家族也覆盖该位置。缺口纯粹在 source 侧 (公开 API 形参不入正式源)。",
+      "结论: 本轮候选路径与真实漏洞完全不相交 —— 真实漏洞的攻击面是 '库公开 API 的调用方参数 -> shell', 而本轮 10 条候选的攻击面是 '本机 env -> 构建/编译命令', 两者在文件、函数、污点入口上均无交集。"
+    ],
+    "what_would_have_been_needed": "要将该漏洞纳入正式检出, 需要 (a) 把公开 API 形参 (get_online_pass_interval days/hours, download url, pslib model_path 等 labels 记录的覆盖缺口) 升级为正式 source (param-source), 或 (b) 由诊断查询产出并按某规则采纳其结果; 同时由于库内无调用方, 任何方案都依赖 '形参即攻击者输入' 的库式威胁模型 (与本项目 labels 采用的调用用户边界一致)。"
+  },
+  "summary": {
+    "formal_alert_count": 10,
+    "verdicts": {
+      "likely_tp": 0,
+      "likely_fp": 10,
+      "uncertain": 0
+    },
+    "distinct_taint_chains": 2,
+    "distinct_taint_chains_detail": "链 A (pass2-001..004): PADDLE_EXTENSION_DIR env -> get_build_directory -> load() file_path -> _jit_compile -> compile_cmd f-string -> run_cmd -> check_call(shell=True); 同一污点链在 4 个 sink 节点上重复告警。链 B (pass2-005..010): CXX env -> _check_abi -> check_abi_compatibility -> check_output(无 shell, argv/程序名); 同一链在 6 个 sink 节点上重复告警 (含 2 对列表节点/元素双报)。",
+    "codeql_status": "CodeQL 分析成功 (executionSuccessful=true), 本轮命中 10 条正式 CWE-78 污点路径 (非纯解析诊断); 全部经逐条 codeFlow 复核后判为 likely_fp —— 污点传播机制真实, 但 source 均为本机用户自设的环境变量 (无攻击者/受害者分离), 且 CXX 链的 sink 不带 shell。无一条对应外部可影响输入边界。",
+    "ground_truth": "已知真实漏洞 (get_online_pass_interval, commit 49bec176) 未被候选路径命中 (miss): 10 条候选全部在 cpp_extension 模块, 与 fleet_util.py:1320/:1321 的 os.popen(days/hours) 污点链无任何交集; 根因是公开 API 形参未入正式源 (labels 记录的覆盖缺口) 且该函数在库内无调用方, 诊断查询结果亦缺失。",
+    "notes": "本轮未读取 PyVul 漏洞真值、修复提交与 CVE 公告; ground_truth_hit_check 仅使用任务提示中给出的 commit 记录, 并在源码树中独立复核了预修复代码的存在。原始 SARIF、labels 与查询未做任何修改。"
+  }
+}

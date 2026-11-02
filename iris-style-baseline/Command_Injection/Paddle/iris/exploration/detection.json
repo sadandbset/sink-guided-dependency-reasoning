@@ -1,0 +1,155 @@
+{
+  "project": "Paddle (PaddlePaddle deep-learning framework, Python package)",
+  "run_stage": "Phase 1 / Step 1-2 (explore and detect; source/sink candidate extraction queries)",
+  "detected_language": "python",
+  "language_evidence": {
+    "database_metadata": "primaryLanguage: python (Paddle-db/codeql-database.yml, cliVersion 2.25.1, sha e64a054ff6b3964070fb2eb24c9aace4db5965eb, baselineLinesOfCode 953722)",
+    "file_extensions": "937 .py files under python/paddle/ (the shipped framework package); additional .py trees under tools/ (CI/build scripts), test/ and python/unittest_py/ (tests)",
+    "build_manifests": "pyproject.toml, setup.py, python/requirements.txt, python/setup.py.in"
+  },
+  "toolchain": {
+    "codeql_cli": "2.25.1 (unpacked at E:\\codeql)",
+    "python_pack": "codeql/python-all 7.1.x installed under ~/.codeql/packages (qlpack.yml dependency: codeql/python-all)"
+  },
+  "selected_passes": [2],
+  "selected_cwes": ["CWE-78"],
+  "framework_candidates": [
+    {
+      "name": "argparse CLI (paddle.distributed.launch / fleet launch / elastic command)",
+      "kind": "cli",
+      "confidence": 0.95,
+      "score_breakdown": {
+        "import_evidence": 0.45,
+        "registration_evidence": 0.3,
+        "bootstrap_evidence": 0.2,
+        "layout_evidence": 0.0
+      },
+      "evidence": [
+        "python/paddle/distributed/launch/__main__.py: 'python -m paddle.distributed.launch' entry point dispatching to launch.main.launch()",
+        "python/paddle/distributed/launch/context/args_envs.py:57-178: base_group.add_argument(...) defines the full launch CLI surface (--master, --rank, --nnodes, --nproc_per_node, --log_dir, --run_mode, --job_id, --devices, --host, --servers, --trainers, 'training_script_args' REMAINDER, ...)",
+        "python/paddle/distributed/launch/context/args_envs.py:203-221: elastic_group.add_argument(--elastic_level/--elastic_timeout)",
+        "python/paddle/distributed/launch/context/args_envs.py:224: args = parser.parse_known_args(); env_rank = int(os.getenv('PADDLE_TRAINER_ID', -1))",
+        "python/paddle/distributed/elastic.py:47-57: argparse.ArgumentParser('Elastic Command') with --master/--job_id/action add_argument declarations",
+        "python/paddle/distributed/fleet/launch_utils.py:371-385: add_arguments(argname, ...) helper wrapping argparser.add_argument; consumed by fleet/launch.py",
+        "python/paddle/distributed/utils/launch_utils.py:360-373: same add_arguments helper for the legacy fleet launch parser",
+        "python/paddle/distributed/launch/controllers/ipu_controller.py:35-62: parser.add_argument(...) plus 'training_script_args' REMAINDER",
+        "112 add_argument(...) call sites total under python/paddle/"
+      ]
+    },
+    {
+      "name": "etcd-based elastic job manager",
+      "kind": "cluster_state_client",
+      "confidence": 0.55,
+      "score_breakdown": {
+        "import_evidence": 0.45,
+        "registration_evidence": 0.0,
+        "bootstrap_evidence": 0.1,
+        "layout_evidence": 0.0
+      },
+      "evidence": [
+        "python/paddle/distributed/elastic.py:21-24: import etcd3; etcd3.client(host=srv, port=port) parsed from --master=etcd://...",
+        "python/paddle/distributed/fleet/elastic/__init__.py:52-54: import etcd3; etcd3.client(...)",
+        "python/paddle/distributed/launch/controllers/master.py:194: import etcd3 (rendezvous master)",
+        "python/paddle/distributed/fleet/elastic/manager.py:221-304: self.etcd.get_prefix(...)/put(...)/add_watch_prefix_callback(...) - job/cluster state read from external etcd server"
+      ],
+      "note": "etcd carries cluster membership and node endpoints, not HTTP request parameters. It is modeled as an external input surface (etcd.get_prefix reads) rather than a request-driven framework."
+    },
+    {
+      "name": "http.server / web framework",
+      "kind": "web",
+      "confidence": 0.0,
+      "evidence": [],
+      "note": "No Flask/Django/FastAPI/Express-style request handlers exist under python/paddle/; no framework reference loaded."
+    }
+  ],
+  "primary_framework": "argparse CLI (paddle.distributed.launch / fleet launch / elastic command)",
+  "libraries_of_interest": [
+    {"name": "subprocess (stdlib)", "role": "process_execution", "evidence": ["43 subprocess.<exec> call sites under python/paddle/ (launch_utils, process_context, fleet utils, cpp_extension, nvsmi, download, graphviz, ...)"]},
+    {"name": "os (system/popen)", "role": "process_execution", "evidence": ["14 os.system/os.popen call sites (launch/main.py:989 'kill -9 '+pid, fleet role_maker.py:289/316, incubate fleet_util.py:382/383/1320/1321, pslib/__init__.py:814/834, base/core.py:75/83/91)"]},
+    {"name": "httpx", "role": "http_client", "evidence": ["python/paddle/utils/download.py:25 import httpx; :168 httpx.stream(...) for model/weight downloads; _wget_download fallback"]},
+    {"name": "etcd3", "role": "cluster_state_client", "evidence": ["python/paddle/distributed/elastic.py, fleet/elastic/__init__.py, launch/controllers/master.py"]},
+    {"name": "json (stdlib)", "role": "config_decode", "evidence": ["35 json.loads/json.load call sites (auto_tuner/utils.py, launch/controllers/*.py, fleet_util.py, profiler, quanter, ...)"]},
+    {"name": "shutil.which", "role": "path_lookup", "evidence": ["launch/utils/nvsmi.py:154/158 shutil.which('nvidia-smi'/'rocm-smi') - used as exec-existence check, not itself a sink"]},
+    {"name": "paddle.base.core (C extension bindings)", "role": "native_shell_exec", "evidence": ["python/paddle/distributed/fleet/utils/fs.py:506 core.shell_execute_cmd(exe_cmd, 0, 0, redirect_stderr) executes hadoop fs shell commands"]}
+  ],
+  "external_input_surfaces": [
+    {"family": "cli_arguments", "evidence": ["launch/context/args_envs.py: add_argument declarations + parse_known_args(); launch/controllers/master.py:107 cmd.extend(sys.argv[1:]) forwards raw CLI args into the launched command; fleet/launch.py:364,512,517 sys.argv[1:] slicing"], "notes": "primary attacker-relevant boundary for Pass 2: launch CLI options (--log_dir, --master, --devices, elastic_pre_hook ...) and training_script_args REMAINDER flow into process launch commands"},
+    {"family": "environment_variables", "evidence": ["306 os.getenv(...) and 184 os.environ references under python/paddle/; paddle/distributed/backup_env.py:21 getenv_or_backup(name, default) wrapper used by role_maker.py:871/1095, parallel.py:709/910, executor.py:635, elastic/manager.py:154"], "notes": "PADDLE_TRAINER_ENDPOINTS / PADDLE_TRAINER_ID / PADDLE_* training env carry peer-supplied cluster topology"},
+    {"family": "json_config", "evidence": ["35 json.loads/json.load sites, e.g. auto_tuner/utils.py (auto-tuning strategy config), launch/controllers/{collective,ps,rpc,master}.py (controller config), fleet_util.py (index/feature files)"], "notes": "decoded config/message objects parsed from files supplied by the user or cluster"},
+    {"family": "socket_peer_data", "evidence": ["python/paddle/distributed/auto_parallel/static/utils.py:1809,1829 rank = client_socket.recv(buff_size).decode() in get_cluster(); fleet/elastic/manager.py:341-351 socket bind/connect for port probing"], "notes": "rank/host data received over TCP from peer nodes"},
+    {"family": "etcd_cluster_state", "evidence": ["fleet/elastic/manager.py:242,264 self.etcd.get_prefix(self.node_prefix); :304 self.etcd.get(self.endpoints_path)"], "notes": "node lists / endpoints read from external etcd service"},
+    {"family": "file_input", "evidence": ["236 open(...) call sites under python/paddle/ (config, cache, index, metadata files; e.g. auto_tuner, download.py, cpp_extension source scanning)"], "notes": "kept as candidates; LLM labeling decides relevance"},
+    {"family": "http_download", "evidence": ["utils/download.py:168 httpx.stream(...); :185 req.iter_bytes(1024); _wget_download(url, ...) via wget subprocess"], "notes": "model/weight URLs come from user code (paddle.utils.download / hapi hub) and flow into a shell command in _wget_download"}
+  ],
+  "command_execution_sinks": [
+    {"api": "subprocess.Popen", "evidence": ["fleet/launch_utils.py:606/610/833/1679/1683/1787/1791/1855/1859/1946/1950 (distributed worker/server process launch)", "utils/launch_utils.py:492/494", "launch/utils/process_context.py:69 (ProcessContext._proc)", "auto_parallel/static/parallelizer.py:417, topology.py:21 (shell=True)", "fleet/base/util_factory.py:365", "fleet/elastic/manager.py:364 (shell=True, command = self.args.elastic_pre_hook)", "fleet/base/graphviz.py:94/106", "parameter_server_optimizer.py:267, ps_optimizer.py:184", "incubate fleet/utils.py:139", "utils/download.py:204 (shell=True, wget + URL)"]},
+    {"api": "subprocess.check_output", "evidence": ["utils/cpp_extension/extension_utils.py:676/718/810/1336/1408/1433/1440 (compiler/toolchain probing)", "launch/utils/nvsmi.py:66/88 (nvidia-smi/rocm-smi query)"]},
+    {"api": "subprocess.check_call", "evidence": ["utils/cpp_extension/extension_utils.py:1389/1393 (run_cmd wrapper, shell=True)", "base/framework.py:5570 (shell=True)"]},
+    {"api": "subprocess.run", "evidence": ["distributed/auto_tuner/prune.py:521 (shell=True)"]},
+    {"api": "os.system", "evidence": ["distributed/launch/main.py:989 os.system('kill -9 ' + pid) where pid comes from os.popen fuser output", "incubate/distributed/fleet/parameter_server/pslib/__init__.py:814/834 os.system(cmd)"]},
+    {"api": "os.popen", "evidence": ["base/core.py:75/83 (fixed diagnostic strings)", "fleet/base/role_maker.py:289/316, incubate fleet role_maker.py:996/1023 (fixed network diagnostic strings)", "launch/main.py:983 (fuser output feeding os.system)", "incubate fleet_util.py:382/383/1320/1321 (1320/1321 interpolate days/hours parameters into the shell string)"]},
+    {"api": "core.shell_execute_cmd (C++-backed shell exec)", "evidence": ["fleet/utils/fs.py:506 core.shell_execute_cmd(exe_cmd, 0, 0, redirect_stderr) where exe_cmd = f'{self._base_cmd} -{cmd}' (HDFSClient hadoop fs commands)"]},
+    {"api": "pexpect / os.execv / os.spawn* / asyncio.create_subprocess_*", "evidence": [], "notes": "not observed in python/paddle/; families included in the sink query per Pass 2 coverage policy and will simply yield no rows"}
+  ],
+  "project_internal_wrapper_functions": {
+    "sink_side": [
+      "python/paddle/base/core.py:184 run_shell_command(cmd) - wraps subprocess.Popen(..., shell=True); called at core.py:198/225/229 with ldd/grep shell strings",
+      "python/paddle/utils/cpp_extension/extension_utils.py:1381 run_cmd(command, verbose) - wraps subprocess.check_call(command, shell=True); called from cpp_extension build helpers",
+      "python/paddle/distributed/fleet/utils/fs.py:500 HDFSClient._run_cmd(cmd, ...) - wraps core.shell_execute_cmd for hadoop fs commands; called from fs.py:586/649/723/833/906/945 etc.",
+      "python/paddle/utils/download.py:196 _wget_download(url, fullname) - wraps subprocess.Popen(f'wget -O {tmp} {url}', shell=True)",
+      "python/paddle/distributed/launch/utils/process_context.py:69 ProcessContext - owns subprocess.Popen for launched training processes",
+      "python/paddle/distributed/launch/utils/nvsmi.py: query_nvidia_smi/query_rocm_smi - wrap subprocess.check_output of nvidia-smi/rocm-smi",
+      "python/paddle/distributed/fleet/elastic/manager.py:357 pre_hook() - passes self.args.elastic_pre_hook (CLI arg) to subprocess.Popen(..., shell=True)"
+    ],
+    "source_side": [
+      "python/paddle/distributed/launch/context/args_envs.py: parse function - argparse surface + os.getenv('PADDLE_TRAINER_ID') merging env into parsed args",
+      "python/paddle/distributed/backup_env.py:21 getenv_or_backup(name, default) - env-read wrapper used across distributed role makers",
+      "python/paddle/utils/download.py: _download/_wget_download entry points - user-supplied url/fname params",
+      "python/paddle/distributed/auto_parallel/static/utils.py: get_cluster - receives rank/host strings over TCP sockets"
+    ]
+  },
+  "reference_files_loaded": [
+    "references/patterns.md",
+    "references/python.md"
+  ],
+  "framework_references_loaded": [],
+  "framework_reference_decision": "No web framework detected. Per WORKFLOW.md 4.2.3, source/sink shapes were derived from repository code using the Python language reference only; assumptions recorded in this file.",
+  "extraction_scope": {
+    "included": "python/paddle/% (the shipped framework package: distributed launch/fleet/elastic tooling, utils, base, incubate, hapi)",
+    "excluded": [
+      "tools/% (CI/build automation scripts, not shipped with the wheel)",
+      "test/%, python/unittest_py/%, %/test.py, %/tests/% (tests/fixtures)",
+      "python/paddle/distributed/launch/plugins/test.py (launch smoke-test plugin)"
+    ]
+  },
+  "extraction_query_metadata": {
+    "kind_annotation": "none (deliberate)",
+    "reason": "These are raw BQRS extraction queries for 'codeql query run' + 'codeql bqrs decode' with a multi-column select. '@kind problem' is wrong for multi-column candidate rows and no '@kind table' exists for this purpose, so no @kind is annotated. SARIF-oriented metadata (@kind path-problem, @problem.severity error) is only used later for the Pass 2 taint query.",
+    "csv_columns": [
+      "node (AST element; decodes to file:line in BQRS)",
+      "candidate_kind (source_candidate | sink_candidate)",
+      "callable",
+      "flow_kind (param | arg | return | field)",
+      "receiver",
+      "moduleHint (never 'module' - reserved word avoided)",
+      "arg_index (-1 when not applicable)",
+      "file (repo-relative path)",
+      "line",
+      "exec_mode (sinks only: shell/arg-shape context)"
+    ]
+  },
+  "assumptions": [
+    "Paddle is a library/CLI framework, not a web service: the attacker-relevant input boundary is the process environment of the machine running Paddle - CLI arguments and training_script_args of 'python -m paddle.distributed.launch'/'fleet launch', environment variables (PADDLE_* cluster topology), JSON config files, socket/etcd peer data, and download URLs passed by user code. 'Attacker' control therefore means control by the invoking user/peer node, consistent with CWE-78 in a training-cluster setting.",
+    "Matching in both extraction queries is syntactic AST-shape matching (Call/Attribute/Subscript patterns). Resolving the callee to the real imported API (e.g. that 'Popen' really is subprocess.Popen) is deferred to LLM labeling, per the Augur candidate strategy.",
+    "Predefined distributed-launch functionality (launching the user's training script) is a designed feature and not automatically a vulnerability; the candidate rows preserve receiver/arg-index/shell-mode context so labeling and later triage can make that call.",
+    "os.popen/os.system sites with fixed diagnostic strings (role_maker route/ip probing, core.py cpuinfo probing) are kept as candidates; they are expected to be labeled sink/none based on their fixed operands.",
+    "The repository root contains audit-looking artifacts (vulnerability_audit_report.md, confirmed_vulns.json, cmd_sinks.csv, patches/). Per experiment constraints these were NOT read; this detection file is based solely on real source code under the repo."
+  ],
+  "coverage_limits": [
+    "No 'import subprocess as ...', 'import os as ...' or 'from subprocess import <exec>' aliases exist under python/paddle/ (only 'from subprocess import DEVNULL'), so module-attribute matching on the plain names 'subprocess'/'os' is sufficient; a from-import-verified direct-name branch is included anyway for robustness.",
+    "No json/os from-import aliases exist; json.loads/json.load and os.getenv are matched via their module-attribute forms only.",
+    "Dynamic dispatch (getattr-based command execution) was searched for and not observed; if a call target cannot be resolved syntactically it will not appear in the candidate set.",
+    "paddle.distributed.recv / stream.recv tensor-communication calls also match the '.recv(...)' socket family syntactically; they are emitted as candidates with their receiver expression and are expected to be labeled 'none' for CWE-78 (kept for recall, not pre-filtered).",
+    "C++-side command execution in paddle/ (outside the Python database) is out of scope for this Python CodeQL database; only Python-visible bindings such as core.shell_execute_cmd are covered."
+  ]
+}

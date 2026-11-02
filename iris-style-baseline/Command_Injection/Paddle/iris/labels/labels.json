@@ -1,0 +1,650 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "paddle-iris-phase1-step3-pass2-20261015",
+    "generated_at": "2026-10-15T11:30:01Z",
+    "language": "python",
+    "framework": "argparse CLI (paddle.distributed.launch / fleet launch / elastic command)",
+    "model": "glm-5.3",
+    "project": "Paddle",
+    "notes": [
+      "Phase 1 Step 3 labeling; experiment scope is Augur pass 2 narrowed to CWE-78 command injection (pass family 077/078/088 per WORKFLOW.md).",
+      "LLM: glm-5.3, 11 labeling batches (S1-S7 source families, K1-K4 sink clusters), 925 CSV candidates processed (858 source rows + 67 sink rows); zero rows dropped.",
+      "labels.json entries are signature-level and deduplicated from labels_raw_pass2.json (per-row audit artifact); 3 duplicate CSV rows (same callable+file+line) were collapsed during deduplication.",
+      "No sanitizer was labeled: no allow-list/escaping/metacharacter-neutralizing check was observed on any command construction path. startswith('hdfs:'/'afs:') prefix checks (pslib) select a branch but do not neutralize shell metacharacters; shlex.split + argv-list Popen (optimization_tuner.py:462/477, parallelizer.py:412-417) is a structural mitigation noted in rationales but was not a CSV candidate.",
+      "Pass 1 block is a deliberate empty placeholder: assets/labels_schema.json 'passes.contains' requires an entry with pass_id 1; pass 1 is outside this experiment's scope (detection.json selected_passes=[2]) so it carries no entries.",
+      "Source-side coverage gaps recorded for Step 4: function parameters of public APIs (e.g. paddle.utils.download url, fleet_util.get_online_pass_interval days/hours, Graph.draw save_path) were not extractable as source candidates by the syntactic extraction; consider param-source or summary edges in MySources/MySummaries.",
+      "Trust boundary model (detection.json): Paddle is a library/CLI framework; 'attacker' control means control by the invoking user or cluster peer (CLI args, env, config files, socket/etcd peer data, download URLs)."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 2,
+      "focus": "Command/Argument Injection",
+      "cwes": [
+        "077",
+        "078",
+        "088"
+      ],
+      "entries": [
+        {
+          "id": "p2-src-sysargv",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "sys.argv",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "sys"
+          },
+          "location": {
+            "file": "python/paddle/distributed/fleet/launch.py",
+            "line": 364
+          },
+          "rationale": "sys.argv slicing at CLI entry points of the distributed launcher. launch/controllers/master.py:107 forwards sys.argv[1:] into the printed launch command and fleet/launch.py:364-365 packs sys.argv[1:] into PADDLE_ORIGINAL_CMD_ARGS, re-expanded into the parallelizer.py:412-417 relaunch command. CLI boundary - source.",
+          "evidence": [
+            "fleet/launch.py:364-365: os.environ['PADDLE_ORIGINAL_CMD_ARGS'] = ' '.join(sys.argv[1:])",
+            "launch/controllers/master.py:107: cmd.extend(sys.argv[1:])",
+            "auto_parallel/static/parallelizer.py:405-417: new_cmd_args embeds original CLI args for relaunch"
+          ]
+        },
+        {
+          "id": "p2-src-parse-args",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "argparse.parse_args",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "argparse"
+          },
+          "location": {
+            "file": "python/paddle/distributed/elastic.py",
+            "line": 59
+          },
+          "rationale": "argparse parse result namespace of the paddle.distributed launch/elastic CLI. Parsed fields (training_script, training_script_args REMAINDER, elastic_pre_hook) flow into subprocess command construction, e.g. elastic/manager.py:358-370 executes self.args.elastic_pre_hook with Popen(..., shell=True); launch_utils.py:828-833 builds [sys.executable, '-u', args.training_script] + args.training_script_args. Source.",
+          "evidence": [
+            "elastic.py:59 args = parser.parse_args() -> args.elastic_pre_hook",
+            "elastic/manager.py:364: Popen(self.args.elastic_pre_hook, shell=True)",
+            "launch/context/args_envs.py:225: parse_known_args() merges env into parsed launch args"
+          ]
+        },
+        {
+          "id": "p2-src-parse-known",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "argparse.parse_known_args",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "argparse"
+          },
+          "location": {
+            "file": "python/paddle/distributed/launch/context/args_envs.py",
+            "line": 225
+          },
+          "rationale": "argparse parse result namespace of the paddle.distributed launch/elastic CLI. Parsed fields (training_script, training_script_args REMAINDER, elastic_pre_hook) flow into subprocess command construction, e.g. elastic/manager.py:358-370 executes self.args.elastic_pre_hook with Popen(..., shell=True); launch_utils.py:828-833 builds [sys.executable, '-u', args.training_script] + args.training_script_args. Source.",
+          "evidence": [
+            "args_envs.py:224-226: args = parser.parse_known_args(); env_rank = int(os.getenv(...))",
+            "fleet/launch.py:257: parse_known_args() for fleet launch CLI (training_script + REMAINDER args)"
+          ]
+        },
+        {
+          "id": "p2-src-getenv",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "os.getenv",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "os"
+          },
+          "location": {
+            "file": "python/paddle/distributed/fleet/launch.py",
+            "line": 410
+          },
+          "rationale": "Environment variable read inside a process-launch / command-construction module (paddle.distributed launch/fleet/elastic, auto_tuner, ps tooling, cpp_extension, download). This family demonstrably reaches command construction: fleet/launch.py:364-365 packs sys.argv[1:] into PADDLE_ORIGINAL_CMD_ARGS which is re-expanded into the auto-mapping relaunch command (auto_parallel/static/parallelizer.py:405-417); cpp_extension reads CC/CXX/CUDA toolchain selection; elastic manager reads job state. Labeled source-candidate for recall - most individual variables are feature flags and the concrete paths need Phase 2 taint confirmation.",
+          "evidence": [
+            "304 of 433 os.getenv/os.environ reads sit in command-construction modules (Tier A, batch S2); the remaining 129 reads are in compute modules and labeled none per-row (Tier B, batch S3)",
+            "fleet/launch.py:364-365: sys.argv[1:] -> PADDLE_ORIGINAL_CMD_ARGS env -> parallelizer relaunch command",
+            "cpp_extension/extension_utils.py:669: CC/CUDA toolchain selection feeds compiler command construction"
+          ]
+        },
+        {
+          "id": "p2-src-environ-get",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "os.environ.get",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "os"
+          },
+          "location": {
+            "file": "python/paddle/utils/cpp_extension/extension_utils.py",
+            "line": 684
+          },
+          "rationale": "Environment variable read inside a process-launch / command-construction module (paddle.distributed launch/fleet/elastic, auto_tuner, ps tooling, cpp_extension, download). This family demonstrably reaches command construction: fleet/launch.py:364-365 packs sys.argv[1:] into PADDLE_ORIGINAL_CMD_ARGS which is re-expanded into the auto-mapping relaunch command (auto_parallel/static/parallelizer.py:405-417); cpp_extension reads CC/CXX/CUDA toolchain selection; elastic manager reads job state. Labeled source-candidate for recall - most individual variables are feature flags and the concrete paths need Phase 2 taint confirmation.",
+          "evidence": [
+            "Same Tier A / Tier B split as os.getenv; see p2-src-getenv evidence",
+            "extension_utils.py:669: cuda_home = os.environ.get('CUDA_HOME') or os.environ.get('CUDA_PATH')"
+          ]
+        },
+        {
+          "id": "p2-src-environ-getitem",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "os.environ.__getitem__",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "os"
+          },
+          "location": {
+            "file": "python/paddle/distributed/fleet/launch.py",
+            "line": 354
+          },
+          "rationale": "Environment variable read inside a process-launch / command-construction module (paddle.distributed launch/fleet/elastic, auto_tuner, ps tooling, cpp_extension, download). This family demonstrably reaches command construction: fleet/launch.py:364-365 packs sys.argv[1:] into PADDLE_ORIGINAL_CMD_ARGS which is re-expanded into the auto-mapping relaunch command (auto_parallel/static/parallelizer.py:405-417); cpp_extension reads CC/CXX/CUDA toolchain selection; elastic manager reads job state. Labeled source-candidate for recall - most individual variables are feature flags and the concrete paths need Phase 2 taint confirmation.",
+          "evidence": [
+            "Same Tier A / Tier B split as os.getenv; see p2-src-getenv evidence",
+            "fleet/launch.py:362-366: os.environ[...] assignments carry rank-mapping paths and original CLI args"
+          ]
+        },
+        {
+          "id": "p2-src-getenv-or-backup",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "paddle.distributed.backup_env.getenv_or_backup",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "paddle.distributed.backup_env"
+          },
+          "location": {
+            "file": "python/paddle/distributed/backup_env.py",
+            "line": 24
+          },
+          "rationale": "Internal wrapper paddle.distributed.backup_env.getenv_or_backup returning os.getenv(name) (value restored from a JSON env backup file written by process_context). Return value carries environment-sourced cluster identity consumed by role_maker/parallel/elastic-manager launch logic. Labeled source-candidate; can equivalently be modeled as an env->return summary edge in MySummaries.qll.",
+          "evidence": [
+            "backup_env.py:21-31: os.getenv(name) with JSON-file backup restore",
+            "used by fleet/base/role_maker.py:871/1095, parallel.py:709/910/1086, elastic/manager.py:154"
+          ]
+        },
+        {
+          "id": "p2-src-json-load",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "json.load",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "json"
+          },
+          "location": {
+            "file": "python/paddle/distributed/fleet/launch_utils.py",
+            "line": 931
+          },
+          "rationale": "Decoded JSON config consumed by distributed-launch or auto-tuning logic; decoded values (worker counts, endpoints, controller config, memory-estimation tool path) parameterize process launching - e.g. fleet/launch_utils.py:930-931 and launch/main.py:322-323 feed worker/server config into subprocess command lists, auto_tuner config values flow into the prune.py:513-521 shell command. Source-candidate.",
+          "evidence": [
+            "25 of 35 json.load/loads rows are launch/auto-tuner config decodes (source); 10 are in-process metadata (none)",
+            "launch_utils.py:930-931: open+json.load of controller config feeding worker/server launch",
+            "auto_tuner/utils.py + prune.py:513-521: tuner config -> memory_estimation_cmd shell string"
+          ]
+        },
+        {
+          "id": "p2-src-json-loads",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "json.loads",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "json"
+          },
+          "location": {
+            "file": "python/paddle/distributed/launch/main.py",
+            "line": 323
+          },
+          "rationale": "Decoded JSON config consumed by distributed-launch or auto-tuning logic; decoded values (worker counts, endpoints, controller config, memory-estimation tool path) parameterize process launching - e.g. fleet/launch_utils.py:930-931 and launch/main.py:322-323 feed worker/server config into subprocess command lists, auto_tuner config values flow into the prune.py:513-521 shell command. Source-candidate.",
+          "evidence": [
+            "same family split as json.load; incubate fleet_util.py json.loads rows kept candidate 0.5 (hadoop/xbox workflows)"
+          ]
+        },
+        {
+          "id": "p2-src-etcd",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "etcd.get_prefix",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "etcd"
+          },
+          "location": {
+            "file": "python/paddle/distributed/fleet/elastic/manager.py",
+            "line": 242
+          },
+          "rationale": "etcd.get_prefix reads cluster membership/endpoint state from an external etcd service (cluster/peer controlled). Values drive launch decisions and endpoint lists (fleet/elastic/manager.py:242-356, launch/controllers/master.py). Direct flow into command strings not observed; source-candidate, low confidence.",
+          "evidence": [
+            "fleet/elastic/manager.py:242-356: node list from etcd drives elastic launch decisions",
+            "launch/controllers/master.py:163-297: rendezvous state from etcd"
+          ]
+        },
+        {
+          "id": "p2-src-socket-recv",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "socket.recv",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "socket"
+          },
+          "location": {
+            "file": "python/paddle/distributed/auto_parallel/static/utils.py",
+            "line": 1809
+          },
+          "rationale": "socket.recv in auto_parallel/static/utils.py get_cluster(): rank/host strings received from peer cluster nodes over TCP; peer-supplied topology parameterizes subsequent distributed process launching (engine launch, endpoint env). Kept as source-candidate for recall - the received values currently feed cluster topology/env rather than command strings directly, so the command-injection path is unproven.",
+          "evidence": [
+            "auto_parallel/static/utils.py:1809/1829: rank = client_socket.recv(buff_size).decode() in get_cluster()",
+            "the other 18 socket.recv rows (tensor/record/sync receives, incl. syntactically matched paddle.distributed recv APIs) are labeled none per-row"
+          ]
+        },
+        {
+          "id": "p2-none-open",
+          "role": "none",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "open",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "builtins"
+          },
+          "location": {
+            "file": "python/paddle/static/io.py",
+            "line": 505
+          },
+          "rationale": "open() reads local files (datasets, model/index/metadata, configs). File content is not an attacker-controlled command parameter under the CWE-78 model used here; where decoded content matters (launch/auto_tuner/backup_env configs) the paired json.load/loads decoder at the same site is labeled source. open() is primarily a pass-1 (path traversal) API; labeled none for pass 2.",
+          "evidence": [
+            "217 open() rows all labeled none for pass 2; paired json decoders at config sites carry the source label"
+          ]
+        },
+        {
+          "id": "p2-none-add-argument",
+          "role": "none",
+          "classification": "candidate",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "argparse.add_argument",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "argparse"
+          },
+          "location": {
+            "file": "python/paddle/distributed/launch/context/args_envs.py",
+            "line": 59
+          },
+          "rationale": "add_argument() is a CLI option declaration, not a data-flow node; no tainted value is produced at the declaration site. Parsed values surface via parse_args/parse_known_args (labeled source). Labeled none for taint modeling.",
+          "evidence": [
+            "112 add_argument declaration rows; parsed values surface via parse_args/parse_known_args (labeled source)"
+          ]
+        },
+        {
+          "id": "p2-none-httpx",
+          "role": "none",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "httpx.stream",
+            "flow_kind": "return",
+            "arg_index": null,
+            "module": "httpx"
+          },
+          "location": {
+            "file": "python/paddle/utils/download.py",
+            "line": 168
+          },
+          "rationale": "httpx.stream / iter_bytes response bytes are written straight to disk as model/dataset files; the response body does not reach command construction. The download URL itself is a function parameter (not extracted as a source candidate) and is the actual attacker-relevant input to the _wget_download shell sink (utils/download.py:199-206) - recorded as a coverage gap in phase1_review.md. Labeled none for this row.",
+          "evidence": [
+            "download.py:168-190 and dataset/common.py:102-121: response bytes written to disk, not executed",
+            "coverage gap: url/fname parameters of download APIs are the attacker-relevant input to the wget shell sink"
+          ]
+        },
+        {
+          "id": "p2-snk-os-system",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "os.system",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "os"
+          },
+          "location": {
+            "file": "python/paddle/incubate/distributed/fleet/parameter_server/pslib/__init__.py",
+            "line": 814
+          },
+          "rationale": "os.system(cmd) where cmd is a concatenated shell string built from self._opt_info['fleet_desc'].fs_client_param (hadoop_bin, fs_name, fs_ugi containing user/password) plus model_path/model_proto_file supplied via save/load APIs. The startswith('hdfs:'/'afs:') prefix check only selects the branch - it does not neutralize shell metacharacters in the concatenated value. Attacker/user-controlled config reaches a shell string: tp-shaped sink.",
+          "evidence": [
+            "pslib/__init__.py:803-814 and 823-834: hadoop fs shell string from fleet_desc config (tp, 0.75)",
+            "launch/main.py:989: os.system('kill -9 ' + pid) from fuser output (unknown, 0.45)"
+          ]
+        },
+        {
+          "id": "p2-snk-os-popen",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "os.popen",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "os"
+          },
+          "location": {
+            "file": "python/paddle/incubate/distributed/fleet/fleet_util.py",
+            "line": 1320
+          },
+          "rationale": "os.popen('echo -n ' + days) / ('echo -n ' + hours) in get_online_pass_interval(days, hours, ...): function parameters (documented API, e.g. days='{20190720..20190729}') are concatenated into a shell string executed at import-visible call time. tp-shaped sink; reachable from user code.",
+          "evidence": [
+            "fleet_util.py:1320/1321: 'echo -n ' + days/hours parameters (tp, 0.7)",
+            "core.py:75/86, fleet_util.py:382/383, launch/main.py:983, role_maker.py:289/316/996/1023: fixed literals (fp)"
+          ]
+        },
+        {
+          "id": "p2-snk-popen",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "subprocess.Popen",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "python/paddle/distributed/fleet/elastic/manager.py",
+            "line": 364
+          },
+          "rationale": "subprocess.Popen argument 0. Highest-risk instances: elastic/manager.py:364 executes the --elastic_pre_hook CLI option with shell=True (tp, 0.85); utils/download.py:204 executes a wget f-string with the caller-supplied URL (tp, 0.75); fleet/utils launch_utils.py and utils/launch_utils.py launch [sys.executable, '-u', training_script] + training_script_args argv lists from the CLI (candidate, designed launcher feature); graphviz/util_factory/incubate fleet utils run fixed ['dot', ...] argv lists (low); ps_optimizer/parameter_server_optimizer run fixed ['vm_stat'] (fp); optimization_tuner/parallelizer run shlex.split arg lists (metachar-safe).",
+          "evidence": [
+            "elastic/manager.py:358-370: Popen(self.args.elastic_pre_hook, shell=True)",
+            "utils/download.py:199-206: Popen(f'wget -O {tmp} {url}', shell=True)",
+            "fleet/launch_utils.py:828-833: cmd = [sys.executable, '-u', args.training_script] + args.training_script_args"
+          ]
+        },
+        {
+          "id": "p2-snk-check-output",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "subprocess.check_output",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "python/paddle/utils/cpp_extension/extension_utils.py",
+            "line": 1408
+          },
+          "rationale": "subprocess.check_output with argv list (or scalar on Windows) whose head element is the 'compiler' parameter of check_abi_compatibility (extension_utils.py:1399), sourced from CC/CXX-style env/config. argv-list form without shell limits exposure to argument injection; candidate.",
+          "evidence": [
+            "extension_utils.py:676/718/1336: fixed argv lists (fp)",
+            "extension_utils.py:810/1408/1433/1440: compiler parameter in argv/scalar form (candidate)",
+            "nvsmi.py:66 query fields / :88 fixed ['rocm-smi']"
+          ]
+        },
+        {
+          "id": "p2-snk-check-call",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "subprocess.check_call",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "python/paddle/utils/cpp_extension/extension_utils.py",
+            "line": 1389
+          },
+          "rationale": "subprocess.check_call(command, shell=True) inside run_cmd; argument is the wrapper's command parameter (see run_cmd entry) - candidate.",
+          "evidence": [
+            "extension_utils.py:1389/1393: run_cmd wrapper executes its command parameter with shell=True",
+            "base/framework.py:5570: 'dot -Tpdf ' + path concatenation with shell=True (candidate, 0.65)"
+          ]
+        },
+        {
+          "id": "p2-snk-subprocess-run",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "subprocess.run",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "subprocess"
+          },
+          "location": {
+            "file": "python/paddle/distributed/auto_tuner/prune.py",
+            "line": 521
+          },
+          "rationale": "subprocess.run(memory_estimation_cmd, shell=True) where memory_estimation_cmd is an f-string interpolating memory_estimation_tool (tuner-config path, only existence-checked) and cur_cfg / model_cfg values decoded from the auto-tuning JSON config. Config-controlled shell string - tp-shaped sink.",
+          "evidence": [
+            "auto_tuner/prune.py:513-526: shell=True f-string from tuner-config values"
+          ]
+        },
+        {
+          "id": "p2-snk-shell-execute-cmd",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "callable": "core.shell_execute_cmd",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "paddle.base.core",
+            "type": "core"
+          },
+          "location": {
+            "file": "python/paddle/distributed/fleet/utils/fs.py",
+            "line": 506
+          },
+          "rationale": "core.shell_execute_cmd(exe_cmd, 0, 0, redirect_stderr) (C++ binding) executes the hadoop fs shell command exe_cmd = f'{self._base_cmd} -{cmd}' where _base_cmd embeds hadoop_bin/fs_ugi (user/passwd) from the fleet distributed-strategy config. User-config-controlled shell string - tp-shaped sink.",
+          "evidence": [
+            "fleet/utils/fs.py:495-506: exe_cmd = f'{self._base_cmd} -{cmd}' with hadoop_bin/fs_ugi config (tp, 0.65)"
+          ]
+        },
+        {
+          "id": "p2-snk-run-shell-command",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "run_shell_command",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "python.paddle.base.core"
+          },
+          "location": {
+            "file": "python/paddle/base/core.py",
+            "line": 184
+          },
+          "rationale": "run_shell_command(cmd) wraps subprocess.Popen(cmd, shell=True) (core.py:184-193); its cmd parameter is a direct command-execution boundary. Current call sites (core.py:198/225/229) pass fixed ldd/grep strings with install-layout paths, so no live taint path - candidate.",
+          "evidence": [
+            "core.py:184-193: Popen(cmd, shell=True) wrapper; call sites 198/225/229 pass fixed ldd/grep strings"
+          ]
+        },
+        {
+          "id": "p2-snk-run-cmd",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "callable": "run_cmd",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "python.paddle.utils.cpp_extension.extension_utils"
+          },
+          "location": {
+            "file": "python/paddle/utils/cpp_extension/extension_utils.py",
+            "line": 1379
+          },
+          "rationale": "run_cmd(command, verbose) wraps subprocess.check_call(command, shell=True) (extension_utils.py:1379-1396); its command parameter is a direct shell-execution boundary fed by cpp_extension build helpers with user-API-derived paths - candidate.",
+          "evidence": [
+            "extension_utils.py:1379-1396: check_call(command, shell=True) wrapper fed by cpp_extension build helpers"
+          ]
+        },
+        {
+          "id": "p2-snk-hdfs-run-cmd",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "callable": "HDFSClient._run_cmd",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "python.paddle.distributed.fleet.utils.fs",
+            "type": "HDFSClient"
+          },
+          "location": {
+            "file": "python/paddle/distributed/fleet/utils/fs.py",
+            "line": 500
+          },
+          "rationale": "HDFSClient._run_cmd(self, cmd, ...): cmd is concatenated into exe_cmd = f'{self._base_cmd} -{cmd}' and executed via core.shell_execute_cmd (C++-backed shell exec) in a retry loop. _base_cmd is built from fs_name/fs_ugi/hadoop_bin hadoop config (fs.py constructor). Parameter passthrough to shell execution - candidate. Note: CSV arg_index says 2; manual verification shows the exec-relevant parameter is cmd (first non-self parameter, index 0).",
+          "evidence": [
+            "fs.py:500-514: exe_cmd = f'{self._base_cmd} -{cmd}' -> core.shell_execute_cmd",
+            "CSV arg_index recorded 2; manual verification: exec-relevant parameter is cmd (index 0, first non-self param)"
+          ]
+        },
+        {
+          "id": "p2-snk-call-cmd",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "call_cmd",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "python.paddle.distributed.auto_parallel.static.topology"
+          },
+          "location": {
+            "file": "python/paddle/distributed/auto_parallel/static/topology.py",
+            "line": 20
+          },
+          "rationale": "call_cmd(cmd, err_msg, default_value) wraps subprocess.Popen(cmd, shell=True) (topology.py:20-33); its cmd parameter is a direct shell-execution boundary. All current call sites pass fixed lscpu/lspci/ip route shell strings, so no live taint path - candidate.",
+          "evidence": [
+            "topology.py:20-33: Popen(cmd, shell=True) wrapper; all current call sites pass fixed lscpu/lspci strings"
+          ]
+        },
+        {
+          "id": "p2-snk-jit-compile",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "_jit_compile",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "python.paddle.utils.cpp_extension.extension_utils"
+          },
+          "location": {
+            "file": "python/paddle/utils/cpp_extension/extension_utils.py",
+            "line": 1325
+          },
+          "rationale": "_jit_compile(file_path, verbose): file_path (from cpp_extension.load user API) is interpolated into compile_cmd = 'cd {ext_dir} && {interpreter} {setup_file} build' and executed via run_cmd -> subprocess.check_call(shell=True) (extension_utils.py:1348-1354, 1379-1393). Parameter passthrough to shell execution - candidate.",
+          "evidence": [
+            "extension_utils.py:1325-1354: file_path -> 'cd {ext_dir} && {interpreter} {setup_file} build' -> run_cmd(shell=True)",
+            "CSV arg_index recorded 1; manual verification: exec-relevant parameter is file_path (index 0)"
+          ]
+        },
+        {
+          "id": "p2-snk-check-abi",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "check_abi_compatibility",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "python.paddle.utils.cpp_extension.extension_utils"
+          },
+          "location": {
+            "file": "python/paddle/utils/cpp_extension/extension_utils.py",
+            "line": 1399
+          },
+          "rationale": "check_abi_compatibility(compiler, verbose): compiler parameter flows into subprocess.check_output(['which', compiler]) / [compiler, '-dumpfullversion', ...] argv lists and (Windows) check_output(compiler) without shell. Argument-injection-only exposure - candidate, low.",
+          "evidence": [
+            "extension_utils.py:1399-1440: compiler parameter reaches check_output argv lists only"
+          ]
+        },
+        {
+          "id": "p2-sum-run-shell-command-call",
+          "role": "summary",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "run_shell_command",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "python.paddle.base.core"
+          },
+          "location": {
+            "file": "python/paddle/base/core.py",
+            "line": 198
+          },
+          "rationale": "Call site of the run_shell_command wrapper with a fixed ldd/grep shell string (paths derived from the paddle install layout). Labeled summary (argument -> shell execution inside the wrapper) so taint reaching this argument is tracked; operands here are constants, fp.",
+          "evidence": [
+            "core.py:198/225/229: fixed ldd/grep operands; taint step tracked for recall"
+          ]
+        },
+        {
+          "id": "p2-sum-run-cmd-call",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "run_cmd",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "python.paddle.utils.cpp_extension.extension_utils"
+          },
+          "location": {
+            "file": "python/paddle/utils/cpp_extension/extension_utils.py",
+            "line": 1354
+          },
+          "rationale": "Call site of run_cmd() with an f-string command (install_name_tool / mklink over so/dll paths, or 'cd {ext_dir} && {interpreter} {setup_file} build' from the user-supplied file_path of cpp_extension.load()). Labeled summary (argument -> shell execution in run_cmd wrapper); paths are user/library-API influenced - candidate.",
+          "evidence": [
+            "extension_utils.py:504/641/1354: f-string commands with install/API-derived paths; taint step tracked for recall"
+          ]
+        }
+      ]
+    }
+  ]
+}
