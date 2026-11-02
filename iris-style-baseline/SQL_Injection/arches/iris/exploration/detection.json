@@ -1,0 +1,258 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-20",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SQL_Injection\\arches\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the arches_vuln source tree. The CodeQL database arches-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded arches-db (and the arches-safe-db copy shipped next to it). The database metadata sourceLocationPrefix matches the explored tree (creation sha 75ce8f7), so file/line evidence below refers to the same snapshot the database was built from."
+  },
+  "target": {
+    "project": "arches",
+    "projectDescription": "Arches 7.1.0-beta (arches/__init__.py VERSION = (7, 1, 0, \"beta\", 0)) - a Django-based cultural heritage data management platform: graph/resource model management, a reference data manager (RDM) for concepts, an Elasticsearch-backed search layer, map/MVT tile services over PostGIS, and a CSV/Excel ETL import pipeline staged through Postgres load tables.",
+    "pass": 5,
+    "cwes": ["CWE-089"],
+    "focus": "SQL Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\arches_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (arches-db/codeql-database.yml)",
+      "345 .py files under arches/ excluding node_modules (284 under arches/app, 35 under arches/management); the database also covers tests/, docker/ and the top-level manage.py / setup.py",
+      "pyproject.toml target-version = py37; setup.py classifiers 'Programming Language :: Python :: 3', 'Framework :: Django :: 1.11' (version dynamically computed from arches.VERSION)"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\arches_vuln\\arches-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\arches_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "75ce8f7cb9c08caf608569797a40ca9be585b182",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:14:57.416754200Z"
+    },
+    "baselineLinesOfCode": 48420,
+    "finalised": true,
+    "locationNote": "arches-db is nested inside the source tree; it (and the arches-safe-db sibling copy) were excluded from all exploration and will be excluded from extraction result rows via the path filter in both queries."
+  },
+  "toolchain": {
+    "qlpack": "iris/arches-cwe89 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (7.1.2 present under the .codeql pack cache)",
+    "codeqlCli": "2.25.1 (E:\\codeql)",
+    "compatibilityBasis": "API facts used by the generated queries were verified against the cached python-all 7.1.2 library sources (AstNode.getLocation().getFile(): File, Location.getStartLine(), Call.getPositionalArg/getAPositionalArg/getANamedArg, Function.getAnArg/getName/getEnclosingScope, Parameter.getName/isSelf/getPosition, Attribute.getName/getObject, Subscript.getObject, BinaryExpr.getOp with Mod/Add, StringLiteral, Fstring, class Class). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "django",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package +0.45: 'from django.db import transaction, connection' (arches/app/models/concept.py:24, arches/app/views/concept.py:20, arches/app/datatypes/datatypes.py:45, arches/app/etl_modules/base_import_module.py:3, branch_csv_importer.py:14 and 20+ more files); 'from django.views.generic import View' (arches/app/views/api.py:20)",
+            "route/decorator +0.30: arches/urls.py:89 urlpatterns with url(r\"^concepts/paged_dropdown\", concept.paged_dropdown), :115 ^concepts/dropdown, :116 paged_dropdown, :122 ^search$, :128 ^buffer/$, :259-261 ^mvt/<nodeid>/<zoom>/<x>/<y>.pbf$ -> api.MVT.as_view(); @method_decorator(csrf_exempt, name=\"dispatch\") (arches/app/views/api.py:237); @group_required(\"RDM Administrator\") (arches/app/views/concept.py:102)",
+            "runtime/bootstrap +0.20: arches/settings.py:42 DATABASES ENGINE 'django.contrib.gis.db.backends.postgis'; arches/wsgi.py, arches/celery.py, manage.py at the source root",
+            "directory/layout +0.05: arches/app/{views,models,search,datatypes,etl_modules,functions,utils}, arches/urls.py, arches/settings.py, arches/management/commands/"
+          ]
+        },
+        {
+          "name": "django management CLI (infrastructure, not a web framework)",
+          "kind": "cli",
+          "confidence": 1.0,
+          "evidence": [
+            "arches/management/commands/ holds 40+ BaseCommand commands (graph.py:25 'class Command(BaseCommand)'), each defining add_arguments(self, parser) with parser.add_argument(...) and handle(self, *args, **options) reading options[...]",
+            "commands that build SQL from CLI options: setup_db.py (username/table names), export.py (table name), packages.py (loads .sql files from a package dir), v3migration helper, etl_template.py"
+          ]
+        },
+        {
+          "name": "celery (task infrastructure, not a web framework)",
+          "kind": "task_queue",
+          "confidence": 0.7,
+          "evidence": [
+            "arches/app/tasks.py @shared_task refresh_geojson_geometries / import_business_data / load_single_csv; ETL modules delegate loads via tasks.load_single_csv.apply_async((self.userid, self.loadid, ...))",
+            "celery argument tuples are a task boundary, not an HTTP boundary; modeled only as intermediate propagation (see uncoveredCases)"
+          ]
+        },
+        { "name": "flask", "confidence": 0.0, "evidence": [] },
+        { "name": "fastapi", "confidence": 0.0, "evidence": [] },
+        { "name": "django-rest-framework", "confidence": 0.0, "evidence": ["no 'rest_framework' import anywhere in arches/ - request.data / request.query_params / DRF serializer sources are NOT observed and NOT emitted"] }
+      ]
+    },
+    "selected": "django (primary, confidence 1.0) + django management commands (CLI) + celery task delegation (secondary)",
+    "notes": "references/django.md was loaded in addition to references/python.md and references/patterns.md. Its source cues (request.GET/POST/body, route parameters, serializer validated_data) map onto the observed code: function views read request.GET/POST and CBV handler methods (APIBase(View) subclasses such as MVT.get(self, request, nodeid, zoom, x, y)) receive URL route parameters directly. Its sink cues (cursor.execute, .raw) are half-observed: cursor.execute is the dominant channel, but .raw()/RawSQL()/.extra()/from_statement do not exist in project code (see sinkFamilies.absentChannels) so no rules were fabricated for them. request.user / request.method / request.LANGUAGE_CODE reads were observed but are framework-computed identity/state rather than raw attacker text and are not emitted as source families."
+  },
+  "inputBoundaryInventory": {
+    "summary": "Attackers face (1) the Django HTTP surface: request.GET (181 reads in arches/app), request.POST (91), request.body JSON payloads (29), request.FILES (12), request.META (9) and URL route parameters (uuid route params such as conceptid/nodeid plus non-uuid zoom/x/y path segments); function views (concept.py, search.py, api.py, etl_manager.py, ...) and APIBase(View)/View subclass handler methods (get/post) are the dispatch boundary registered in arches/urls.py; (2) the CLI surface of 40+ django management commands whose add_argument/options values (including DB role names and table names) reach string-built SQL in setup_db.py, export.py and packages.py; (3) the filesystem: packages.py load_sql()/load_resource_views() read entire .sql files from operator-supplied package directories and execute them verbatim; ETL uploads are staged under uploadedfiles/<loadid>; (4) the Postgres DB itself: concept values, tile primary keys and ORM lookups are re-interpolated into SQL (intermediate propagation, not external input); (5) settings/environment: operator-level trust (DATABASES credentials, os.environ in settings_docker.py). The dominant SQL execution channel is django.db connection.cursor() + cursor.execute(); 74 .execute( sites exist in arches/ overall, of which the ETL import modules, the MVT/buffer map endpoints and the etl_manager views are fully parameterized, while a handful of concept/RDM paths interpolate request-derived values into the SQL text.",
+    "sourceFamilies": [
+      {
+        "family": "http_request_state",
+        "evidence": [
+          "arches/app/views/concept.py:382-385 paged_dropdown: conceptid = request.GET.get(\"conceptid\"); query = request.GET.get(\"query\", None); query = None if query == \"\" else query; page = int(request.GET.get(\"page\", 1)) - conceptid and query flow into Concept().get_child_collections_hierarchically(conceptid, offset, limit, query)",
+          "arches/app/views/concept.py:376-378 dropdown: conceptid = request.GET.get(\"conceptid\") -> Concept().get_e55_domain(conceptid)",
+          "arches/app/views/concept.py:443-444 search: searchString = request.GET[\"q\"] (subscript read)",
+          "arches/app/views/base.py:86-87 APIBase.dispatch: get_params = request.GET.copy(); accept = request.META.get(\"HTTP_ACCEPT\")",
+          "request attribute usage census in arches/app: request.GET 181, request.POST 91, request.body 29, request.FILES 12, request.META 9 (request.user/LANGUAGE_CODE/method excluded as framework-computed)",
+          "arches/app/views/etl_manager.py:37-38 loadid = request.GET.get(\"loadid\") (and request.POST.get(\"loadid\") in base_import_module.py:29) - flows only into parameterized SQL"
+        ]
+      },
+      {
+        "family": "http_body_json",
+        "evidence": [
+          "JSONDeserializer().deserialize(request.body) call sites: arches/app/views/api.py:569, 589, 636, 656, 1512; arches/app/views/concept.py:241, 251, 562; arches/app/views/graph.py:96; arches/app/views/admin.py:35; arches/app/views/tile.py, resource.py, notifications.py, manifest_manager.py additional sites",
+          "arches/app/views/search.py:439-441 buffer: spatial_filter = JSONDeserializer().deserialize(request.GET.get(\"filter\", ...)) - decoded geometry/width/unit reach _buffer() which executes parameterized PostGIS SQL"
+        ]
+      },
+      {
+        "family": "handler_entry_points",
+        "evidence": [
+          "function views (dispatched from arches/urls.py): arches/app/views/concept.py:103 def concept(request, conceptid) (route ^concepts/<uuid>/), :375 def dropdown(request), :381 def paged_dropdown(request), :443 def search(request); arches/app/views/search.py:438 def buffer(request); arches/app/views/etl_manager.py ETLManagerView; arches/app/views/api.py NodeValue/Validator etc.",
+          "CBV handler methods: arches/app/views/api.py:84 class APIBase(View) with dispatch/get/post; api.py:241 MVT.get(self, request, nodeid, zoom, x, y) (route ^mvt/<nodeid>/<zoom>/<x>/<y>.pbf$, non-uuid zoom/x/y segments); api.py Graphs/Resources/Card/Tile/Node/NodeGroup/... get/post methods; etl_manager.py ETLManagerView(View).get(self, request)",
+          "URL route parameter extraction (e.g. conceptid from ^concepts/(?P<conceptid>...)) is modeled by the handler parameter family, not by a separate route family"
+        ]
+      },
+      {
+        "family": "cli_management_commands",
+        "evidence": [
+          "40+ commands under arches/management/commands/ (graph.py:25 class Command(BaseCommand)); parser.add_argument(...) registration ~200 sites (packages.py alone has 26)",
+          "options[...] reads in handle() drive SQL construction: arches/management/commands/setup_db.py (db role username interpolated into pg_roles queries at :102/:105, table names at :124), export.py (table name at :55/:61), packages.py (package_dir -> .sql file loading), etl_template.py:89",
+          "sys.argv is used only by arches/app/utils/profile_stats.py:4 (dev utility) - kept as a cli family row"
+        ]
+      },
+      {
+        "family": "file_input",
+        "evidence": [
+          "arches/management/commands/packages.py:604-613 load_sql(): sql_files = glob(os.path.join(package_dir, sql_dir, \"*.sql\")); with open(sql_file) as f: sql = f.read(); cursor.execute(sql) - entire SQL text loaded from operator-controlled package files",
+          "arches/management/commands/packages.py:619-629 load_resource_views(): same shape for business_data/resource_views/*.sql",
+          "arches/app/utils/data_management/resources/importer.py:99-122 open() reads of relations/mapping/business-data files (ETL import input); arches/app/utils/data_management/resources/formats/csvfile.py:68 json.load(open(configs))",
+          "arches/app/models/migrations/0001_initial.py:17 codecs.open(pathtofile) (migration fixture read)"
+        ]
+      },
+      {
+        "family": "config_settings",
+        "evidence": [
+          "~385 settings.<ATTR> reads in arches/app (128 distinct attribute names) - operator-level trust: settings.DATABASES credentials (arches/settings.py:42-47), settings.ANALYSIS_COORDINATE_SYSTEM_SRID (search.py:469), settings.LANGUAGE_CODE interpolated into concept SQL (models/concept.py:660)",
+          "arches/app/utils/v3migration.py:26-31: db_conn = \"dbname = {} user = {} ...\".format(db[\"POSTGIS_TEMPLATE\"], db[\"USER\"], ...) from settings.DATABASES -> psycopg2.connect(db_conn) - operator config, not attacker input"
+        ]
+      },
+      {
+        "family": "env",
+        "evidence": [
+          "arches/settings_docker.py:11,19 os.environ[var_name] lookups for dockerized settings; arches/celery.py:9-11 and arches/wsgi.py:31 os.environ.setdefault/bootstrap writes",
+          "operator-level trust boundary; no os.getenv()/os.environ reads were observed inside request-reachable SQL construction paths"
+        ]
+      },
+      {
+        "family": "internal_transfer_to_sql_layer",
+        "evidence": [
+          "arches/app/views/concept.py:388-390: Concept().get_child_collections_hierarchically(conceptid, offset=offset, limit=limit, query=query) - positional args conceptid/offset/limit captured; the query=... keyword argument is NOT captured positionally (see uncoveredCases)",
+          "arches/app/views/concept.py:377: Concept().get_e55_domain(conceptid)",
+          "arches/app/views/search.py:442-443: _buffer(spatial_filter[\"geometry\"], spatial_filter[\"buffer\"][\"width\"], spatial_filter[\"buffer\"][\"unit\"]) - positional hand-off of decoded request data into a PostGIS-executing helper"
+        ]
+      },
+      {
+        "family": "db_content_intermediate",
+        "evidence": [
+          "arches/app/models/concept.py:1153-1159 check_if_concept_in_use: sql = \"\"\"...json_data.value = '%s'\"\"\" % value.id (value.id from ORM/DB, then executed at :1160) - intermediate, injection-shaped but not request-controlled at this boundary",
+          "arches/app/datatypes/datatypes.py:2132-2137 post_tile_save: sql = \"\"\"...__arches_create_resource_x_resource_relationships('%s')...\"\"\" % (tile.pk) (executed at :2138)",
+          "arches/app/utils/index_database.py:314-316 valueTypes built from models.DValueType.objects... ORM values, then .format()ed into SQL executed at :343/:370 - DB-derived identifiers, not external input; recorded as candidates only"
+        ]
+      }
+    ],
+    "sinkFamilies": {
+      "channelInventory": {
+        "djangoDbCursorExecute": "django.db connection.cursor() + cursor.execute(sql[, params]) - 45 files use connection.cursor(), 74 .execute( call sites in arches/ overall. This is the ONLY SQL execution channel in request-reachable project code.",
+        "schemaEditorExecute": "arches/db/migration_operations/extras.py:21,31 (CREATE/DROP EXTENSION '%s' % self.name), :94,102 (function DDL .format), :119,123 (ALTER TABLE {0} ALTER COLUMN {1} .format) - schema_editor.execute() in migration operations; identifiers come from operation constructors, not requests",
+        "psycopg2Direct": "arches/management/commands/setup_db.py:79-88 psycopg2.connect(conn_string) and arches/app/utils/v3migration.py:30 psycopg2.connect(db_conn) - direct driver connections (CLI context); their execute calls go through the same .execute member shape and are covered by the AST-level sink family",
+        "callproc": "arches/app/models/graph.py:1561-1563 cursor.callproc(\"__arches_slugify\", [node.alias]) - stored procedure call with a bound argument list",
+        "djangoOrm": "Django ORM (models/*.py managers, .filter()/.exclude()/Q objects) used pervasively for non-raw data access; ORM generates parameterized SQL internally and is NOT a raw-SQL sink",
+        "absentChannels": "NOT OBSERVED in project code: Manager.raw(), django.db.models.RawSQL(), QuerySet.extra(), QuerySet.from_statement(), cursor.executemany(), cursor.executescript(), sqlite3 usage, SQLAlchemy usage (text()/from_statement()), mogrify-based execution. No sink rules were fabricated for these; they are recorded here as absent."
+      },
+      "dynamicSqlSites": [
+        "arches/app/views/concept.py:404-426 (paged_dropdown, HTTP-reachable via /concepts/paged_dropdown): sql = \"\"\"SELECT value, valueid FROM (... LOWER(value)='{query}' ...)\"\"\" ; sql = sql.format(query=query.lower(), languageid=..., short_languageid=...) ; cursor = connection.cursor(); cursor.execute(sql) - query originates from request.GET.get(\"query\")",
+        "arches/app/models/concept.py:637-655 (get_child_edges, reached from paged_dropdown): subquery = \"\"\", results as (... WHERE LOWER(values.value) like '%%%s%%' ...)\"\"\" % query.lower() if query is not None - request-derived query %-formatted into the LIKE clause; then sql.format(conceptid=..., relationtypes=..., child_valuetypes=..., limit_clause=..., subquery=..., languageid=...) at :653 and :713, executed at :723",
+        "arches/app/models/concept.py:1186-1216 (get_e55_domain, reached from /concepts/dropdown): sql = \"\"\"... WHERE d.conceptidfrom = '{0}' ...\"\"\".format(conceptid) with conceptid = request.GET.get(\"conceptid\") and NO uuid validation on this path; cursor.execute(sql) at :1216",
+        "arches/app/models/concept.py:1147-1161 check_if_concept_in_use: % value.id into a jsonb_each_text comparison (DB-derived value)",
+        "arches/app/datatypes/datatypes.py:2131-2138 post_tile_save: % (tile.pk) into a stored-function call (DB-derived value)",
+        "arches/app/utils/index_database.py:326-343 and :370: .format(topConcept, valueTypes) / .format(valueTypes) (CLI/indexing context, ORM-derived values)",
+        "arches/app/utils/v3migration.py:47-54 fix_v3_value: .format(value) into ST_AsGeoJSON(...) on a psycopg2 cursor (v3 migration file input)",
+        "arches/management/commands/setup_db.py:102,105 ('{}'.format(username) into pg_roles lookups), :124 (DROP TABLE {} CASCADE), :137/:144/:157 (terminate/drop/create from CLI options)",
+        "arches/management/commands/export.py:55,61 ('SELECT * FROM {0}'.format(table), geom_type IN ({1}) join)",
+        "arches/management/commands/packages.py:611,623 (execute of whole .sql file contents read via open().read())",
+        "arches/db/migration_operations/extras.py:21,31,94,102,119,123 (schema_editor.execute with %-format / .format identifiers from migration operation config)"
+      ],
+      "parameterizedSites": "Fully parameterized (bound %%s placeholders + argument tuple/list) and therefore modeled as the safe bound-parameter channel, not as dynamic SQL: the whole ETL staging pipeline (branch_csv_importer.py:52,167,193,204,219,224,232,236,247,252,258,301,333,347; import_single_csv.py:112,125,148,170,188,196,201,214,220,227,238,334,360,381; base_import_module.py:16,21; etl_template.py:89), arches/app/views/api.py:264,316 (MVT ST_AsMVT), arches/app/views/search.py:465 and arches/app/search/components/map_filter.py:92 (_buffer ST_TRANSFORM/ST_BUFFER), arches/app/views/etl_manager.py:26,32,33, arches/management/commands/graph.py:95, updateproject.py:42,57,66, and constant-SQL sites (arches/app/tasks.py:105, arches/app/utils/system_metadata.py:32, arches/app/utils/data_management/resources/remover.py:40, arches/app/datatypes/datatypes.py:1320,1325).",
+      "sanitizingShapes": "SQL text with %%s placeholders passed together with a bound argument list (cursor.execute(sql, params)); graph.py model callproc bound list. These are recorded in sinks.ql as a separate 'bound_params' flow kind (argument index 1) so the labeling step can mark them as the safe parameterized channel rather than as injection sinks."
+    },
+    "sanitizerObservations": [
+      "arches/app/models/concept.py:502-506 (get_child_edges): try: uuid.UUID(conceptid) except: return [] - conceptid is validated as a UUID before being interpolated, which neutralizes classic quote-breaking payloads on the conceptid slot of that query; the query parameter on the same path is NOT validated (subquery % query.lower() at :645-655)",
+      "arches/app/models/concept.py:1172 get_e55_domain: NO uuid or format validation observed before .format(conceptid) at :1197-1200 - the /concepts/dropdown path is the unvalidated counterpart",
+      "arches/app/views/concept.py:114-116: depth_limit = request.GET.get(\"depth_limit\", None) is immediately overwritten by depth_limit = 1 - the request-derived depth_limit is dead on this path (the SQL-depth-limit slot is constant)",
+      "Django ORM usage throughout models/*.py compiles to parameterized SQL (no .raw()/.extra() anywhere); auth/CSRF middleware constrain WHO can reach RDM endpoints (@group_required(\"RDM Administrator\") on concept views) but do not sanitize payload content",
+      "No SQL quoting/escaping helper (psycopg2.extensions.quote_ident, manual replace of quotes) exists in project source"
+    ],
+    "nonVulnerabilityNote": "Management-command SQL construction (setup_db/export/packages/v3migration/index_database) is driven by operator CLI input, ORM values and package files - CLI/file trust level, recorded as candidates only. ETL module SQL is entirely parameterized. The DB-derived %-interpolations in check_if_concept_in_use / post_tile_save / index_database are injection-shaped but their inputs are internal ids at those boundaries; they are kept as sink/construction candidates for the labeling step to triage, not presumed vulnerable."
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution is deferred to the next round per the task contract (generation only).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO sink or source row is expected to resolve at API level: all SQL execution flows through local cursor variables (cursor = connection.cursor() / self.dbcursor / schema_editor parameters) that API graphs cannot bind to django.db or psycopg2 members, and the Django request object is a framework-injected value, not a module member. The column is kept for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, request/field/settings/options name conventions). All execute/callproc matches are receiver-name-agnostic (any <obj>.execute(...) / <obj>.callproc(...) call matches), which tolerates cursor aliasing (cursor, dbcursor, schema_editor) but cannot prove the receiver is a database cursor - name-collision noise is possible and is left to the labeling step."
+    },
+    "flowKinds": {
+      "sources": ["http_request", "request_param", "http_body", "param", "cli", "env", "file", "config", "internal_transfer"],
+      "sinks": ["sql_text", "bound_params", "sql_percent_format", "sql_format_call", "sql_fstring", "sql_concat", "internal_sql_wrapper"]
+    },
+    "exclusions": [
+      "paths containing /tests/ or /fixtures/ (the database snapshot covers tests/, docker/ and repo-root scripts; tests are excluded from candidates per the workflow noise rules)",
+      "/arches-db/ and /arches-safe-db/ (CodeQL database directories nested inside the source tree)",
+      "/node_modules/, /media/, /webpack/, /cypress/ (frontend assets)"
+    ],
+    "expectedVolume": "roughly 1500-2500 source rows (request attribute reads ~320, request .get() reads ~280, handler parameters ~400, cli add_argument/options ~350, settings config reads ~400, file open/read ~100, internal_transfer call args ~200, env/sys.argv sparse) and roughly 200-400 sink rows (74 execute sites + bound-param companion rows + construction nodes inside ~35 SQL wrapper functions + wrapper function rows). This is in line with prior projects in this series (maltrail 617/52, pgadmin4 2150/61)."
+  },
+  "uncoveredCases": [
+    "Positional-argument scan cap: the http_body family (index of the request.body argument) and the internal_transfer family (index of a transferred positional argument) enumerate argument positions 0-9 (i is bound by range membership before the indexed Call.getPositionalArg(i) lookup, because the index parameter of getPositionalArg is a checked/total-function input in QL); calls with more than 10 positional arguments would not be scanned. No such call exists on the SQL-relevant paths in this snapshot.",
+    "Binding-analysis hardening (verified by codeql query compile): excludedPath(string path) carries a bindingset[path] annotation because path only appears in checked positions (receiver of replaceAll/matches) inside the predicate; without the annotation the compiler reports 'path is not bound to a value'. Both queries compile clean (exit 0, no warnings) against codeql 2.25.1 + codeql/python-all resolved from the local pack cache via iris/qlpack.yml.",
+    "Keyword-argument hand-off: get_child_collections_hierarchically passes query=query / offset= / limit= as KEYWORD arguments to get_child_edges (arches/app/models/concept.py:464-467); internal_transfer rows cover positional arguments only, so the request-derived query keyword binding is not captured as a call-argument row. Mitigation: the query parameter itself is captured by the handler-param family (paged_dropdown's request.GET.get) and the construction+execute sites in get_child_edges are captured by the sink query.",
+    "packages.py load_sql/load_resource_views (arches/management/commands/packages.py:604-629): SQL text is read from a whole file into a variable (sql = f.read()) and executed - no string-construction expression exists, so only the execute row and the open()/read() source rows represent this path; the file->variable->execute data flow is not traced at extraction time.",
+    "SQL text variables: all 'execute(sql)' sites where sql is a plain local variable (concept.py view/model, index_database, datatypes, tasks, system_metadata) are captured as execute rows; the variable assignment chain (which construction expression fed sql) is only captured when the construction sits inside the same executing function - cross-function construction is not traced.",
+    "Dynamic receiver identity: <obj>.execute(...) matching is syntactic; whether the receiver is a django.db cursor, a psycopg2 cursor or an unrelated object with an execute method is not resolved. In this snapshot every .execute( site found by grep is a database cursor, but the query tolerates collisions by design.",
+    "Celery task boundary: tasks.load_single_csv.apply_async((self.userid, self.loadid, graphid, ...)) (arches/app/etl_modules/import_single_csv.py:163-166) - task argument tuples are not modeled as a source family; the ETL-side SQL is parameterized anyway.",
+    "Django ORM model-manager calls (models.X.objects.filter(...)) and route->view dispatch (urls.py -> as_view()) are framework-internal and not extracted; ORM raw channels are absent (see sinkFamilies.channelInventory.absentChannels).",
+    "request.user / request.method / request.LANGUAGE_CODE / request.GET.copy() are framework-computed or container state; request.data / request.query_params / request.headers / request.COOKIES (DRF shapes) are NOT observed in this project and are not emitted.",
+    "The concept() view's depth_limit request input is dead (overwritten at arches/app/views/concept.py:115); its get_child_concepts/depth_limit SQL slot is therefore constant on the reachable path - recorded here rather than as a candidate."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/references/django.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: sql_sinks.csv, sql_safe_sinks.csv, 漏洞审查报告.md, 分析结果test.md and the arches-safe-db tree inside the source directory were NOT opened during this step; candidate families are derived from repository evidence and the loaded language/pattern/django references only. arches-db was used solely to read codeql-database.yml metadata (language/version/ sha) and was otherwise excluded. Project source, the database, and the Augur installation were not modified. Only the three Phase-1 Step-1/2 artifacts under iris_manual/SQL_Injection/arches/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). CodeQL execution and LLM labeling are deferred to later steps per the task contract."
+  }
+}
