@@ -1,0 +1,187 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "pymodbus-iris-phase2-llm-path-review-pass1",
+    "generated_at": "2026-10-23T05:40:00Z",
+    "model": "glm-5.3",
+    "project": "pymodbus",
+    "pass": 1,
+    "focus": "Path Traversal (CWE-22 / CWE-23 / CWE-36 / CWE-73)",
+    "reviewed_rule_id": "py/augur/pymodbus/pass1-path-traversal",
+    "input_sarif": "results/pass1.sarif",
+    "source_tree": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymodbus_vuln",
+    "prompt_discrepancy_note": "The review-request header named the pymdown-extensions experiment/source/db paths (stale template carried over from the previous project session, whose report/llm_triage.json already exists and was left untouched). The actual session environment, SARIF, labels, report and the supplied ground-truth commit (pymodbus ba906c1c, handle_html_static) all target pymodbus, whose report/llm_triage.json did not yet exist. The pymodbus Pass 1 formal results were therefore reviewed; only rule py/augur/pymodbus/pass1-path-traversal codeFlows are counted.",
+    "independence": [
+      "Only results/pass1.sarif, report/iris_report.md, labels/labels.json, report/query_generation_notes.md, report/phase1_review.md, queries/Pass1_PathTraversal.ql, and the real Python source under pymodbus_vuln were read for the triage itself.",
+      "SARIF, labels and formal queries were not modified; no CodeQL re-run was performed.",
+      "PyVul ground truth, fix commits and CVE descriptions were NOT consulted. The only ground-truth material used is the commit metadata (ba906c1c, handle_html_static code_before/code_after) supplied verbatim in the review request itself, compared against the actual snapshot source for the hit assessment.",
+      "External-library verification: the aiohttp 3.9.0 sdist was downloaded from PyPI and its web_urldispatcher.py / web_request.py inspected, because pyproject.toml declares aiohttp>=3.9.0b0 (the floor in force for this 3.6.0dev snapshot). This is dependency inspection, not PyVul ground truth. Newer aiohttp sdists could not be fetched due to intermittent tool-permission outages (the same outage class already recorded in phase1_review.md §8); this limitation is stated where it matters (checklist point 5/6, exploitability note).",
+      "CodeQL invocation notifications (baseline expected-extracted-files, file-coverage, platform telemetry, all level 'none') were inspected and confirmed NOT to be results; no diagnostics and no CodeQL built-in security query results are counted."
+    ]
+  },
+  "sarif_integrity_check": {
+    "rules_in_sarif": 1,
+    "rule_ids": ["py/augur/pymodbus/pass1-path-traversal"],
+    "result_count": 2,
+    "all_results_match_reviewed_rule": true,
+    "diagnostics_or_builtin_results_mixed_in": false,
+    "tool_execution_successful": true,
+    "notes": "The single run (CodeQL 2.25.1, extension iris/pymodbus-cwe22) contains exactly two results, both under the Augur pass1 rule, both with real codeFlows. They are the two distinct dangerous file accesses of one taint path (K11 open at http_server.py:264, K12 web.FileResponse at http_server.py:265) sharing the same source (S05 request.path at :260) and the same propagation (:260 page -> :262 os.path.join -> file); this one-path-two-sinks shape is the intended, documented output (query_generation_notes.md §4 'Potential duplicate alerts'). The invocationNotifications are py baseline expected-extracted-files + CLI file-coverage/platform telemetry (level 'none'), not alerts. No other CWE, no CodeQL built-in baseline results, no SARIF-parsing diagnostics are present."
+  },
+  "alerts": [
+    {
+      "alert_id": "pass1-001",
+      "rule_id": "py/augur/pymodbus/pass1-path-traversal",
+      "sink_location": {
+        "file": "pymodbus/server/simulator/http_server.py",
+        "line": 264,
+        "code": "with open(file, encoding=\"utf-8\"):"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.7,
+      "checklist": {
+        "1_source_attacker_controlled": {
+          "answer": "yes",
+          "evidence": "Source node http_server.py:260 `if not (page := request.path[1:]):` — the aiohttp `Request.path` attribute (the percent-decoded URL path of the incoming HTTP request), read directly by handle_html_static. The handler is registered on the simulator web console's public router: web.get('/{tail:[a-z0-9.]*}', self.handle_html_static) at :172 and web.get('/', self.handle_html_static) at :173; the console binds 0.0.0.0:8080 by default (:118-119) and has no authentication of any kind (grep: no auth/session/login in http_server.py). Any network party that can reach the host controls the URL path. This is a genuine, strong source."
+        },
+        "2_source_reaches_file_path_arg": {
+          "answer": "yes",
+          "evidence": "Fully intra-procedural, every hop is real source code and matches the SARIF codeFlows exactly: request.path attribute (:260) -> walrus target `page` (:260) -> `page` as argument 1 of os.path.join (:262) -> join result assigned to `file` (:262) -> `file` as argument 0 of open (:264). No async indirection (the handler is async but the path from read to open is straight-line synchronous code), no file-name transformation other than the [1:] slice stripping the leading '/'. The os.path.join propagation is backed by both the stdlib taint model and the K10 summary (MySummaries.qll, anchored to this exact call site); the SARIF threadFlow locations (:260/:260/:262/:262/:262/:264) were verified line-by-line against the real file."
+        },
+        "3_sink_is_sensitive_file_op": {
+          "answer": "yes",
+          "evidence": "http_server.py:264 is a real builtins.open() file read with the tainted expression as positional argument 0 (path). It is not a mere string concatenation or path-object construction: the join at :262 is modeled as a taint step (summary), not a sink, exactly per the rubric. Within the same try block the same `file` is served via web.FileResponse at :265 (the companion alert pass1-002), so this open both probes existence and gates content delivery. Sensitive file operation: read."
+        },
+        "4_declared_allowed_root_and_escape": {
+          "answer": "escapable in code, filterability external",
+          "evidence": "Declared/implied allowed root: self.web_path = os.path.join(os.path.dirname(__file__), 'web') (:166) — the packaged simulator web assets directory (index.html, welcome.html, css, icons, generator templates). Intended access set: exactly those static assets. Escape analysis in project code: nothing prevents escape — `page` containing '/', '\\\\' or an anchored/absolute form escapes web_path by os.path.join semantics (join discards the base for an absolute second argument; separators traverse out); a bare '..' joins to the parent of web/ (a directory -> IsADirectoryError -> 404, no disclosure). Whether any separator-bearing value can actually reach `page` is governed solely by the external aiohttp router (see point 5/6) — no in-project containment exists."
+        },
+        "5_traversal_vectors_effective": {
+          "answer": "blocked only by external router semantics; no in-project defense",
+          "evidence": "Percent-decoding: single, upstream — aiohttp percent-decodes the URL once into request.path (web_request.py:455-460: `path` returns `self._rel_url.path`, the yarl decoded path); no unquote/quote call exists anywhere in the pymodbus package (grep-verified: zero hits for unquote). No double-decode, no separator transformation in DB code. '..', absolute paths, and separator variants would all lexically escape the join — nothing in the handler blocks them. External verification performed this round (aiohttp 3.9.0 sdist, the declared floor aiohttp>=3.9.0b0, pyproject.toml:52/59): DynamicResource matching is `self._match(request.rel_url.raw_path)` with `self._pattern.fullmatch(path)` (web_urldispatcher.py:368-373 and :488-489) — an anchored whole-path match against the yarl-normalized percent-ENCODED raw path, and `request.path` returns the DECODED path. Since '%' is not in the route class [a-z0-9.], any percent-encoded sequence fails the match and the handler is never invoked; a raw path that does match contains no '%', so its decoding is identity — hence `page` can only ever match [a-z0-9.]* (no '/', no '\\\\', no '%2e%2e%2f'). Under these exact 3.9.0 semantics the traversal vectors do NOT reach the open(). Caveats: (a) the dependency range is open-ended (>= 3.9.0b0) and router semantics are not a documented stability contract — newer aiohttp sdists could not be fetched for comparison due to intermittent tool-permission outages this session; (b) a fronting proxy with different path normalization is outside all evidence; (c) the project maintainers themselves did not rely on the router filter — they added normpath+startswith containment (commit ba906c1c)."
+        },
+        "6_containment_guards_before_access": {
+          "answer": "none in project code",
+          "evidence": "Grep over the whole pymodbus package: zero hits for normpath / abspath / realpath / relative_to / basename; the only startswith uses in the package are unrelated string comparisons (pdu.py:180, transport.py:193/319/328, repl helper/completer doc-filtering). The handler performs no canonicalization, no root-containment check, no fixed-filename mapping, no real filename whitelist. The try/except (FileNotFoundError, IsADirectoryError) -> web.HTTPNotFound at :266-267 is post-access error handling, not validation — it fires after open() has already attempted the path. The single candidate pre-access filter is the aiohttp route regex at :172 (route resolution precedes handler invocation by construction); per verified aiohttp 3.9.0 semantics it is effective, but it lives in an external library outside the CodeQL database, is not a project-deployed validation, and is explicitly not credited as a provable barrier by the Pass 1 methodology (phase1_review.md §5 R1) or by the maintainers' own fix."
+        },
+        "7_misjudged_protections": {
+          "answer": "none claimed",
+          "evidence": "The vulnerable code contains no normpath/startsWith check, no login/auth (the console is unauthenticated), so there is nothing to misjudge on this path. Conversely this review does NOT credit the external route regex or the 404 error handling as sufficient protection: the route regex is external-library behavior (verified for the 3.9.0 floor only, open-ended above), and the 404 conversion happens after the access attempt. (The code_after fix itself uses the classic `normpath + startswith` lexical prefix pattern — a weaker form than resolved-root containment, e.g. a sibling directory sharing the web_path string prefix would pass — but the fixed version is outside this snapshot's scope.)"
+        },
+        "8_not_authorized_static_service_or_unreachable": {
+          "answer": "real production route, defect is the missing containment",
+          "evidence": "handle_html_static is the production static-file route of the simulator web console, registered on the public router (:172-173) and served on 0.0.0.0:8080 — not test code, not dead code, not an unreachable path. Serving the fixed web/ assets is the console's authorized intended function; the alert is not about that authorized access but about the request-derived path reaching open()/FileResponse with no containment, i.e. the escape capability, which is precisely what the maintainers fixed. Note the console is a development/simulation tool, which bounds severity, not the existence of the flow."
+        },
+        "9_overgeneralized_modeling_fp": {
+          "answer": "no",
+          "evidence": "Source and sink models are structurally anchored to this file and these handlers (MySources isReviewedRequestPathRead constrained to handle_html_static/handle_html/handle_json in pymodbus/server/simulator/http_server.py; MySinks constrained to the exact call shapes); the two SARIF results correspond one-to-one to the two real dangerous statements; the message text ('Untrusted data from an HTTP request path ... flows to a file access API without path validation') is accurate for both. The other labeled sinks (K03/K04/K06/K13/K16/K21) correctly produced no alerts. No database-coverage or wrong-diagnostic-path issue: file coverage includes http_server.py (index 0 in artifacts/notifications)."
+        },
+        "10_other_cwe_or_baseline_contamination": {
+          "answer": "no",
+          "evidence": "The run contains a single rule (py/augur/pymodbus/pass1-path-traversal, tagged cwe-022/023/036/073) with exactly two results; invocationNotifications are baseline/file-coverage/platform telemetry with level 'none' and are not results; no CodeQL built-in security query output, no diagnostics query output, and no other-CWE findings are present in the formal Pass 1 output."
+        }
+      },
+      "taint_path_summary": "Network attacker's HTTP URL path -> aiohttp request.path (percent-decoded, web_request.py:455-460) -> page := request.path[1:] (http_server.py:260, walrus, leading '/' stripped, 'index.html' default when empty) -> os.path.join(self.web_path, page) (:262, web_path = package web/ dir, :166) -> file -> open(file, encoding='utf-8') argument 0 (:264, real file read inside try; except (FileNotFoundError, IsADirectoryError) -> HTTP 404 at :266-267 is post-access error handling). SARIF codeFlows: :260 (request.path Attribute) -> :260 (page) -> :262 (page as join arg) -> :262 (join Attribute()) -> :262 (file) -> :264 (file).",
+      "preconditions": [
+        "pymodbus simulator HTTP console deployed and reachable (default bind 0.0.0.0:8080, http_server.py:118-119 — no authentication anywhere on the console).",
+        "aiohttp installed (>= 3.9.0b0 declared; the constructor hard-fails without it, :125-129).",
+        "A GET request routed through '/{tail:[a-z0-9.]*}' (:172) or '/' (:173) — the handler is only invoked for router-matched paths.",
+        "For an actual escape beyond web/: a routed path whose percent-decoded form contains '/', '\\\\' or absolute/..-chain forms. Verified aiohttp 3.9.0 router semantics (anchored fullmatch on the percent-encoded raw path) filter all such forms out before the handler runs, so exploitation under exactly these library semantics is not demonstrated; it requires different router behavior in another allowed aiohttp version, or a fronting proxy with divergent path normalization (both outside the CodeQL database and outside this round's verifiable evidence)."
+      ],
+      "rationale": "Every code-level element of the taint path is verified against real source: strong untrusted source (unauthenticated console's request.path), straight-line real propagation (slice -> join -> assignment), genuine file-read sink, and zero in-project validation or canonicalization before the access (grep-verified absence of normpath/abspath/realpath/relative_to/basename; the 404 except is post-access). This is exactly the code shape the maintainers themselves hardened in #1855 (normpath+startswith inserted between the :262 join and the :264 open), and both alerts' sinks are the fix's target statements. The verdict is likely_tp as a code-level finding. Confidence is held at 0.7 rather than higher because the only obstacle an attacker actually faces is the external aiohttp route regex, whose effectiveness for the declared floor (3.9.0) this round could verify and found effective (separators/percent-escapes cannot reach `page`), while the open-ended aiohttp>= range, proxy normalization, and the maintainers' refusal to rely on the filter keep exploitability plausible-but-unproven rather than demonstrated."
+    },
+    {
+      "alert_id": "pass1-002",
+      "rule_id": "py/augur/pymodbus/pass1-path-traversal",
+      "sink_location": {
+        "file": "pymodbus/server/simulator/http_server.py",
+        "line": 265,
+        "code": "return web.FileResponse(file)"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.7,
+      "checklist": {
+        "1_source_attacker_controlled": {
+          "answer": "yes (identical to pass1-001)",
+          "evidence": "Same source node and same codeFlow prefix: request.path at http_server.py:260, handler registered at :172/:173, console on 0.0.0.0:8080 without authentication."
+        },
+        "2_source_reaches_file_path_arg": {
+          "answer": "yes",
+          "evidence": "Same verified intra-procedural path: :260 request.path[1:] -> page -> :262 os.path.join(self.web_path, page) -> file -> :265 web.FileResponse(file) argument 0. The aiohttp FileResponse call itself is real code in the same try block as the :264 open; the internal open/read performed by aiohttp when serving the FileResponse is outside the CodeQL database (external library), so the sink is correctly anchored at this call site (labels K12; query_generation_notes §4 'aiohttp externals'). The SARIF threadFlow (:260/:260/:262/:262/:262/:265) matches the real file."
+        },
+        "3_sink_is_sensitive_file_op": {
+          "answer": "yes",
+          "evidence": "web.FileResponse(file) is aiohttp's file-response API: it opens the file at argument 0 and streams its content as the HTTP response body. This is a real file-response/落盘响应 sensitive operation (the actual content-disclosure channel of the pair), not a path-object construction. The join at :262 is a taint step, not a sink. Companion note: the same `file` is first opened by the :264 open inside the same with/try block, so any path FileResponse serves has already passed a real open() — the two alerts are the read probe and the delivery channel of one flow."
+        },
+        "4_declared_allowed_root_and_escape": {
+          "answer": "escapable in code, filterability external (same as pass1-001)",
+          "evidence": "Allowed root self.web_path = package web/ directory (:166). No in-project containment between the join (:262) and FileResponse (:265); separator-bearing or absolute `page` values would serve arbitrary files outside web/. Actual reachability of such values is governed solely by the external router (points 5/6)."
+        },
+        "5_traversal_vectors_effective": {
+          "answer": "blocked only by external router semantics; no in-project defense (same as pass1-001)",
+          "evidence": "Same single upstream percent-decode, no double-decode, no unquote in the package. Verified aiohttp 3.9.0 DynamicResource semantics: fullmatch on the percent-encoded raw path (web_urldispatcher.py:368-373/:488-489) with '%' excluded by the route class, so page is confined to [a-z0-9.]* under those semantics; '..' alone yields the parent directory, which the :264 open rejects with IsADirectoryError before any response is produced. Caveats identical to pass1-001: open-ended aiohttp>= range unverified (tool outage), proxy normalization out of scope, and the maintainers patched rather than rely on the filter."
+        },
+        "6_containment_guards_before_access": {
+          "answer": "none in project code (same as pass1-001)",
+          "evidence": "No normpath/abspath/realpath/relative_to/basename/startswith on the path anywhere in the package (grep-verified; unrelated startswith hits only in pdu.py/transport.py/repl). The except->HTTPNotFound at :266-267 is error handling after the access attempts. Only external route regex precedes the handler; not credited as a provable in-project barrier (phase1_review.md §5 R1)."
+        },
+        "7_misjudged_protections": {
+          "answer": "none claimed (same as pass1-001)",
+          "evidence": "No auth, no path checks exist on this path in the snapshot; the review does not credit the route regex or the 404 handling as sufficient protection."
+        },
+        "8_not_authorized_static_service_or_unreachable": {
+          "answer": "real production route (same as pass1-001)",
+          "evidence": "Production static-serving route of the unauthenticated simulator console; the defect reported is the missing containment on the request-derived path, not the authorized serving of web/ assets."
+        },
+        "9_overgeneralized_modeling_fp": {
+          "answer": "no",
+          "evidence": "Sink model anchored to the exact web.FileResponse(file) call in handle_html_static (MySinks simulatorFileResponseSink); one result, one real statement, accurate message; companion of pass1-001 by design (query_generation_notes §4 documents the one-path-two-sinks shape as intended, deduped only at triage)."
+        },
+        "10_other_cwe_or_baseline_contamination": {
+          "answer": "no (same run as pass1-001)",
+          "evidence": "Single rule, two results, telemetry-only notifications, no built-in/diagnostic results."
+        }
+      },
+      "taint_path_summary": "Network attacker's HTTP URL path -> aiohttp request.path (percent-decoded) -> page := request.path[1:] (http_server.py:260) -> os.path.join(self.web_path, page) (:262) -> file -> web.FileResponse(file) argument 0 (:265, file response; aiohttp internally opens and streams the file content as the HTTP body — external-library open anchored at the call site). SARIF codeFlows: :260 (request.path Attribute) -> :260 (page) -> :262 (page as join arg) -> :262 (join Attribute()) -> :262 (file) -> :265 (file).",
+      "preconditions": [
+        "Same as pass1-001: reachable unauthenticated simulator console, aiohttp installed, GET routed via :172/:173.",
+        "For actual escape beyond web/: separator-bearing decoded path reaching `page`, which the verified aiohttp 3.9.0 router semantics filter out; exploitation requires differing router/proxy behavior outside verifiable evidence.",
+        "Target file readable by the server process (FileResponse also requires the :264 open to succeed first — both are inside the same try block)."
+      ],
+      "rationale": "Same verified source and propagation as pass1-001 with a genuine file-response sink (the content-delivery half of the flow: open() at :264 probes, FileResponse at :265 delivers). No in-project validation exists anywhere on the path; the maintainers' fix wraps exactly the join result consumed by both statements. likely_tp as a code-level finding, confidence 0.7 with the same R1 reservation: under the verified aiohttp 3.9.0 floor semantics the escape vectors cannot reach `page`, so practical exploitability rests on the open-ended aiohttp>= range / proxy normalization / the maintainers' judgment that the router filter is not a security boundary."
+    }
+  ],
+  "overall_conclusion": {
+    "formal_alerts_present": true,
+    "statement": "CodeQL 分析成功，本轮命中 2 条正式 Pass 1 路径穿越污点路径告警（pymodbus/server/simulator/http_server.py:264 open(file) 与 :265 web.FileResponse(file)，ruleId 均为 py/augur/pymodbus/pass1-path-traversal）。两条告警为同一污点路径（source: :260 request.path -> :262 os.path.join -> file）的两个真实敏感文件操作（读取探测 + 文件响应输出），逐条复核均判 likely_tp（代码级证据完整：无鉴权控制台的真实攻击者可控 URL 路径源、直-line 传播、真实文件读取/响应 Sink、全项目零包含校验），无 likely_fp、无 uncertain。置信度 0.7 而非更高：唯一的实际防线是外部 aiohttp 路由正则（本轮对声明下限 3.9.0 的验证表明其能有效滤除分隔符/百分号编码逃逸向量，但依赖区间开口向上未全部验证、且维护者本人不接受其作为安全边界并加了 normpath+startswith 修复）。",
+    "per_alert": {
+      "http_server.py:264 open(file)": "likely_tp (0.70) — attacker-controlled request.path[1:] -> join(web_path, page) -> real file read; zero in-project validation; exactly the statement the upstream fix hardens.",
+      "http_server.py:265 web.FileResponse(file)": "likely_tp (0.70) — same flow, file-response sink delivering file content as HTTP body; the content-disclosure half of the pair."
+    },
+    "not_counted": "SARIF invocationNotifications (baseline/file-coverage/platform telemetry, level 'none') 与诊断/CodeQL 内置安全查询结果均未计入本轮 Augur 正式 TP。"
+  },
+  "ground_truth_hit_assessment": {
+    "task": "Determine whether the real vulnerability of commit https://github.com/pymodbus-dev/pymodbus/commit/ba906c1c5a6b87a0d659c3a0c5fcba373ee0ed4e (CWE-22, PR #1855 'Avoid malicious user path input', handle_html_static) is hit by the formal Pass 1 alerts. Only the commit metadata supplied verbatim in the review request was used; no PyVul ground-truth files, repository patch history, or CVE descriptions were opened. The aiohttp 3.9.0 sdist inspection is external-dependency verification, not ground truth.",
+    "vulnerable_function": {
+      "name": "handle_html_static",
+      "file": "pymodbus/server/simulator/http_server.py",
+      "snapshot_lines": "258-267",
+      "snapshot_matches_code_before": true,
+      "evidence": "The snapshot's handle_html_static is line-for-line the commit's code_before: `if not (page := request.path[1:]): page = 'index.html'` (:260-261), `file = os.path.join(self.web_path, page)` (:262), `with open(file, encoding='utf-8'): return web.FileResponse(file)` (:263-265), `except (FileNotFoundError, IsADirectoryError) ... HTTPNotFound` (:266-267). The fix's containment lines (os.path.normpath on the join result + `if not file.startswith(self.web_path): raise ValueError(...)`) are absent — grep over the whole pymodbus package returns zero hits for normpath and no startswith on any path."
+    },
+    "hit_by_formal_alert": {
+      "hit": true,
+      "alert_ids": ["pass1-001", "pass1-002"],
+      "mapping": [
+        "Advisory attack surface ('malicious user path input'): request.path read at :260 — the exact source node (first threadFlow location + relatedLocation) of BOTH formal alerts.",
+        "Vulnerable construction ('unsafe operations in the file variable'): os.path.join(self.web_path, page) at :262 producing `file` — the propagation step in both codeFlows; the fix inserts normpath exactly on this expression's result and adds a containment check on `file` between :262 and :264.",
+        "Dangerous operation 1 (read probe): open(file) at :264 — sink of alert pass1-001; statement retained unchanged in code_after.",
+        "Dangerous operation 2 (content delivery): web.FileResponse(file) at :265 — sink of alert pass1-002; statement retained unchanged in code_after.",
+        "Root cause (no path validation): confirmed by grep — no normpath/abspath/realpath/relative_to/basename/path-startswith anywhere in the package; the except->404 at :266-267 (also present in code_before) is error handling, not validation."
+      ],
+      "coverage": "Complete. The vulnerable function contains exactly two dangerous file operations and both are formal alert sinks; the source read and the tainted construction are both intra-codeFlow (no summary-only gap in the attribution: even without the K10 summary the stdlib os.path.join taint model yields the same path). Both alerts together cover the entire vulnerable code_before body."
+    },
+    "hit_conclusion": "真实漏洞被命中：两条正式 Pass 1 告警的 Sink（:264 open / :265 web.FileResponse）正是修复提交 ba906c1c 所加固的两条语句，其 codeFlows 的 Source（:260 request.path）与传播（:262 join）正是被修复包裹的表达式；快照 http_server.py:258-267 与 code_before 逐行一致，修复引入的 normpath/startswith 在快照中完全不存在。命中判定不依赖任何 PyVul 真值文件，仅基于用户在请求中提供的提交元数据与对快照源码的直接比对。",
+    "exploitability_note": "独立复核同时如实记录：对本轮声明依赖下限 aiohttp 3.9.0 的源码验证表明，路由 '/{tail:[a-z0-9.]*}' 的匹配是对百分号编码原始路径的锚定 fullmatch（web_urldispatcher.py:368-373/:488-489），'%' 不在字符类内，故任何含分隔符或百分号编码的穿越 payload 都无法路由到 handle_html_static——在该精确库语义下 page 被限制为 [a-z0-9.]*，裸 '..' 只会命中父目录并被 IsADirectoryError -> 404 拒绝。因此该漏洞的代码级缺陷（无任何项目内包含校验、直接读取 request.path 而非 match_info 捕获值、依赖外部路由正则这一非契约行为）是确凿且被两条告警准确报告的，也是提交 ba906c1c 以纵深防御方式修复的对象；实际可利用性取决于部署的 aiohttp 路由行为（>= 3.9.0b0 开区间，高于 3.9.0 的版本本轮因工具间歇故障未能核验）及是否存在路径规范化行为不同的前置代理，二者均在 CodeQL 数据库之外。"
+  }
+}

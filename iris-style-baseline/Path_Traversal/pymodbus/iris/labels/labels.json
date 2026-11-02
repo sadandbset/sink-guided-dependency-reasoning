@@ -1,0 +1,822 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "iris-pymodbus-pathtraversal-pass1-20261023",
+    "generated_at": "2026-10-23T01:43:49Z",
+    "language": "python",
+    "framework": "aiohttp",
+    "model": "glm-5.3",
+    "project": "pymodbus (pymodbus_vuln snapshot, 3.6.0dev, CodeQL db creation sha 927fa4d4d9ddf1ffaa9a6d83616bc4a279f74555)",
+    "notes": [
+      "Pass 1 (Path Traversal, CWE-022/023/036/073) LLM candidate labeling over 34 candidates (12 sources.csv rows + 22 sinks.csv rows) from iris/extraction/, all processed, none skipped.",
+      "Labeling performed in-context by the analysis LLM itself (glm-5.3, Claude Code CLI session) in 3 batches (12/9/13 candidates); no external LLM API calls were made; see labels_raw_pass1.json for batch composition and per-batch decisions.",
+      "All code evidence read from the real pymodbus_vuln source tree at the file/line anchors of the CSV rows; no CodeQL re-run was performed in this step (labeling only).",
+      "Ground-truth-looking artifacts in the source tree (VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv, Chinese audit reports), CVE advisories and patch diffs were NOT read (independence rule); no source file, CodeQL database, Augur file or extraction CSV was modified.",
+      "No sanitizer entries were labeled: no normpath/abspath/realpath/relative_to/startswith/'..' rejection exists anywhere on the static-file path in the DB; the aiohttp route regex '{tail:[a-z0-9.]*}' is the only input filter and its effectiveness depends on external-library (aiohttp router) semantics not present in the CodeQL database - documented as a manual-review point in phase1_review.md, not asserted as a sanitizer.",
+      "Augur references loaded: references/patterns.md, references/python.md. No aiohttp framework reference exists in Augur references/ (checked); framework-specific shapes derived from repository code per WORKFLOW.md 4.2.3 fallback, as recorded in exploration/detection.json."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": ["022", "023", "036", "073"],
+      "entries": [
+        {
+          "id": "S01",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "pymodbus",
+            "module": "examples.contrib.explain",
+            "type": null,
+            "callable": "annotate_pymodbus_logs",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "examples/contrib/explain.py",
+            "line": 139
+          },
+          "rationale": "Function parameter of a contrib example helper is a local operator/library boundary, not an untrusted input boundary: annotate_pymodbus_logs has no caller inside the file (verified), it is an offline log-annotation tool, and the path supplied is the operator's own log file (authorized use, no privilege differential between input provider and file access). A bare function parameter is not automatically a source.",
+          "evidence": [
+            "examples/contrib/explain.py:139 def annotate_pymodbus_logs(file: str | os.PathLike) -> None",
+            "examples/contrib/explain.py:141 with open(file, encoding='utf-8') as in_file (read of the operator-supplied path; sink labeled separately as K03)",
+            "grep over examples/contrib/explain.py: no in-file caller, no argparse/main entry in this module"
+          ]
+        },
+        {
+          "id": "S02",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "pymodbus",
+            "module": "pymodbus.server.simulator.http_server",
+            "type": "ModbusSimulatorServer",
+            "callable": "__init__",
+            "arg_index": 5,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 120
+          },
+          "rationale": "log_file is server startup configuration (CLI --log_file or embedding-application argument). It is stored to self.log_file at http_server.py:162 and never consumed anywhere in this snapshot (no FileHandler or other file-API call site reads it - verified by grep), so no flow to a file API exists at all; additionally the value is operator-supplied, not attacker-controlled.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:120 log_file: str = 'server.log' (constructor param 5)",
+            "pymodbus/server/simulator/http_server.py:162 self.log_file = log_file (stored, dead config in this snapshot)",
+            "grep over pymodbus/: no read of self.log_file after assignment"
+          ]
+        },
+        {
+          "id": "S03",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "pymodbus",
+            "module": "pymodbus.server.simulator.http_server",
+            "type": "ModbusSimulatorServer",
+            "callable": "__init__",
+            "arg_index": 6,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 121
+          },
+          "rationale": "json_file is server startup configuration (CLI --json_file, default setup.json next to the module; or an embedding-application argument). It flows to open(json_file) at :130 (sink K06), but the only reachable callers are the local operator CLI (pymodbus/server/simulator/main.py:118 ModbusSimulatorServer(**cmd_args)) or embedding code; reading a setup file the operator explicitly selected is authorized use, not attacker-driven traversal. A constructor parameter of a library class is not an untrusted boundary by itself.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:121 json_file: str = 'setup.json' (constructor param 6)",
+            "pymodbus/server/simulator/http_server.py:130 with open(json_file, encoding='utf-8') as file: setup = json.load(file)",
+            "pymodbus/server/simulator/main.py:85-88 --json_file argparse option with constant default os.path.join(os.path.dirname(__file__), 'setup.json')",
+            "pymodbus/server/simulator/main.py:118 task = ModbusSimulatorServer(**cmd_args) (sole in-repo construction site)"
+          ]
+        },
+        {
+          "id": "S04",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": "pymodbus",
+            "module": "pymodbus.server.simulator.http_server",
+            "type": "ModbusSimulatorServer",
+            "callable": "__init__",
+            "arg_index": 7,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 122
+          },
+          "rationale": "custom_actions_module is operator startup configuration flowing to importlib.import_module (http_server.py:140). Module import by name is code-injection semantics (Pass 4), not a filesystem path-traversal channel; importlib is not a direct file-access API. Out of scope for Pass 1.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:122 custom_actions_module: str | None = None (constructor param 7)",
+            "pymodbus/server/simulator/http_server.py:139-141 if custom_actions_module: actions_module = importlib.import_module(custom_actions_module)"
+          ]
+        },
+        {
+          "id": "S05",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "aiohttp",
+            "module": "aiohttp.web",
+            "type": "Request",
+            "callable": "path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 260
+          },
+          "rationale": "Genuine untrusted HTTP input boundary: handle_html_static (routes GET /{tail:[a-z0-9.]*} at :172 and GET / at :173) reads the aiohttp request path - a client-controlled, percent-decoded URL path - as request.path[1:] into page, with zero in-code validation before os.path.join(self.web_path, page) (:262) -> open(file) (:264) and web.FileResponse(file) (:265). As a source boundary this is a true positive. Exploitability of the full flow depends on whether the aiohttp route regex (charset [a-z0-9.], anchored whole-path match) constrains request.path to separator-free values in the deployed aiohttp version - aiohttp is outside the CodeQL database, so this cannot be resolved from DB code and is flagged as the primary manual-review point (see phase1_review.md); the handler notably reads request.path directly instead of request.match_info['tail'].",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:258-261 async def handle_html_static(self, request): if not (page := request.path[1:]): page = 'index.html'",
+            "pymodbus/server/simulator/http_server.py:262 file = os.path.join(self.web_path, page)",
+            "pymodbus/server/simulator/http_server.py:264-265 with open(file, encoding='utf-8'): return web.FileResponse(file)",
+            "pymodbus/server/simulator/http_server.py:172-173 web.get('/{tail:[a-z0-9.]*}', self.handle_html_static), web.get('/', self.handle_html_static)",
+            "pymodbus/server/simulator/http_server.py:166 self.web_path = os.path.join(os.path.dirname(__file__), 'web') (fixed package-relative base)",
+            "No normpath/abspath/realpath/relative_to/startswith/'..' rejection anywhere in the handler (only FileNotFoundError/IsADirectoryError -> HTTPNotFound at :266-267)"
+          ]
+        },
+        {
+          "id": "S06",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "aiohttp",
+            "module": "aiohttp.web",
+            "type": "Request",
+            "callable": "path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 271
+          },
+          "rationale": "Genuine untrusted HTTP input boundary: handle_html (route GET /api/{tail:[a-z]*} at :170) reads request.path and takes the last segment as page_type. The boundary read itself is a true-positive source; however page_type is only used as a lookup key into the generator_html template dict (:276-:282) and never reaches any file-access API, so no Pass 1 flow exists downstream of this source.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:271 page_type = request.path.split('/')[-1]",
+            "pymodbus/server/simulator/http_server.py:276-282 html = self.generator_html[page_type][0].replace(...) (dict-key usage only, no file access)",
+            "pymodbus/server/simulator/http_server.py:170 web.get('/api/{tail:[a-z]*}', self.handle_html)"
+          ]
+        },
+        {
+          "id": "S07",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "aiohttp",
+            "module": "aiohttp.web",
+            "type": "Request",
+            "callable": "path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 287
+          },
+          "rationale": "Genuine untrusted HTTP input boundary: handle_json (route POST /api/{tail:[a-z]*} at :171) reads request.path, last segment used as page_type. Same as S06: the source boundary is real, but the value is only a generator_json/generator_html dict key (:289-:290); request.post() form data drives register/call simulator actions and never locates files. No Pass 1 flow downstream.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:287 page_type = request.path.split('/')[-1]",
+            "pymodbus/server/simulator/http_server.py:288-290 params = await request.post(); json_dict = self.generator_html[page_type][0].copy(); result = self.generator_json[page_type][1](params, json_dict)",
+            "pymodbus/server/simulator/http_server.py:171 web.post('/api/{tail:[a-z]*}', self.handle_json)"
+          ]
+        },
+        {
+          "id": "S08",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "pymodbus",
+            "module": "pymodbus.logging",
+            "type": null,
+            "callable": "pymodbus_apply_logging_config",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "pymodbus/logging.py",
+            "line": 21
+          },
+          "rationale": "Optional log-file-name parameter of the public logging-config helper. Semantics are operator/embedding-application configuration (documented usage in API_changes.rst: pymodbus_apply_logging_config(log_file_name='pymodbus.log')); every in-repo caller passes only the level argument (verified by grep over the whole tree). No attacker-controlled data reaches this parameter in this codebase; a public API parameter designed for app configuration is not an untrusted boundary.",
+          "evidence": [
+            "pymodbus/logging.py:20-21 def pymodbus_apply_logging_config(level=..., log_file_name: str | None = None)",
+            "pymodbus/logging.py:32 Log.apply_logging_config(level, log_file_name) (forwards to S09)",
+            "grep over pymodbus_vuln tree: all 8 call sites (examples/helper.py:105, examples/datastore_simulator.py:141, examples/server_hook.py:56, examples/contrib/solar.py:27, examples/simple_sync_client.py:31, examples/simple_async_client.py:29, pymodbus/server/simulator/main.py:104, pymodbus/repl/server/main.py:112) pass level only, never log_file_name"
+          ]
+        },
+        {
+          "id": "S09",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "pymodbus",
+            "module": "pymodbus.logging",
+            "type": "Log",
+            "callable": "apply_logging_config",
+            "arg_index": 2,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "pymodbus/logging.py",
+            "line": 44
+          },
+          "rationale": "Internal classmethod of the Log wrapper class (marked ':meta private:'), only invoked from pymodbus_apply_logging_config (S08). Same operator-configuration judgment as S08: the value that would reach logging.FileHandler(log_file_name) at :57 (sink K13) comes from app logging configuration, never from an attacker-controlled boundary in this codebase.",
+          "evidence": [
+            "pymodbus/logging.py:44 def apply_logging_config(cls, level, log_file_name) ('meta private' classmethod)",
+            "pymodbus/logging.py:56-57 if log_file_name: log_file_handler = logging.FileHandler(log_file_name)",
+            "pymodbus/logging.py:32 sole caller forwards S08's arguments"
+          ]
+        },
+        {
+          "id": "S10",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "argparse",
+            "type": null,
+            "callable": "parse_args",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/main.py",
+            "line": 103
+          },
+          "rationale": "CLI boundary of the simulator entry point. argparse arguments (--json_file/--log_file/--custom_actions_module) are supplied by the local operator who starts the server - the same principal that owns the process and the files; there is no privilege differential (no setuid wrapper, service running with different credentials, or evidence of attacker-influenced argv). python.md's 'CLI args in service-mode tools' source family does not apply here; operator access to their own chosen config files is authorized behavior. Dedup note: S10/S11/S12 are three nodes of the same single CLI boundary.",
+          "evidence": [
+            "pymodbus/server/simulator/main.py:103 args = parser.parse_args(cmdline)",
+            "pymodbus/server/simulator/main.py:85-99 --json_file/--log_file/--custom_actions_module operator options",
+            "pymodbus/server/simulator/main.py:107-111 generic args.__dict__ copy loop -> cmd_args",
+            "pymodbus/server/simulator/main.py:118 ModbusSimulatorServer(**cmd_args) (config consumed at server startup, not per-request)"
+          ]
+        },
+        {
+          "id": "S11",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "pymodbus.server.simulator.main",
+            "type": null,
+            "callable": "args.__dict__",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/main.py",
+            "line": 110
+          },
+          "rationale": "Same CLI boundary as S10 (args.__dict__[argument] member/subscript read inside the copy loop at :107-111): operator-supplied startup configuration with no attacker boundary and no privilege differential. Kept as a separate entry because it is a separate CSV candidate row; signature-level dedup for library generation will collapse S10/S11/S12 into one boundary.",
+          "evidence": [
+            "pymodbus/server/simulator/main.py:107-111 for argument in args.__dict__: ... if args.__dict__[argument] is not None: cmd_args[argument] = args.__dict__[argument]",
+            "pymodbus/server/simulator/main.py:118 task = ModbusSimulatorServer(**cmd_args)"
+          ]
+        },
+        {
+          "id": "S12",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "pymodbus.server.simulator.main",
+            "type": null,
+            "callable": "args.__dict__",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/main.py",
+            "line": 111
+          },
+          "rationale": "Same CLI boundary as S10/S11 (the second args.__dict__[argument] read in the same copy loop): operator startup configuration, no attacker boundary. Duplicate-in-effect of S11 within the same statement; retained per CSV row, collapsed at library generation.",
+          "evidence": [
+            "pymodbus/server/simulator/main.py:111 if args.__dict__[argument] is not None: (value read flows into cmd_args -> ModbusSimulatorServer kwargs)"
+          ]
+        },
+        {
+          "id": "K01",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "pymodbus",
+            "module": "pymodbus.server.async_io",
+            "type": "ModbusTlsServer",
+            "callable": "__init__",
+            "arg_index": 6,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "pymodbus/server/async_io.py",
+            "line": 382
+          },
+          "rationale": "TLS certificate path is deployment/operation configuration supplied by the operator embedding the server (documented as 'The cert file path for TLS'); it is not reachable from any request or other attacker-controlled boundary in this codebase. The actual file read happens later at ssl load_cert_chain (transport.py:132, labeled K21); this definition-side parameter is not a sink for Pass 1 and has no untrusted source.",
+          "evidence": [
+            "pymodbus/server/async_io.py:382 certfile=None (ModbusTlsServer.__init__ param 6)",
+            "pymodbus/server/async_io.py:411-419 self.tls_setup = CommParams(..., sslctx=CommParams.generate_ssl(True, certfile, keyfile, password, sslctx=sslctx)) (forwards to K19/K20 -> K21)"
+          ]
+        },
+        {
+          "id": "K02",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "pymodbus",
+            "module": "pymodbus.server.async_io",
+            "type": "ModbusTlsServer",
+            "callable": "__init__",
+            "arg_index": 7,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "pymodbus/server/async_io.py",
+            "line": 383
+          },
+          "rationale": "Same judgment as K01: keyfile is operator TLS configuration forwarded to CommParams.generate_ssl; no attacker-controlled input reaches it in this codebase, and the parameter definition itself performs no file access.",
+          "evidence": [
+            "pymodbus/server/async_io.py:383 keyfile=None (param 7)",
+            "pymodbus/server/async_io.py:417-418 forwarded into CommParams.generate_ssl(True, certfile, keyfile, password, sslctx=sslctx)"
+          ]
+        },
+        {
+          "id": "K03",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "examples.contrib.explain",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "examples/contrib/explain.py",
+            "line": 141
+          },
+          "rationale": "Real builtins.open() file read whose path argument (index 0) is the annotate_pymodbus_logs function parameter - a non-constant, externally-supplied path, so as a sink API call site this is a true positive (dangerous path argument index 0). No untrusted source is labeled to reach it (S01 judged a trusted local boundary), so no Pass 1 alert is expected from the current source set; the label documents the dangerous API for future taint paths.",
+          "evidence": [
+            "examples/contrib/explain.py:141 with open(file, encoding='utf-8') as in_file, tempfile.NamedTemporaryFile(...) as out_file:",
+            "input controllability: arg 0 is fully caller-controlled (function parameter); current callers are local/offline only"
+          ]
+        },
+        {
+          "id": "K04",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "shutil",
+            "type": null,
+            "callable": "shutil.copyfile",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "examples/contrib/explain.py",
+            "line": 168
+          },
+          "rationale": "Real file copy/overwrite: shutil.copyfile(src, dst) with the destination (argument index 1) set to the caller-supplied `file` parameter - the tool intentionally rewrites the given log file in place. As a file-write sink API on a non-constant path argument this is a true positive (dangerous path argument index 1). Source-side reachability is empty in the current label set (S01 = trusted local boundary).",
+          "evidence": [
+            "examples/contrib/explain.py:168 shutil.copyfile(out_file.name, file) (arg 1 = destination = function parameter; arg 0 = internal temp path)",
+            "examples/contrib/explain.py:165-167 comment documents the delete=False + manual remove workaround"
+          ]
+        },
+        {
+          "id": "K05",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "examples/contrib/explain.py",
+            "line": 170
+          },
+          "rationale": "The os.remove argument is out_file.name - a path generated by tempfile.NamedTemporaryFile itself (delete=False at :141-143), an internal value with no external provenance. No attacker-controlled data can reach this call site, so it is not a usable Pass 1 sink (the API itself is a delete, but the operand is fixed internal state).",
+          "evidence": [
+            "examples/contrib/explain.py:141-143 tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', delete=False) as out_file",
+            "examples/contrib/explain.py:170 with contextlib.suppress(FileNotFoundError): os.remove(out_file.name)"
+          ]
+        },
+        {
+          "id": "K06",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 130
+          },
+          "rationale": "Real builtins.open() read of the constructor parameter json_file (argument index 0, non-constant provenance). Valid sink for API modeling; the only labeled paths into it (CLI --json_file / embedding-app constructor argument, S03) are operator configuration, so no untrusted-source alert is expected - reading the operator-selected setup file is authorized behavior.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:130 with open(json_file, encoding='utf-8') as file: setup = json.load(file)",
+            "pymodbus/server/simulator/main.py:118 sole in-repo construction passes CLI-derived cmd_args"
+          ]
+        },
+        {
+          "id": "K07",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": null,
+            "callable": "os.path.join",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 166
+          },
+          "rationale": "Constant path construction: os.path.join(os.path.dirname(__file__), 'web') builds the fixed package-relative web base directory. Both operands are constants (module location + string literal); no external input participates, so this is not a sink or a needed taint step.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:166 self.web_path = os.path.join(os.path.dirname(__file__), 'web')",
+            "pymodbus/server/simulator/web/ contains only fixed static assets (index.html, welcome.html, css, icons, generator templates)"
+          ]
+        },
+        {
+          "id": "K08",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": null,
+            "callable": "os.path.join",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 200
+          },
+          "rationale": "Constant path construction: join(self.web_path, 'generator', entry) where entry iterates the literal dict keys of generator_html ('log', 'registers', 'calls', 'server' - defined at :178-183). All operands are fixed constants; no external input reaches this join.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:199-202 for entry in self.generator_html: html_file = os.path.join(self.web_path, 'generator', entry); with open(html_file, encoding='utf-8') as handle:",
+            "pymodbus/server/simulator/http_server.py:178-183 generator_html = {'log': ..., 'registers': ..., 'calls': ..., 'server': ...} (literal keys)"
+          ]
+        },
+        {
+          "id": "K09",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 201
+          },
+          "rationale": "open() of a fully constant path: html_file is the result of K08's constant join (web_path + 'generator' + fixed template name). Reads package-internal template files at startup; no external input can influence the path.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:200-202 constant join result opened and stored into generator_html templates",
+            "pymodbus/server/simulator/web/generator/ fixed template files (log/registers/calls/server)"
+          ]
+        },
+        {
+          "id": "K10",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": null,
+            "callable": "os.path.join",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 262
+          },
+          "rationale": "Taint-transfer step required for realistic propagation: os.path.join(self.web_path, page) folds the attacker-influenced `page` (argument index 1, from request.path[1:] via S05) into the result assigned to `file`, which is then passed unchanged to open(:264, K11) and web.FileResponse(:265, K12). The join performs no containment/normalization; its result semantics (attacker arg with no separators stays relative, but any separator or absolute/anchored value escapes the base) make it a pure taint propagator from arguments to return value. arg_index is corrected from the CSV's 0 (family convention) to 1 - the attacker-controlled position; the summary should propagate taint from any argument to the result.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:262 file = os.path.join(self.web_path, page)",
+            "pymodbus/server/simulator/http_server.py:260 page = request.path[1:] (or 'index.html' default)",
+            "pymodbus/server/simulator/http_server.py:264-265 file used by open(file) and web.FileResponse(file) with no post-join validation"
+          ]
+        },
+        {
+          "id": "K11",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 264
+          },
+          "rationale": "Real file-read sink on the path derived from the untrusted request path: open(file) with argument 0 = K10 join result = web_path + attacker-influenced page. There is no root-containment check, no canonicalization, no basename extraction and no '..' rejection between source and this call anywhere in the handler; the surrounding try/except only converts FileNotFoundError/IsADirectoryError into HTTP 404 (:266-267), which is error handling, not sanitization. Whether an actual traversal payload can survive the aiohttp route regex is the documented manual-review point (external-library semantics), but the sink call site itself is a true positive.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:263-264 try: with open(file, encoding='utf-8'):",
+            "pymodbus/server/simulator/http_server.py:266-267 except (FileNotFoundError, IsADirectoryError) -> web.HTTPNotFound (error handling only)",
+            "input controllability: argument 0 fully derived from request.path (S05) via join (K10)"
+          ]
+        },
+        {
+          "id": "K12",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": "aiohttp",
+            "module": "aiohttp.web",
+            "type": null,
+            "callable": "web.FileResponse",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/http_server.py",
+            "line": 265
+          },
+          "rationale": "File-response sink: web.FileResponse(file) serves the file at the attacker-influenced joined path as the HTTP response body (argument index 0). aiohttp's internal open/read of the path cannot be traced (aiohttp is outside the CodeQL database), so the sink anchors at this call site; note the same `file` is first opened by K11 in the same try block, so any path that FileResponse serves has already passed a real open(). True positive as a file-response sink on an unvalidated path.",
+          "evidence": [
+            "pymodbus/server/simulator/http_server.py:265 return web.FileResponse(file) (inside the try block, after open(file) at :264)",
+            "file provenance identical to K11 (K10 join result from request.path)"
+          ]
+        },
+        {
+          "id": "K13",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "logging",
+            "type": null,
+            "callable": "logging.FileHandler",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/logging.py",
+            "line": 57
+          },
+          "rationale": "Real file-write API: logging.FileHandler(log_file_name) opens (creates/appends) the file at argument index 0 - the apply_logging_config parameter. Valid sink for API modeling; in this codebase the only labeled inputs into it (S08/S09) are operator/embedding-app logging configuration and no in-repo caller passes a file name at all, so no untrusted-source alert is expected. An alert would require an embedding application to forward attacker-controlled input into its logging configuration.",
+          "evidence": [
+            "pymodbus/logging.py:56-57 if log_file_name: log_file_handler = logging.FileHandler(log_file_name)",
+            "grep: no in-repo caller of pymodbus_apply_logging_config passes log_file_name"
+          ]
+        },
+        {
+          "id": "K14",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "pathlib",
+            "type": "Path",
+            "callable": "Path.joinpath",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/repl/client/main.py",
+            "line": 157
+          },
+          "rationale": "Fully constant path: pathlib.Path.home().joinpath('.pymodhis') - the fixed REPL history file in the user's home directory. No external input of any kind participates; not a sink.",
+          "evidence": [
+            "pymodbus/repl/client/main.py:157 history_file = pathlib.Path.home().joinpath('.pymodhis')"
+          ]
+        },
+        {
+          "id": "K15",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": "prompt_toolkit",
+            "module": "prompt_toolkit.history",
+            "type": null,
+            "callable": "FileHistory",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/repl/client/main.py",
+            "line": 183
+          },
+          "rationale": "FileHistory(history_file) writes the fixed constant path produced by K14 (home + '.pymodhis'); the path argument has no external provenance, so no attacker-controlled data can reach this call site.",
+          "evidence": [
+            "pymodbus/repl/client/main.py:183 history=FileHistory(history_file) (history_file from :157, constant)"
+          ]
+        },
+        {
+          "id": "K16",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/repl/server/main.py",
+            "line": 173
+          },
+          "rationale": "Real open() read whose path argument (index 0) is the typer CLI option modbus_config_path (Path, declared at :145-147) - non-constant, externally supplied provenance, so a valid sink call site. The only input into it is the local operator's CLI option (no attacker boundary labeled), so no untrusted-source alert is expected; reading the operator-selected config file is authorized behavior.",
+          "evidence": [
+            "pymodbus/repl/server/main.py:145-147 modbus_config_path: Path = typer.Option(None, help='Path to additional modbus server config')",
+            "pymodbus/repl/server/main.py:172-174 if modbus_config_path: with open(modbus_config_path, encoding='utf-8') as my_file: modbus_config = json.load(my_file)"
+          ]
+        },
+        {
+          "id": "K17",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": null,
+            "callable": "os.path.join",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/server/simulator/main.py",
+            "line": 88
+          },
+          "rationale": "Constant path construction for the argparse default: os.path.join(os.path.dirname(__file__), 'setup.json'). Both operands are constants; no external input participates.",
+          "evidence": [
+            "pymodbus/server/simulator/main.py:88 default=os.path.join(os.path.dirname(__file__), 'setup.json') (inside parser.add_argument for --json_file)"
+          ]
+        },
+        {
+          "id": "K18",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "pyserial",
+            "module": "serial",
+            "type": null,
+            "callable": "serial.serial_for_url",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/client/serial.py",
+            "line": 211
+          },
+          "rationale": "serial.serial_for_url opens a serial device or a socket:// URL from comm_params.host - operator-configured communication parameters set at client/server construction, never request-derived. Semantically it is a device/socket connection, not a filesystem path-traversal target, and no untrusted source reaches it in this codebase.",
+          "evidence": [
+            "pymodbus/client/serial.py:211-218 self.socket = serial.serial_for_url(self.comm_params.host, timeout=..., bytesize=..., stopbits=..., baudrate=..., parity=...)",
+            "comm_params is built from constructor arguments (operator configuration), not from any request boundary"
+          ]
+        },
+        {
+          "id": "K19",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "pymodbus",
+            "module": "pymodbus.transport.transport",
+            "type": "CommParams",
+            "callable": "generate_ssl",
+            "arg_index": 2,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "pymodbus/transport/transport.py",
+            "line": 111
+          },
+          "rationale": "Definition-side TLS configuration parameter (certfile, param index 2) of CommParams.generate_ssl; forwarded to ssl load_cert_chain at :132 (K21). Operator deployment configuration with no attacker-controlled source in this codebase; the parameter itself performs no file access.",
+          "evidence": [
+            "pymodbus/transport/transport.py:108-115 @classmethod def generate_ssl(cls, is_server, certfile=None, keyfile=None, password=None, sslctx=None)",
+            "pymodbus/transport/transport.py:131-134 if certfile: new_sslctx.load_cert_chain(certfile=certfile, keyfile=keyfile, password=password)"
+          ]
+        },
+        {
+          "id": "K20",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": "pymodbus",
+            "module": "pymodbus.transport.transport",
+            "type": "CommParams",
+            "callable": "generate_ssl",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "pymodbus/transport/transport.py",
+            "line": 112
+          },
+          "rationale": "Same judgment as K19: keyfile (param index 3) is operator TLS configuration forwarded to load_cert_chain; no untrusted source reaches it in this codebase.",
+          "evidence": [
+            "pymodbus/transport/transport.py:112 keyfile: str | None = None (param 3)",
+            "pymodbus/transport/transport.py:132-134 forwarded as keyfile= to load_cert_chain"
+          ]
+        },
+        {
+          "id": "K21",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "ssl",
+            "type": "ssl.SSLContext",
+            "callable": "load_cert_chain",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/transport/transport.py",
+            "line": 132
+          },
+          "rationale": "Real file-read API: new_sslctx.load_cert_chain(certfile=..., keyfile=..., password=...) reads the certificate and private-key files (argument index 0 = certfile, 1 = keyfile). As a sink call site it is a true positive on non-constant (parameter-derived) paths; however the entire provenance chain (ModbusTlsServer.__init__ / client TLS params -> generate_ssl) is operator TLS deployment configuration with no attacker-controlled source in this codebase, hence the moderate confidence - the API model is valid but no labeled flow reaches it.",
+          "evidence": [
+            "pymodbus/transport/transport.py:131-134 if certfile: new_sslctx.load_cert_chain(certfile=certfile, keyfile=keyfile, password=password)",
+            "pymodbus/server/async_io.py:417-418 ModbusTlsServer forwards certfile/keyfile into CommParams.generate_ssl"
+          ]
+        },
+        {
+          "id": "K22",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": "pyserial",
+            "module": "serial",
+            "type": null,
+            "callable": "serial.serial_for_url",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "pymodbus/transport/transport_serial.py",
+            "line": 23
+          },
+          "rationale": "Generic *args forwarding of operator serial configuration into serial.serial_for_url (SerialTransport.__init__(loop, protocol, *args, **kwargs)); same judgment as K18 - device/socket connection parameters, not attacker-controlled and not a filesystem path-traversal channel.",
+          "evidence": [
+            "pymodbus/transport/transport_serial.py:18-23 def __init__(self, loop, protocol, *args, **kwargs): ... self.sync_serial = serial.serial_for_url(*args, **kwargs)",
+            "callers pass operator-configured comm parameters (device path or socket:// URL)"
+          ]
+        }
+      ]
+    }
+  ]
+}

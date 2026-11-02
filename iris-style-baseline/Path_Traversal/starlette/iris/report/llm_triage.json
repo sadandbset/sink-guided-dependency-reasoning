@@ -1,0 +1,184 @@
+{
+  "review": {
+    "type": "independent_llm_path_recheck",
+    "target_rule_id": "py/augur/starlette/pass1-path-traversal",
+    "sarif_file": "iris/results/pass1.sarif",
+    "reviewed_at": "2026-10-23",
+    "reviewer_model": "glm-5.3 (running as Claude Code CLI agent)",
+    "source_tree": "dataset/codeql_databases/path_traversal_dbs/starlette_vuln (starlette 0.26.1)",
+    "inputs_read": [
+      "iris/report/iris_report.md",
+      "iris/labels/labels.json",
+      "iris/report/query_generation_notes.md",
+      "iris/results/pass1.sarif",
+      "starlette/staticfiles.py",
+      "starlette/responses.py",
+      "starlette/routing.py (grep)",
+      "starlette/testclient.py (grep)"
+    ],
+    "constraints_honored": [
+      "SARIF, labels and formal queries were not modified",
+      "PyVul ground truth, fix commits and CVE descriptions were not read; the real-vulnerability comparison below uses only the code_before/code_after snippet supplied in the task prompt, matched against the local source tree"
+    ]
+  },
+  "sarif_integrity": {
+    "rules_present_in_sarif": [
+      "py/augur/starlette/pass1-path-traversal"
+    ],
+    "results_total": 6,
+    "all_results_rule_id_matches_target": true,
+    "diagnostics_or_codeql_baseline_results_mixed_in": false,
+    "evidence": "driver.rules contains exactly one rule; every result entry has ruleId py/augur/starlette/pass1-path-traversal; the invocations block contains only level=none telemetry notifications (file-coverage baseline, platform), no diagnostic results. No other CWE / built-in security query results are present."
+  },
+  "common_taint_flow_all_alerts": {
+    "source": {
+      "location": "starlette/staticfiles.py:111 (scope[\"path\"] subscript inside StaticFiles.get_path), reached from the scope parameter of StaticFiles.__call__ at staticfiles.py:92",
+      "attacker_controlled": true,
+      "reasoning": "scope[\"path\"] is the ASGI request path. Any network client sets it arbitrarily via the request target (GET/HEAD; other methods are rejected with 405 at staticfiles.py:117-118, which is not an auth barrier). Percent-decoding happens exactly once at the server before the scope is built (testclient.py:240/258 build scope[\"path\"] = unquote(path)); no second decode boundary exists in-tree, so %2e%2e/%2f arrive as literal ../ and separators after that single decode. This is a genuine, directly reachable input boundary - not a wrapper parameter, not test code, not a constant."
+    },
+    "propagation": "staticfiles.py:111 os.path.normpath(os.path.join(*scope[\"path\"].split(\"/\"))) -> return of get_path -> get_response path param (:113) -> anyio.to_thread.run_sync(self.lookup_path, path) (:121-123, thread-offload, real code) -> lookup_path path param (:163) -> os.path.join(directory, path) (:166) -> realpath/abspath (:168 or :170) -> full_path -> os.stat(full_path) (:177) -> return tuple -> run_sync await result (:150 / :121) -> full_path in get_response (:131 or :150) -> file_response full_path param (:184) -> FileResponse(full_path, ...) (:192-193) -> FileResponse.__init__ path param (responses.py:288) -> self.path store (responses.py:298) -> self.path reads (responses.py:335, :353). Every hop is a real statement in the source tree; the async/thread wrappers are bridged by the reviewed summary edges and correspond to genuine runtime calls.",
+    "sink_family": "Real file operations only: os.stat (metadata), anyio.to_thread.run_sync(os.stat, ...) (stat offloaded to a thread), anyio.open_file(self.path, mode='rb') (actual file READ whose content is streamed to the client), and the FileResponse construction/param sites that deterministically feed those. No pure string-concatenation or Path-object-construction sink is counted among the 6 alerts.",
+    "allowed_root_and_guards": {
+      "declared_root": "Operator-configured StaticFiles(directory=...) plus package statics directories, collected in self.all_directories (staticfiles.py:39-90; bootstrap isdir check at :56 and check_config stat at :209). The declared permission is: serve only files inside these directories.",
+      "only_runtime_containment_check": "staticfiles.py:172: if os.path.commonprefix([full_path, directory]) != directory: continue - executed inside lookup_path BEFORE os.stat(:177) and before the file is returned/served.",
+      "check_effective": false,
+      "why_not_effective": [
+        "os.path.commonprefix compares raw CHARACTER prefixes, not path components. A resolved path outside the root that shares the root's character prefix passes: with root /app/static, the request /../static.txt resolves to /app/static.txt and commonprefix(['/app/static.txt', '/app/static']) == '/app/static' == directory, so the sibling file is served (lateral escape, CWE-22/36). Same for a sibling directory /app/static-evil.",
+        "Upward ../ escapes are usually caught here (the prefix shortens), and get_path's normpath (staticfiles.py:111) collapses ../ lexically but may leave an upward-relative path (e.g. '/a/../..' -> '..') that join+realpath then resolves - the final decision is still only the commonprefix character comparison.",
+        "follow_symlink=True (staticfiles.py:167-168) uses abspath (no symlink resolution), so a symlink inside the root pointing outside keeps an in-root string prefix and is served; this branch is an explicit operator opt-in, so it is a documented-behavior concern rather than the primary bug.",
+        "TOCTOU: the containment+stat check runs in lookup_path (in a worker thread) while the final re-stat (responses.py:335) and open (responses.py:353) run later in FileResponse.__call__ - a symlink swapped in between escapes the root.",
+        "No filename whitelist, no fixed mapping, no commonpath-style component containment exists anywhere in this snapshot (grep: commonprefix appears only at staticfiles.py:172; commonpath appears nowhere)."
+      ]
+    },
+    "pipeline_guard_handling": "Correct: MySanitizers::isBarrier is none() - the weak commonprefix check is NOT misjudged as an effective barrier, and realpath/abspath/normpath are modeled as taint-preserving steps, not sanitizers. No login/auth check exists on this path (StaticFiles performs no authentication at all)."
+  },
+  "alerts": [
+    {
+      "alert_id": "result-0",
+      "primary_location": "starlette/responses.py:288 (FileResponse.__init__ path parameter)",
+      "verdict": "likely_tp",
+      "confidence": 0.75,
+      "source": "scope[\"path\"] at staticfiles.py:111 (attacker-controlled ASGI request path; see common flow)",
+      "sink": "Definition-side sink: FileResponse.__init__ path param, stored to self.path (responses.py:298) and then stat at :335 and opened for read at :353.",
+      "taint_flow": "scope -> get_path (:111) -> get_response path (:113) -> run_sync offload (:121) -> lookup_path (:163) -> join/realpath (:166/:168 or :170) -> os.stat (:177) -> return -> full_path (:150/:131) -> file_response (:184) -> FileResponse ctor arg (staticfiles.py:192-193) -> path param (responses.py:288).",
+      "guard_evidence": "Weak character-prefix check at staticfiles.py:172 runs before this value is produced but is bypassable (see common analysis).",
+      "prerequisites": "Unauthenticated GET/HEAD request routed to a StaticFiles mount; a sibling file/directory sharing the root's name prefix on disk (or follow_symlink=True with an in-root symlink).",
+      "rationale": "The sink is a definition-side parameter, but a genuinely tainted call site exists: staticfiles.py:192 FileResponse(full_path, ...) with attacker-influenced full_path (proven by result-5 reaching the same ctor argument at :193). The displayed representative codeFlows route through the 404.html branch (staticfiles.py:150 -> :155 -> responses.py:288), which is an over-approximation (see result-3), so the shown path is suboptimal - but a real tainted path into this parameter exists via :192. Alert is a true positive as a definition-site mirror of the same vulnerable flow; the concrete file operations are reported separately (results 1 and 2).",
+      "fp_risk_note": "If only the 404-branch path existed, this would be an FP; the :192 caller path makes it a TP."
+    },
+    {
+      "alert_id": "result-1",
+      "primary_location": "starlette/responses.py:335 (anyio.to_thread.run_sync(os.stat, self.path) in FileResponse.__call__)",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "source": "scope[\"path\"] at staticfiles.py:111 (attacker-controlled)",
+      "sink": "os.stat of self.path, offloaded to a worker thread - a real stat of the attacker-influenced resolved path.",
+      "taint_flow": "scope -> get_path -> lookup_path (join/realpath/commonprefix) -> full_path (:177 stat, return) -> file_response (:184) -> FileResponse ctor (:192) -> self.path (responses.py:298) -> self.path read (:335).",
+      "guard_evidence": "Containment decision happened earlier in lookup_path (:172, weak) - the stat at :335 re-executes on the same path afterwards (TOCTOU window) with no re-check.",
+      "prerequisites": "Same as common flow; also stat_result must be None (when StaticFiles passes stat_result, :333 branch is skipped) - reachable e.g. via direct FileResponse use or after the tuple's stat_result is None.",
+      "rationale": "Real file-access API on a path derived from the request path, after a bypassable guard. On the sibling-prefix bypass the stat succeeds on the out-of-root file and its size/mtime are reflected in response headers. Genuine taint, genuine sink, genuine bypass precondition."
+    },
+    {
+      "alert_id": "result-2",
+      "primary_location": "starlette/responses.py:353 (await anyio.open_file(self.path, mode=\"rb\") in FileResponse.__call__)",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "source": "scope[\"path\"] at staticfiles.py:111 (attacker-controlled)",
+      "sink": "THE actual file open-for-read: the file content is read in chunks (:356) and streamed to the HTTP client (:358-363).",
+      "taint_flow": "scope -> get_path (:111) -> get_response (:113) -> run_sync (:121) -> lookup_path (:163/:166/:168-170/:177) -> full_path -> file_response (:184) -> FileResponse (:192) -> self.path (responses.py:298) -> anyio.open_file (:353).",
+      "guard_evidence": "Only guard is the bypassable commonprefix character-prefix comparison at staticfiles.py:172, executed before the path is returned; no check between the guard and this open (TOCTOU).",
+      "prerequisites": "Unauthenticated GET/HEAD to a StaticFiles mount + sibling-prefix file (e.g. root /app/static, request /../static.txt serving /app/static.txt), or follow_symlink=True with an in-root symlink.",
+      "rationale": "Strongest alert of the set: attacker-controlled request path reaches an unconditional file read whose bytes are returned to the attacker, and the only containment check is character-prefix based and provably bypassable in this exact code. This is a real CWE-22 flow, not an authorized-normal-serving false alarm - the served file escapes the declared static root under the stated preconditions."
+    },
+    {
+      "alert_id": "result-3",
+      "primary_location": "starlette/staticfiles.py:155 (FileResponse(full_path, ...) in the html-mode 404.html branch)",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "source": "Formal source node is scope[\"path\"] (staticfiles.py:111), but on this specific path the argument actually passed to lookup_path is the fixed literal \"404.html\" (staticfiles.py:151).",
+      "sink": "FileResponse construction at :154-155 (feeds stat/open as above).",
+      "taint_flow_claimed": "scope -> ... -> lookup_path return -> threadOffloadReturnStep -> await result at :150 -> full_path (:150) -> :155 -> FileResponse.",
+      "guard_evidence": "n/a - the value is not attacker-controlled at runtime, so no bypass is needed or possible here.",
+      "prerequisites": "html=True configured and the earlier lookup failing (404 path).",
+      "rationale": "The threadOffloadReturnStep summary edge (anyio.to_thread.run_sync(self.lookup_path, X) return -> lookup_path's returned tuple) is call-site-insensitive: taint from lookup_path's tainted invocation at :121/:137 is propagated onto the :150 call result too. At runtime, lookup_path(\"404.html\") joins the operator-fixed directories with the constant \"404.html\" and returns <root>/404.html - no attacker control over the value (the directory list is fixed at construction; the request path is not an input to this call). The alert therefore fires purely due to the over-generalized propagation edge, matching the Phase-1 label p1-k-031 (fp, fixed '404.html').",
+      "fp_cause": "over_generalized_summary_edge (site-insensitive thread-offload return bridging)"
+    },
+    {
+      "alert_id": "result-4",
+      "primary_location": "starlette/staticfiles.py:177 (os.stat(full_path) in lookup_path)",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "source": "scope[\"path\"] at staticfiles.py:111 (attacker-controlled)",
+      "sink": "os.stat on the resolved full_path - real metadata access on the attacker-influenced path, inside the vulnerable function itself.",
+      "taint_flow": "scope -> get_path (:111) -> get_response path (:113) -> run_sync arg (:121-123) -> lookup_path path param (:163) -> os.path.join(directory, path) (:166) -> realpath/abspath (:168/:170) -> full_path -> os.stat (:177).",
+      "guard_evidence": "The containment check at :172 runs immediately before :177 - but it is the weak character-prefix commonprefix comparison (bypassable via sibling-prefix; see common analysis). This alert fires exactly at the point where the vulnerable guard's decision materializes into a file access.",
+      "prerequisites": "Unauthenticated GET/HEAD + sibling-prefix file/directory on disk (or follow_symlink=True).",
+      "rationale": "True positive: the stat at :177 succeeds on the out-of-root sibling file when the commonprefix check passes it, and the returned (full_path, stat_result) then drives the FileResponse serving chain (results 1/2/5)."
+    },
+    {
+      "alert_id": "result-5",
+      "primary_location": "starlette/staticfiles.py:193 (FileResponse(full_path, ...) argument in StaticFiles.file_response)",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "source": "scope[\"path\"] at staticfiles.py:111 (attacker-controlled)",
+      "sink": "FileResponse construction on the main serving path (staticfiles.py:192-193); the constructed object then re-stats and opens the file (responses.py:335/:353).",
+      "taint_flow": "scope -> get_path (:111) -> get_response (:113) -> run_sync (:121) -> lookup_path (:163/:166/:168-170/:177) -> full_path returned (:121/:131) -> file_response full_path param (:184) -> FileResponse ctor arg (:193).",
+      "guard_evidence": "Only the bypassable commonprefix check at :172, upstream of this construction; nothing re-validates full_path between lookup_path and the eventual open (TOCTOU).",
+      "prerequisites": "Same as common flow (stat_result must indicate a regular file at :129, or the index.html/404 branches).",
+      "rationale": "True positive: this is the main authorized-serving construction site, but with an attacker-influenced path that can resolve outside the declared root under the sibling-prefix bypass; the constructor's stat_result shortcut (:319-320) only skips the re-stat, not the open at :353."
+    }
+  ],
+  "real_vulnerability_coverage": {
+    "question": "Is the real vulnerability (lookup_path commonprefix -> commonpath, CWE-22, supplied commit 1797de46/GHSA-v5gw-mw7f-84px code_before) hit by the formal Pass 1 alerts?",
+    "vulnerable_code_present_in_snapshot": {
+      "confirmed": true,
+      "evidence": "starlette/staticfiles.py:162-180 in the starlette_vuln source tree matches the supplied code_before verbatim: os.path.commonprefix([full_path, directory]) != directory at line 172, follow_symlink/realpath branches at :167-171, return full_path, os.stat(full_path) at :177. grep confirms commonpath appears nowhere in the tree."
+    },
+    "verdict": "hit",
+    "confidence": 0.9,
+    "matching_alerts": [
+      "result-4 (staticfiles.py:177, os.stat(full_path) inside lookup_path) - alert inside the vulnerable function itself, on the exact statement fed by the flawed guard",
+      "result-5 (staticfiles.py:193, FileResponse ctor on file_response's full_path) - the out-of-root full_path produced by the bypassed guard is handed to the serving response",
+      "result-2 (responses.py:353, anyio.open_file(self.path)) - the actual read that serves the escaped file's bytes",
+      "result-1 (responses.py:335, run_sync(os.stat, self.path)) - downstream re-stat of the escaped path",
+      "result-0 (responses.py:288, FileResponse.__init__ path param) - definition-side mirror of the same flow (via the genuine :192 caller)"
+    ],
+    "non_matching_alert": "result-3 (staticfiles.py:155, 404.html branch) does not lie on the vulnerable flow - its lookup_path argument is the constant \"404.html\"; it is a site-insensitivity artifact of the thread-offload return summary (likely_fp).",
+    "attack_scenario_covered": "Request path (e.g. /../static.txt with root /app/static, or /../static-evil/secret.txt with sibling dir /app/static-evil) -> get_path normpath -> lookup_path join+realpath resolves to the sibling path -> commonprefix character-prefix comparison wrongly equals the directory -> check passes (the CWE-22 root cause at :172) -> os.stat (:177) succeeds -> FileResponse (:192-193) -> anyio.open_file (responses.py:353) reads and streams the file located OUTSIDE the declared static root. The Augur pipeline correctly declines to model the commonprefix check as a barrier (MySanitizers none()), which is what allows this genuinely vulnerable flow to surface as alerts.",
+    "coverage_caveats": [
+      "The alerts are flow-level (source->sink) matches; they do not name the commonprefix defect itself, but the vulnerable line staticfiles.py:172 sits on every reported codeFlow between :166 and :177.",
+      "Preconditions required for exploitation (sibling file/dir sharing the root's name prefix on disk, or follow_symlink=True) are environmental, not visible to static taint analysis - consistent with verdict likely_tp rather than certain.",
+      "The upward ../ variant and the purely-lexical normpath collapse are caught by commonprefix in most cases; the reliable bypass is the lateral sibling-prefix one, which the alerts' data flow fully represents."
+    ]
+  },
+  "checklist_answers": {
+    "1_source_attacker_controlled": "Yes for all 6 alerts formally; at runtime only 5 of them carry request-derived data (result-3's branch argument is the constant '404.html'). Source is scope['path'] (staticfiles.py:111) / the ASGI scope - the actual request URL path, single percent-decode at the server.",
+    "2_source_reaches_file_arg": "Yes for results 1/2/4/5 (and 0 via the genuine :192 caller): every intermediate hop (get_path, run_sync offload, lookup_path, join/realpath, FileResponse ctor, self.path field store) is a real statement verified in staticfiles.py and responses.py. Result-3's displayed path depends on a site-insensitive summary edge and does not hold at runtime.",
+    "3_sink_is_real_file_operation": "Yes: os.stat (staticfiles.py:177), run_sync(os.stat,...) (responses.py:335), anyio.open_file read (responses.py:353), and the FileResponse ctor/param sites that deterministically feed them. No pure concatenation/Path-construction sink among the alerts.",
+    "4_allowed_root_and_escape": "Allowed root = operator-configured StaticFiles directory(ies). Controlled input CAN point outside via the character-prefix sibling bypass at :172 - serving files outside the declared root.",
+    "5_traversal_factors": "Single percent-decode at the server (testclient.py:240/258); no double-decode in-tree. ../ collapsed by normpath in get_path but upward escapes are generally caught by the prefix check; the effective bypass is lateral (sibling name prefix), plus the follow_symlink abspath branch and the check-vs-open TOCTOU. Windows separator normalization by normpath is a residual mixed-separator concern.",
+    "6_effective_guards": "None effective. The only check (commonprefix, :172) runs before the stat/return inside lookup_path but is character-based and bypassable; no commonpath, no whitelist, no fixed mapping anywhere in the tree.",
+    "7_misjudged_guards": "No. The pipeline does not treat commonprefix, realpath, normpath or any auth (there is none on this path) as a barrier; MySanitizers is none() - the correct call for this vulnerable snapshot.",
+    "8_normal_authorized_serving_or_unreachable": "No for 5 alerts: the flow is the production StaticFiles serving pipeline (not test code), externally reachable via Mount/Route dispatch (routing.py:394 remainder becomes child scope path), and under the sibling-prefix precondition it serves files OUTSIDE the authorized root - i.e. not merely normal authorized static serving. Result-3 is the exception (constant argument -> FP).",
+    "9_over_generalization": "Yes for result-3 only: the threadOffloadReturnStep bridges lookup_path's tainted return to the constant-argument '404.html' call site. The other 5 alerts' paths correspond to runtime-realizable flows. Database coverage is complete for the involved files (responses.py, staticfiles.py both in the artifacts list).",
+    "10_wrong_cwe_or_mixed_results": "No. The SARIF contains exactly one rule (the Augur pass-1 query), 6 results, no diagnostics, no CodeQL built-in baseline results; the CWE tags are 022/023/036/073 as declared."
+  },
+  "summary": {
+    "total_formal_alerts": 6,
+    "likely_tp": 5,
+    "likely_fp": 1,
+    "uncertain": 0,
+    "likely_tp_alerts": [
+      "responses.py:288 (result-0, confidence 0.75)",
+      "responses.py:335 (result-1, confidence 0.85)",
+      "responses.py:353 (result-2, confidence 0.9)",
+      "staticfiles.py:177 (result-4, confidence 0.85)",
+      "staticfiles.py:193 (result-5, confidence 0.85)"
+    ],
+    "likely_fp_alerts": [
+      "staticfiles.py:155 (result-3, confidence 0.8 - site-insensitive thread-offload return summary onto the constant '404.html' branch)"
+    ],
+    "real_vulnerability_hit": "Yes - the lookup_path commonprefix CWE-22 (code matching the supplied vulnerable code_before at staticfiles.py:162-180) is on the tainted path of 5 of the 6 formal alerts, including an alert directly inside lookup_path (:177) and the actual file-read sink (responses.py:353).",
+    "bottom_line": "CodeQL analysis succeeded and the formal Pass 1 path-traversal alerts substantially overlap the real vulnerability; the single FP is an over-approximate summary edge on the fixed-name 404.html branch, not a wrong source or sink."
+  }
+}

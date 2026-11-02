@@ -1,0 +1,1203 @@
+{
+  "pass_id": 1,
+  "focus": "Path Traversal",
+  "cwes": [
+    "022",
+    "023",
+    "036",
+    "073"
+  ],
+  "run_id": "pymdown-extensions-iris-phase1-step3-pass1",
+  "model": "glm-5.3",
+  "generated_at": "2026-10-23T01:24:35Z",
+  "labeling_mode": "LLM in-context labeling over full source reads (glm-5.3 via Claude Code CLI); temperature not applicable (single deterministic pass per batch, re-ask round for sub-threshold entries)",
+  "inputs": {
+    "sources_csv": "iris/extraction/sources.csv (15 candidate rows)",
+    "sinks_csv": "iris/extraction/sinks.csv (59 candidate rows)",
+    "detection_json": "iris/exploration/detection.json",
+    "references_loaded": [
+      "augur-0.3.0/WORKFLOW.md",
+      "references/patterns.md",
+      "references/python.md"
+    ],
+    "framework_reference": "none - no web framework matches this tree (see detection.json); host-library boundary (python-markdown extension architecture)",
+    "source_tree": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln"
+  },
+  "batch_policy": {
+    "batch_count": 5,
+    "batch_grouping": "by module family, in CSV row order",
+    "reask_threshold": 0.55,
+    "reask_entries": [
+      "p1-k09",
+      "p1-k19"
+    ]
+  },
+  "batches": [
+    {
+      "batch_id": "batch-1-sources",
+      "scope": "Source candidates from iris/extraction/sources.csv (all files)",
+      "input_csv": "iris/extraction/sources.csv",
+      "csv_rows": 15,
+      "entries_emitted": 14,
+      "note": "one exact duplicate row pair (snippets.py:258, CSV rows 13-14) deduplicated"
+    },
+    {
+      "batch_id": "batch-2-b64-sinks",
+      "scope": "Sink candidates in pymdownx/b64.py",
+      "input_csv": "iris/extraction/sinks.csv",
+      "csv_rows": 8,
+      "entries_emitted": 8,
+      "note": "b64 src-attr pipeline; the open() at :86 is the confirmed read sink"
+    },
+    {
+      "batch_id": "batch-3-snippets-util-sinks",
+      "scope": "Sink candidates in pymdownx/snippets.py and pymdownx/util.py",
+      "input_csv": "iris/extraction/sinks.csv",
+      "csv_rows": 15,
+      "entries_emitted": 15,
+      "note": "snippets include pipeline + shared decode helpers; codecs.open at :311 is the confirmed read sink"
+    },
+    {
+      "batch_id": "batch-4-pathconverter-run_tests-sinks",
+      "scope": "Sink candidates in pymdownx/pathconverter.py and run_tests.py",
+      "input_csv": "iris/extraction/sinks.csv",
+      "csv_rows": 11,
+      "entries_emitted": 11,
+      "note": "all labeled none: pathconverter is string-only; run_tests is trusted operator CLI"
+    },
+    {
+      "batch_id": "batch-5-tools-root-scripts-sinks",
+      "scope": "Sink candidates in tools/ and hatch_build.py (dev/build tooling)",
+      "input_csv": "iris/extraction/sinks.csv",
+      "csv_rows": 25,
+      "entries_emitted": 25,
+      "note": "gen_emoji zip-slip shape held at candidate; all fixed-constant paths labeled none"
+    }
+  ],
+  "dedup_records": [
+    {
+      "kept_id": "p1-s12",
+      "csv_rows": [
+        13,
+        14
+      ],
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 258,
+      "reason": "identical rows for the two m.group('snippet') calls of the inline conditional expression on snippets.py:258 - same location, same role, same downstream flow; one label entry retained"
+    }
+  ],
+  "reask_records": [
+    {
+      "id": "p1-k09",
+      "first_pass_confidence": 0.5,
+      "action": "re-examined with a fresh read of gen_emoji.py:42-78",
+      "final_confidence": 0.55,
+      "final_decision": "kept as sink/candidate - conservative recall for the untrusted archive entry point; path is basename-guarded, extractall is the actual zip-slip surface"
+    },
+    {
+      "id": "p1-k19",
+      "first_pass_confidence": 0.5,
+      "action": "re-examined with a fresh read of gen_emoji.py:57-78",
+      "final_confidence": 0.55,
+      "final_decision": "kept as sanitizer/candidate - basename(url) + literal '.zip' is a concrete flat-filename neutralization for the write path, but does not cover extractall members; left for human review"
+    }
+  ],
+  "raw_decisions": [
+    {
+      "id": "p1-s01",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        2
+      ],
+      "batch": "batch-1-sources",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/b64.py",
+      "line": 73,
+      "role": "source",
+      "classification": "tp",
+      "confidence": 0.95,
+      "rationale": "True untrusted origin: B64Postprocessor processes the rendered HTML of untrusted Markdown; m.group('path')[1:-1] in repl_path extracts the attacker-supplied <img> src value (quotes stripped), which flows into util.parse_url -> util.url2path -> os.path.join/normpath -> open(file_name, 'rb') at b64.py:86. The value is fully attacker-controlled string content from the Markdown document, not an internal wrapper artifact."
+    },
+    {
+      "id": "p1-s02",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        3
+      ],
+      "batch": "batch-1-sources",
+      "node": "text",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/b64.py",
+      "line": 114,
+      "role": "source",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "Host-library input boundary: the Python-Markdown core invokes B64Postprocessor.run(text) with the rendered output of untrusted Markdown source; the host call site is outside the CodeQL database, so this parameter (position 1, self slot included) is the visible entry point of the attacker-controlled text that feeds the src extraction at b64.py:73."
+    },
+    {
+      "id": "p1-s03",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        4
+      ],
+      "batch": "batch-1-sources",
+      "node": "Subscript",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 112,
+      "role": "source",
+      "classification": "candidate",
+      "confidence": 0.55,
+      "rationale": "External semi-trusted content: tags[user_input]['zipball_url'] is read out of json.loads(requests.get(GitHub API releases).text); the basename of this URL is embedded into the downloaded-zip file path. This is not a normal untrusted input boundary (HTTPS GitHub API response, maintainer-run dev tool, user_input only selects a list index), so it is held at candidate pending human review rather than confirmed tp."
+    },
+    {
+      "id": "p1-s04",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        5
+      ],
+      "batch": "batch-1-sources",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 126,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "argparse CLI of a maintainer dev tool: all options (--tag, --gemoji, --twemoji, ...) are tag/version strings and booleans, not filesystem paths; the tool is operator-run and no untrusted path value is born here. Not a Pass 1 source."
+    },
+    {
+      "id": "p1-s05",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        6
+      ],
+      "batch": "batch-1-sources",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 72,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "The m.group('path') value is genuinely attacker-controlled (href/src attribute of untrusted rendered output), but pathconverter.py is verified pure string rewriting: no exists/open/stat or any filesystem API anywhere in the module; the rewritten value is written back into the output HTML text. No Pass 1 filesystem sink is reachable from this origin."
+    },
+    {
+      "id": "p1-s06",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        7
+      ],
+      "batch": "batch-1-sources",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 102,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "Same situation as the repl_relative branch: m.group('path') at repl_absolute extracts an attacker href/src value, but the module performs string rewriting only (path2url/urlunparse write-back at :107-:118) with no filesystem access; no Pass 1 sink downstream."
+    },
+    {
+      "id": "p1-s07",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        8
+      ],
+      "batch": "batch-1-sources",
+      "node": "text",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 145,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "The host-library boundary is real (run(text) receives the untrusted rendered output at position 1, self slot included), but the whole module is verified string-only: no filesystem operation exists downstream, so this boundary cannot produce a path-traversal flow in Pass 1."
+    },
+    {
+      "id": "p1-s08",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        9
+      ],
+      "batch": "batch-1-sources",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/run_tests.py",
+      "line": 22,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "Trusted operator CLI: parse_args() of the test runner; --update/--test-target/--file are chosen by the developer running the tests. An operator is an authorized, trusted user, not an attacker boundary; no untrusted value is born here."
+    },
+    {
+      "id": "p1-s09",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        10
+      ],
+      "batch": "batch-1-sources",
+      "node": "Subscript",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/run_tests.py",
+      "line": 26,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "args.file[0] is the operator's own --file selection, canonicalized with os.path.abspath and only forwarded to test_syntax.set_target_file; this is deliberate authorized access to a test file chosen by the trusted operator, not attacker-controlled input."
+    },
+    {
+      "id": "p1-s10",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        11
+      ],
+      "batch": "batch-1-sources",
+      "node": "url",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 177,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.8,
+      "rationale": "download(url) receives a Markdown-controlled http(s) URL, but it is consumed by urllib.request.urlopen - a network fetch (SSRF / Pass 3 territory), not a filesystem path API. No Pass 1 traversal flow; recorded here so Pass 3 labeling can pick this boundary up."
+    },
+    {
+      "id": "p1-s11",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        12
+      ],
+      "batch": "batch-1-sources",
+      "node": "lines",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 210,
+      "role": "source",
+      "classification": "candidate",
+      "confidence": 0.6,
+      "rationale": "Internal recursive entry: parse_snippets(lines) receives either the document lines from run() (the true host boundary at :352) or snippet file lines on recursion (:333-341); the parameter carries attacker text, but the origin rows at :258/:276 already model the birth of the controlled path. Kept as a low-priority source for recall of nested-include flows; primary boundary is run()."
+    },
+    {
+      "id": "p1-s12",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        13,
+        14
+      ],
+      "batch": "batch-1-sources",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 258,
+      "role": "source",
+      "classification": "tp",
+      "confidence": 0.95,
+      "rationale": "THE snippet include-path origin: m.group('snippet') returns the quoted include path straight out of the untrusted Markdown line (--8<-- inline syntax); quotes are stripped ([1:-1]) and the value flows to get_snippet_path -> os.path.join -> codecs.open. Two identical CSV rows (the two m.group('snippet') calls of the inline conditional on line 258) were deduplicated into this single entry."
+    },
+    {
+      "id": "p1-s13",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        15
+      ],
+      "batch": "batch-1-sources",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 276,
+      "role": "source",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "Block-form include path re-extracted after suffix stripping: RE_SNIPPET_FILE removes :lines/:section suffixes and m.group(1) yields the bare attacker path from the Markdown block body; it feeds the same get_snippet_path -> join -> codecs.open flow as the inline form."
+    },
+    {
+      "id": "p1-s14",
+      "csv_file": "iris/extraction/sources.csv",
+      "csv_rows": [
+        16
+      ],
+      "batch": "batch-1-sources",
+      "node": "lines",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 352,
+      "role": "source",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "Host-library input boundary: the Python-Markdown core calls SnippetPreprocessor.run(lines) with the untrusted document source; the host invocation is outside the database, so this parameter (position 1, self slot included) is the visible entry of the attacker-controlled Markdown text whose include lines birth the paths at :258/:276."
+    },
+    {
+      "id": "p1-k01",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        2
+      ],
+      "batch": "batch-2-b64-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/b64.py",
+      "line": 73,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "Decode/propagation helper, not a guard: util.parse_url HTML-entity-decodes (html.unescape) and urlparse()s the attacker src value; the path component is returned and joined at b64.py:80. Required taint step (argument 0 -> parsed path component); it widens the input surface (entity-encoded traversal chars decode before the join), never restricts it."
+    },
+    {
+      "id": "p1-k02",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        3
+      ],
+      "batch": "batch-2-b64-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/b64.py",
+      "line": 75,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "Percent-decode step: util.url2path calls url2pathname, so %2e%2e%2f decodes into plain ../ BEFORE os.path.join at b64.py:80. Taint-preserving and traversal-enabling; explicitly NOT a sanitizer in this implementation."
+    },
+    {
+      "id": "p1-k03",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        4
+      ],
+      "batch": "batch-2-b64-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/b64.py",
+      "line": 78,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.85,
+      "rationale": "os.path.normpath on the absolute branch: parse_url flags file://, c:/, // UNC and leading-/\\\\ forms as is_absolute, and this branch normpaths the path WITHOUT joining base_path and WITHOUT any containment check - any absolute path on the host reaches open() at :86 directly. Taint-preserving step; normpath collapses '..' lexically but enforces nothing here."
+    },
+    {
+      "id": "p1-k04",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        5
+      ],
+      "batch": "batch-2-b64-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/b64.py",
+      "line": 80,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.85,
+      "rationale": "os.path.normpath over join(base_path, path): collapses '..' segments lexically but performs no base-directory containment, so sequences that normalize outside base_path still pass the exists() gate at :82 and reach open() at :86. Taint-preserving step, not a sanitizer."
+    },
+    {
+      "id": "p1-k05",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        6
+      ],
+      "batch": "batch-2-b64-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/b64.py",
+      "line": 80,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "os.path.join(base_path, path) composes the operator-configured base with the attacker path at argument 1: no post-join validation and no '..' rejection anywhere downstream; os.path.join semantics additionally let an absolute path argument discard base_path entirely. Key taint step from the src attribute value to the open() sink at :86."
+    },
+    {
+      "id": "p1-k06",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        7
+      ],
+      "batch": "batch-2-b64-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/b64.py",
+      "line": 82,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "Existence oracle only: os.path.exists(file_name) gates the read but returns no file content; the dangerous operation is open() at :86. A TOCTOU-shaped check-then-open window exists between :82 and :86, but the check itself is neither a sink nor a traversal guard."
+    },
+    {
+      "id": "p1-k07",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        8
+      ],
+      "batch": "batch-2-b64-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/b64.py",
+      "line": 83,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "Extension extraction feeding the image-type whitelist at :84-85; the result selects a MIME type and is never used as a path. The whitelist restricts which files get read, not where they may live - not a traversal guard, and not a sink."
+    },
+    {
+      "id": "p1-k08",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        9
+      ],
+      "batch": "batch-2-b64-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/b64.py",
+      "line": 86,
+      "role": "sink",
+      "classification": "tp",
+      "confidence": 0.95,
+      "rationale": "THE B64 read sink: open(file_name, 'rb') reads the file resolved from the attacker-controlled <img> src after decode+join+normpath with no base-directory containment; the content is base64-embedded into the rendered output (data URI), i.e. arbitrary file read plus exfiltration into the generated HTML. Absolute src forms (file://, c:/, //, leading /) read outside base_path by construction."
+    },
+    {
+      "id": "p1-k09",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        10
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 44,
+      "role": "sink",
+      "classification": "candidate",
+      "confidence": 0.55,
+      "rationale": "zipfile.ZipFile(file_location, 'r') opens the archive downloaded from the GitHub zipball_url. The file_location path itself is constrained by the basename+'.zip' composition (see the sanitizer row at :66), but the opened archive is externally sourced content that feeds the unvalidated extractall at :45. Labeled sink conservatively; classification candidate because the source is a semi-trusted HTTPS GitHub API response in a maintainer-run dev tool. Re-examined after the first pass scored 0.5 (<0.55 threshold) and kept at 0.55."
+    },
+    {
+      "id": "p1-k10",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        11
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 45,
+      "role": "sink",
+      "classification": "candidate",
+      "confidence": 0.6,
+      "rationale": "Zip-slip shape: z.extractall(os.path.dirname(file_location)) extracts externally downloaded archive members with NO member-name validation - entry names containing ../ or absolute components would write outside the extraction directory. A real CWE-22 shape, but reachability requires a malicious or compromised GitHub archive response (maintainer tool, semi-trusted source); held at candidate for human review."
+    },
+    {
+      "id": "p1-k11",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        12
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 48,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "os.listdir(base) enumerates the operator-configured tags/<repo> directory to locate the extracted repo folder; base derives from current_dir (a __file__ derivative) and hardcoded repo names, not from attacker input."
+    },
+    {
+      "id": "p1-k12",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        13
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 50,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "Directory test applied to entries listed from the operator tags directory; a type probe on non-attacker paths, not a read/write/delete of an attacker-controlled path."
+    },
+    {
+      "id": "p1-k13",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        14
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 54,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.7,
+      "rationale": "os.rename(repo_dir, join(base, repo.replace('/', '-'))): the destination is fixed and the source directory name derives from the archive listing (archive-influenced), but renaming within the same operator directory is not a traversal primitive; it is downstream of the same semi-trusted archive as the extractall candidate row."
+    },
+    {
+      "id": "p1-k14",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        15
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 60,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "Existence check on destination = join(current_dir, 'tags', repo.replace('/', '-')) - operator constants only (current_dir from __file__, hardcoded repo names); no attacker-controlled path."
+    },
+    {
+      "id": "p1-k15",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        16
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 61,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "Directory creation of the operator tags destination; constants only, no attacker influence."
+    },
+    {
+      "id": "p1-k16",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        17
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 64,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "shutil.rmtree(destination) removes the operator tags directory before regeneration; destination is built from __file__ derivatives and hardcoded repo names."
+    },
+    {
+      "id": "p1-k17",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        18
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 65,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "Directory re-creation of the same operator destination; constants only."
+    },
+    {
+      "id": "p1-k18",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        19
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 66,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.7,
+      "rationale": "join(destination, os.path.basename(url) + '.zip') composes the operator destination with a filename that cannot traverse: basename strips all separator components and the literal '.zip' suffix guarantees a flat file name (see the sanitizer row for :66). Not a traversal-capable join; the extraction-column arg_index 0 records the destination operand, the external-derived basename sits in argument 1."
+    },
+    {
+      "id": "p1-k19",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        20
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 66,
+      "role": "sanitizer",
+      "classification": "candidate",
+      "confidence": 0.55,
+      "rationale": "os.path.basename(url) strips every path-separator component from the external zipball_url before the literal '.zip' suffix is appended and joined into the fixed tags directory, so the external URL cannot influence directories - a concrete, implementation-verified neutralization for the download-write path (argument 0 -> result). Held at candidate because it does NOT validate archive members for the extractall at :45, and on POSIX a backslash-containing basename remains a flat (non-separator) filename. Re-examined after the first pass scored 0.5 (<0.55 threshold) and kept at 0.55."
+    },
+    {
+      "id": "p1-k20",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        21
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji.py",
+      "line": 73,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.7,
+      "rationale": "open(file_location, 'wb') writes the downloaded archive bytes to the basename-guarded path inside the fixed tags directory (join at :66 plus the sanitizer row); the write location cannot traverse. If the :66 sanitizer label is rejected at human review, re-evaluate this row together with the join row."
+    },
+    {
+      "id": "p1-k21",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        22
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji1.py",
+      "line": 21,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "open(os.path.join(current_dir, 'tags', repo, repo, 'emoji.json')) - repo derives from the hardcoded EMOJIONE repo name and current_dir from __file__; operator constants, no attacker input reaches this path."
+    },
+    {
+      "id": "p1-k22",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        23
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji1.py",
+      "line": 43,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.95,
+      "rationale": "open('../tests/extensions/emoji/emoji1 (%s).txt' % test, 'w') - literal relative output path with test drawn from a fixed tuple; no attacker control."
+    },
+    {
+      "id": "p1-k23",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        24
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_emoji1.py",
+      "line": 53,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.95,
+      "rationale": "open('../pymdownx/emoji1_db.py', 'w') - literal generated-db output path; no attacker control."
+    },
+    {
+      "id": "p1-k24",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        25
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_gemoji.py",
+      "line": 87,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "codecs.open(join(current_dir, 'tags', repo, repo, 'db', 'emoji.json'), 'r', encoding='utf-8') - repo derives from the hardcoded GEMOJI repo name; operator constants only."
+    },
+    {
+      "id": "p1-k25",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        26
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_gemoji.py",
+      "line": 115,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.95,
+      "rationale": "open('../tests/extensions/emoji/gemoji (%s).txt' % test, 'w') - literal relative output path; no attacker control."
+    },
+    {
+      "id": "p1-k26",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        27
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_gemoji.py",
+      "line": 124,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "open(join(current_dir, 'tags', repo, repo, 'LICENSE'), 'r') - operator constants (hardcoded repo name, __file__ derivative); no attacker control."
+    },
+    {
+      "id": "p1-k27",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        28
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_gemoji.py",
+      "line": 128,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.95,
+      "rationale": "open('../pymdownx/gemoji_db.py', 'w') - literal generated-db output path; no attacker control."
+    },
+    {
+      "id": "p1-k28",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        29
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_joypixels.py",
+      "line": 21,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "open(join(current_dir, 'tags', repo, repo, 'emoji.json'), 'r') - repo derives from the hardcoded JOYPIXELS repo name; operator constants only."
+    },
+    {
+      "id": "p1-k29",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        30
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_twemoji.py",
+      "line": 200,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "os.listdir(asset_path) where asset_path = join(current_dir, 'tags', repo, repo, 'assets', 'svg') - operator constants (hardcoded TWEMOJI repo name, __file__ derivative); no attacker input."
+    },
+    {
+      "id": "p1-k30",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        31
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_twemoji.py",
+      "line": 201,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "os.path.isfile applied to names listed from the operator svg asset directory (with an .svg extension check); a type probe on non-attacker paths."
+    },
+    {
+      "id": "p1-k31",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        32
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_twemoji.py",
+      "line": 264,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.95,
+      "rationale": "open('../tests/extensions/emoji/twemoji (%s).txt' % test, 'w') - literal relative output path; no attacker control."
+    },
+    {
+      "id": "p1-k32",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        33
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/tools/gen_twemoji.py",
+      "line": 274,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.95,
+      "rationale": "open('../pymdownx/twemoji_db.py', 'w') - literal generated-db output path; no attacker control."
+    },
+    {
+      "id": "p1-k33",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        34
+      ],
+      "batch": "batch-5-tools-root-scripts-sinks",
+      "node": "open()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/hatch_build.py",
+      "line": 23,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "open(os.path.join(root, 'requirements', 'project.txt')) inside the hatchling metadata hook: root is the build-system-provided project root (operator) and the joined tail is a literal; no attacker-controlled path."
+    },
+    {
+      "id": "p1-k34",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        35
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 72,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "util.parse_url at repl_relative: decodes the attacker href/src value, but the module is verified pure string rewriting - the parsed path is rebuilt into output link text via path2url/urlunparse, never touching the filesystem. Propagation-only local chain, not a Pass 1 sink."
+    },
+    {
+      "id": "p1-k35",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        36
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 77,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "util.url2path at repl_relative: percent-decode of the attribute value feeding the string rewrite at :80-:88; no filesystem access exists in pathconverter.py, so this is not a Pass 1 sink."
+    },
+    {
+      "id": "p1-k36",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        37
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 80,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "os.path.relpath at repl_relative: computes the output-relative display path for the rewritten link; string-only transformation, no file access in the module."
+    },
+    {
+      "id": "p1-k37",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        38
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 81,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "os.path.normpath inside repl_relative's join: lexical cleanup of the composed display path; the result becomes link text, not a file operation."
+    },
+    {
+      "id": "p1-k38",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        39
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 81,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "os.path.join(base_path, path) at repl_relative (argument 1 carries the attacker value): the composed path feeds relpath/path2url and is written back into the output HTML; verified no exists/open/stat anywhere in pathconverter.py, so no Pass 1 sink is reachable."
+    },
+    {
+      "id": "p1-k39",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        40
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 82,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "os.path.normpath(relative_path) on the operator-configured relative path: display-path cleanup for the rewrite; no file access."
+    },
+    {
+      "id": "p1-k40",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        41
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 102,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "util.parse_url at repl_absolute: same as the repl_relative branch - decode feeds a string-only rewrite (:106-:118); no filesystem access in the module."
+    },
+    {
+      "id": "p1-k41",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        42
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 105,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "util.url2path at repl_absolute: percent-decode feeding the string rewrite; no file access."
+    },
+    {
+      "id": "p1-k42",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        43
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 106,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "os.path.normpath over join(base_path, path) at repl_absolute: the normalized path becomes link text via path2url/urlunparse; no file access."
+    },
+    {
+      "id": "p1-k43",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        44
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/pathconverter.py",
+      "line": 106,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "os.path.join(base_path, path) at repl_absolute (argument 1 carries the attacker value): the composed path is rewritten into output link text; module verified string-only, no Pass 1 sink downstream."
+    },
+    {
+      "id": "p1-k44",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        45
+      ],
+      "batch": "batch-4-pathconverter-run_tests-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/run_tests.py",
+      "line": 26,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "os.path.abspath(args.file[0]) canonicalizes the operator's own --file CLI selection; trusted operator input and deliberate access (the file is then fed to the test runner), not a sink for untrusted traversal."
+    },
+    {
+      "id": "p1-k45",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        46
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "path",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 155,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "Internal resolution wrapper definition: takes the attacker include path (parameter position 1, self slot included) and returns the first existing os.path.join result across the configured base_path list, with NO validation inside the function (no '..' rejection, no absolute-path rejection, no containment). Required summary step (path parameter -> return value) so taint flows from :258/:276 through the :301 call into codecs.open at :311."
+    },
+    {
+      "id": "p1-k46",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        47
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 160,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "Existence gate on the operator-configured base entry: selects which base is tried, returns no content, and blocks nothing about traversal. Not a sanitizer (a missing file just falls through to the next base) and not a sink."
+    },
+    {
+      "id": "p1-k47",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        48
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 161,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "Type probe distinguishing directory-style from file-style base entries; operates on the operator base value, not the attacker path; not a traversal guard."
+    },
+    {
+      "id": "p1-k48",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        49
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 162,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "THE include-path composition: os.path.join(base, path) with the attacker include path at argument 1 and no post-join validation. os.path.join semantics accept absolute path arguments (discarding base) and pass '..' segments through unchanged; the result is returned by get_snippet_path and opened at :311."
+    },
+    {
+      "id": "p1-k49",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        50
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 163,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "Existence gate on the joined filename: check-then-read with a TOCTOU window before codecs.open at :311, but the check itself returns no content and constrains nothing about where the joined path may point."
+    },
+    {
+      "id": "p1-k50",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        51
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 167,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "os.path.basename is applied to the operator's base entry, NOT to the attacker include path: it supports the file-style base comparison at :169 (case-insensitive basename match) and neutralizes nothing about the user-supplied path. The function name alone does not make this a sanitizer - in this implementation the tainted value never passes through it."
+    },
+    {
+      "id": "p1-k51",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        52
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 168,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.85,
+      "rationale": "os.path.dirname(base) extracts the directory of the operator base entry for the file-style branch; the attacker path is joined afterwards at :170 with no validation."
+    },
+    {
+      "id": "p1-k52",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        53
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 170,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "Second join branch (file-style base entries): os.path.join(dirname, path) with the attacker path at argument 1 and no post-join containment; identical traversal semantics to :162 (an absolute path argument discards the derived base)."
+    },
+    {
+      "id": "p1-k53",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        54
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 171,
+      "role": "none",
+      "classification": "fp",
+      "confidence": 0.9,
+      "rationale": "Existence gate of the file-style branch; same check-then-read shape as :163, constrains nothing about traversal."
+    },
+    {
+      "id": "p1-k54",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        55
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 301,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.85,
+      "rationale": "Call site of the resolution wrapper: self.get_snippet_path(path) inside parse_snippets - argument 0 carries the attacker include path extracted at :258/:276; complements the definition-row summary at :155 so taint propagates into the codecs.open read at :311."
+    },
+    {
+      "id": "p1-k55",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        56
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/snippets.py",
+      "line": 311,
+      "role": "sink",
+      "classification": "tp",
+      "confidence": 0.95,
+      "rationale": "THE Snippets read sink: codecs.open(snippet, 'r', encoding) reads the file resolved from the attacker include path with no base-directory containment - '..' segments, absolute paths (os.path.join semantics) and mixed-separator forms all survive to here; the read lines are recursively re-parsed at :333-341, so nested includes compound the traversal. With the default base_path ['.'] any readable file reachable from the working directory is exposed."
+    },
+    {
+      "id": "p1-k56",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        57
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "path",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/util.py",
+      "line": 53,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "Wrapper definition: path parameter (position 0) -> url2pathname return. Percent-decoding taint step used by b64.py:75 and pathconverter.py:77/:105; needed so taint flows through the helper into the join composition."
+    },
+    {
+      "id": "p1-k57",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        58
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "url2pathname()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/util.py",
+      "line": 56,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "urllib.request.url2pathname percent-decodes the path argument: %2e%2e%2f becomes ../ before the joins in the b64 pipeline. Propagation step, explicitly not a sanitizer in this implementation."
+    },
+    {
+      "id": "p1-k58",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        59
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "url",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/util.py",
+      "line": 103,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.9,
+      "rationale": "Shared decode helper definition: url parameter (position 0) -> 8-tuple return including the path component and the is_absolute flag. html.unescape plus urlparse and backslash-to-slash rewrites in the file:// branches; taint must flow through this return for the b64 pipeline to reach join; the function is a decoder, not a guard."
+    },
+    {
+      "id": "p1-k59",
+      "csv_file": "iris/extraction/sinks.csv",
+      "csv_rows": [
+        60
+      ],
+      "batch": "batch-3-snippets-util-sinks",
+      "node": "Attribute()",
+      "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln/pymdownx/util.py",
+      "line": 119,
+      "role": "summary",
+      "classification": "tp",
+      "confidence": 0.85,
+      "rationale": "html.unescape(url) decodes HTML entities (&#46;, &period;) BEFORE parsing and joining - attacker encodings decode into traversal characters downstream of this step. Propagation step, not a sanitizer."
+    }
+  ]
+}

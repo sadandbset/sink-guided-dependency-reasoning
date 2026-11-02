@@ -1,0 +1,161 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-23",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\pymodbus\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round per the task contract) against the pymodbus_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database pymodbus-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded pymodbus-db. The database sourceLocationPrefix matches the explored tree (creation sha 927fa4d4d9ddf1ffaa9a6d83616bc4a279f74555, CLI 2.25.1, baseline 19100 LOC), so file/line evidence below refers to the same snapshot the database was built from. Ground-truth-looking artifacts present in the source tree (VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv, Chinese audit reports) were NOT read, per the experiment independence rule."
+  },
+  "target": {
+    "project": "pymodbus",
+    "projectVersion": "3.6.0dev (pymodbus/__init__.py __version__)",
+    "projectDescription": "Modbus protocol library (client/server, TCP/UDP/TLS/serial) with a datastore simulator that embeds an aiohttp web console, an argparse simulator entry point, and typer-based REPL client/server CLIs. The audit-relevant file surface is small and concentrated: the simulator HTTP server (pymodbus/server/simulator/http_server.py) serves static files from a fixed web directory, reads an operator-supplied JSON setup file, and imports an optional custom-actions module; the REPL server reads a typer-supplied config path; the logging helper can open a caller-supplied log file; the TLS layers pass operator-supplied cert/key paths to ssl; the serial layers pass device strings to pyserial; one contrib example rewrites a caller-supplied log file in place."
+  },
+  "pass": {
+    "pass_id": 1,
+    "pass_query_name": "Pass1_PathTraversal.ql",
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal"
+  },
+  "language": {
+    "detected": "python",
+    "detectionOrder": ["database metadata (primaryLanguage: python, codeql-database.yml)", "file extensions (59 .py files under pymodbus/)", "build manifest (pyproject.toml, py-version 3.8)"],
+    "referenceFilesLoaded": ["references/patterns.md", "references/python.md"],
+    "referenceFilesNotAvailable": ["references/aiohttp.md - no aiohttp framework reference exists in Augur references/ (available: aspnet, csharp, django, echo, express, fastapi, flask, gin, go, java, javascript, python, spring); framework-specific source/sink shapes were therefore derived from the repository code itself per WORKFLOW.md 4.2.3 fallback"],
+    "toolchain": {
+      "qlpack": "iris/qlpack.yml -> codeql/python-all: \"*\"",
+      "codeqlCliAtDatabaseCreation": "2.25.1",
+      "databaseCreationSha": "927fa4d4d9ddf1ffaa9a6d83616bc4a279f74555"
+    }
+  },
+  "framework": {
+    "primary": {
+      "name": "aiohttp",
+      "confidence": 0.95,
+      "scoreBreakdown": {
+        "importEvidence": 0.45,
+        "routeEvidence": 0.30,
+        "runtimeBootstrapEvidence": 0.20,
+        "directoryLayoutEvidence": 0.0
+      },
+      "evidence": [
+        "pymodbus/server/simulator/http_server.py:14 'from aiohttp import web' (guarded by try/except ImportError with AIOHTTP_MISSING flag)",
+        "pymodbus/server/reactive/main.py:16 'from aiohttp import web'",
+        "pymodbus/server/simulator/http_server.py:168-175 web_app.add_routes([web.get('/api/{tail:[a-z]*}', ...), web.post('/api/{tail:[a-z]*}', ...), web.get('/{tail:[a-z0-9.]*}', ...), web.get('/', ...)])",
+        "pymodbus/server/reactive/main.py:234 web.post('/', self._response_manipulator)",
+        "pymodbus/server/simulator/http_server.py:167 web.Application(); :238 web.AppRunner(self.web_app); :240 web.TCPSite(runner, self.http_host, self.http_port)",
+        "pymodbus/server/reactive/main.py:205-206 web.Application()/web.AppRunner; :338 web.TCPSite"
+      ],
+      "usageNote": "aiohttp is an external dependency and is NOT part of the CodeQL database (only the pymodbus tree is extracted), so aiohttp internals (e.g. web.FileResponse actually opening the file, request.path decoding behavior) cannot be resolved by API graphs; all request/response-flow candidates are AST-level matches with match_kind='ast'."
+    },
+    "secondary": [
+      {
+        "name": "typer (CLI framework, repl client/server)",
+        "confidence": 0.55,
+        "evidence": [
+          "pymodbus/repl/server/main.py:90 'app = typer.Typer(...)'; :97-98 '@app.callback() def server(ctx, ...)' with typer.Option parameters incl. modbus_config_path: Path (:145-147)",
+          "pymodbus/repl/client/main.py uses typer-style commands and prompt_toolkit"
+        ],
+        "usageNote": "CLI boundary, not a web framework; recorded because the typer Option 'modbus_config_path' (Path) flows into open() at pymodbus/repl/server/main.py:173."
+      },
+      {
+        "name": "argparse (CLI, simulator entry point)",
+        "confidence": 0.55,
+        "evidence": [
+          "pymodbus/server/simulator/main.py:53-99 argparse.ArgumentParser with --json_file / --log_file / --custom_actions_module string options; :103 args = parser.parse_args(cmdline); :107-111 generic args.__dict__ loop building cmd_args; run_main() passes ModbusSimulatorServer(**cmd_args)",
+          "examples/datastore_simulator.py:123-136 argparse with only --log/--port/--host (no path-bearing options - not a path-traversal source)"
+        ]
+      }
+    ]
+  },
+  "inputSurface": {
+    "httpHandlers": [
+      {
+        "handler": "ModbusSimulatorServer.handle_html_static (pymodbus/server/simulator/http_server.py:258-267)",
+        "routes": ["GET /{tail:[a-z0-9.]*} (http_server.py:172)", "GET / (http_server.py:173)"],
+        "sourceNode": "request.path[1:] (http_server.py:260) - the aiohttp request path (percent-decoded), first character stripped, assigned to 'page' (defaults to 'index.html' when empty)",
+        "flow": "page -> os.path.join(self.web_path, page) (http_server.py:262) -> open(file, encoding='utf-8') (:264) and web.FileResponse(file) (:265)",
+        "webBase": "self.web_path = os.path.join(os.path.dirname(__file__), 'web') (http_server.py:166) - fixed package-relative base directory",
+        "guardEvidence": "NO path containment validation, no basename extraction, no '..' rejection, no realpath/abspath/normpath anywhere in the handler. The only filtering is (a) the route regex {tail:[a-z0-9.]*} which restricts the aiohttp route-matched tail to lowercase letters, digits and dots (no '/' and no uppercase, so '..' as a full segment cannot appear in the matched tail, but a bare dotted name like 'a..b' or hidden files can) - note the handler reads request.path directly rather than request.match_info['tail'], so route-regex protection vs. raw-path access is a labeling/analysis question; and (b) FileNotFoundError/IsADirectoryError -> HTTPNotFound (:266-267). aiohttp request.path is percent-decoded; whether encoded traversal sequences (e.g. %2e%2e%2f) can reach the handler past route matching depends on the aiohttp version's matching behavior (aiohttp not in DB - unresolved, see uncoveredCases)."
+      },
+      {
+        "handler": "ModbusSimulatorServer.handle_html (http_server.py:269-283)",
+        "routes": ["GET /api/{tail:[a-z]*} (http_server.py:170)"],
+        "sourceNodes": ["request.path.split('/')[-1] (http_server.py:271) -> page_type used as generator_html dict key", "request.query (http_server.py:272) -> params (refresh rate, register filters, submit actions)"],
+        "flow": "page_type/params feed HTML template building and register/call monitor actions - NOT used to locate files. Emitted as source only for request.path (:271); query params documented here, not emitted."
+      },
+      {
+        "handler": "ModbusSimulatorServer.handle_json (http_server.py:285-291)",
+        "routes": ["POST /api/{tail:[a-z]*} (http_server.py:171)"],
+        "sourceNodes": ["request.path.split('/')[-1] (http_server.py:287)", "await request.post() (http_server.py:288) -> form params"],
+        "flow": "params feed build_json_* stubs and register/call actions - NOT used to locate files. Emitted as source only for request.path (:287); posted form data documented here, not emitted."
+      },
+      {
+        "handler": "ReactiveServer._response_manipulator (pymodbus/server/reactive/main.py:268-281)",
+        "routes": ["POST / (reactive/main.py:234)"],
+        "sourceNodes": ["await request.json() (reactive/main.py:279)"],
+        "flow": "JSON body drives response manipulation settings (delay/junk/error) - NOT used to locate files; no file access exists anywhere in reactive/main.py. Documented here, not emitted."
+      }
+    ],
+    "cliBoundaries": [
+      {
+        "entry": "pymodbus/server/simulator/main.py get_commandline()",
+        "sourceNodes": ["parser.parse_args(cmdline) (main.py:103)", "args.__dict__[argument] subscript reads (main.py:110/:111) - the generic loop copies json_file/log_file/custom_actions_module CLI values into cmd_args, then run_main() calls ModbusSimulatorServer(**cmd_args)"],
+        "pathRelevantOptions": ["--json_file (setup file path, default os.path.join(os.path.dirname(__file__), 'setup.json') main.py:88)", "--log_file (server log name)", "--custom_actions_module (python module name, consumed by importlib.import_module at http_server.py:140)"]
+      },
+      {
+        "entry": "pymodbus/repl/server/main.py server() typer callback (def at :98)",
+        "sourceNodes": ["modbus_config_path: Path = typer.Option(None, ...) (main.py:145-147)"],
+        "flow": "if modbus_config_path: open(modbus_config_path, encoding='utf-8') + json.load (main.py:172-173)"
+      }
+    ],
+    "libraryApiBoundaries": [
+      {
+        "api": "ModbusSimulatorServer.__init__ (http_server.py:114-123)",
+        "params": "self(0) modbus_server(1) modbus_device(2) http_host(3) http_port(4) log_file(5) json_file(6) custom_actions_module(7)",
+        "flow": "json_file -> open(json_file, encoding='utf-8') + json.load (http_server.py:130-131); custom_actions_module -> importlib.import_module (http_server.py:140); log_file -> self.log_file = log_file (http_server.py:162) - stored but NEVER used afterwards (no FileHandler call site on it in this snapshot; documented as dead config). Emitted source params: json_file, log_file, custom_actions_module."
+      },
+      {
+        "api": "pymodbus_apply_logging_config(level, log_file_name) (pymodbus/logging.py:20) -> Log.apply_logging_config(cls, level, log_file_name) (logging.py:44)",
+        "flow": "log_file_name -> logging.FileHandler(log_file_name) (logging.py:57) - a real open-for-append on a caller-supplied path. Current in-repo callers pass no log_file_name (level only): simulator/main.py:104, repl/server/main.py:112, examples - so the path is only reachable when an embedding application passes it."
+      },
+      {
+        "api": "annotate_pymodbus_logs(file) (examples/contrib/explain.py:140)",
+        "flow": "file -> open(file) read (:141), shutil.copyfile(out_file.name, file) overwrite (:168), os.remove(out_file.name) (:170). Caller/library boundary in a contrib example script."
+      }
+    ],
+    "notEmittedOperatorConfigured": [
+      "TLS certfile/keyfile/password params: ModbusTlsServer.__init__ (pymodbus/server/async_io.py:378-388), StartAsyncTlsServer (:626-633), client/tls.py:79/:163 -> CommParams.generate_ssl (pymodbus/transport/transport.py:108-137) -> ssl.SSLContext.load_cert_chain(certfile=..., keyfile=...) (transport.py:131-134). Real file reads, but the paths are operator/TLS configuration, not attacker input; load_cert_chain is emitted as a SINK row, the params are not emitted as sources.",
+      "Serial device strings: client/serial.py:211 and transport_serial.py:23 serial.serial_for_url(host/*args) - pyserial opens a device or 'socket://...' URL; operator-configured comm parameter. Emitted as sink rows (serial_open) for labeling to judge; not emitted as sources.",
+      "REPL history file: pathlib.Path.home().joinpath('.pymodhis') (pymodbus/repl/client/main.py:157) -> FileHistory(history_file) (:183) - fully constant path; sink rows emitted with constant-path note, no source.",
+      "Modbus 'file record' PDUs (pymodbus/file_message.py, function codes 0x14/0x15 Read/Write File Record) are in-protocol register files, NOT filesystem access - verified: no open/os/pathlib usage in file_message.py.",
+      "getpass passwords, env vars: no os.environ reads on path-like values anywhere in the package (only os.urandom at http_server.py:628); no message-queue consumers; no multipart upload handling; no zipfile/tarfile/extractall usage anywhere in the tree."
+    ]
+  },
+  "extractionPlan": {
+    "sourcesQl": "iris/extraction/sources.ql - families: http_request_path (request.path reads at http_server.py:260/271/287), cli (parse_args boundary at simulator/main.py:103 + args.__dict__ subscript reads :110/:111), param (ModbusSimulatorServer.__init__ json_file/log_file/custom_actions_module; pymodbus_apply_logging_config log_file_name; Log.apply_logging_config log_file_name; repl server() modbus_config_path; annotate_pymodbus_logs file)",
+    "sinksQl": "iris/extraction/sinks.ql - families: file_open (builtin open: http_server.py:130/:201/:264, repl/server/main.py:173, explain.py:141), file_response (web.FileResponse http_server.py:265), path_join (os.path.join http_server.py:166/:200/:262, simulator/main.py:88; pathlib .joinpath repl/client/main.py:157), file_write (logging.FileHandler logging.py:57; FileHistory repl/client/main.py:183), file_copy (shutil.copyfile explain.py:168, arg 1), file_delete (os.remove explain.py:170), file_read (ssl load_cert_chain transport.py:131-134), serial_open (serial.serial_for_url client/serial.py:211, transport_serial.py:23), file_api_def (CommParams.generate_ssl certfile/keyfile, ModbusTlsServer.__init__ certfile/keyfile)",
+    "columnContract": "10 columns, identical order to the previous Path_Traversal iris projects (py7zr et al.): node, role, callable, flow_kind, receiver, moduleHint, arg_index, file, line, match_kind",
+    "queryKindNote": "Both extraction queries are plain multi-column select queries for 'codeql query run' + 'codeql bqrs decode' (NOT database analyze / SARIF). @kind problem is deliberately NOT set (wrong select shape for candidate tables) and @kind table is NOT assumed to exist. No {{...}} template placeholders remain."
+  },
+  "excludedPaths": [
+    "%/test/% - integration and unit test trees (test/sub_* etc.)",
+    "%/pymodbus-db/% - the CodeQL database directory nested inside the source tree",
+    "%/doc/% - sphinx documentation sources (doc/conf.py only)"
+  ],
+  "keptInScope": [
+    "examples/ - contrib/example scripts kept in scope like the py7zr project kept utils/; the only file-op rows expected there are examples/contrib/explain.py (param-boundary, for the labeling step to judge)"
+  ],
+  "uncoveredCases": [
+    "aiohttp is not part of the CodeQL database: web.FileResponse's internal file open/read cannot be traced (the sink row anchors the call site at http_server.py:265 only); request.path percent-decoding and route-regex matching semantics (raw vs decoded path) are external-library behavior - the labeling/analysis step must decide whether the {tail:[a-z0-9.]*} route regex plus the request.path[1:] handler read constitutes a reachable traversal channel.",
+    "The handler reads request.path directly instead of request.match_info['tail']; route registrations (web.get/web.post at http_server.py:170-173, reactive/main.py:234) are textual evidence only and are NOT emitted as candidate rows.",
+    "request.query (http_server.py:272), await request.post() (:288) and await request.json() (reactive/main.py:279) are real untrusted inputs but are not used to locate files anywhere in this snapshot - documented, not emitted as source rows.",
+    "importlib.import_module(custom_actions_module) (http_server.py:140) - module import by caller-supplied name; relevant to code-injection (pass 4) rather than path traversal, and importlib is not a direct filesystem API - not emitted as a sink row; the custom_actions_module parameter IS emitted as a source param row.",
+    "self.log_file = log_file (http_server.py:162) and the --log_file CLI option are stored but never consumed in this snapshot (no FileHandler call site on them) - no sink row possible; the log_file param is still emitted as a source row for boundary documentation.",
+    "tempfile.NamedTemporaryFile (explain.py:141-143) creates an internal temp path (not attacker-controlled); only the surrounding open/copyfile/os.remove rows are emitted.",
+    "request.urlopen (examples/contrib/explain.py:83) is an outbound HTTP fetch (SSRF-relevant pass 3), not a filesystem sink - not emitted for pass 1.",
+    "No sanitizer families were observed for path handling: no realpath/abspath/normpath/relative_to/startswith/'..' rejection anywhere on the static-file path (the route regex at http_server.py:172 is the only filter); no TOCTOU-relevant exists()-then-open windows on attacker-controlled paths (the open() at :264 is wrapped in try/except FileNotFoundError, single-shot read)."
+  ]
+}

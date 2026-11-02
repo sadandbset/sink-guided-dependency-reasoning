@@ -1,0 +1,183 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "pymdown-extensions-iris-phase2-llm-path-review-pass1",
+    "generated_at": "2026-10-23T00:00:00Z",
+    "model": "glm-5.3",
+    "project": "pymdown-extensions",
+    "pass": 1,
+    "focus": "Path Traversal (CWE-22 / CWE-23 / CWE-36 / CWE-73)",
+    "reviewed_rule_id": "py/augur/pymdown-extensions/pass1-path-traversal",
+    "input_sarif": "results/pass1.sarif",
+    "source_tree": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pymdown-extensions_vuln",
+    "independence": [
+      "Only results/pass1.sarif, report/iris_report.md, labels/labels.json, report/query_generation_notes.md and the real Python source under the audited snapshot were read.",
+      "SARIF, labels and formal queries were not modified.",
+      "PyVul ground truth (CVE reports, vulnerability audit reports, patch diffs in the repo) was NOT consulted. The only ground-truth material used is the commit metadata supplied verbatim in the review request itself (commit b7bb4878, get_snippet_path, GHSA-jh85-wwv9-24hv), compared against the actual snapshot source.",
+      "CodeQL invocation notifications (baseline/file-coverage telemetry) were inspected and confirmed NOT to be results; no diagnostics and no CodeQL built-in security query results are counted."
+    ]
+  },
+  "sarif_integrity_check": {
+    "rules_in_sarif": 1,
+    "rule_ids": ["py/augur/pymdown-extensions/pass1-path-traversal"],
+    "result_count": 2,
+    "all_results_match_reviewed_rule": true,
+    "diagnostics_or_builtin_results_mixed_in": false,
+    "notes": "The single run contains exactly two results, both under the Augur pass1 rule. The invocationNotifications are py/js baseline expected-extracted-files and CLI telemetry (level 'none'), not alerts. The 5x repeated message text on the snippets result is SARIF multi-path merging at one sink location (5 distinct source paths deduplicated by fingerprint), not 5 separate findings."
+  },
+  "alerts": [
+    {
+      "alert_id": "pass1-001",
+      "rule_id": "py/augur/pymdown-extensions/pass1-path-traversal",
+      "sink_location": {
+        "file": "pymdownx/b64.py",
+        "line": 86,
+        "code": "with open(file_name, \"rb\") as f:"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "checklist": {
+        "1_source_attacker_controlled": {
+          "answer": "yes",
+          "evidence": "Source node b64.py:73 `util.parse_url(m.group('path')[1:-1])`. RE_TAG_HTML (b64.py:42-54) scans the postprocessor text for <img ...> tags; RE_TAG_LINK_ATTR (b64.py:56-65) captures the quoted src attribute value; m.group('path')[1:-1] is that attribute value with quotes stripped. The text arrives via B64Postprocessor.run(text) (b64.py:114-119), invoked by the Python-Markdown core on the rendered output of untrusted Markdown. Both raw HTML `<img src=...>` and Markdown image syntax `![alt](path)` produce this tag, so the src value is fully attacker-chosen document content — no privilege boundary beyond the host process' filesystem privileges."
+        },
+        "2_source_reaches_file_path_arg": {
+          "answer": "yes",
+          "evidence": "All steps are synchronous, real source, verified by reading b64.py / util.py: b64.py:73 parse_url -> util.py:103-159 (html.unescape + urlparse at util.py:119, absolute-form classification util.py:127-157) -> b64.py:75 util.url2path (util.py:53-56, percent-decode) -> b64.py:77-80: absolute branch `normpath(path)` WITHOUT joining base_path; relative branch `normpath(join(base_path, path))` -> b64.py:82 exists gate -> b64.py:86 open(file_name, 'rb'). The codeFlows thread through parse_url's real internals (util.py:103/:119/:159) and url2pathname (util.py:56); no invented wrapper, no async hop. The source row at the regex group call is the documented boundary proxy for the un-modeled run(text)->regex-match provenance (query notes §5.1) and is semantically exact: the value is the attacker's src string."
+        },
+        "3_sink_is_sensitive_file_op": {
+          "answer": "yes",
+          "evidence": "open(file_name, 'rb') at b64.py:86 performs a real file READ; the bytes are base64-encoded and embedded into the rendered output as a data: URI (b64.py:87-90) — read plus exfiltration into the generated HTML, not mere string/Path construction."
+        },
+        "4_declared_allowed_root_and_escape": {
+          "answer": "escapable",
+          "evidence": "Declared allowed root is the operator-configured `base_path` (default \".\", b64.py:129). Escapes: (a) absolute src forms — parse_url sets is_absolute for file:///, file://c:/, UNC //, c: drive and leading / or \\ (util.py:127-157), and b64.py:77-78 then normpaths the path without joining base_path, so the read is outside the root by construction; (b) relative `../` chains survive normpath (lexical collapse only) and exists() and reach open(); (c) os.path.join semantics discard base_path for an absolute second argument."
+        },
+        "5_traversal_vectors_effective": {
+          "answer": "yes",
+          "evidence": "`..` passes join/normpath unrejected; absolute paths (POSIX leading /, Windows drive/UNC forms) are explicitly accepted and re-routed to the no-join branch; html.unescape (util.py:119) decodes entity-encoded traversal chars and url2pathname (util.py:56) percent-decodes %2e%2e%2f BEFORE the join — the decode chain widens rather than restricts. Mixed separators are normalized to / in parse_url's file branches. No repeated-decode barrier exists. Symlinks: no islink/realpath policy anywhere in the pipeline — a symlink inside base_path is followed transparently (moot, since containment does not exist at all)."
+        },
+        "6_containment_guards_before_access": {
+          "answer": "none",
+          "evidence": "Between b64.py:73 and b64.py:86 there is exactly: is_url/branch selection, url2path, normpath/join, os.path.exists (b64.py:82), splitext + extension whitelist (b64.py:83-85). No relative_to, no samefile, no abspath+prefix, no startswith(base), no fixed filename map. The extension whitelist restricts WHAT is read (png/jpg/jpeg/gif/svg), not WHERE it may live."
+        },
+        "7_misjudged_protections": {
+          "answer": "no misjudgment in the alert",
+          "evidence": "The alert does not cite normpath, exists or the extension whitelist as sufficient protection, and none of them is: normpath is lexical-only, exists is a check-then-read oracle (TOCTOU-shaped), the whitelist is a content-type filter. No login/auth exists in this library."
+        },
+        "8_not_authorized_static_service_or_unreachable": {
+          "answer": "not authorized / reachable",
+          "evidence": "The extension's contract is to embed images under the configured base_path; attacker-chosen src values pointing at arbitrary host files are outside that authorization. Production-reachable whenever the b64 extension is enabled on untrusted Markdown (e.g. a docs server rendering user-supplied Markdown). Not test code, not a fixed constant."
+        },
+        "9_overgeneralized_modeling_fp": {
+          "answer": "no",
+          "evidence": "The 4 codeFlows are component-level variants (scheme / path / netloc+url2pathname / params) of the one real flow parse_url-result -> tuple unpack (b64.py:73) -> path/file_name -> open; every location in every threadFlow exists in the source and the path-component flow is the semantically exact route. Source and sink predicates are pinned to real AST nodes (b64.py:73, b64.py:86)."
+        },
+        "10_other_cwe_or_baseline_contamination": {
+          "answer": "no",
+          "evidence": "Single Augur ruleId in the whole run; both results belong to it; baseline notifications are level 'none' telemetry. No SSRF/network findings (the download() flow was deliberately labeled out of Pass 1 scope) and no built-in query results appear."
+        }
+      },
+      "taint_path_summary": "Markdown img src (attacker) -> RE_TAG_HTML/RE_TAG_LINK_ATTR extraction (b64.py:106 -> repl_path) -> parse_url: html.unescape + urlparse + absolute classification (util.py:119/:127-157) -> [optional] url2path percent-decode (util.py:53-56) -> absolute branch normpath(path) (b64.py:78) OR join(base_path, path)+normpath (b64.py:80) -> exists gate (b64.py:82) -> extension whitelist (b64.py:83-85) -> open(file_name, 'rb') read + base64 exfil into output (b64.py:86-90).",
+      "preconditions": [
+        "B64 extension enabled by the host (opt-in extension).",
+        "Untrusted Markdown produces an <img> tag (raw HTML allowed by default in Python-Markdown, or `![alt](src)` image syntax).",
+        "Target file exists and its extension is .png/.jpg/.jpeg/.gif/.svg (limits readable files to image types — bounds impact but does not negate the traversal of the declared base_path root)."
+      ],
+      "rationale": "Real attacker-controlled src attribute -> real read sink with base64 exfiltration channel, no containment of any kind between them; absolute-path and .. escapes both verified against the actual source. Impact bounded by the image-extension whitelist, hence confidence 0.9 rather than higher. This is a genuine CWE-22 flow in the audited snapshot, independent of (same class as) the snippets vulnerability."
+    },
+    {
+      "alert_id": "pass1-002",
+      "rule_id": "py/augur/pymdown-extensions/pass1-path-traversal",
+      "sink_location": {
+        "file": "pymdownx/snippets.py",
+        "line": 311,
+        "code": "with codecs.open(snippet, 'r', encoding=self.encoding) as f:"
+      },
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "checklist": {
+        "1_source_attacker_controlled": {
+          "answer": "yes",
+          "evidence": "Source nodes snippets.py:258 `path = m.group('snippet')[1:-1].strip() if inline else m.group('snippet').strip()` and snippets.py:276 `path = m.group(1).strip()` (after RE_SNIPPET_FILE strips :lines/:section suffixes, snippets.py:77). RE_ALL_SNIPPETS (snippets.py:48-58) matches the `--8<--` include syntax; the captured snippet group is the verbatim include path from an untrusted Markdown line. Entry boundary is SnippetPreprocessor.run(lines) (snippets.py:352-359) fed by the Python-Markdown core with the untrusted document source; the group-extraction rows are the documented in-DB proxy for that host boundary (query notes §5.1) and are semantically exact — the extracted value is the attacker's path string."
+        },
+        "2_source_reaches_file_path_arg": {
+          "answer": "yes",
+          "evidence": "Fully synchronous, real-code route: snippets.py:258/:276 -> RE_SNIPPET_FILE suffix strip (:275-276) -> is_link check (:294, non-http path stays local) -> snippets.py:301 `snippet = self.get_snippet_path(path)` -> get_snippet_path body (:155-174): join(base, path) at :162 (directory-style base) or join(dirname, path) at :170 (file-style base), exists gate, return -> codecs.open(snippet, ...) at :311. The codeFlows traverse the get_snippet_path call edge via the reviewed summary (p1-k45/p1-k54 arg0->result), which exactly matches the real function semantics (returns the first existing join result, nothing else). No async hop, no invented wrapper."
+        },
+        "3_sink_is_sensitive_file_op": {
+          "answer": "yes",
+          "evidence": "codecs.open(snippet, 'r', encoding) at snippets.py:311 is a real text file READ; the read lines are inserted into the rendered document (new_lines, :333-341) and recursively re-parsed, so the file content is disclosed in the output and nested includes compound the traversal."
+        },
+        "4_declared_allowed_root_and_escape": {
+          "answer": "escapable",
+          "evidence": "Declared allowed roots are the operator-configured `base_path` list (default [\".\"], snippets.py:369). Escapes: (a) absolute include path — os.path.join(base, \"/etc/passwd\") discards the base on both POSIX and Windows; (b) relative `../../../../etc/passwd\"` — join passes `..` through, exists() succeeds, codecs.open reads it. This is exactly the two exploitation forms described in the upstream advisory (`--8<--\"/etc/passwd\"`, `--8<-- \"../../../../etc/passwd\"`)."
+        },
+        "5_traversal_vectors_effective": {
+          "answer": "yes",
+          "evidence": "`..` and absolute paths both survive to the read (no decoding needed — the raw path is used as extracted). RE_SNIPPET_FILE only strips :lines/:section suffixes. Mixed separators work on Windows. No decode/normalization barrier exists; symlink policy absent (any symlink reachable from a base is followed — moot without containment). The is_link rule (:294) only diverts http(s) paths to the URL branch; /etc/passwd is not a link, so it stays local."
+        },
+        "6_containment_guards_before_access": {
+          "answer": "none",
+          "evidence": "Verified over the full pipeline: get_snippet_path (:155-174) contains only join + exists + the file-style basename/dirname comparison (:167-170) — the comparison matches the operator's base basename against the attacker path and then joins the attacker path anyway. `check_paths` (:279/:328/:343) only converts missing snippets into an error; `seen` (:306) is cycle prevention; the `;` escape (:268) is a comment facility. grep of the whole pymdownx package confirms `restrict_base_path` and `os.path.samefile` do NOT exist in this snapshot — the containment check that upstream later added is absent, i.e. the vulnerable version is what the database holds."
+        },
+        "7_misjudged_protections": {
+          "answer": "no misjudgment in the alert",
+          "evidence": "The alert claims no guard, and none exists. No normpath/startswith/auth is present in this pipeline at all (normpath does not even appear in the snippets flow), so there is nothing the alert could have over-trusted."
+        },
+        "8_not_authorized_static_service_or_unreachable": {
+          "answer": "not authorized / reachable",
+          "evidence": "The Snippets extension's contract is to inject files under the configured base_path(s); attacker-directed includes resolving to arbitrary host files are outside that authorization. Production-reachable whenever the (default-shipped, opt-in-enabled) snippets extension processes untrusted Markdown — e.g. a docs build/server rendering user-submitted Markdown. Not test code; the block- and inline-form paths are both live syntax."
+        },
+        "9_overgeneralized_modeling_fp": {
+          "answer": "no",
+          "evidence": "Every threadFlow location exists in the source (:276 -> :301 -> :311, plus the :258 inline-origin variants merged into the same sink fingerprint). The source row is pinned to the real regex group call; the sink is pinned to the real codecs.open arg 0. The 5x repeated message text is path-merging at one sink, not over-generation. One benign modeling artifact: the codeFlow shown jumps :301 (call) -> :311 (sink) through the summary edge rather than stepping inside get_snippet_path — the real body (:155-174) was independently read and matches the modeled semantics exactly, so connectivity is genuine."
+        },
+        "10_other_cwe_or_baseline_contamination": {
+          "answer": "no",
+          "evidence": "Single Augur ruleId for the whole run; the download()/urlopen SSRF-shaped flow was deliberately kept out of Pass 1 labels and produces no result here; no diagnostics or built-in-query results are present."
+        }
+      },
+      "taint_path_summary": "Markdown include line `--8<-- \"<path>\"` / block form (attacker) -> RE_ALL_SNIPPETS match, m.group('snippet')/m.group(1) (snippets.py:258/:276) -> suffix strip (:275-276) -> get_snippet_path(path) (:301) -> os.path.join(base|dirname, path) (:162/:170) + exists (:163/:171) -> returned filename -> codecs.open(snippet, 'r') read (:311) -> content injected into rendered output and recursively re-parsed (:333-341). No containment anywhere on the path.",
+      "preconditions": [
+        "Snippets extension enabled (standard pymdown-extensions feature; opt-in at the Markdown level).",
+        "Untrusted Markdown contains a snippet include line (inline quoted or block form).",
+        "Target file exists and is readable by the host process (any file type — no extension whitelist here)."
+      ],
+      "rationale": "Source, propagation, sink and the absence of any containment are all verified line-by-line against the real source. This is a textbook arbitrary-file-read via include-syntax path traversal with default base_path [\".\"] — and it is the exact vulnerability fixed by upstream commit b7bb4878 (GHSA-jh85-wwv9-24hv), which adds the restrict_base_path/abspath+samefile containment this snapshot lacks (see ground-truth hit assessment)."
+    }
+  ],
+  "overall_conclusion": {
+    "formal_alerts_present": true,
+    "statement": "CodeQL 分析成功，本轮命中 2 条正式 Pass 1 路径穿越污点路径（b64.py:86 与 snippets.py:311），独立复核判定均为 likely_tp，无 likely_fp 或 uncertain。",
+    "per_alert": {
+      "pymdownx/b64.py:86 open(file_name,'rb')": "likely_tp (0.90) — attacker img src -> parse_url/url2path -> join/normpath -> read + base64 exfiltration; no containment; impact bounded by image-extension whitelist.",
+      "pymdownx/snippets.py:311 codecs.open(snippet,'r')": "likely_tp (0.95) — attacker --8<-- include path -> get_snippet_path join -> arbitrary file read into rendered output; no containment; matches upstream GHSA-jh85-wwv9-24hv / commit b7bb4878 exactly."
+    }
+  },
+  "ground_truth_hit_assessment": {
+    "task": "Determine whether the real vulnerability of commit https://github.com/facelessuser/pymdown-extensions/commit/b7bb4878d6017c03c8dc97c42d8d3bb6ee81db9d (CWE-22, get_snippet_path, GHSA-jh85-wwv9-24hv) is hit by the formal Pass 1 alerts. Only the commit metadata supplied in the review request was used; no PyVul ground-truth files were opened.",
+    "vulnerable_function": {
+      "name": "get_snippet_path",
+      "file": "pymdownx/snippets.py",
+      "snapshot_lines": "155-174",
+      "snapshot_matches_code_before": true,
+      "evidence": "The snapshot's get_snippet_path is line-for-line the commit's code_before: for base in self.base_path / exists(base) / isdir(base) / join(base, path) (:162) / exists(filename) (:163) / basename+dirname with case-insensitive match (:167-169) / join(dirname, path) (:170) / exists (:171). The fix's restrict_base_path branch (abspath + os.path.samefile containment) is absent — grep over the entire pymdownx package returns zero hits for 'restrict_base_path' and 'samefile'."
+    },
+    "hit_by_formal_alert": {
+      "hit": true,
+      "alert_id": "pass1-002",
+      "sink": "pymdownx/snippets.py:311 codecs.open(snippet, 'r', encoding)",
+      "mapping": [
+        "Advisory attack surface: `--8<--\"/etc/passwd\"` / `--8<-- \"../../../../etc/passwd\"` include syntax => alert source rows snippets.py:258 (inline quoted form, quotes stripped by [1:-1]) and :276 (block form) — the exact extraction points of the include path.",
+        "Vulnerable resolution: get_snippet_path join at :162/:170 => alert propagation via the :301 call and the p1-k45/p1-k54 summary edge, semantics independently verified against the real function body.",
+        "Dangerous operation: arbitrary file read into the rendered output => alert sink codecs.open at :311, with content disclosure (lines injected at :333-341).",
+        "Root cause: missing base-path containment in get_snippet_path => alert condition 'no base-directory containment check' confirmed by source read + grep (no restrict_base_path/samefile/relative_to/startswith anywhere in the pipeline).",
+        "Both advisory exploitation forms reproduce in the snapshot: absolute path (os.path.join discards base) and ../ chains (passed through to exists+open)."
+      ],
+      "coverage_caveat": "The alert reports the sink at the codecs.open call site (:311) with the get_snippet_path internals carried by a summary edge rather than an intra-procedural codeFlow — the fixed function itself appears in the flow as the :301 call step. Function-level attribution to get_snippet_path is nonetheless unambiguous: it is the only resolver between the include extraction and the read, and the join summaries p1-k48/p1-k52 sit exactly on its :162/:170 lines."
+    },
+    "secondary_observation": "Alert pass1-001 (b64.py:86) is a second, independent genuine CWE-22 flow in the same snapshot (b64 extension img-src read without containment). It is NOT the target of commit b7bb4878 — that commit touches only pymdownx/snippets.py — so it counts toward Pass 1 precision as a same-class true traversal, not as a hit of this specific ground-truth vulnerability.",
+    "conclusion": "命中（HIT）：正式 Pass 1 告警 pass1-002（snippets.py:311）完整覆盖 commit b7bb4878 / GHSA-jh85-wwv9-24hv 修复的 get_snippet_path 任意文件读取漏洞 —— 相同的攻击入口（--8<-- include 语法）、相同的漏洞函数（get_snippet_path 无包含检查的 join）、相同的敏感操作（任意文件读取并注入渲染输出）；快照源码与 code_before 完全一致且缺失修复后的 restrict_base_path/samefile 防护。"
+  }
+}

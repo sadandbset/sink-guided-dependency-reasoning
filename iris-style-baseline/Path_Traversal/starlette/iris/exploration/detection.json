@@ -1,0 +1,231 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-23",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\starlette\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the starlette_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database starlette-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded starlette-db. The database sourceLocationPrefix matches the explored tree (creation sha 24c1fac6), so file/line evidence below refers to the same snapshot the database was built from. The audit target is the starlette library itself (version 0.26.1, starlette/__init__.py __version__), an ASGI framework/library: the audited server surface is StaticFiles static-file serving (staticfiles.py, the concentrated attack surface), the router (routing.py Route/WebSocketRoute/Mount/Host/Router over the raw ASGI scope), the request object (requests.py, formparsers.py multipart parsing into SpooledTemporaryFile/UploadFile), FileResponse (responses.py, os.stat via anyio.to_thread.run_sync + anyio.open_file('rb') + chunked read), the ASGI-to-WSGI bridge (middleware/wsgi.py PATH_INFO), templating (templating.py jinja2 FileSystemLoader/get_template), config (config.py env-file open), and the test client (testclient.py scope construction with unquote)."
+  },
+  "target": {
+    "project": "starlette",
+    "projectDescription": "starlette 0.26.1 (starlette/__init__.py __version__) - the starlette ASGI framework/library source tree: request/response/routing/static-files/websocket framework for building ASGI apps. Server side: routing.Router.__call__ iterates routes; Route/WebSocketRoute.matches() regex-match scope['path'] and build path_params via match.groupdict() + convertor.convert; Mount.matches() pops the remainder 'path' param and rewrites child scope['path']/root_path; StaticFiles.__call__(scope) -> get_path(scope) = os.path.normpath(os.path.join(*scope['path'].split('/'))) -> get_response(path) -> anyio.to_thread.run_sync(self.lookup_path, path) where lookup_path joins directory+path, realpath/abspath canonicalizes, commonprefix containment-checks and os.stat()s, then FileResponse(full_path) whose __call__ re-stats (anyio.to_thread.run_sync(os.stat, self.path)) and serves via anyio.open_file(self.path, mode='rb') + file.read(chunk_size); requests.Request (url/headers/query_params/path_params/cookies accessors over scope, stream() body via self._receive(), _get_form multipart parsing via MultiPartParser into SpooledTemporaryFile wrapped by UploadFile(filename=Content-Disposition filename)); middleware/wsgi.py builds WSGI PATH_INFO from scope['path']; templating.Jinja2Templates (jinja2.FileSystemLoader(directory), env.get_template(name)); config.Config (open(env_file) read, os.environ via Environ wrapper).",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\starlette_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (starlette-db/codeql-database.yml)",
+      "the database source archive (starlette-db/src.zip) covers 66 .py files: 34 under starlette/ and 32 under tests/ (no docs/, scripts/ or other trees in the database)",
+      "pyproject.toml (setuptools build backend, dynamic version) packaging the starlette package; starlette/__init__.py __version__ = 0.26.1"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\starlette_vuln\\starlette-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\starlette_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "24c1fac62a80bb153c6548145334fc643991e35a",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:36:36.080680500Z"
+    },
+    "baselineLinesOfCode": 11453,
+    "finalised": true,
+    "locationNote": "starlette-db is nested inside the source tree; it was excluded from all exploration and will be excluded from extraction result rows via the path filter in both queries. The database snapshot also covers tests/ (32 files); both queries filter /tests/ and /starlette-db/ paths. Only starlette/ (34 files) remains as candidate-bearing scope, so the library code dominates the candidate rows."
+  },
+  "toolchain": {
+    "qlpack": "iris/starlette-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1)",
+    "compatibilityBasis": "API facts used by the generated queries were cross-checked against the cached python-all 7.1.2 library sources: AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), AstNode.getScope() and Scope.getEnclosingModule() (semmle/python/Scope.qll:24-25), Module.getName(), Call.getFunc()/getPositionalArg(index) (semmle/python/AstGenerated.qll:198-206, index must be bound before lookup), Attribute.getName()/getObject(), Subscript.getObject()/getIndex() (semmle/python/Exprs.qll:90-100), StringLiteral.getText() { result = this.getS() } (semmle/python/Exprs.qll:557 - returns the literal value WITHOUT quotes; class Bytes extends StringLiteral at Exprs.qll:242, so b\"filename\" literals match the same getText()), Assign.getATarget() (semmle/python/Stmts.qll:76-80 - plural accessor used to exclude subscript write targets, covering chained-assignment forms), Function.getAnArg() and Parameter.getPosition()/isSelf() (semmle/python/Function.qll:280), class Class, class Function extends Scope (so AstNode.getScope().(Function).getName() resolves the enclosing function of a call). The two queries reuse the structural shapes already proven on this same CLI + pack family in the prior projects of this series (moduleHintOf/receiverHint helpers, bindingset[path] excludedPath, AST-cast matching with unbound receivers, no QL classes, no API::Node-to-DataFlow::Node assignment, variable named moduleHint instead of `module`). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name, no unbound `this`, no {{...}} template placeholders. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "starlette (the project IS the framework - ASGI web framework/library, not an application built on a framework)",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package +0.45: the package defines the framework itself: starlette/__init__.py exports Starlette, Route, Mount, WebSocketRoute, StaticFiles, Response, FileResponse, Jinja2Templates etc.; applications.py defines the Starlette ASGI application class composing Router + middleware",
+            "route/decorator +0.30: routing surface defined in starlette/routing.py - Route/WebSocketRoute/Mount/Host route classes with matches()/url_path_for(), Router.__call__ dispatch (routing.py:697), Router.mount/host/add_route/add_websocket_route and the deprecated route/websocket_route decorators (routing.py:787-839); endpoints.py HTTPEndpoint/WebSocketEndpoint class endpoints",
+            "runtime/bootstrap +0.20: ASGI entry points __call__(scope, receive, send) across StaticFiles (staticfiles.py:92), Router (routing.py:697), Response (responses.py:163), Starlette (applications.py); request_response/websocket_session adapters (routing.py:56-84)",
+            "directory/layout +0.05: starlette/ package layout with middleware/ subpackage (base, cors, errors, exceptions, gzip, trustedhost, wsgi), requests.py/responses.py/routing.py/staticfiles.py module family"
+          ]
+        },
+        {
+          "name": "jinja2 (templating dependency, not a web framework)",
+          "kind": "template-library",
+          "confidence": 1.0,
+          "evidence": [
+            "templating.py:11 `import jinja2`; Jinja2Templates._create_env builds jinja2.Environment with jinja2.FileSystemLoader(directory) (templating.py:85) and env.get_template(name) (templating.py:94) - the template-loading channel; jinja2 itself is not part of the database"
+          ]
+        },
+        {
+          "name": "anyio (async runtime dependency, not a web framework)",
+          "kind": "async-library",
+          "confidence": 1.0,
+          "evidence": [
+            "anyio.to_thread.run_sync offloads file work to threads: staticfiles.py:121/:137/:150 (self.lookup_path), staticfiles.py:209 and responses.py:335 (os.stat); anyio.open_file(self.path, mode='rb') at responses.py:353 is the FileResponse serving read; anyio itself is not part of the database"
+          ]
+        },
+        { "name": "fastapi", "confidence": 0.0, "evidence": ["no fastapi import anywhere in the tree - references/fastapi.md mentions starlette only for import disambiguation of request classes in FastAPI apps; the audit target is starlette itself, so the FastAPI app-level reference was not loaded"] },
+        { "name": "flask", "confidence": 0.0, "evidence": ["no flask import - references/flask.md was not loaded"] },
+        { "name": "django", "confidence": 0.0, "evidence": ["no django import (only a Django-derived comment in requests.py cookie_parser) - references/django.md was not loaded"] },
+        { "name": "click / celery (CLI / task boundaries)", "confidence": 0.0, "evidence": ["no click or celery usage; no argparse either; the scripts/ tree contains shell scripts only (not Python, and not part of the database snapshot) - no CLI source family exists"] }
+      ]
+    },
+    "selected": "starlette (primary, confidence 1.0 - the audit target is the framework's own ASGI request-handling and static-file serving code, plus the template/config file-loading code)",
+    "notes": "No references/starlette.md framework reference exists in the Augur installation, so no framework reference was loaded (per the task contract: framework reference only read when the file exists; the only reference mentioning starlette is fastapi.md, which describes FastAPI applications and does not match this target). All framework-specific shapes below are derived from repository evidence only. references/python.md and references/patterns.md were loaded: python.md Pass 1 sink cues (open/Path/os.path/shutil, archive extraction) map onto the observed os.path/os.stat/anyio.open_file/builtin open usage (note: pathlib is only used in config.py type hints, all real path work is os.path string-based); its source cues (request path/query/header values, handler parameters) map onto the observed ASGI scope reads and scope parameters; its sanitizer cues (canonicalize + base containment, explicit '..' rejection, basename-only) map onto the observed normpath/realpath/commonprefix guards. patterns.md Pass 1 sink families (file open/read/write APIs with user-controlled path, resource loader methods taking path strings) map onto FileResponse/StaticFiles/Jinja2Templates/Config."
+  },
+  "inputBoundaryInventory": {
+    "summary": "The audit target is the starlette framework itself, so the untrusted-input boundaries are the ASGI scope (the dict the ASGI server hands to every __call__(scope, receive, send) entry point - it carries the request path, method, headers, query_string, and the routed path_params the router injects) and the receive() message stream (raw body chunks): (1) scope['path'] reads - StaticFiles.get_path at staticfiles.py:111 (os.path.normpath(os.path.join(*scope['path'].split('/'))) - THE dominant attacker-controlled file-location input, fed into lookup_path), staticfiles.py:141, Route.matches at routing.py:238, WebSocketRoute.matches at :316, Mount.matches at :388, Router.__call__ redirect_slashes at :732/:734/:735/:737, URL.__init__ at datastructures.py:34, WSGI PATH_INFO at middleware/wsgi.py:25; (2) routed path variables - match.groupdict() at routing.py:240/:318/:391 (regex match over scope['path'] producing path_params), matched_params.pop('path') at routing.py:394 (Mount remainder that becomes the child scope['path']), scope.get('path_params', {}) at routing.py:243/:321/:396/:481 and requests.py:124 (request.path_params accessor); (3) request headers - scope['headers'] reads at datastructures.py:38/:534 (URL host header, Headers.__init__), <x>.headers.get(...) call sites (requests.py:130 cookie, :257 Content-Type, :312 server-push; routing.py:475 host; middleware/gzip.py:20 Accept-Encoding, middleware/trustedhost.py:38 host, middleware/cors.py:80 origin / :107 access-control-request-headers, middleware/errors.py:247 accept, datastructures.py:452 upload content-type, testclient.py:233), StaticFiles Not-Modified subscripts request_headers['if-none-match']/['if-modified-since'] at staticfiles.py:227/:235, self.headers['Content-Type'] at formparsers.py:228; (4) multipart upload filenames - MultiPartParser.on_headers_finished reads options[b'name']/:b'filename'] from the Content-Disposition parse (formparsers.py:194/:206), the filename is stored on UploadFile(filename=...) at formparsers.py:209-214 while the CONTENT goes to an auto-named SpooledTemporaryFile (formparsers.py:207) - the upload filename never reaches a filesystem path in this tree; (5) percent/charset decode boundaries - unquote_plus at formparsers.py:111/:112 (urlencoded form fields), _user_safe_decode at :162/:193/:206, http_cookies._unquote at requests.py:55 (cookie values), unquote(path) at testclient.py:240/:258 (test client scope construction); (6) raw wire - self._receive() calls at requests.py:221/:301 (Request body loop) and websockets.py:35/:45 (WebSocket.receive), websocket.receive() at endpoints.py:77, and the message.get('body')/:get('type')/:get('more_body') reads at requests.py:223/:226/:303 plus the websocket message.get reads at endpoints.py:83/:106/:120 (middleware/base.py message.get reads are response-direction and excluded); the stream/headers parameters of FormParser/MultiPartParser (formparsers.py:48-54/:122-127) and the receive parameter of Request.__init__ (requests.py:194); (7) ASGI entry parameters - the `scope` parameter of the ~44 ASGI callable functions across the package (every __call__/matches/handle/lifespan signature) is the framework-injected carrier of all HTTP input; `request`/`websocket` handler parameters in endpoints.py/authentication.py/middleware errors+exceptions; (8) environment - os.environ default in config.py:16 (Environ wrapper, Config.get at :109-114) - operator/local-process trust level; (9) operator-configured file paths (NOT attacker input, emitted for labeling to classify): StaticFiles directory/packages (staticfiles.py:42-52), Jinja2Templates directory (templating.py:67), Config env_file (config.py:55). The dominant filesystem-operation channels are: os.path.join (staticfiles.py:83/:111/:136/:166), os.path.normpath (:82/:111), os.path.abspath/realpath (:168/:170/:171), os.path.commonprefix containment check (:172), os.stat direct (:177) and via anyio.to_thread.run_sync (staticfiles.py:209, responses.py:335), os.path.isdir/isfile (staticfiles.py:56/:85, config.py:62), anyio.open_file (responses.py:353 - the serving read), builtin open (config.py:121), FileResponse construction (staticfiles.py:154/:192), file.read chunked transmission (responses.py:356), SpooledTemporaryFile (formparsers.py:207), UploadFile.file write/read/seek/close (formparsers.py:263/:266, datastructures.py:465-484), jinja2.FileSystemLoader/get_template (templating.py:85/:94/:112), importlib.util.find_spec (staticfiles.py:79).",
+    "sourceFamilies": [
+      { "family": "scope_path_subscript", "flow_kind": "http_path", "evidence": "scope['path'] / redirect_scope['path'] subscript reads (write targets excluded): staticfiles.py:111 (get_path - feeds the join/normpath pipeline), :141, routing.py:238, :316, :388, :732, :734, :735 (value side), :737 (value side), datastructures.py:34 (URL.__init__), middleware/wsgi.py:25 (PATH_INFO encode/decode roundtrip)" },
+      { "family": "scope_key_subscript", "flow_kind": "http_request / http_header / route_var", "evidence": "scope['method'] (staticfiles.py:117/:157/:189, routing.py:246/:266, middleware/cors.py:78, middleware/wsgi.py:23, requests.py:206), scope['query_string'] (requests.py:119, middleware/wsgi.py:26), scope['headers'] (datastructures.py:38 URL host iteration, :534 Headers.__init__ RHS read - chained-assignment target excluded) - request-state key reads on the ASGI scope" },
+      { "family": "scope_get", "flow_kind": "route_var / http_request / http_path", "evidence": "scope.get('path_params', {}) at routing.py:243/:321/:396/:481 and self.scope.get at requests.py:124 (the request.path_params accessor); scope.get('query_string', b'') at datastructures.py:35; scope.get('root_path', '') at datastructures.py:34 and routing.py:398 (root_path is server/mount-derived - partially request-influenced via Mount.matches matched_path at routing.py:402, trust caveat recorded for labeling)" },
+      { "family": "match_groupdict", "flow_kind": "route_var", "evidence": "match.groupdict() at routing.py:240 (Route.matches), :318 (WebSocketRoute.matches), :391 (Mount.matches) - the regex match over scope['path'] that yields the routed path params (then convertor.convert at :242/:320/:393)" },
+      { "family": "matched_params_pop", "flow_kind": "route_var", "evidence": "matched_params.pop('path') at routing.py:394 (Mount.matches) - the remainder path that becomes the child scope['path'] for the mounted sub-app (e.g. StaticFiles mounted at a prefix)" },
+      { "family": "headers_get_getlist", "flow_kind": "http_header", "evidence": "<x>.headers.get(...)/getlist(...) call sites: requests.py:130 (cookie), :257 (Content-Type - selects the multipart parser), :312 (server-push headers), routing.py:475 (host - Host.matches), middleware/gzip.py:20 (Accept-Encoding - response compression only), middleware/trustedhost.py:38 (host), middleware/cors.py:80 (origin), :107 (access-control-request-headers), middleware/errors.py:247 (accept), datastructures.py:452 (upload file content-type), testclient.py:233" },
+      { "family": "header_subscript", "flow_kind": "http_header", "evidence": "request_headers['if-none-match']/['if-modified-since'] at staticfiles.py:227/:235 (StaticFiles conditional-request handling - response metadata only, never a file location); self.headers['Content-Type'] at formparsers.py:228 (multipart boundary/charset source)" },
+      { "family": "multipart_options", "flow_kind": "multipart_filename / multipart_field", "evidence": "options[b'name'] at formparsers.py:194 and options[b'filename'] at :206 (Content-Disposition options parsed by parse_options_header at :189 - the multipart upload filename and field name); params.get(b'charset', ...) at :229 and params[b'boundary'] at :234 (Content-Type params)" },
+      { "family": "parse_options_header", "flow_kind": "http_header", "evidence": "parse_options_header(...) calls at formparsers.py:189 (Content-Disposition of each part), :228 (request Content-Type), requests.py:259 (Content-Type dispatch) - the multipart option/header parse boundary" },
+      { "family": "url_decode", "flow_kind": "url_decode", "evidence": "unquote_plus at formparsers.py:111/:112 (urlencoded form field name/value decode); _user_safe_decode at :162/:193/:206 (multipart field/filename charset decode); http_cookies._unquote at requests.py:55 (cookie value decode); unquote(path) at testclient.py:240/:258 (test client builds scope['path'] by percent-decoding - evidence the scope path is the decoded request path)" },
+      { "family": "receive_wire", "flow_kind": "http_wire", "evidence": "self._receive() calls at requests.py:221 (Request.stream body loop), :301 (is_disconnected) and websockets.py:35/:45 (WebSocket.receive); websocket.receive() at endpoints.py:77 (WebSocketEndpoint.dispatch); message.get('body', b'')/:get('more_body')/:get('type') at requests.py:223/:226/:303 and the websocket message.get('code'/'text') reads at endpoints.py:83/:106/:120 - the raw ASGI message chunks off the socket before parsing (middleware/base.py message.get reads are response-direction and deliberately excluded)" },
+      { "family": "os_environ", "flow_kind": "env", "evidence": "os.environ attribute read at config.py:16 (Environ default mapping; read through Environ.__getitem__ at :22 and Config.get self.environ[key] at :110) - operator/local-process trust level; no other os.environ read sites in the package" },
+      { "family": "asgi_scope_params", "flow_kind": "param", "evidence": "parameters named `scope` of the ASGI callable functions across the package (~44 functions: StaticFiles.__call__/get_response/file_response, Route/WebSocketRoute/Mount/Host/BaseRoute matches/handle/__call__, Router.__call__/not_found/lifespan, request_response/websocket_session app closures, Response/StreamingResponse/FileResponse.__call__, Request.__init__, WebSocket/WebSocketEndpoint __init__/dispatch, Starlette.__call__, middleware __call__s, endpoints HTTPEndpoint.__init__) - the scope object carries all HTTP input; arg_index is the 0-based position including the self slot" },
+      { "family": "handler_request_params", "flow_kind": "param", "evidence": "parameters named `request`/`websocket` of handler functions in endpoints.py (HTTPEndpoint.method_not_allowed(request), WebSocketEndpoint on_connect/on_receive/on_disconnect/decode), authentication.py (requires() wrappers), middleware/errors.py and middleware/exceptions.py (exception handlers) - framework-injected request objects" },
+      { "family": "parser_stream_params", "flow_kind": "param", "evidence": "headers/stream parameters of FormParser.__init__ and MultiPartParser.__init__ (formparsers.py:48-54/:122-127 - the request headers and the request-body async stream); receive parameter of Request.__init__ (requests.py:194)" },
+      { "family": "uploadfile_ctor", "flow_kind": "multipart_filename", "evidence": "UploadFile(file=tempfile, size=0, filename=filename, headers=...) at formparsers.py:209-214 - the wrapper that stores the attacker-controlled Content-Disposition filename (keyword argument; content goes to the auto-named SpooledTemporaryFile)" }
+    ],
+    "sinkChannels": [
+      { "channel": "os.path.join (static-file path construction)", "evidence": "staticfiles.py:111 os.path.join(*scope['path'].split('/')) in get_path (arg 0 = the starred split of the ATTACKER-controlled scope path); :136 os.path.join(path, 'index.html') in get_response (arg 0 = the get_path output, attacker-influenced); :166 os.path.join(directory, path) in lookup_path (arg 1 = the attacker path joined onto the operator-configured base directory); :83 os.path.join(spec.origin, '..', statics_dir) in get_directories (operator-config package statics dir)" },
+      { "channel": "os.path.normpath / abspath / realpath (canonicalization)", "evidence": "staticfiles.py:111 os.path.normpath(...) in get_path - collapses '..'/'.' components of the scope path BEFORE the join (sanitizer-shaped: pure-relative traversal strings are neutralized here; on Windows normpath also converts / to \\); :82 normpath in get_directories; :168 os.path.abspath(joined_path) when follow_symlink=True (NO containment check on that branch); :170 os.path.realpath(joined_path) and :171 realpath(directory) when follow_symlink=False (the containment-checked branch)" },
+      { "channel": "os.path.commonprefix containment check", "evidence": "staticfiles.py:172 os.path.commonprefix([full_path, directory]) != directory - the base-directory containment guard, applied ONLY on the realpath branch (follow_symlink=False default); note commonprefix is a pure string-prefix comparison (not path-component-aware) and is NOT applied when follow_symlink=True (staticfiles.py:167-168)" },
+      { "channel": "os.stat / isdir / isfile (file metadata access)", "evidence": "staticfiles.py:177 os.stat(full_path) (the direct stat in lookup_path after the containment check); :209 and responses.py:335 anyio.to_thread.run_sync(os.stat, ...) (check_config and FileResponse.__call__ re-stat - argument 1 carries the path); staticfiles.py:56/:85 os.path.isdir (ctor and package dir checks), config.py:62 os.path.isfile(env_file)" },
+      { "channel": "anyio.open_file (the serving read)", "evidence": "responses.py:353 anyio.open_file(self.path, mode='rb') in FileResponse.__call__ - THE actual file open for HTTP serving, with the path at argument 0 (self.path comes from FileResponse(full_path, ...) constructed at staticfiles.py:154/:192)" },
+      { "channel": "builtin open", "evidence": "config.py:121 open(file_name) in Config._read_file - env-file read, operator-configured path at argument 0" },
+      { "channel": "FileResponse wrapper (file access follows from construction)", "evidence": "staticfiles.py:192 FileResponse(full_path, stat_result=..., method=...) in StaticFiles.file_response and :154 FileResponse(full_path, ...) (html-mode 404.html) - argument 0 is the looked-up path; FileResponse.__call__ performs the re-stat and anyio.open_file above" },
+      { "channel": "lookup_path offload wrapper", "evidence": "staticfiles.py:121/:137/:150 anyio.to_thread.run_sync(self.lookup_path, path/index_path/'404.html') - argument 1 carries the path; lookup_path performs the join/realpath/commonprefix/os.stat sequence" },
+      { "channel": "file read for transmission", "evidence": "responses.py:356 file.read(self.chunk_size) on the file opened at :353 (chunked body transmission)" },
+      { "channel": "template loading", "evidence": "templating.py:85 jinja2.FileSystemLoader(directory) (operator-configured template root at argument 0); :94 self.env.get_template(name) and :112 self.get_template(name) (template NAME at argument 0 - application-supplied string, not request input in this tree; the underlying file load happens inside jinja2, which is not part of the database)" },
+      { "channel": "multipart upload storage", "evidence": "formparsers.py:207 SpooledTemporaryFile(max_size=...) - auto-generated name, NOT attacker-controlled (upload content sink, name-safe); :263 part.file.write(data) and :266 part.file.seek(0) (content write to the spooled file); datastructures.py:465-484 UploadFile self.file.write/read/seek/close direct calls and run_in_threadpool(self.file.write/read/seek/close, ...) executor submissions" },
+      { "channel": "module spec lookup", "evidence": "staticfiles.py:79 importlib.util.find_spec(package) - package location for the `packages=` statics directories (operator-configured package names); joined via os.path.join(spec.origin, '..', statics_dir) at :83" }
+    ],
+    "guardsAndEvidence": [
+      { "guard": "normpath pre-collapse in get_path", "evidence": "staticfiles.py:106-111 - get_path returns os.path.normpath(os.path.join(*scope['path'].split('/'))): the scope path is split on '/' (dropping empty components) and normpath collapses '..' and '.' components, so pure-relative traversal strings like a/../.. are neutralized BEFORE lookup_path joins them onto the base directory; leading-absolute and Windows backslash forms interplay with normpath/OS semantics is a labeling concern, not an extraction rule" },
+      { "guard": "base-directory containment via commonprefix", "evidence": "staticfiles.py:170-175 - realpath(joined_path) then os.path.commonprefix([full_path, directory]) != directory -> skip the directory (continue). Only on the follow_symlink=False (DEFAULT) branch; when follow_symlink=True (staticfiles.py:167-168) only abspath is used and NO containment check runs" },
+      { "guard": "commonprefix string-prefix weakness", "evidence": "staticfiles.py:172 - os.path.commonprefix is a pure character-prefix comparison, not path-component aware: a sibling directory sharing a textual prefix (e.g. base '/static' vs '/static-secret') would pass the check; combined with normpath-only '..' handling this is the residual guard-shape evidence, recorded for labeling" },
+      { "guard": "symlink policy", "evidence": "StaticFiles follow_symlink defaults to False (staticfiles.py:48); with False the realpath+commonprefix branch runs; with True the abspath branch at :168 skips the containment check entirely" },
+      { "evidence": "decode boundary position", "note": "percent-decoding happens in the ASGI SERVER before the scope is built (evidence inside this tree: testclient.py:240/:258 build scope['path'] via unquote(path)); StaticFiles.get_path then splits on '/' and normpaths - encoded separators (%2f) arriving as real separators after the single server-side decode are therefore split and normpath'd like literal ones" },
+      { "evidence": "TOCTOU window", "note": "staticfiles.py:170-177 realpath+commonprefix check and os.stat, then FileResponse (staticfiles.py:192) whose __call__ re-stats (responses.py:335) and opens (responses.py:353) in a thread - a symlink-swap window exists between the containment check and the final open; recorded as evidence, TOCTOU is not separately extractable as a candidate row" },
+      { "evidence": "mixed separators / Windows", "note": "os.path.join/os.path.normpath are OS-dependent: on Windows normpath converts '/' to '\\' and a backslash-containing scope path component survives the '/'-split as a single component; the commonprefix check compares the resulting Windows-style strings; recorded for labeling, not extraction" },
+      { "evidence": "upload filename never reaches a path", "note": "formparsers.py:200-214 - the Content-Disposition filename is stored on UploadFile(filename=...) while the content goes to an auto-named SpooledTemporaryFile at :207; NO path construction from the multipart filename exists in this tree (grep-verified: no os.path.join/joinpath/Path()/open with the filename value; UploadFile consumers decide persistence outside this codebase)" },
+      { "evidence": "WSGI PATH_INFO passthrough", "note": "middleware/wsgi.py:25 PATH_INFO = scope['path'].encode('utf8').decode('latin1') - the raw scope path is passed into the wrapped WSGI application unmodified (the starlette side performs no normalization; any file access is the WSGI app's responsibility - recorded as a boundary, the wsgi module contains no file operations itself)" }
+    ],
+    "notObserved": [
+      "pathlib usage: `from pathlib import Path` only in config.py:4 as a TYPE (Config env_file: Union[str, Path]); zero Path(...)/.joinpath()/.resolve()/.relative_to() call sites in the whole database snapshot - pathlib sink families NOT emitted, no rules fabricated (the static-file pipeline is pure os.path string manipulation)",
+      "os.path.dirname / os.path.basename: zero call sites - NOT emitted",
+      "os.remove / os.unlink / os.rmdir / os.rename / os.replace / shutil: zero imports and zero call sites - no delete/move sink families emitted",
+      "zipfile / tarfile / extract / extractall: zero imports and zero call sites - archive extraction channels NOT emitted",
+      "io.open / os.open: zero call sites (the two real opens are anyio.open_file at responses.py:353 and builtin open at config.py:121) - NOT emitted",
+      "sys.argv / argparse / click: zero call sites in the package (scripts/ are shell scripts, not in the database) - no CLI source family emitted",
+      "mimetypes.guess_type (responses.py:36/:303): string-based media-type guessing on the filename/path, no filesystem access - deliberately NOT emitted as a sink (documented here)",
+      "request.query_params / request.json read sites inside the package (query_params defined at requests.py:117-120 with no package-internal consumers beyond the definition; json() at :241) - the query-string family is emitted at the scope['query_string']/.get level where the framework itself reads it (requests.py:119, datastructures.py:35, wsgi.py:26)",
+      "UploadFile.filename consumers: no code in this tree reads .filename off an UploadFile after construction (only the Content-Disposition parse writes it) - the propagation beyond the library is application code, not extractable here",
+      "scope['root_path'] writes (Mount.matches child_scope at routing.py:399-405) and the redirect_scope['path'] rewrite at routing.py:733-737: these are dictionary writes; the value-side scope['path'] reads are captured in the http_path family, the writes themselves are not candidate rows"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution is deferred to the next round per the task contract (generation only).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO source or sink row is expected to resolve at API level: the file-access channels flow through os.path/anyio/jinja2 members that are not part of the database (only the starlette tree is), and the input channels are ASGI scope dict reads, framework-injected objects and Content-Disposition option dicts that API graphs cannot bind to module members. The column is kept 'ast' for all families for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name/subscript text, syntactic receiver, scope/request/headers/options name conventions). os.path.join / os.stat / anyio.open_file / anyio.to_thread.run_sync / jinja2.FileSystemLoader are matched by their syntactic module-qualified shapes (os.path.* Attribute chains, anyio.* Attribute chains, jinja2.* Attribute chain) with moduleHint carrying the stdlib/external module path; member-name matching on instance members (file.read, part.file.write, self.file.write, headers.get, match.groupdict, matched_params.pop) is receiver-name-based on purpose; name-collision noise (a .read()/.get() on an unrelated object) is constrained by module/file and receiver-shape restrictions and left to labeling."
+    },
+    "flowKinds": {
+      "sources": [
+        "http_path",
+        "http_request",
+        "http_header",
+        "route_var",
+        "multipart_filename",
+        "multipart_field",
+        "http_wire",
+        "url_decode",
+        "env",
+        "param"
+      ],
+      "sinks": [
+        "path_join",
+        "path_normalize",
+        "path_resolve",
+        "path_containment_check",
+        "path_ctor",
+        "file_open",
+        "file_stat",
+        "file_lookup",
+        "file_read",
+        "file_write",
+        "file_close",
+        "file_response",
+        "file_loader",
+        "file_create_temp",
+        "file_api_def"
+      ]
+    },
+    "exclusions": [
+      "paths containing /tests/ (32 files of the database snapshot - the workflow's noise rule for tests and fixtures)",
+      "/starlette-db/ (the CodeQL database directory nested inside the source tree)",
+      "starlette/testclient.py is NOT excluded (it is shipped library code inside the package, not the tests/ tree): its unquote(url_decode) and headers.get rows carry test-machinery trust caveats and are expected to be labeled none/FP - kept for auditability, consistent with prior projects in this series"
+    ],
+    "expectedVolume": "roughly 120-140 source rows (scope path subscripts ~11, scope method/query_string/headers subscripts ~12, scope.get rows ~8, groupdict 4, matched_params.pop 1, headers.get/getlist ~11, header subscripts 3, multipart options/params 4, parse_options_header 3, url_decode ~8, receive/message wire reads ~11, os.environ 1, scope params ~40-44, request/websocket handler params ~6-8, parser stream/headers/receive params 5, UploadFile ctor 1) and roughly 45-55 sink rows (os.path.join 4, normpath 2, abspath 1, realpath 2, commonprefix 1, os.stat direct 1, run_sync(os.stat) 2, run_sync(lookup_path) 3, isdir/isfile 3, anyio.open_file 1, builtin open 1, FileResponse ctor 2, file.read 1, FileSystemLoader 1, get_template 2, SpooledTemporaryFile 1, part.file.write/seek 2, self.file ops 8, fspath 1, file_api_def 11). This is in line with prior projects in this series (aiohttp ~60-120/~55-90); this target is a compact framework library whose single concentrated attack surface is the StaticFiles pipeline."
+  },
+  "uncoveredCases": [
+    "Async/await indirection: StaticFiles.get_response offloads the real file work via anyio.to_thread.run_sync(self.lookup_path, path) (staticfiles.py:121/:137/:150) and FileResponse.__call__ via anyio.open_file (responses.py:353); the run_sync wrapper rows capture the path argument (argument 1) but the taint step from the ASGI scope through get_path/get_response/lookup_path into these calls requires data-flow modeling in Phase 2 (MySummaries), not extraction rows.",
+    "Dynamic dispatch ambiguity: .headers.get/.get calls are name-based; a non-Headers receiver with a .get member inside the matched module set would produce a false candidate row (no such collision observed on the request path in this snapshot; receivers like request/self.headers/headers/request_headers are emitted as hints).",
+    "Chained assignment targets: scope['headers'] = list(scope['headers']) at datastructures.py:534 assigns through a subscript target inside a chained assignment; write targets are excluded via Assign.getATarget() (plural accessor) so the RHS read at :534 is captured while the target occurrence is not - if a future CodeQL version models chained targets differently, this row could double-count (verified against python-all 7.1.2).",
+    "Starred join argument: os.path.join(*scope['path'].split('/')) at staticfiles.py:111 passes the split components as a starred unpack; the row reports arg_index 0 (the positional slot the starred expression occupies) - the per-component flow is left to labeling/data-flow.",
+    "os.path.splitext/re.sub path munging in schemas.py (_remove_converter, schemas.py:86-93) operates on ROUTE definitions (operator strings), not request paths - not extracted; documented here.",
+    "mimetypes.guess_type at responses.py:36/:303 receives filename or path but performs no filesystem access (string matching against a type map) - deliberately not a sink row; if a future labeling round wants it as a propagation node it should be a summary, not a sink.",
+    "Test client scope construction (testclient.py:236-258) builds the scope dict literal including 'path': unquote(path) - the dict literal keys are not subscripts, so only the unquote calls are captured; the mapping from unquote result into scope['path'] for downstream consumers is a data-flow concern (MySummaries), recorded here.",
+    "Import-qualified name matching: anyio/jinja2 members are matched by syntactic Attribute chains (anyio.to_thread.run_sync, anyio.open_file, jinja2.FileSystemLoader); an aliased import (import anyio as x) would be missed - not observed in this snapshot (all modules use plain `import anyio` / `import jinja2` / `import os`).",
+    "Compile validation: `codeql query compile --check-only` execution against the local toolchain is deferred together with `codeql query run` per the task contract (this round is generation-only); the queries reuse the binding/API shapes proven on this same CLI 2.25.1 + python-all 7.1.x family in the aiohttp project of this series, and every API fact was cross-checked against the cached python-all 7.1.2 sources (see toolchain.compatibilityBasis).",
+    "requests.QueryParams(self.scope['query_string']) (requests.py:119) and cookie_parser (requests.py:32-56) define request-state accessors whose package-internal consumers are absent (applications consume them); the scope-level reads are extracted, the property definitions are not rows."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql)",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "no framework reference was loaded: references/starlette.md does not exist in the Augur installation (references/fastapi.md is the only reference mentioning starlette, but it describes FastAPI applications built on starlette, not the starlette framework itself - no import evidence matches)"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: VULNERABILITY_AUDIT_REPORT.md and path_traversal_sinks.csv at the starlette_vuln repo root were NOT opened during this step (they were only listed to be explicitly avoided); candidate families are derived from repository evidence and the loaded language/pattern references only. starlette-db was used solely to read codeql-database.yml and the src.zip path listing (metadata/scope) and was otherwise excluded. Project source, the database, and the Augur installation were not modified. Only the three Phase-1 Step-1/2 artifacts under iris_manual/Path_Traversal/starlette/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). `codeql query run`/bqrs decode execution and LLM labeling are deferred to later steps per the task contract; run_manifest.json and summary.md belong to Step 0 / post-execution steps and were not fabricated."
+  }
+}

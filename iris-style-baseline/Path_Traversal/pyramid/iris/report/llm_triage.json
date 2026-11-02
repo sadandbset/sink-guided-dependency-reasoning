@@ -1,0 +1,188 @@
+{
+  "meta": {
+    "reviewer": "independent LLM path re-review (Augur IRIS Pass 1)",
+    "date": "2026-10-23",
+    "project": "pyramid",
+    "pass": 1,
+    "focus": "Path Traversal (CWE-22 / CWE-23 / CWE-36 / CWE-73)",
+    "rule_id": "py/augur/pyramid/pass1-path-traversal",
+    "inputs_reviewed": [
+      "report/iris_report.md",
+      "report/query_generation_notes.md",
+      "labels/labels.json (S026, K022, K029, K030, K034, K040, A001, A002)",
+      "results/pass1.sarif (codeFlows of all 5 results)",
+      "libraries/MySources.qll / MySinks.qll / MySanitizers.qll / MySummaries.qll",
+      "src/pyramid/i18n.py, static.py, request.py, config/i18n.py (real source tree)"
+    ],
+    "independence": "未读取 PyVul 真值、修复提交、CVE/GHSA 描述；仅使用用户在任务中直接提供的 commit 元数据做第二项命中性分析。未修改 SARIF、标签、正式查询。"
+  },
+
+  "sarif_integrity": {
+    "runs": 1,
+    "rules": ["py/augur/pyramid/pass1-path-traversal"],
+    "results_total": 5,
+    "all_results_rule_id_ok": true,
+    "results_by_file": {"src/pyramid/i18n.py": [193, 198, 200, 202, 203]},
+    "diagnostics_or_builtin_queries_mixed_in": false,
+    "note": "invocations 仅含 level=none 的 py/baseline/expected-extracted-files 执行期通知，不属于结果集；results 数组 5 条全部为正式 Pass 1 污点告警。"
+  },
+
+  "chain_overview": {
+    "chain": "Chain B (locale negotiation → make_localizer)",
+    "source_entry": "src/pyramid/i18n.py:363:31 (self.locale_name 属性读, 标签 S026, tp, conf 0.95)",
+    "underlying_attacker_input": "HTTP 请求参数 request.params['_LOCALE_'] 或 cookie request.cookies['_LOCALE_']（default_locale_negotiator, i18n.py:132-138）；亦可为 request 属性。全库 grep 无任何 _LOCALE_ 取值校验（无正则、无白名单、无规范化）。",
+    "sink_sites": [
+      "i18n.py:193 os.path.isdir(ldir) [K029]",
+      "i18n.py:198 os.path.isdir(os.path.realpath(messages_dir)) [K030]",
+      "i18n.py:200 os.listdir(messages_dir) [K034]",
+      "i18n.py:202 os.path.isfile(mopath) [K040]",
+      "i18n.py:203 open(mopath, 'rb') [K022]"
+    ],
+    "taint_flow_verified_lines": [
+      "i18n.py:363 current_locale_name = self.locale_name（源，reify 属性 i18n.py:377-380 → negotiate_locale_name → default_locale_negotiator i18n.py:132-138 → _LOCALE_ param/cookie）",
+      "i18n.py:369 make_localizer(current_locale_name, tdirs)（调用点）",
+      "i18n.py:169-179 locales_to_try = [current_locale_name.split('_')[0]]（仅当含 '_' 时）+ locales_to_try.append(current_locale_name)",
+      "i18n.py:189-192 for tdir in translation_directories: ldir = os.path.realpath(os.path.join(tdir, lname))",
+      "i18n.py:193-194 if os.path.isdir(ldir): locale_dirs.append(ldir)",
+      "i18n.py:196-198 messages_dir = os.path.join(locale_dir, 'LC_MESSAGES'); if not os.path.isdir(os.path.realpath(messages_dir)): continue",
+      "i18n.py:200-203 for mofile in os.listdir(messages_dir); mopath = os.path.realpath(os.path.join(messages_dir, mofile)); mofile.endswith('.mo') and os.path.isfile(mopath); open(mopath, 'rb')"
+    ],
+    "codeflow_matches_source": "SARIF codeFlows（每条告警 3-4 条 threadFlow，含 split 短码分支与 append 容器分支）与上述真实源码逐行一致；MySummaries 渲染的 3 条边（osPathJoinStep/osPathRealpathStep/listAppendStep）均对应 i18n.py:192/197/201/179 的真实调用形态，无凭空传播。"
+  },
+
+  "findings": [
+    {
+      "finding_id": "pass1-i18n-193",
+      "alert_location": "src/pyramid/i18n.py:193:30-34 (ldir)",
+      "sink": "os.path.isdir(ldir)（os.path 存在性/元数据探测）[标签 K029, tp, conf 0.8]",
+      "verdict": "likely_tp",
+      "confidence": 0.6,
+      "role_in_chain": "支撑性发现：同一已证实链上的门控步骤（目录存在性 oracle），单独影响低",
+      "controllable_path": "ldir = realpath(join(tdir, lname))，lname 完全来自 _LOCALE_ param/cookie，任意字符串",
+      "allowed_root": "translation_directories（配置期 add_translation_dirs 注册, config/i18n.py:47/118；经 registry.queryUtility(ITranslationDirectories) 传入, i18n.py:368）",
+      "actual_operation": "真实 syscall：stat 探测 realpath(join(受控根, 攻击者字符串)) 是否为目录",
+      "escape_vectors": [
+        "绝对路径：lname 以 / 或 Windows 盘符开头时 os.path.join 丢弃 tdir，根被完全替换",
+        "相对 ..：join 后 realpath 词法消解 ..，无包含复核",
+        "符号链接：realpath 解析后亦无包含判断"
+      ],
+      "guard_evidence": "无。join/realpath 前后均无根包含判断、白名单或 locale 名格式校验；realpath 被模型正确地当作传播步而非 barrier（MySanitizers 头注 §NOT-modeled，与源码事实一致）",
+      "preconditions": [
+        "应用配置了至少一个翻译目录（tdirs 为空列表时循环体不执行, i18n.py:189/368 default=[]）",
+        "请求触发 request.localizer / request.locale_name（i18n.py:359-375 reify 属性；翻译机制或 locale 访问即可触发）",
+        "默认 negotiator 未被应用替换（queryUtility 间接调用不可静态解析, i18n.py:148-151；替换后取值来源取决于应用）"
+      ],
+      "impact": "存在性 oracle（翻译加载与否导致响应文本/时序差异）；本身不返回文件内容。是该链到达 listdir/open 的必要门",
+      "rationale": "污点链逐行属实、无任何防护、绝对路径与 .. 均可逃逸名义根；作为独立告警影响有限，故 likely_tp（低置信、支撑性）"
+    },
+    {
+      "finding_id": "pass1-i18n-198",
+      "alert_location": "src/pyramid/i18n.py:198:34-64 (os.path.realpath(messages_dir))",
+      "sink": "os.path.isdir(os.path.realpath(messages_dir))（存在性探测）[标签 K030, tp, conf 0.75]",
+      "verdict": "likely_tp",
+      "confidence": 0.6,
+      "role_in_chain": "支撑性发现：第二道存在性门（<攻击者选定目录>/LC_MESSAGES 是否存在），决定是否进入 listdir/open",
+      "controllable_path": "messages_dir = join(ldir, 'LC_MESSAGES')，ldir 已由攻击者完全控制（见上）",
+      "allowed_root": "同上：translation_directories 名义根，无包含检查",
+      "actual_operation": "真实 syscall：stat + 符号链接消解",
+      "escape_vectors": ["继承 193 处的全部逃逸向量；LC_MESSAGES 后缀为固定常量，不构成约束逃逸，但把可探测/枚举范围限定为含 LC_MESSAGES 子目录的目录"],
+      "guard_evidence": "无（isdir 是门不是校验；模型同样将其列为 sink 而非 barrier，正确）",
+      "preconditions": "同 pass1-i18n-193，另需 ldir 存在（193 通过）",
+      "impact": "存在性 oracle；无内容返回",
+      "rationale": "同链属实、无防护；单独影响低，likely_tp（低置信、支撑性）"
+    },
+    {
+      "finding_id": "pass1-i18n-200",
+      "alert_location": "src/pyramid/i18n.py:200:38-50 (messages_dir)",
+      "sink": "os.listdir(messages_dir)（目录枚举）[标签 K034, tp, conf 0.85]",
+      "verdict": "likely_tp",
+      "confidence": 0.65,
+      "role_in_chain": "主链中间落点：对攻击者选定目录的真实枚举",
+      "controllable_path": "messages_dir 同上（攻击者可用绝对 lname 任意指定）",
+      "allowed_root": "translation_directories 名义根，无包含检查",
+      "actual_operation": "真实 syscall：枚举 <任意已存在目录>/LC_MESSAGES 的条目",
+      "escape_vectors": ["绝对路径替换根；.. 逃逸；realpath 符号链接消解"],
+      "guard_evidence": "无",
+      "preconditions": "同上且 193/198 两道存在性门通过",
+      "impact": "枚举结果不直接回显给客户端（文件名仅进入 mofile 循环）；枚举行为与 .mo 后缀过滤把可读集合约束为 */LC_MESSAGES/*.mo。条目名单可间接成为行为 oracle",
+      "rationale": "对无包含的攻击者可控路径执行真实目录枚举——CWE-22 枚举原语成立；可枚举范围受 LC_MESSAGES 结构约束，影响受限，故 likely_tp（中置信）"
+    },
+    {
+      "finding_id": "pass1-i18n-202",
+      "alert_location": "src/pyramid/i18n.py:202:62-68 (mopath)",
+      "sink": "os.path.isfile(mopath)（存在性探测）[标签 K040, tp, conf 0.75]",
+      "verdict": "likely_tp",
+      "confidence": 0.6,
+      "role_in_chain": "支撑性发现：open 前的最终存在性门（TOCTOU 前置）",
+      "controllable_path": "mopath = realpath(join(messages_dir, mofile))；mofile 来自 listdir（文件名不可直接指定，受目录内容约束）",
+      "allowed_root": "同上，无包含检查",
+      "actual_operation": "真实 syscall：stat 探测",
+      "escape_vectors": ["继承上游全部逃逸向量（路径的目录部分完全可控，文件名部分受 listdir 结果约束）"],
+      "guard_evidence": "无；与 open（:203）之间存在 TOCTOU 窗口（isfile → open 无原子性）",
+      "preconditions": "同上且 200 已枚举到以 .mo 结尾的条目",
+      "impact": "存在性 oracle；单独影响低",
+      "rationale": "同链属实、无防护，likely_tp（低置信、支撑性）"
+    },
+    {
+      "finding_id": "pass1-i18n-203",
+      "alert_location": "src/pyramid/i18n.py:203:31-37 (mopath)",
+      "sink": "open(mopath, 'rb')（真实文件读取，gettext MO 目录加载）[标签 K022, tp, conf 0.9]",
+      "verdict": "likely_tp",
+      "confidence": 0.7,
+      "role_in_chain": "主链最终落点：对逃逸后路径的真实读",
+      "controllable_path": "mopath 目录部分完全可控（绝对 lname 任意指定），文件名部分 = listdir 条目且须以 .mo 结尾",
+      "allowed_root": "translation_directories 名义根，join 前后无任何包含判断",
+      "actual_operation": "真实文件读取（'rb'），读入内容经 Translations(mofp, domain)（i18n.py:205）解析进翻译目录并 translations.add（:206）",
+      "escape_vectors": ["绝对路径替换根（join 语义丢弃 tdir）；相对 ..；符号链接（realpath 消解后无复核）"],
+      "guard_evidence": "无。全链唯一的检查是 isdir/isfile 存在性门（:193/:198/:202），均非校验；realpath/normpath 类函数未出现在该链；无前缀包含、无白名单、无 locale 名格式校验（grep 全库 _LOCALE_ 无校验点）",
+      "preconditions": [
+        "应用配置 ≥1 个翻译目录",
+        "请求触发 localizer/locale_name",
+        "目标须为已存在目录且含 LC_MESSAGES 子目录，其中存在 *.mo 文件（读取集合受限，非任意文件读取）"
+      ],
+      "impact": "受限读取：攻击者可让框架加载文件系统上任意 */LC_MESSAGES/*.mo（如 /usr/share/locale/<lang>），读取内容不直接回显，仅经翻译查找间接体现（需 msgid 命中）；畸形 MO 可致解析异常（DoS 面）；按 locale 名缓存 localizer utility（i18n.py:371-373）亦可造成无界注册。写入/删除/文件响应均无",
+      "rationale": "攻击者可控字符串无包含地进入 open() 的路径参数，穿越原语（CWE-22/73）在源码层面完整成立且逐行验证；但可达读取集合被 LC_MESSAGES/*.mo 结构约束、无直接内容外泄通道，实际可利用性显著低于任意文件读，故 likely_tp（中置信，影响受限）"
+    }
+  ],
+
+  "checklist_summary": {
+    "Q1_source_attacker_controlled": "是。S026（self.locale_name, i18n.py:363）的底层取值为 request.params['_LOCALE_']/request.cookies['_LOCALE_']（i18n.py:132-138），任意 HTTP 客户端可设，无认证前置、无格式校验。非过度泛化：codeFlows 的源恰好是被使用的值。",
+    "Q2_flow_reaches_sink": "是。363→369→169-179→189-203 全部为库内真实同步代码，无异步、无包装层；MySummaries 的 3 条额外边（join/realpath/append）均对应真实调用且与 codeFlow 逐行吻合。",
+    "Q3_sink_is_sensitive_op": "203 open('rb')=真实读（满足）；200 listdir=真实枚举（满足）；193/198/202 为 isdir/isfile 存在性 syscall——非纯拼接，但敏感度弱（oracle/门控），已按支撑性发现降置信处理。",
+    "Q4_allowed_root_and_escape": "允许根为配置期 translation_directories；受控 lname 经绝对路径（join 丢弃根）、.. （realpath 消解）与符号链接均可指向根外，无任何包含判断。",
+    "Q5_traversal_factors": "真实影响：绝对路径直接生效；.. 生效；无需二次百分号解码（param 值为解码后字符串）；realpath 消解符号链接且事后无包含复核。",
+    "Q6_real_guards": "无。不存在规范化后根包含判断、固定映射或文件名白名单；存在性检查（isdir/isfile）均在使用点之前但属门控而非校验。",
+    "Q7_misjudged_guards": "告警判定未误信 realpath/normpath/startsWith/鉴权（模型亦未把它们当 barrier）。但模型层面对 A001 _secure_path 的完全信任是另一问题，见 real_vulnerability_hit_analysis。",
+    "Q8_benign_authorization_or_unreachable": "非静态文件服务、非测试代码、非固定常量；请求可达（前置条件：配置翻译目录 + 触发 localizer），属框架公开 i18n 机制的未防护路径，而非授权访问。",
+    "Q9_overgeneralization_fp": "未发现。源/汇/summary 均逐行核对到真实代码；数据库覆盖（src/pyramid 作用域）包含全部涉及文件。",
+    "Q10_mixing": "未混入。SARIF 单 run 单规则 5 结果，全为正式 Pass 1 告警；baseline 通知与 CodeQL 内置查询均不在结果集中。"
+  },
+
+  "real_vulnerability_hit_analysis": {
+    "given_vulnerability": {
+      "commit": "https://github.com/Pylons/pyramid/commit/347d7750da6f45c7436dd0c31468885cc9343c85",
+      "cwe": "CWE-22",
+      "advisory_ref": "GHSA-j8g2-6fc7-q8f8（仅引用用户提供的 commit message，未读取公告内容）",
+      "function": "_secure_path",
+      "patch_site": "src/pyramid/static.py（_contains_slash → _contains_invalid_element_char，新增拒绝 NUL 字符路径元素）"
+    },
+    "source_tree_verification": {
+      "pre_fix_code_present": true,
+      "evidence": "src/pyramid/static.py:263-285：_seps = {'/', os.sep}（:263）、_contains_slash（:266-270，仅检查分隔符）、_has_insecure_pathelement = {'..','.',''}.intersection（:272）、_secure_path（:275-285，@lru_cache）。与用户提供的 code_before 完全一致：不含 NUL 拒绝。受影响的消费链在 static.py:104-171（get_resource_name → :134 _secure_path → :141/:152 join → :153/:167-171 isdir/resource_exists/resource_filename → :112 FileResponse → response.py:55-57 getmtime/getsize/open）"
+    },
+    "hit_by_pass1_formal_alerts": false,
+    "alerts_in_vulnerable_function": 0,
+    "alerts_at_patch_site": 0,
+    "alerts_at_real_vuln_flow": 0,
+    "reasons": [
+      "5 条正式告警全部位于 src/pyramid/i18n.py 的 make_localizer（Chain B），与 static.py 的 _secure_path 静态视图链（Chain A）无交集；commit 347d7750 仅修改 static.py 的元素校验辅助函数，i18n.py 不在补丁范围内，故 5 条告警没有一条落在真实漏洞的修复点上。",
+      "真实漏洞所在的 Chain A 被本查询的 A001 barrier（MySanitizers.qll：static.py:134 的 _secure_path 调用结果）在构造上整体截断：request.path_info/subpath → traversal_path_info/split_path_info（A002）→ _secure_path（A001）→ join/resource_* → FileResponse → open 的任何下游污点都不可能告警。query_generation_notes.md §6.4 明确预期 Chain A 无告警。",
+      "根因是 barrier 前提被证伪：A001 的阻断论证（MySanitizers 头注'absolute paths and ANY separator injection: no element may contain / or os.sep'）假设 _secure_path 拒绝一切逃逸元素；而 pre-fix 的 _contains_slash 只拒绝 '/' 与 os.sep，不拒绝 NUL——NUL 元素（来自 URL 中 %00）既不等于 '../'/'.'/''，也不含分隔符，可通过 _secure_path。按用户提供的 advisory 影响（Python 3.11、全文件系统路径静态视图、仅可泄露 docroot 上一级的 index.html），该 NUL 元素使其下游 join/isdir/exists/open 访问到 docroot 之外的固定目标。这是把 sanitizer 过度信任为完备防护（复核清单第 7 项的错误模式在模型层面成立），产生的是真实漏洞上的假阴性，而非告警误报。",
+      "检测该漏洞还需 NUL 语义建模：逃逸向量既非 .. 序列、也非绝对路径或二次解码，而是 NUL 在 Python 3.11 文件系统调用层的特殊行为；Pass 1 的 CWE-22 source/sink/sanitizer 模型（A001/A002 均不感知 NUL）不具备捕获该向量的机制。"
+    ],
+    "conclusion": "CodeQL 分析成功且命中了 5 条 i18n 污点路径（按本复核为 pattern-level likely_tp），但真实存在于本快照的漏洞（GHSA-j8g2-6fc7-q8f8 / commit 347d7750，_secure_path NUL 元素绕过）未被任何正式 Pass 1 告警命中：漏报，且漏报由 A001 barrier 对 _secure_path 的过度信任在查询构造层面注定。",
+    "caveat": "NUL 绕过的 CPython 运行时级机制（为何仅 Python 3.11、为何仅上一级 index.html）未在本环境复现；此处仅依据用户提供的 commit 元数据与 static.py 源码层面的 pre-fix 事实（_contains_slash 不含 NUL 检查）作出判断，未读取修复提交全文与公告描述。"
+  },
+
+  "overall_conclusion": "本轮存在正式 Pass 1 告警（5 条，均在 src/pyramid/i18n.py:193/198/200/202/203，ruleId=py/augur/pyramid/pass1-path-traversal）。独立复核结论：同一条已逐行证实的 Chain B（_LOCALE_ param/cookie → locale_name → make_localizer → join/realpath → isdir/listdir/isfile/open，全链无包含校验）上的 likely_tp——5 条告警中 open(:203) 与 listdir(:200) 为主要落点，193/198/202 为同链支撑性存在性门；整体影响受限（仅 */LC_MESSAGES/*.mo 受限读取 + 存在性 oracle，无任意文件读/写/回显，且以应用配置翻译目录为前提）。诊断与 CodeQL 基线未混入正式结果。任务给定的真实漏洞（CWE-22, _secure_path NUL 绕过, commit 347d7750）未被本轮告警命中（假阴性，归因于 A001 barrier 过度信任 _secure_path），且该补丁位点不在任何告警链上。"
+}

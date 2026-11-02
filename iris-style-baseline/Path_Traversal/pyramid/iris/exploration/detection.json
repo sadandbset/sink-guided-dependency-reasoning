@@ -1,0 +1,326 @@
+{
+  "run": {
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "workspace": "iris_manual/Path_Traversal/pyramid/iris",
+    "generated": "2026-10-23",
+    "notes": "Only detection.json, extraction/sources.ql and extraction/sinks.ql are produced in this run. No CodeQL execution, no LLM labeling, no pass queries."
+  },
+  "pass": {
+    "id": 1,
+    "name": "Path Traversal",
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"],
+    "target_query": "iris/queries/Pass1_PathTraversal.ql",
+    "verified_against": "WORKFLOW.md section 2 (Pass 1 -> CWEs 022, 023, 036, 073); Pass1_PathTraversal.ql is the Phase 2 pass-query name and does not exist yet in this workspace"
+  },
+  "language": {
+    "detected": "python",
+    "evidence": [
+      "codeql-database.yml: primaryLanguage: python",
+      "src/ tree is a Python package (src/pyramid/__init__.py, 61 .py files under src/pyramid)",
+      "build manifests: setup.py (setuptools, VERSION = '2.0.1'), setup.cfg, pyproject.toml, MANIFEST.in"
+    ]
+  },
+  "project": {
+    "name": "pyramid",
+    "version": "2.0.1",
+    "version_evidence": "setup.py: VERSION = '2.0.1'",
+    "kind": "web framework source (the repo IS the Pylons Pyramid framework itself, not an application built on a framework)",
+    "database": {
+      "path": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/pyramid_vuln/pyramid-db",
+      "cli_version": "2.25.1",
+      "pack": "codeql/python-all (iris/qlpack.yml)",
+      "source_location_prefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\pyramid_vuln",
+      "baseline_loc": 58294,
+      "source_files": 61,
+      "scope_notes": [
+        "The nested pyramid-db CodeQL database directory sits at the repository root (pyramid_vuln/pyramid-db), NOT under src/, so the structural src/pyramid/% scope guard in both extraction queries excludes it from code traversal, search and candidate extraction regardless of DB scope; repo-root files (setup.py, scripts, reports) and the tests/ tree are excluded the same way.",
+        "src/pyramid/testing.py and src/pyramid/config/testing.py are Pyramid's own testing helper modules (DummyRequest/DummyTemplateRenderer etc.); per the Augur noise policy (tests and fixtures) they are excluded from candidate extraction and documented here. src/pyramid/interfaces.py (zope.interface declaration stubs with no executable logic) is likewise excluded so interface method declarations are not mistaken for entry points.",
+        "Per experiment-independence rules, repository-root artifacts that look like ground truth (PYRAMID-VULNERABILITY-REPORT.md, path_traversal_sinks.csv, 漏洞审查报告.md, 第一步筛选报告.md) were NOT read; all findings below derive only from src/ code.",
+        "Dependencies (webob, zope.interface, pkg_resources/setuptools, plaster/plaster_pastedeploy, hupper, venusian, translationstring) are NOT in the DB; their APIs are matched syntactically by call-site name with module hints."
+      ]
+    },
+    "layout": {
+      "wsgi_entry": "src/pyramid/router.py (Router.__call__(environ, start_response) at :262; request_context(environ) at :193; handle_request/invoke_request/invoke_subrequest)",
+      "static_file_serving": "src/pyramid/static.py (static_view view callable, ManifestCacheBuster, QueryStringCacheBuster)",
+      "file_response": "src/pyramid/response.py (FileResponse: open/getmtime/getsize at :55-57, FileIter)",
+      "asset_subsystem": "src/pyramid/asset.py, src/pyramid/path.py (AssetResolver, PkgResourcesAssetDescriptor, FSAssetDescriptor), src/pyramid/config/assets.py (PackageOverrides/OverrideProvider/PackageAssetSource/FSAssetSource, override_asset)",
+      "traversal_and_routing": "src/pyramid/traversal.py (ResourceTreeTraverser, traversal_path_info, split_path_info, decode_path_info), src/pyramid/urldispatch.py (RoutesMapper, Route.match)",
+      "i18n": "src/pyramid/i18n.py (default_locale_negotiator, make_localizer, Translations.load), src/pyramid/config/i18n.py (add_translation_dirs)",
+      "cli_scripts": "src/pyramid/scripts/{pserve,pshell,prequest,pviews,proutes,ptweens,pdistreport}.py, src/pyramid/paster.py"
+    }
+  },
+  "framework": {
+    "name": "pyramid",
+    "confidence": 1.0,
+    "scores": {
+      "import_package_evidence": 0.45,
+      "route_decorator_evidence": 0.30,
+      "runtime_bootstrap_evidence": 0.20,
+      "directory_layout_evidence": 0.05
+    },
+    "evidence": [
+      "package: src/pyramid/ package with setup.py name 'pyramid', VERSION '2.0.1'",
+      "routing/view machinery: router.py WSGI Router, config/routes.py add_route, config/views.py add_view + viewderivers.py view derivation, urldispatch.py RoutesMapper, traversal.py ResourceTreeTraverser",
+      "bootstrap: scripts/pserve.py serves PasteDeploy ini configs via plaster; Router is the WSGI application returned by Configurator.make_wsgi_app",
+      "layout: src/ layout, config/ configurator mixins, interfaces.py zope.interface declarations"
+    ],
+    "reference_status": "No references/pyramid.md exists in augur-0.3.0 (only django.md, fastapi.md, flask.md for Python), so no framework reference was loaded; references/python.md and references/patterns.md were used and framework-specific signatures were derived directly from repository code as WORKFLOW.md 4.2.3 instructs for unmatched frameworks.",
+    "secondary_candidates": [
+      {"name": "webob", "confidence": 0.55, "evidence": ["pyramid.request.Request subclasses webob BaseRequest (request.py:4); pyramid.response.Response subclasses webob Response (response.py:4)"], "note": "external dependency; request attribute semantics (path_info, params, cookies, headers) are webob-defined and not in the DB"},
+      {"name": "pkg_resources (setuptools)", "confidence": 0.55, "evidence": ["asset subsystem resolves package resources via pkg_resources.resource_filename/resource_stream/resource_exists (static.py:6, asset.py:43, path.py:396-421, config/assets.py)"], "note": "external dependency; performs the actual filesystem access for package-relative assets"},
+      {"name": "plaster / plaster_pastedeploy", "confidence": 0.5, "evidence": ["scripts/common.py get_config_loader uses plaster.get_loader(config_uri, protocols=['wsgi']); pserve.py reads ini settings (watch_files) and loader.uri.path"], "note": "external dependency; ini config file reading happens inside plaster, not in this repo"}
+    ]
+  },
+  "references_loaded": [
+    "iris_tools/augur-0.3.0/WORKFLOW.md",
+    "iris_tools/augur-0.3.0/references/patterns.md",
+    "iris_tools/augur-0.3.0/references/python.md",
+    "iris_tools/augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl"
+  ],
+  "template_notes": "All language starter templates are stubs; placeholder bodies were generated from repository evidence per WORKFLOW.md 4.3.1. No {{...}} placeholders remain. Column order matches prior projects (pretalx-style): nodeRepr, role, callableName, flowKind, receiver, moduleHint, argIndex, filePath, line, context. Both queries carry @name/@description/@id but deliberately NO @kind annotation: a @kind problem select shape cannot carry the multi-column extraction contract needed for codeql query run + codeql bqrs decode, and no @kind table is assumed. moduleHint is used instead of a 'module' variable name; locations use the n.getLocation().getFile()/getStartLine() API pair proven on this Windows-created database family.",
+  "source_families": [
+    {
+      "family": "wsgi_environ_param",
+      "description": "The raw WSGI environ dictionary parameter of WSGI-application entry points: methods named __call__ or request_context whose parameter index 1 is named 'environ'. This is the outermost untrusted boundary; every request-derived value (PATH_INFO, headers, query string) originates here.",
+      "evidence": [
+        "src/pyramid/router.py:262 def __call__(self, environ, start_response) - Router, the WSGI application",
+        "src/pyramid/router.py:193 def request_context(self, environ) - creates the request from environ",
+        "src/pyramid/httpexceptions.py:336 def __call__(self, environ, start_response) - HTTPException as WSGI app"
+      ]
+    },
+    {
+      "family": "http_request_param",
+      "description": "The 'request' parameter of request-entry methods (__call__/handle_request/invoke_request/invoke_subrequest/__init__ with a 'request' parameter) and of view-callable-shaped functions whose parameters 0,1 are (context, request). The request object carries all HTTP-controlled data (path, subpath, matchdict, params, headers).",
+      "evidence": [
+        "src/pyramid/static.py:104 static_view.__call__(self, context, request) - THE static file view; request.path_info/request.subpath select the file to serve",
+        "src/pyramid/traversal.py:595 ResourceTreeTraverser.__call__(self, request) - consumes request.path_info/matchdict/environ",
+        "src/pyramid/urldispatch.py:74 RoutesMapper.__call__(self, request) - route matching on request.path_info",
+        "src/pyramid/router.py:56/229/173 handle_request/invoke_request/invoke_subrequest(self, request)",
+        "src/pyramid/traversal.py:758 DefaultRootFactory.__init__(self, request)",
+        "src/pyramid/view.py:324 AppendSlashNotFoundViewFactory.__call__(self, context, request)",
+        "src/pyramid/viewderivers.py:107-139/230/271/316/391/426/503 and src/pyramid/config/views.py:148/169/188/2103/2122 - framework view wrappers with (context, request) signature",
+        "src/pyramid/view.py:28/79/110, src/pyramid/security.py:124, src/pyramid/httpexceptions.py:1333, src/pyramid/wsgi.py:38/82 - module-level (context, request) view helper functions"
+      ],
+      "caveats": [
+        "The 'context' parameter of the (context, request) convention is also URL-derived (traversal locates contexts by URL path segments via __getitem__), but it is deliberately NOT extracted to keep row volume bounded; it is recorded here as a second-order URL-derived input."
+      ]
+    },
+    {
+      "family": "request_field",
+      "description": "Attribute reads request.<field> / self.request.<field> for HTTP-controlled fields: path_info, path, path_url, url, subpath, query_string, matchdict, matched_route, params, GET, POST, cookies, headers, environ, accept_encoding, locale_name, localizer. Field-to-flow-kind mapping recorded per row.",
+      "evidence": [
+        "src/pyramid/static.py:131/133 request.subpath / request.path_info - raw URL path selecting the served file (path_info then passes through traversal_path_info URL-decoding and _secure_path validation)",
+        "src/pyramid/static.py:212/222 request.accept_encoding - Accept-Encoding header; only selects among already-existing encoded files, it does not control the file location",
+        "src/pyramid/traversal.py:620 request.path_info - traversal input; :597 request.matchdict - URL route match values",
+        "src/pyramid/traversal.py:596/728 request.environ - WSGI environ access (HTTP_X_VHM_ROOT virtual-host header key)",
+        "src/pyramid/i18n.py:139 request.cookies.get('_LOCALE_') input chain; request.locale_name reified property ultimately flows into make_localizer's os.path.join(tdir, lname) -> open(mopath)",
+        "src/pyramid/renderers.py:381 request.GET.get(param_name) - JSONP callback (not path-relevant, kept for labeling)",
+        "src/pyramid/predicates.py:91/128/131/201, src/pyramid/csrf.py:230/238/311, src/pyramid/authentication.py:1376 - params/headers/POST/matchdict reads used for matching and auth tokens"
+      ],
+      "caveats": [
+        "request.path_url/request.url/request.query_string are used for redirect URLs and debug logging, not for file paths (static.py:143/154/236-237, view.py:332-336); extracted with that caveat for the labeler.",
+        "request.headers/params/POST reads in predicates/csrf/authentication are compared or hashed, not used as paths; kept as boundary rows for labeling to discard."
+      ]
+    },
+    {
+      "family": "request_field_lookup",
+      "description": ".get() lookups on request fields (request.params.get, request.cookies.get, request.headers.get, request.environ.get, request.matchdict.get) and on local variables named 'environ' or 'matchdict' (bound from request.environ / request.matchdict in the same functions).",
+      "evidence": [
+        "src/pyramid/traversal.py:601/608 matchdict.get('traverse') / matchdict.get('subpath') - route match values from URL (*traverse / *subpath star-args, already URL-decoded by routing)",
+        "src/pyramid/i18n.py:135/139 request.params.get('_LOCALE_') / request.cookies.get('_LOCALE_') - locale name negotiation; the value reaches make_localizer path joining",
+        "src/pyramid/authentication.py:211/214/415 request.environ.get(...) - repoze.who identity / environ-key reads",
+        "src/pyramid/request.py:274/275 environ.get('SCRIPT_NAME')/environ.get('PATH_INFO') - local environ bound from request.environ at :273",
+        "src/pyramid/httpexceptions.py:257 environ.get('HTTP_ACCEPT') - local environ (WSGI app call)"
+      ],
+      "caveats": [
+        "Local Name 'environ'/'matchdict' matching is a convention-based heuristic: it is assumed to be the WSGI environ / route matchdict because it is bound from request.environ / request.matchdict at traversal.py:596-597, response.py:60, request.py:273; sites are few and verified by hand."
+      ]
+    },
+    {
+      "family": "request_field_subscript",
+      "description": "Subscript reads (and prequest's writes) on request fields and on local 'environ': environ[HTTP_X_VHM_ROOT], environ['wsgi.file_wrapper'], environ['PATH_INFO']-style access.",
+      "evidence": [
+        "src/pyramid/traversal.py:631 environ[self.VH_ROOT_KEY] - HTTP_X_VHM_ROOT request header (VH_ROOT_KEY = 'HTTP_X_VHM_ROOT'), URL-decoded via decode_path_info and used for virtual-root path computation",
+        "src/pyramid/response.py:62 environ['wsgi.file_wrapper'](f, _BLOCK_SIZE) - server-provided file wrapper invoked with the opened file (not path-controlled)",
+        "src/pyramid/scripts/prequest.py:195/196/203 environ['wsgi.input']=.../environ[name]=value - CLI-controlled environ mutation (operator boundary)"
+      ]
+    },
+    {
+      "family": "request_dynamic_attr",
+      "description": "getattr(request, ...) dynamic attribute reads on the request object.",
+      "evidence": [
+        "src/pyramid/i18n.py:134 getattr(request, '_LOCALE_', None) - locale name attribute (settable by views/listeners from request data)"
+      ]
+    },
+    {
+      "family": "cli_argv",
+      "description": "argv parameters of the console-script entry points (module-level main(argv=sys.argv) and P*Command.__init__(self, argv, ...)) plus self.args.<name> argparse result reads. CLI operators, not HTTP attackers: extracted with an explicit operator-boundary caveat; config_uri/path values flow into plaster config loading and Request.blank.",
+      "evidence": [
+        "src/pyramid/scripts/pserve.py:26/134 main(argv)/PServeCommand.__init__(self, argv) - config_uri -> plaster loader -> loader.uri.path -> os.path.abspath; watch_files ini setting -> AssetResolver.resolve(file).abspath() -> pkg_resources.resource_filename",
+        "src/pyramid/scripts/prequest.py:11/125 - config_uri and URL path from argv; path -> Request.blank(path) drives the full request pipeline",
+        "src/pyramid/scripts/pshell.py:15/102, pviews.py:12/62, proutes.py:20/274, ptweens.py:11/55 - config_uri from argv"
+      ],
+      "caveats": [
+        "CLI argv is an operator-controlled boundary (whoever runs the process already controls the machine); extracted per Augur guidance to let labeling decide, with this caveat attached to every row."
+      ]
+    },
+    {
+      "family": "env_config",
+      "description": "Environment variable reads (os.environ.get/os.getenv and os.environ[...] subscripts). Deployment/operator boundary, not attacker input.",
+      "evidence": [
+        "src/pyramid/scripts/pshell.py:99 pystartup = os.environ.get('PYTHONSTARTUP') - later opened and exec'd at pshell.py:210-213 (file read; the exec itself is a Pass 4 concern, noted under coverage gaps)"
+      ],
+      "caveats": [
+        "environment variables do not cross an untrusted boundary in standard deployments; kept as boundary candidates with operator caveat only."
+      ]
+    },
+    {
+      "family": "config_settings_lookup",
+      "description": ".get() lookups on local 'settings' inside the CLI scripts, where ini-file settings influence filesystem paths.",
+      "evidence": [
+        "src/pyramid/scripts/pserve.py:158-160 settings.get('watch_files') - watch list entries are resolved via AssetResolver and watched by hupper",
+        "src/pyramid/scripts/pserve.py:174 settings.get('open_url')"
+      ],
+      "caveats": [
+        "ini settings are operator configuration, not attacker input; extracted only because watch_files entries reach resource_filename/fs resolution."
+      ]
+    },
+    {
+      "family": "config_asset_spec_param",
+      "description": "Parameters of configuration-facing constructors/methods whose values flow into filesystem operations inside this repo (static root dirs, manifest specs, asset override specs, asset descriptor paths). Developer/operator boundary: these are set by application code at config time, not per-request.",
+      "evidence": [
+        "src/pyramid/static.py:78 static_view.__init__(self, root_dir, ...) - root_dir becomes docroot/norm_docroot joined with the request-derived path at :152",
+        "src/pyramid/static.py:382 ManifestCacheBuster.__init__(self, manifest_spec) - manifest_path via abspath_from_asset_spec, opened at :394",
+        "src/pyramid/config/assets.py:263 FSAssetSource.__init__(self, prefix) / :215 PackageAssetSource.__init__(self, package, prefix) / :184 DirectoryOverride.__init__(self, path, source) / :196 FileOverride.__init__(self, path, source)",
+        "src/pyramid/path.py:172 AssetResolver.resolve(self, spec) - spec -> PkgResourcesAssetDescriptor/FSAssetDescriptor (pkg_name, path)",
+        "src/pyramid/path.py:399/426 PkgResourcesAssetDescriptor.__init__(self, pkg_name, path) / FSAssetDescriptor.__init__(self, path)",
+        "src/pyramid/asset.py:37 abspath_from_asset_spec(spec, pname) - spec -> pkg_resources.resource_filename",
+        "src/pyramid/config/assets.py:319 override_asset(self, to_override, override_with) and :307 _override(self, package, path, override_source)",
+        "src/pyramid/config/views.py:2195 StaticURLInfo.add(self, config, name, spec) - spec becomes static_view root_dir"
+      ],
+      "caveats": [
+        "Not attacker sources in standard deployments; extracted as config-boundary candidates so the labeling stage can mark them none/sanitizer-context as appropriate.",
+        "add_translation_dirs(*specs) uses a vararg parameter, which the extraction query does not match for safety; specs flow to AssetResolver().resolve(spec).abspath() in config/i18n.py:90-99 and are recorded here as a gap."
+      ]
+    }
+  ],
+  "sink_families": [
+    {
+      "family": "fs_open",
+      "description": "Builtins open(path, ...) calls - real file read. argIndex 0.",
+      "evidence": [
+        "src/pyramid/response.py:57 f = open(path, 'rb') - FileResponse.__init__ serving an HTTP response body; path arrives from static_view after request-path joining",
+        "src/pyramid/static.py:394 open(self.manifest_path, 'rb') - ManifestCacheBuster manifest load",
+        "src/pyramid/path.py:436 open(self.path, 'rb') - FSAssetDescriptor.stream()",
+        "src/pyramid/config/assets.py:281 open(path, 'rb') - FSAssetSource.get_stream(), path = os.path.join(prefix, resource_name)",
+        "src/pyramid/i18n.py:203 open(mopath, 'rb') - make_localizer .mo file load; mopath = realpath(join(messages_dir, mofile)) where messages_dir derives from the negotiated locale name (request-controlled via _LOCALE_ param/cookie)",
+        "src/pyramid/i18n.py:272 open(filename, 'rb') - Translations.load, filename from gettext.find",
+        "src/pyramid/scripts/pshell.py:211 open(self.pystartup, 'rb') - PYTHONSTARTUP env file"
+      ]
+    },
+    {
+      "family": "fs_listdir",
+      "description": "os.listdir(path) directory enumeration. argIndex 0.",
+      "evidence": [
+        "src/pyramid/i18n.py:201 os.listdir(messages_dir) - enumerates .mo candidates under the locale-derived directory",
+        "src/pyramid/path.py:442 os.listdir(self.path) - FSAssetDescriptor.listdir()",
+        "src/pyramid/config/assets.py:302 os.listdir(path) - FSAssetSource.listdir()"
+      ]
+    },
+    {
+      "family": "fs_metadata",
+      "description": "Filesystem existence/metadata checks: os.path.isdir/isfile/exists/realpath/getsize/getmtime (dotted calls), plus the from-import bare aliases in static.py (exists, isdir, getsize) and response.py (getmtime, getsize). argIndex 0. These touch the filesystem and are recorded for TOCTOU/prefix-validation evidence, while content read/write sinks remain the open family.",
+      "evidence": [
+        "src/pyramid/i18n.py:192/193/198/202 os.path.realpath(os.path.join(tdir, lname)) / os.path.isdir(ldir) / os.path.realpath(messages_dir) / os.path.isfile(mopath)",
+        "src/pyramid/path.py:439/445 os.path.isdir(self.path) / os.path.exists(self.path)",
+        "src/pyramid/config/assets.py:275/297/347/352 os.path.exists(path) / os.path.isdir(path) / os.path.exists(override_with) / os.path.isdir(override_with)",
+        "src/pyramid/static.py:170 exists(name) / :153 isdir(resource_path) / :201 getsize(x[0]) - bare aliases of os.path.exists/isdir/getsize via 'from os.path import exists, getmtime, getsize, isdir, join, normcase, normpath' (static.py:5)",
+        "src/pyramid/response.py:55/56 getmtime(path) / getsize(path) - bare aliases via 'from os.path import getmtime, getsize' (response.py:2)"
+      ]
+    },
+    {
+      "family": "http_file_response",
+      "description": "FileResponse(path, request, ...) - Pyramid's HTTP file-serving response. The real file access happens inside FileResponse.__init__ in this same repo (open + getmtime + getsize, response.py:55-57), so this call site is the framework-level sink where a derived path enters HTTP file serving. argIndex 0.",
+      "evidence": [
+        "src/pyramid/static.py:112 FileResponse(filepath, request, self.cache_max_age, content_type, content_encoding) - filepath derived from request path_info/subpath via _secure_path + normcase(normpath(join(norm_docroot, path)))"
+      ]
+    },
+    {
+      "family": "fs_resource_stream",
+      "description": "pkg_resources.resource_stream(pkg, path) (dotted 'pkg_resources.resource_stream' or 'self.pkg_resources.resource_stream') - opens a package resource for reading (external API performing the actual filesystem open). argIndex 1.",
+      "evidence": [
+        "src/pyramid/path.py:411-412 PkgResourcesAssetDescriptor.stream() -> self.pkg_resources.resource_stream(self.pkg_name, self.path)",
+        "src/pyramid/config/assets.py:233-234 PackageAssetSource.get_stream() -> pkg_resources.resource_stream(self.pkg_name, path)"
+      ]
+    },
+    {
+      "family": "fs_resource_filename",
+      "description": "pkg_resources.resource_filename(pkg, path) (dotted or self.pkg_resources form, plus static.py's from-import bare alias) - resolves a package-relative resource to an absolute filesystem filename (external API; the returned path is then opened/stat'ed, e.g. by FileResponse). argIndex 1.",
+      "evidence": [
+        "src/pyramid/static.py:168 resource_filename(self.package_name, name) - bare alias via 'from pkg_resources import resource_exists, resource_filename, resource_isdir' (static.py:6); result flows into find_best_match -> FileResponse",
+        "src/pyramid/asset.py:43 pkg_resources.resource_filename(pname, filename) - abspath_from_asset_spec",
+        "src/pyramid/path.py:407-408 self.pkg_resources.resource_filename(self.pkg_name, self.path) - PkgResourcesAssetDescriptor.abspath(); :71 pkg_resources.resource_filename(package.__name__, '') - package_path()",
+        "src/pyramid/config/assets.py:228-229 pkg_resources.resource_filename(self.pkg_name, path) - PackageAssetSource.get_filename()"
+      ]
+    },
+    {
+      "family": "fs_resource_metadata",
+      "description": "pkg_resources.resource_exists/resource_isdir/resource_listdir (dotted, self.pkg_resources form, static.py bare aliases) - resource existence checks. argIndex 1. Also the OverrideProvider delegations to pkg_resources.DefaultProvider.get_resource_filename/stream/string/has_resource/resource_isdir/resource_listdir in config/assets.py (argIndex 1 for has_resource/resource_isdir/resource_listdir, 2 for the manager/resource_name pairs).",
+      "evidence": [
+        "src/pyramid/static.py:142 resource_isdir(self.package_name, resource_path) / :167 resource_exists(self.package_name, name) - bare aliases",
+        "src/pyramid/path.py:414-421 self.pkg_resources.resource_isdir/resource_exists(...) - PkgResourcesAssetDescriptor",
+        "src/pyramid/config/assets.py:241-254 pkg_resources.resource_exists/resource_isdir/resource_listdir(self.pkg_name, path); :32-82 OverrideProvider.get_resource_filename/get_resource_stream/get_resource_string/has_resource/resource_isdir/resource_listdir delegating to pkg_resources.DefaultProvider"
+      ]
+    }
+  ],
+  "propagation_and_validation_nodes": {
+    "description": "Path construction / normalization / validation nodes observed in the code. These are deliberately NOT extracted as sinks (no direct filesystem operation); they are the intermediate propagation and validation layer for Phase 2 summary/sanitizer labeling.",
+    "nodes": [
+      "static.py:152 normcase(normpath(join(self.norm_docroot, path))) - join + normalize of docroot with the request-derived path (Windows: normpath converts / to \\, see comment at :151)",
+      "static.py:141 resource_path = '%s/%s' % (self.docroot.rstrip('/'), path) - package-resource path concatenation",
+      "static.py:98 normcase(normpath(docroot)) - docroot normalization at construction",
+      "static.py:156/263-285 join(resource_path, self.index); _secure_path(path_tuple) - lru_cache'd validation rejecting path elements in {'..', '.', ''} and elements containing '/' or os.sep; belt-and-suspenders guard over the traversal-split path (raises HTTPNotFound 'Out of bounds')",
+      "traversal.py:438-506 traversal_path_info / split_path_info / decode_path_info - PATH_INFO split: drops '' and '.' segments, pops the previous segment on '..', latin-1->utf-8 decode (URL decoding per PEP 3333); traversal.py:420-435 traversal_path also unquotes percent-encoding via unquote_to_bytes",
+      "i18n.py:192/197/201 os.path.join(tdir, lname) / os.path.join(messages_dir) / os.path.realpath(...) - locale directory construction and symlink resolution (realpath) around the locale-name join; no '..' filtering is applied to the locale name itself",
+      "i18n.py:174-187 make_localizer locale candidate list ('de', 'de_DE' split on '_')",
+      "path.py:13-17 caller_path os.path.join(prefix, path); path.py:407-408 os.path.abspath(resource_filename(...)); path.py:427 FSAssetDescriptor self.path = os.path.abspath(path)",
+      "asset.py:10-33 resolve_asset_spec / asset_spec_from_abspath - asset spec <-> path conversions (colon-split, package prefix matching)",
+      "config/assets.py:266-271 FSAssetSource.get_path os.path.join(self.prefix, resource_name); :184-203 DirectoryOverride/FileOverride prefix matching on resource_name",
+      "request.py:281-291 new_path_info construction from request.subpath (call_app_with_subpath_as_path_info)",
+      "url.py:631/676/831/850 static_url path handling - URL generation only"
+    ]
+  },
+  "sanitizer_evidence": [
+    "static.py:272-285 _secure_path - rejects any path element in {'..', '.', ''} and any element containing '/' or os.sep (mixed-separator defense) before joining with the docroot; returns None -> HTTPNotFound('Out of bounds') at static.py:136-137",
+    "traversal.py:510-523 split_path_info - drops ''/'.' elements and resolves '..' by popping the previous element during URL path splitting (request.subpath and traversed paths are computed through it)",
+    "traversal.py:502-505 decode_path_info + URLDecodeError on invalid UTF-8 - percent/latin-1 decoding is canonicalized at ingress",
+    "static.py:108-109/136-137 - HTTPNotFound when no file matches or the path is out of bounds; static.py:143-144/154-155 add_slash redirects only",
+    "response.py:55-57 - FileResponse accesses the path only after the static view produced a matching file (find_resource_path checked existence first: TOCTOU window between the existence check and open, partially mitigated by the filemap cache when reload=False)"
+  ],
+  "security_evidence": {
+    "base_directory": "static.py:98/152 - norm_docroot base joined with request path (filesystem mode); static.py:141 - docroot resource prefix (package mode); config/assets.py:268 - FSAssetSource prefix; i18n.py:192 - translation_directories base (config-provided) joined with the request-negotiated locale name",
+    "dotdot_handling": "static.py:272-285 _secure_path rejects '..' AFTER traversal.py:510-523 split_path_info already resolved '..' lexically; the i18n locale join (i18n.py:192) has no '..' rejection of its own",
+    "absolute_path_handling": "asset.py:10/25, path.py:200/427, config/assets.py:345, url.py:631/676/831/850, scripts/pserve.py:165 - os.path.isabs branches: absolute specs bypass the package/docroot prefix and resolve directly (FSAssetDescriptor, FSAssetSource)",
+    "mixed_separators": "static.py:263 _seps = {'/', os.sep} and :282 _contains_slash reject both; static.py:151 comment 'os.path.normpath converts / to \\ on windows'; config/views.py:2197/2286 pick os.sep for absolute specs on Windows",
+    "percent_decoding": "traversal.py:527-533 decode_path_info / unquote_bytes_to_wsgi (latin-1/UTF-8 per PEP 3333); traversal.py:420-435 traversal_path unquotes URL-encoded paths; route match values are decoded by routing before entering matchdict",
+    "symlinks": "i18n.py:192/198/201 os.path.realpath resolves symlinks in locale dirs; no symlink checks in the static view path (resource_filename/isdir existence checks only)",
+    "prefix_validation": "static.py _secure_path element filtering (not a prefix check on the joined result); config/assets.py:190 DirectoryOverride startswith prefix matching; asset.py:27 abspath.startswith(package_path)",
+    "toctou": "static.py:201 getsize(x[0]) after find_resource_path existence checks; static.py:175-205 filemap cache (reload=False) vs per-request disk scan (reload=True) changes the TOCTOU window; response.py:55-57 open happens after static.py's existence/metadata checks"
+  },
+  "coverage_gaps": [
+    "Dynamic dispatch / receiver-typing: pkg_resources functions are matched by dotted call-site names (pkg_resources.resource_*, self.pkg_resources.resource_*, bare from-import aliases in static.py); calls through aliased imports or re-bound references elsewhere would be missed. static.py's bare os.path aliases (exists/isdir/getsize/join/normcase/normpath) and response.py's (getmtime/getsize) are constrained to those files by an explicit file guard because from-import alias resolution is not modeled.",
+    "FileResponse is matched by call-site name (from pyramid.response import FileResponse at static.py:11); other import styles of the same class would be missed (only one call site exists in this repo).",
+    "OverrideProvider.get_resource_* / PackageAssetSource.get_* / FSAssetSource.get_* / PkgResourcesAssetDescriptor.* / FSAssetDescriptor.* are internal wrapper methods (propagation nodes), extracted only via their concrete underlying calls (open/os.path.*/pkg_resources.*); pure delegations to parent providers are matched as pkg_resources.DefaultProvider.* super-calls.",
+    "webob internals (Request.path_info/params/headers implementations) and pkg_resources DefaultProvider internals are external dependencies not present in the DB; their filesystem behavior cannot be traced further.",
+    "plaster/pastedeploy ini-file loading and hupper file watching (pserve watch_files) happen inside external dependencies; only the pyramid-side AssetResolver.resolve(file).abspath() chain is observable.",
+    "scripts/pshell.py:210-213 open + exec of PYTHONSTARTUP: the exec is a code-injection (Pass 4) concern, only the file open is in Pass 1 scope.",
+    "No archive APIs (zipfile/tarfile/extractall), no pathlib usage, no shutil/tempfile usage, and no multipart upload filename handling exist in src/pyramid (grep-verified); pyramid delegates request body parsing to webob and archive handling does not occur.",
+    "interfaces.py method declarations (abspath/isdir/exists/stream stubs at interfaces.py:1424-1446) are zope.interface contracts without bodies; they are declarations, not call sites, and are not extracted.",
+    "add_translation_dirs(*specs) vararg parameter is not matched by the parameter-extraction family (vararg binding risk); the spec values are documented under config_asset_spec_param instead.",
+    "request.matchdict route values are URL-decoded by the routing layer before entering matchdict; the decode happens in route matching code paths partially shared with external webob behavior - matched syntactically only."
+  ]
+}

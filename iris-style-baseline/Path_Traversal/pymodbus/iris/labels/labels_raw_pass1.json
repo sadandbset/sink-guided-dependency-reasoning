@@ -1,0 +1,125 @@
+{
+  "run_id": "iris-pymodbus-pathtraversal-pass1-20261023",
+  "generated_at": "2026-10-23T01:43:49Z",
+  "pass": {
+    "pass_id": 1,
+    "focus": "Path Traversal",
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"]
+  },
+  "process": {
+    "labeler": "glm-5.3 (Claude Code CLI session, in-context labeling by the analysis agent itself)",
+    "external_llm_api_calls": 0,
+    "sampling_settings": "not applicable - deterministic single-pass labeling performed by the session model itself (no separate sampled generation); no re-ask was needed because no entry fell below the 0.55 confidence threshold (minimum labeled confidence: 0.65)",
+    "batching_policy": "candidates grouped by candidate family / source file, 3 batches, batch sizes 12/9/13",
+    "total_candidates": 34,
+    "candidates_from": "iris/extraction/sources.csv (12 rows), iris/extraction/sinks.csv (22 rows)",
+    "candidates_processed": 34,
+    "candidates_skipped": 0,
+    "context_inputs_per_batch": [
+      "candidate rows from the extraction CSVs (node, callable, flowKind, receiver, argIndex, file, line)",
+      "real source code at and around each row's file:line anchor, read from the pymodbus_vuln tree",
+      "supporting repo context: call-site greps (pymodbus_apply_logging_config callers, annotate_pymodbus_logs callers, self.log_file consumers), web/ directory listing, constructor call sites",
+      "references/patterns.md and references/python.md rubrics (source = attacker-influenced input boundary; sanitizer only with concrete evidence; conservative recall)"
+    ],
+    "independence": "no ground-truth files, VULNERABILITY_AUDIT_REPORT.md, path_traversal_sinks.csv, CVE advisories or patch diffs were consulted; no source/DB/Auger/extraction-CSV file was modified"
+  },
+  "batches": [
+    {
+      "batch_id": "B1",
+      "description": "All 12 source candidates (sources.csv rows 1-12)",
+      "candidate_ids": ["S01", "S02", "S03", "S04", "S05", "S06", "S07", "S08", "S09", "S10", "S11", "S12"],
+      "context_snippets": [
+        "pymodbus/server/simulator/http_server.py:114-208 (constructor: json_file open, custom_actions import, log_file storage, web_path, route registrations, generator templates)",
+        "pymodbus/server/simulator/http_server.py:258-291 (handle_html_static / handle_html / handle_json request.path reads)",
+        "pymodbus/logging.py:20-60 (pymodbus_apply_logging_config -> Log.apply_logging_config -> FileHandler)",
+        "pymodbus/server/simulator/main.py:51-118 (argparse boundary, args.__dict__ copy loop, ModbusSimulatorServer(**cmd_args))",
+        "examples/contrib/explain.py:139-170 (annotate_pymodbus_logs)",
+        "grep: all pymodbus_apply_logging_config call sites (level only, no log_file_name)",
+        "grep: no in-file caller of annotate_pymodbus_logs; no consumer of self.log_file"
+      ],
+      "decisions": {
+        "S01": {"role": "none", "classification": "fp", "confidence": 0.75},
+        "S02": {"role": "none", "classification": "fp", "confidence": 0.8},
+        "S03": {"role": "none", "classification": "fp", "confidence": 0.7},
+        "S04": {"role": "none", "classification": "fp", "confidence": 0.8},
+        "S05": {"role": "source", "classification": "tp", "confidence": 0.9},
+        "S06": {"role": "source", "classification": "tp", "confidence": 0.85},
+        "S07": {"role": "source", "classification": "tp", "confidence": 0.85},
+        "S08": {"role": "none", "classification": "fp", "confidence": 0.7},
+        "S09": {"role": "none", "classification": "fp", "confidence": 0.75},
+        "S10": {"role": "none", "classification": "fp", "confidence": 0.7},
+        "S11": {"role": "none", "classification": "fp", "confidence": 0.7},
+        "S12": {"role": "none", "classification": "fp", "confidence": 0.7}
+      },
+      "batch_notes": "Only the three aiohttp request.path reads are true untrusted boundaries. Internal function/constructor/CLI parameters (json_file, log_file, custom_actions_module, log_file_name, explain file) are operator/embedding-app configuration with no attacker privilege differential; log_file is additionally dead config (stored, never consumed). custom_actions_module feeds importlib.import_module (Pass 4 semantics, out of Pass 1 scope)."
+    },
+    {
+      "batch_id": "B2",
+      "description": "Sink candidates in the simulator HTTP server, simulator CLI and REPL server (the request-facing and CLI-facing surface)",
+      "candidate_ids": ["K06", "K07", "K08", "K09", "K10", "K11", "K12", "K16", "K17"],
+      "context_snippets": [
+        "pymodbus/server/simulator/http_server.py:130-131, 166, 199-202, 258-267 (json_file open, web_path, generator joins, static handler flow)",
+        "pymodbus/server/simulator/main.py:84-99 (argparse defaults)",
+        "pymodbus/repl/server/main.py:145-176 (typer modbus_config_path option -> open)",
+        "pymodbus/server/simulator/web/ directory listing (fixed assets only)"
+      ],
+      "decisions": {
+        "K06": {"role": "sink", "classification": "tp", "confidence": 0.7},
+        "K07": {"role": "none", "classification": "fp", "confidence": 0.9},
+        "K08": {"role": "none", "classification": "fp", "confidence": 0.9},
+        "K09": {"role": "none", "classification": "fp", "confidence": 0.9},
+        "K10": {"role": "summary", "classification": "tp", "confidence": 0.85},
+        "K11": {"role": "sink", "classification": "tp", "confidence": 0.9},
+        "K12": {"role": "sink", "classification": "tp", "confidence": 0.85},
+        "K16": {"role": "sink", "classification": "tp", "confidence": 0.7},
+        "K17": {"role": "none", "classification": "fp", "confidence": 0.9}
+      },
+      "batch_notes": "The static-file handler chain request.path[1:] -> os.path.join -> open/FileResponse is the only request-reachable file flow: K10 labeled summary (arg 1 = tainted page, corrected from CSV argIndex 0), K11/K12 sinks. Constant joins (web_path, generator templates, argparse default) are not sinks. open(json_file) and open(modbus_config_path) are valid sink call sites fed only by operator config."
+    },
+    {
+      "batch_id": "B3",
+      "description": "Remaining sink candidates: contrib example, logging, TLS, serial, REPL history",
+      "candidate_ids": ["K01", "K02", "K03", "K04", "K05", "K13", "K14", "K15", "K18", "K19", "K20", "K21", "K22"],
+      "context_snippets": [
+        "examples/contrib/explain.py:139-170 (open/copyfile/remove on param path and tempfile name)",
+        "pymodbus/logging.py:44-60 (FileHandler on log_file_name)",
+        "pymodbus/server/async_io.py:375-430 (ModbusTlsServer certfile/keyfile -> CommParams.generate_ssl)",
+        "pymodbus/transport/transport.py:107-135 (generate_ssl -> ssl load_cert_chain)",
+        "pymodbus/client/serial.py:206-224 and pymodbus/transport/transport_serial.py:18-27 (serial_for_url)",
+        "pymodbus/repl/client/main.py:153-185 (Path.home().joinpath constant, FileHistory)"
+      ],
+      "decisions": {
+        "K01": {"role": "none", "classification": "fp", "confidence": 0.75},
+        "K02": {"role": "none", "classification": "fp", "confidence": 0.75},
+        "K03": {"role": "sink", "classification": "tp", "confidence": 0.8},
+        "K04": {"role": "sink", "classification": "tp", "confidence": 0.75},
+        "K05": {"role": "none", "classification": "fp", "confidence": 0.75},
+        "K13": {"role": "sink", "classification": "tp", "confidence": 0.75},
+        "K14": {"role": "none", "classification": "fp", "confidence": 0.95},
+        "K15": {"role": "none", "classification": "fp", "confidence": 0.9},
+        "K18": {"role": "none", "classification": "fp", "confidence": 0.7},
+        "K19": {"role": "none", "classification": "fp", "confidence": 0.75},
+        "K20": {"role": "none", "classification": "fp", "confidence": 0.75},
+        "K21": {"role": "sink", "classification": "tp", "confidence": 0.65},
+        "K22": {"role": "none", "classification": "fp", "confidence": 0.7}
+      },
+      "batch_notes": "Sinks kept where the call site is a genuine file API on a parameter-derived (non-constant) path: open/copyfile in explain.py, FileHandler in logging.py, load_cert_chain in transport.py. Rejected: tempfile-name remove, constant REPL history path, TLS definition-side params, serial_for_url device opens (operator comm config, device semantics)."
+    }
+  ],
+  "deduplication": {
+    "exact_duplicate_rows_in_csv": 0,
+    "same_logical_boundary_groups": [
+      "S10/S11/S12 - one CLI boundary (parse_args return + two args.__dict__ subscript reads in the same loop); all three labeled identically (none/fp) and to be collapsed into a single predicate at library generation",
+      "S05/S06/S07 - same request.path signature at three handler locations; separate entries (distinct handlers/flows), collapse to one source predicate at library generation",
+      "K01/K02 and K19/K20 - paired certfile/keyfile definition-side params; identical treatment"
+    ],
+    "signature_corrections": [
+      "K10 arg_index corrected from CSV argIndex 0 to 1: the extraction family convention anchored path_join at the base-dir argument (0), but the attacker-controlled operand of os.path.join(self.web_path, page) at http_server.py:262 is argument index 1 (arg 0 is the fixed base); the summary role propagates taint from any argument to the result"
+    ]
+  },
+  "role_counts": {"source": 3, "sink": 8, "sanitizer": 0, "summary": 1, "none": 22},
+  "classification_counts": {"tp": 12, "fp": 22, "candidate": 0, "unknown": 0},
+  "unresolved_items": [
+    "aiohttp route-matching semantics for web.get('/{tail:[a-z0-9.]*}', ...): whether the router matches the raw (percent-encoded) path with an anchored whole-path pattern, which would constrain request.path[1:] to [a-z0-9.] characters (no '/', no '\\\\', no '%..%' sequences) and make the S05->K11/K12 flow non-exploitable in the deployed aiohttp version. aiohttp is not part of the CodeQL database, so this cannot be resolved from DB code; an attempt to inspect a locally downloaded aiohttp wheel was blocked by tool-availability issues during the run. Recorded as the primary manual-review point (phase1_review.md item R1). The source/sink labels themselves are unaffected: request.path is an attacker-influenced boundary and open(:264)/FileResponse(:265) are genuine file APIs regardless of the router constraint."
+  ]
+}
