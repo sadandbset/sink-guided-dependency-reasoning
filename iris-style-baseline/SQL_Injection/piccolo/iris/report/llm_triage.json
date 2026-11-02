@@ -1,0 +1,568 @@
+{
+  "triage": {
+    "task": "Independent LLM path review of Augur/IRIS Pass 5 (CWE-89) formal SARIF results for piccolo",
+    "reviewer": "independent LLM path review (glm-5.3 via Claude Code agent harness)",
+    "date": "2026-10-21",
+    "rule_id_reviewed": "py/augur/piccolo/pass5-sql-injection",
+    "sarif": "results/pass5.sarif",
+    "sarif_facts": {
+      "total_results": 18,
+      "all_results_rule_id": "py/augur/piccolo/pass5-sql-injection (all 18; no other rule present)",
+      "execution_successful": true,
+      "tool_execution_notifications": "353, all level=none (file-coverage / telemetry only; no error or warning diagnostics)",
+      "native_codeql_baseline_or_diagnostics_mixed_in": false,
+      "diagnostics_directory": "empty - no diagnostic query results exist for this run"
+    },
+    "method": "Every codeFlow of every formal result was read from pass5.sarif and re-verified line-by-line against the pre-fix piccolo source tree (dataset/codeql_databases/sql_injection_dbs/piccolo_vuln, matching DB sha e4946d8). Execution chains (DDL.run -> Engine.run_ddl -> asyncpg fetch / aiosqlite execute; Query._run -> Engine.run_querystring -> compile_string -> fetch) were traced to the real driver call sites. No PyVul ground-truth files, CVE pages, or fix commits were read; the only advisory used is the one supplied in the review request itself (for the vulnerability-hit analysis section).",
+    "summary": {
+      "likely_tp": 8,
+      "likely_fp": 2,
+      "uncertain": 8,
+      "likely_tp_unique_sink_locations": 4,
+      "note_on_duplicates": "Results 9/10, 11/12, 13/14, 15/16 are pairwise duplicates at the same sink line: one alert from the engineSqlTextSink model (connection.execute argument 0) and one from the savepointStatementFstringSink model (the f-string itself). They describe the same underlying flow; 4 unique vulnerable statements are covered."
+    }
+  },
+  "alerts": [
+    {
+      "result_index": 0,
+      "sarif_location": "piccolo/query/methods/alter.py:36",
+      "verdict": "uncertain",
+      "confidence": 0.55,
+      "source": {
+        "file": "piccolo/query/methods/alter.py",
+        "line": 364,
+        "symbol": "Alter.rename_table(new_name)",
+        "kind": "ORM public API parameter (ddlIdentifierBoundary, p5-src-008)"
+      },
+      "sink": {
+        "file": "piccolo/query/methods/alter.py",
+        "line": 36,
+        "symbol": "RenameTable.ddl -> f\"RENAME TO {self.new_name}\"",
+        "kind": "ALTER DDL f-string (alterDdlFstringSink)"
+      },
+      "path": ["rename_table(new_name) param (alter.py:364)", "RenameTable(new_name=...) ctor (alter.py:372)", "self.new_name read in ddl property (alter.py:36)", "ALTER TABLE ... RENAME TO {new_name} (unquoted)", "Alter(DDL).default_ddl -> DDL.run (query/base.py:436-449)", "engine.run_ddl -> postgres.py:553 connection.fetch(ddl) / sqlite run_ddl -> connection.execute - real driver execution"],
+      "controllable_sql_part": "Everything after 'RENAME TO ' - the new table name is interpolated completely unquoted, so arbitrary SQL can be appended to the ALTER statement.",
+      "barrier_evidence": "None. No quoting, escaping, or identifier allowlist anywhere on this channel; the QueryString bound-parameter channel does not apply to DDL identifier positions.",
+      "preconditions": "An embedding application passes an attacker-influenced string as new_name to Alter.rename_table. No in-snapshot flow exists: the only library caller (migration_manager.py:690) passes a reflected DB table name (second-order, developer-controlled).",
+      "reasoning": "The path is real and the code matches the SARIF flow exactly: API param -> dataclass field (ctorArgToFieldRead) -> unquoted f-string -> DDL executed verbatim by the engine driver. This is structurally the same defect class as the confirmed savepoint vulnerability (name-type parameter interpolated unescaped into executed SQL). However, schema/DDL APIs are migration/admin-facing, no untrusted data reaches them inside this project, and they are not covered by any known piccolo security fix. Plausible latent CWE-89, but exploitability is application-dependent.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes (public ORM API), but no attacker data in-snapshot",
+        "taint_enters_sql_text": "yes (unquoted identifier position)",
+        "sink_really_executes_sql": "yes (run_ddl -> asyncpg fetch / aiosqlite execute)",
+        "parameterization_barrier": "no - not applicable to identifier positions"
+      }
+    },
+    {
+      "result_index": 1,
+      "sarif_location": "piccolo/query/methods/alter.py:63",
+      "verdict": "uncertain",
+      "confidence": 0.55,
+      "source": {
+        "file": "piccolo/query/methods/alter.py",
+        "line": 376,
+        "symbol": "Alter.rename_column(column, new_name)",
+        "kind": "ORM public API parameter (ddlIdentifierBoundary, p5-src-008)"
+      },
+      "sink": {
+        "file": "piccolo/query/methods/alter.py",
+        "line": 63,
+        "symbol": "RenameColumn.ddl -> f'RENAME COLUMN \"{self.column_name}\" TO \"{self.new_name}\"'",
+        "kind": "ALTER DDL f-string (alterDdlFstringSink)"
+      },
+      "path": ["rename_column(column, new_name) params (alter.py:376)", "RenameColumn(column, new_name) ctor (alter.py:388)", "column_name property / self.new_name reads (alter.py:45-52, 63)", "RENAME COLUMN \"{col}\" TO \"{new_name}\" (quoted but unescaped)", "DDL.run -> engine.run_ddl -> connection.fetch/execute - real driver execution"],
+      "controllable_sql_part": "Both the column name and new_name are wrapped in double quotes but with no escaping of '\"' - a double quote in either value breaks out of the identifier and injects SQL structure. The two codeFlows (column and new_name) are both valid.",
+      "barrier_evidence": "None. Double quotes are cosmetic, not a barrier (no doubling/escaping of embedded quotes).",
+      "preconditions": "Embedding app passes attacker-influenced strings to rename_column. No in-snapshot untrusted caller.",
+      "reasoning": "Same class as result 0: quoted-but-unescaped identifier interpolation into really-executed DDL. Real path, verified execution chain, but schema-API context and no in-project attacker flow make the practical risk application-dependent.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes (public ORM API), no attacker data in-snapshot",
+        "taint_enters_sql_text": "yes (quoted identifier position, unescaped)",
+        "sink_really_executes_sql": "yes (run_ddl)",
+        "parameterization_barrier": "no"
+      }
+    },
+    {
+      "result_index": 2,
+      "sarif_location": "piccolo/query/methods/alter.py:117",
+      "verdict": "uncertain",
+      "confidence": 0.5,
+      "source": {
+        "file": "piccolo/query/methods/alter.py",
+        "line": 395,
+        "symbol": "Alter.set_column_type(..., using_expression)",
+        "kind": "ORM public API parameter (ddlIdentifierBoundary, p5-src-008)"
+      },
+      "sink": {
+        "file": "piccolo/query/methods/alter.py",
+        "line": 117,
+        "symbol": "SetColumnType.ddl -> query += f\" USING {self.using_expression}\"",
+        "kind": "ALTER DDL f-string (alterDdlFstringSink)"
+      },
+      "path": ["set_column_type(using_expression) param (alter.py:395)", "SetColumnType(..., using_expression=...) ctor (alter.py:413)", "self.using_expression read (alter.py:117)", "' USING ' + expression interpolated verbatim, completely unquoted", "DDL.run -> engine.run_ddl -> connection.fetch/execute - real driver execution"],
+      "controllable_sql_part": "Everything after 'USING ' - the expression is appended verbatim with no quoting at all, so this is a full raw-SQL-fragment channel.",
+      "barrier_evidence": "None. The using_expression parameter is documented (docstring alter.py:396-406) as a raw SQL expression hint ('my_column_name::integer'), i.e. by contract the caller supplies SQL.",
+      "preconditions": "Embedding app passes attacker-influenced string as using_expression. No in-snapshot caller passes anything but literals.",
+      "reasoning": "Borderline. The path and execution are real, but the parameter is by documented contract a SQL expression fragment - closer in character to the by-design raw-SQL APIs (Table.raw/WhereRaw) than to a name-type parameter. Flagging the API's own SQL-fragment parameter is tautological (source = the same parameter whose value becomes the sink). Kept as uncertain rather than likely_fp because the docstring does not explicitly say 'arbitrary SQL executes here', and verbatim unquoted interpolation of a 'hint' parameter is easy for an app developer to misuse.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes (public API), by-contract SQL fragment",
+        "taint_enters_sql_text": "yes (verbatim SQL expression position)",
+        "sink_really_executes_sql": "yes (run_ddl)",
+        "parameterization_barrier": "no"
+      }
+    },
+    {
+      "result_index": 3,
+      "sarif_location": "piccolo/query/methods/alter.py:188",
+      "verdict": "uncertain",
+      "confidence": 0.55,
+      "source": {
+        "file": "piccolo/query/methods/alter.py",
+        "line": 493,
+        "symbol": "Alter.drop_constraint(constraint_name)",
+        "kind": "ORM public API parameter (ddlIdentifierBoundary, p5-src-008)"
+      },
+      "sink": {
+        "file": "piccolo/query/methods/alter.py",
+        "line": 188,
+        "symbol": "DropConstraint.ddl -> f\"DROP CONSTRAINT IF EXISTS {self.constraint_name}\"",
+        "kind": "ALTER DDL f-string (alterDdlFstringSink)"
+      },
+      "path": ["drop_constraint(constraint_name) param (alter.py:493)", "DropConstraint(constraint_name=...) ctor (alter.py:495)", "self.constraint_name read (alter.py:188)", "'DROP CONSTRAINT IF EXISTS ' + name interpolated completely unquoted", "DDL.run -> engine.run_ddl -> connection.fetch/execute - real driver execution"],
+      "controllable_sql_part": "Everything after 'DROP CONSTRAINT IF EXISTS ' - fully unquoted identifier, arbitrary SQL injection possible.",
+      "barrier_evidence": "None.",
+      "preconditions": "Embedding app passes attacker-influenced constraint_name. In-snapshot, drop_constraint is called from drop_foreign_key_constraint (alter.py:503) with a name derived from table/column metadata, not external input.",
+      "reasoning": "Same defect class as results 0/1 but with a completely unquoted identifier - structurally identical to the savepoint vulnerability pattern (name-type param, unquoted, executed). Still application-dependent for exploitation and not part of the known fix.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes (public API), no attacker data in-snapshot",
+        "taint_enters_sql_text": "yes (unquoted identifier)",
+        "sink_really_executes_sql": "yes (run_ddl)",
+        "parameterization_barrier": "no"
+      }
+    },
+    {
+      "result_index": 4,
+      "sarif_location": "piccolo/query/methods/alter.py:250",
+      "verdict": "uncertain",
+      "confidence": 0.55,
+      "source": {
+        "file": "piccolo/query/methods/alter.py",
+        "line": 560,
+        "symbol": "Alter.set_schema(schema_name)",
+        "kind": "ORM public API parameter (ddlIdentifierBoundary, p5-src-008)"
+      },
+      "sink": {
+        "file": "piccolo/query/methods/alter.py",
+        "line": 250,
+        "symbol": "SetSchema.ddl -> f'SET SCHEMA \"{self.schema_name}\"'",
+        "kind": "ALTER DDL f-string (alterDdlFstringSink)"
+      },
+      "path": ["set_schema(schema_name) param (alter.py:560)", "SetSchema(schema_name=...) ctor (alter.py:568)", "self.schema_name read (alter.py:250)", "SET SCHEMA \"{name}\" (quoted but unescaped)", "DDL.run -> engine.run_ddl -> connection.fetch/execute - real driver execution"],
+      "controllable_sql_part": "The schema name inside double quotes; a '\"' character breaks out of the identifier context.",
+      "barrier_evidence": "None (quotes are not escaped).",
+      "preconditions": "Embedding app passes attacker-influenced schema_name. No in-snapshot untrusted caller.",
+      "reasoning": "Quoted-but-unescaped identifier into really-executed DDL; same class and same caveats as results 0/1/3.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes (public API), no attacker data in-snapshot",
+        "taint_enters_sql_text": "yes (quoted identifier, unescaped)",
+        "sink_really_executes_sql": "yes (run_ddl)",
+        "parameterization_barrier": "no"
+      }
+    },
+    {
+      "result_index": 5,
+      "sarif_location": "piccolo/columns/combination.py:131",
+      "verdict": "likely_fp",
+      "confidence": 0.7,
+      "source": {
+        "file": "piccolo/columns/combination.py",
+        "line": 112,
+        "symbol": "WhereRaw.__init__(sql, *args) - the sql parameter itself",
+        "kind": "ORM raw-SQL API parameter (ormRawSqlTextBoundary, p5-src-007)"
+      },
+      "sink": {
+        "file": "piccolo/columns/combination.py",
+        "line": 131,
+        "symbol": "QueryString(sql, *args) - argument 0 (template)",
+        "kind": "raw-SQL template construction (rawSqlTemplateSink, p5-snk-019)"
+      },
+      "path": ["WhereRaw.__init__ sql param (combination.py:112)", "QueryString(sql, *args) template construction (combination.py:131)", "(downstream, outside the reported path) where-clause assembly -> Query._run -> engine.run_querystring -> compile_string -> connection.fetch"],
+      "controllable_sql_part": "The entire SQL template of the where clause - by the documented design of the API.",
+      "barrier_evidence": "The API offers a bound-parameter channel (docstring: WhereRaw(\"name = {}\", value)); only the template argument is the sink, and values in the bound channel are correctly NOT reported. But the template itself is by contract raw SQL.",
+      "preconditions": "An embedding app would have to pass attacker-influenced text as the SQL template - i.e. deliberately use a documented dangerous raw-SQL API with tainted SQL. Nothing like that exists anywhere in this snapshot.",
+      "reasoning": "The source is the raw API's own template parameter and the sink is the QueryString construction one local step later, so the alert is tautological - it fires on the API definition itself, not on any flow of untrusted data (codeFlow has exactly 2 adjacent nodes). The template is genuinely executed verbatim downstream (verified: Query.run -> run_querystring -> compile_string keeps template text, only '{}' becomes $n/? placeholders), so the channel is real, but WhereRaw is an explicitly documented 'Execute raw SQL queries ... use with caution!' API whose purpose is to run caller-supplied SQL. Within this snapshot all call sites (docstring examples, library internals) pass literal templates with bound values. Per review criteria 6 (mis-flagging a project's by-design raw-SQL API as injection) this is a false positive for this project, with the caveat that app misuse with tainted templates would be injectable.",
+      "criteria_findings": {
+        "source_is_real_boundary": "API parameter only; no attacker-controllable input demonstrably reaches it",
+        "tautological_source_sink_adjacency": true,
+        "sink_really_executes_sql": "sink node is object construction; execution is real but one default-hop downstream of the reported path",
+        "parameterization_barrier": "values are parameterizable; the template is raw SQL by design"
+      }
+    },
+    {
+      "result_index": 6,
+      "sarif_location": "piccolo/query/mixins.py:119",
+      "verdict": "uncertain",
+      "confidence": 0.55,
+      "source": {
+        "file": "piccolo/query/mixins.py",
+        "line": 320,
+        "symbol": "AsOfDelegate.as_of(interval)",
+        "kind": "ORM public API parameter (asOfIntervalBoundary, p5-src-012)"
+      },
+      "sink": {
+        "file": "piccolo/query/mixins.py",
+        "line": 119,
+        "symbol": "AsOf.querystring -> QueryString(f\" AS OF SYSTEM TIME '{self.interval}'\")",
+        "kind": "dynamic identifier f-string (dynamicIdentifierFstringSink, p5-snk-018)"
+      },
+      "path": ["as_of(interval) param (mixins.py:320)", "AsOf(interval) ctor (mixins.py:321)", "self.interval read (mixins.py:119)", "interpolated inside single quotes with no escaping", "select querystring assembly -> Query._run -> engine.run_querystring -> compile_string -> connection.fetch - real driver execution"],
+      "controllable_sql_part": "The interval text inside a single-quoted SQL string literal; a quote character in the interval breaks out of the literal and injects SQL text.",
+      "barrier_evidence": "Only an isinstance(str) type check (mixins.py:113-115) - not a sanitizer. No escaping of single quotes.",
+      "preconditions": "Embedding app passes attacker-influenced interval to .as_of() (CockroachDB time-travel feature). In-snapshot the delegate is called from select.py:419 / objects.py:235 which just forward the public-API interval parameter.",
+      "reasoning": "Genuine unescaped string-literal interpolation into executed SQL - the same quoted-context defect class as the savepoint names. However AS OF SYSTEM TIME is a niche CockroachDB feature, and no untrusted interval reaches it in-snapshot. Application-dependent exploitability; plausible latent CWE-89.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes (public API), no attacker data in-snapshot",
+        "taint_enters_sql_text": "yes (string-literal position, unescaped)",
+        "sink_really_executes_sql": "yes (run_querystring -> fetch)",
+        "parameterization_barrier": "no - the interval is interpolated, never bound"
+      }
+    },
+    {
+      "result_index": 7,
+      "sarif_location": "piccolo/query/mixins.py:659",
+      "verdict": "uncertain",
+      "confidence": 0.55,
+      "source": {
+        "file": "piccolo/query/mixins.py",
+        "line": 760,
+        "symbol": "OnConflictDelegate.on_conflict(target, ...)",
+        "kind": "ORM public API parameter (onConflictTargetBoundary, p5-src-013)"
+      },
+      "sink": {
+        "file": "piccolo/query/mixins.py",
+        "line": 659,
+        "symbol": "OnConflictItem.target_string -> f'ON CONSTRAINT \"{target}\"'",
+        "kind": "dynamic identifier f-string (dynamicIdentifierFstringSink)"
+      },
+      "path": ["on_conflict(target) param (mixins.py:760)", "OnConflictItem(target=target, ...) ctor (mixins.py:784)", "self.target read in target_string (mixins.py:649)", "ON CONSTRAINT \"{target}\" (quoted but unescaped, str branch)", "insert querystring assembly (mixins.py:706, 716) -> Query._run -> run_querystring -> connection.fetch - real driver execution"],
+      "controllable_sql_part": "The str target inside double quotes in the ON CONSTRAINT clause; a '\"' breaks out of the identifier.",
+      "barrier_evidence": "None. The str branch interpolates with quotes but no escaping; the Column branch uses _meta.db_column_name (not attacker-controlled).",
+      "preconditions": "Embedding app passes attacker-influenced string as on_conflict(target=...). In-snapshot, fixtures load.py:86 calls on_conflict with action/values from pydantic-validated fixture data, and the target is not tainted there.",
+      "reasoning": "Quoted-but-unescaped identifier into executed INSERT SQL; same defect class as the savepoint names, real path and execution. Application-dependent; not part of the known fix.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes (public API), no attacker data in-snapshot",
+        "taint_enters_sql_text": "yes (quoted identifier, unescaped)",
+        "sink_really_executes_sql": "yes (run_querystring -> fetch)",
+        "parameterization_barrier": "no"
+      }
+    },
+    {
+      "result_index": 8,
+      "sarif_location": "piccolo/query/mixins.py:706",
+      "verdict": "uncertain",
+      "confidence": 0.55,
+      "source": {
+        "file": "piccolo/query/mixins.py",
+        "line": 760,
+        "symbol": "OnConflictDelegate.on_conflict(target, ...)",
+        "kind": "ORM public API parameter (onConflictTargetBoundary, p5-src-013)"
+      },
+      "sink": {
+        "file": "piccolo/query/mixins.py",
+        "line": 706,
+        "symbol": "OnConflictItem.querystring -> query += f\" {self.target_string}\"",
+        "kind": "dynamic identifier f-string (dynamicIdentifierFstringSink)"
+      },
+      "path": ["on_conflict(target) param (mixins.py:760)", "OnConflictItem ctor (mixins.py:784)", "self.target read (mixins.py:649)", "target_string property returns the quoted-unescaped fragment", "fragment appended to the query text (mixins.py:706)", "run via run_querystring -> connection.fetch - real driver execution"],
+      "controllable_sql_part": "Same as result 7 - the target fragment lands in the ON CONFLICT clause text.",
+      "barrier_evidence": "None (same as result 7).",
+      "preconditions": "Same as result 7.",
+      "reasoning": "Same channel as result 7 reported at the second interpolation point (the query-string assembly). Same verdict and confidence.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes (public API), no attacker data in-snapshot",
+        "taint_enters_sql_text": "yes",
+        "sink_really_executes_sql": "yes",
+        "parameterization_barrier": "no"
+      }
+    },
+    {
+      "result_index": 9,
+      "sarif_location": "piccolo/engine/postgres.py:133",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "duplicate_of": "result 10 (same sink line, savepointStatementFstringSink vs engineSqlTextSink model)",
+      "source": {
+        "file": "piccolo/engine/postgres.py",
+        "line": 127,
+        "symbol": "Savepoint.__init__(name) [also fed by PostgresTransaction.rollback_to(savepoint_name) at postgres.py:225 via Savepoint(name=savepoint_name) at postgres.py:229]",
+        "kind": "ORM public API parameter (ddlIdentifierBoundary, p5-src-008)"
+      },
+      "sink": {
+        "file": "piccolo/engine/postgres.py",
+        "line": 132,
+        "symbol": "Savepoint.rollback_to -> await self.transaction.connection.execute(f\"ROLLBACK TO SAVEPOINT {self.name}\")",
+        "kind": "engine driver execute, SQL text argument 0 (engineSqlTextSink) - real asyncpg execution"
+      },
+      "path": [
+        "flow A: Savepoint.__init__(name) param (postgres.py:127) -> self.name = name (128) -> self.name read in rollback_to (133) -> f\"ROLLBACK TO SAVEPOINT {self.name}\" -> connection.execute",
+        "flow B: PostgresTransaction.rollback_to(savepoint_name) param (postgres.py:225) -> Savepoint(name=savepoint_name) (229) -> .rollback_to() -> same sink",
+        "flow C (artifact): sqlite.py:402 savepoint_name -> sqlite.py:406 Savepoint() -> postgres.py:133 - cross-engine wiring caused by the ctorArgToFieldRead/initParamToFieldRead summary matching the identically-named Savepoint class in both engine files; the real sqlite sink is reported separately by results 13/14"
+      ],
+      "controllable_sql_part": "Everything after 'ROLLBACK TO SAVEPOINT ' - the name is interpolated completely unquoted into the executed statement.",
+      "barrier_evidence": "None. Verified: this pre-fix tree has no validate_savepoint_name or any validation/escaping of the savepoint name (the GHSA fix adds exactly that). Parameter binding is not used for the statement at all.",
+      "preconditions": "The embedding application passes an attacker-influenced string as the savepoint name (Savepoint name / transaction.rollback_to(savepoint_name)). This is precisely the scenario of the real vulnerability (GHSA-xq59-7jf3-rjc6: 'user provided input is passed directly to connection.execute(...) via f-strings'). No in-library caller passes external data - the channel is the ORM's public API.",
+      "reasoning": "Every element checks out against the source: name-type parameter -> unquoted f-string -> asyncpg connection.execute, exactly the vulnerable code fixed by the project's real CWE-89 security commit (the advisory's rollback_to function, postgres implementation, code_before matches postgres.py:131-134 verbatim). The sink is genuine SQL execution, not string construction. This is the project's actual known SQL injection.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes - public transaction API; the advisory confirms user-provided names are a real usage pattern",
+        "taint_enters_sql_text": "yes - SQL structure (identifier after ROLLBACK TO SAVEPOINT), not a bound value",
+        "sink_really_executes_sql": "yes - asyncpg connection.execute (postgres.py:132-134)",
+        "parameterization_barrier": "none exists"
+      }
+    },
+    {
+      "result_index": 10,
+      "sarif_location": "piccolo/engine/postgres.py:133",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "duplicate_of": "result 9",
+      "source": "same as result 9 (Savepoint.__init__ name; PostgresTransaction.rollback_to savepoint_name)",
+      "sink": {
+        "file": "piccolo/engine/postgres.py",
+        "line": 133,
+        "symbol": "f\"ROLLBACK TO SAVEPOINT {self.name}\" (the f-string itself)",
+        "kind": "savepoint statement f-string sink (savepointStatementFstringSink)"
+      },
+      "path": "identical to result 9; the codeFlows additionally show the final Fstring node",
+      "controllable_sql_part": "same as result 9",
+      "barrier_evidence": "none (same as result 9)",
+      "preconditions": "same as result 9",
+      "reasoning": "Same flow as result 9 reported via the second sink model (the f-string node instead of the execute argument). Same verdict.",
+      "criteria_findings": "same as result 9"
+    },
+    {
+      "result_index": 11,
+      "sarif_location": "piccolo/engine/postgres.py:138",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "duplicate_of": "result 12",
+      "source": {
+        "file": "piccolo/engine/postgres.py",
+        "line": 127,
+        "symbol": "Savepoint.__init__(name) [also fed by rollback_to(savepoint_name) at postgres.py:225]",
+        "kind": "ORM public API parameter (ddlIdentifierBoundary)"
+      },
+      "sink": {
+        "file": "piccolo/engine/postgres.py",
+        "line": 137,
+        "symbol": "Savepoint.release -> await self.transaction.connection.execute(f\"RELEASE SAVEPOINT {self.name}\")",
+        "kind": "engine driver execute, SQL text argument 0 (engineSqlTextSink) - real asyncpg execution"
+      },
+      "path": "Savepoint.__init__(name) (127) -> self.name (128) -> self.name read in release (138) -> f\"RELEASE SAVEPOINT {self.name}\" -> connection.execute; second flow: rollback_to(savepoint_name) (225) -> Savepoint(name=...) (229) -> release -> sink; third flow is the sqlite.py:402 cross-engine artifact (see result 9)",
+      "controllable_sql_part": "Everything after 'RELEASE SAVEPOINT ' - unquoted, arbitrary SQL injectable.",
+      "barrier_evidence": "None. No validate_savepoint_name in this pre-fix tree; statement not parameterized.",
+      "preconditions": "Same as result 9 - embedding app passes attacker-influenced savepoint name, then the Savepoint is released.",
+      "reasoning": "Exactly the advisory's release function (postgres implementation, code_before matches postgres.py:136-139 verbatim). Real execution, unquoted interpolation, no barrier.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes",
+        "taint_enters_sql_text": "yes (SQL structure)",
+        "sink_really_executes_sql": "yes - asyncpg connection.execute (postgres.py:137-139)",
+        "parameterization_barrier": "none"
+      }
+    },
+    {
+      "result_index": 12,
+      "sarif_location": "piccolo/engine/postgres.py:138",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "duplicate_of": "result 11",
+      "source": "same as result 11",
+      "sink": "f\"RELEASE SAVEPOINT {self.name}\" f-string node (savepointStatementFstringSink)",
+      "path": "identical to result 11 via the second sink model",
+      "controllable_sql_part": "same as result 11",
+      "barrier_evidence": "none",
+      "preconditions": "same as result 11",
+      "reasoning": "Same flow as result 11 reported via the f-string sink model. Same verdict.",
+      "criteria_findings": "same as result 11"
+    },
+    {
+      "result_index": 13,
+      "sarif_location": "piccolo/engine/sqlite.py:313",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "duplicate_of": "result 14",
+      "source": {
+        "file": "piccolo/engine/sqlite.py",
+        "line": 307,
+        "symbol": "Savepoint.__init__(name) [also fed by SQLiteTransaction.rollback_to(savepoint_name) at sqlite.py:402 via Savepoint(name=savepoint_name) at sqlite.py:406]",
+        "kind": "ORM public API parameter (ddlIdentifierBoundary)"
+      },
+      "sink": {
+        "file": "piccolo/engine/sqlite.py",
+        "line": 312,
+        "symbol": "Savepoint.rollback_to -> await self.transaction.connection.execute(f\"ROLLBACK TO SAVEPOINT {self.name}\")",
+        "kind": "engine driver execute, SQL text argument 0 (engineSqlTextSink) - real aiosqlite execution"
+      },
+      "path": [
+        "flow A: Savepoint.__init__(name) (sqlite.py:307) -> self.name (308) -> read in rollback_to (313) -> f-string -> connection.execute",
+        "flow B: SQLiteTransaction.rollback_to(savepoint_name) (sqlite.py:402) -> Savepoint(name=savepoint_name) (406) -> .rollback_to() -> sink",
+        "flow C: postgres.py:225/229 wiring into the sqlite sink (cross-engine artifact of the shared summary, mirror of result 9 flow C)"
+      ],
+      "controllable_sql_part": "Everything after 'ROLLBACK TO SAVEPOINT ' - unquoted.",
+      "barrier_evidence": "None. No validation of the savepoint name in this pre-fix tree; the statement is executed unparameterized.",
+      "preconditions": "Same as result 9, on the SQLite engine.",
+      "reasoning": "Exactly the advisory's rollback_to function (SQLite implementation, code_before matches sqlite.py:311-314 verbatim). Real aiosqlite execution, unquoted interpolation, no barrier.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes",
+        "taint_enters_sql_text": "yes (SQL structure)",
+        "sink_really_executes_sql": "yes - aiosqlite connection.execute (sqlite.py:312-314)",
+        "parameterization_barrier": "none"
+      }
+    },
+    {
+      "result_index": 14,
+      "sarif_location": "piccolo/engine/sqlite.py:313",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "duplicate_of": "result 13",
+      "source": "same as result 13",
+      "sink": "f\"ROLLBACK TO SAVEPOINT {self.name}\" f-string node (savepointStatementFstringSink)",
+      "path": "identical to result 13 via the second sink model",
+      "controllable_sql_part": "same as result 13",
+      "barrier_evidence": "none",
+      "preconditions": "same as result 13",
+      "reasoning": "Same flow as result 13 reported via the f-string sink model. Same verdict.",
+      "criteria_findings": "same as result 13"
+    },
+    {
+      "result_index": 15,
+      "sarif_location": "piccolo/engine/sqlite.py:318",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "duplicate_of": "result 16",
+      "source": {
+        "file": "piccolo/engine/sqlite.py",
+        "line": 307,
+        "symbol": "Savepoint.__init__(name) [also fed by rollback_to(savepoint_name) at sqlite.py:402]",
+        "kind": "ORM public API parameter (ddlIdentifierBoundary)"
+      },
+      "sink": {
+        "file": "piccolo/engine/sqlite.py",
+        "line": 317,
+        "symbol": "Savepoint.release -> await self.transaction.connection.execute(f\"RELEASE SAVEPOINT {self.name}\")",
+        "kind": "engine driver execute, SQL text argument 0 (engineSqlTextSink) - real aiosqlite execution"
+      },
+      "path": "Savepoint.__init__(name) (307) -> self.name (308) -> read in release (318) -> f\"RELEASE SAVEPOINT {self.name}\" -> connection.execute; plus the SQLiteTransaction.rollback_to(savepoint_name) feeder flow and the postgres cross-engine artifact",
+      "controllable_sql_part": "Everything after 'RELEASE SAVEPOINT ' - unquoted.",
+      "barrier_evidence": "None.",
+      "preconditions": "Same as result 13, release path.",
+      "reasoning": "Exactly the advisory's release function (SQLite implementation, code_before matches sqlite.py:316-319 verbatim). Real execution, no barrier.",
+      "criteria_findings": {
+        "source_is_real_boundary": "yes",
+        "taint_enters_sql_text": "yes (SQL structure)",
+        "sink_really_executes_sql": "yes - aiosqlite connection.execute (sqlite.py:317-319)",
+        "parameterization_barrier": "none"
+      }
+    },
+    {
+      "result_index": 16,
+      "sarif_location": "piccolo/engine/sqlite.py:318",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "duplicate_of": "result 15",
+      "source": "same as result 15",
+      "sink": "f\"RELEASE SAVEPOINT {self.name}\" f-string node (savepointStatementFstringSink)",
+      "path": "identical to result 15 via the second sink model",
+      "controllable_sql_part": "same as result 15",
+      "barrier_evidence": "none",
+      "preconditions": "same as result 15",
+      "reasoning": "Same flow as result 15 reported via the f-string sink model. Same verdict.",
+      "criteria_findings": "same as result 15"
+    },
+    {
+      "result_index": 17,
+      "sarif_location": "piccolo/table.py:979",
+      "verdict": "likely_fp",
+      "confidence": 0.7,
+      "source": {
+        "file": "piccolo/table.py",
+        "line": 964,
+        "symbol": "Table.raw(cls, sql, *args) - the sql parameter itself",
+        "kind": "ORM raw-SQL API parameter (ormRawSqlTextBoundary, p5-src-007)"
+      },
+      "sink": {
+        "file": "piccolo/table.py",
+        "line": 979,
+        "symbol": "Raw(table=cls, querystring=QueryString(sql, *args)) - the QueryString template argument",
+        "kind": "raw-SQL template construction (rawSqlTemplateSink, p5-snk-019)"
+      },
+      "path": ["Table.raw sql param (table.py:964)", "QueryString(sql, *args) template construction (table.py:979)", "(downstream, outside the reported path) Raw.default_querystrings -> Query._run -> engine.run_querystring -> compile_string -> connection.fetch"],
+      "controllable_sql_part": "The entire SQL statement template - by the documented design of the API.",
+      "barrier_evidence": "The API provides a bound-parameter channel (docstring: Band.raw(\"SELECT * FROM band WHERE name = {}\", 'Pythonistas')); only the template argument is the sink. In-snapshot all callers (schema/commands/generate.py:476-651) pass literal templates with '{}' slots and bound args.",
+      "preconditions": "An embedding app would have to pass attacker-influenced text as the raw SQL template - deliberate misuse of a documented dangerous API.",
+      "reasoning": "Same tautological pattern as result 5: the source is the raw API's own sql parameter and the sink is the QueryString construction in the same function (2-node codeFlow). The template is genuinely executed verbatim downstream (verified), but Table.raw is documented 'Execute raw SQL queries on the underlying engine - use with caution!'. No untrusted flow exists in this snapshot. Per review criteria 6 this is a false positive for this project; app misuse with a tainted template would of course be injectable, but that is not a piccolo defect.",
+      "criteria_findings": {
+        "source_is_real_boundary": "API parameter only; no attacker-controllable input demonstrably reaches it",
+        "tautological_source_sink_adjacency": true,
+        "sink_really_executes_sql": "sink node is object construction; execution is real but downstream of the reported path",
+        "parameterization_barrier": "values are parameterizable; the template is raw SQL by design"
+      }
+    }
+  ],
+  "vulnerability_hit_analysis": {
+    "task": "Was the project's real CWE-89 vulnerability (piccolo commit 82679eb8, GHSA-xq59-7jf3-rjc6 - savepoint name SQL injection) hit by the formal Pass 5 results?",
+    "advisory_commit": "https://github.com/piccolo-orm/piccolo/commit/82679eb8cd1449cf31d87c9914a072e70168b6eb",
+    "source_tree_state": "The analyzed source tree is the pre-fix version: postgres.py:127-139 / sqlite.py:306-319 / postgres.py:237-240 / sqlite.py:414-417 match the advisory code_before verbatim; no validate_savepoint_name exists anywhere in the tree.",
+    "advisory_functions": [
+      {
+        "function_name": "savepoint",
+        "engine": "postgres (code_before: PostgresTransaction.savepoint)",
+        "vulnerable_line": "piccolo/engine/postgres.py:239 - await self.connection.execute(f\"SAVEPOINT {name}\")",
+        "hit": false,
+        "hit_details": "No formal result at postgres.py:239. The source model (ddlIdentifierBoundary) covers Savepoint.__init__(name) and Transaction.rollback_to(savepoint_name) but NOT the name parameter of Transaction.savepoint itself, so the direct SAVEPOINT-statement injection is missed. Indirect partial coverage: the name passed to savepoint() is stored in the returned Savepoint object (postgres.py:240), and its later execution in rollback_to()/release() IS reported by results 9-12."
+      },
+      {
+        "function_name": "rollback_to",
+        "engine": "postgres (code_before: Savepoint.rollback_to)",
+        "vulnerable_line": "piccolo/engine/postgres.py:133 - f\"ROLLBACK TO SAVEPOINT {self.name}\"",
+        "hit": true,
+        "hit_details": "Results 9 and 10 (duplicate pair at postgres.py:133, both sink models), with valid codeFlows from Savepoint.__init__(name) (postgres.py:127) and from PostgresTransaction.rollback_to(savepoint_name) (postgres.py:225 -> 229), matching the advisory chain exactly."
+      },
+      {
+        "function_name": "release",
+        "engine": "postgres (code_before: Savepoint.release)",
+        "vulnerable_line": "piccolo/engine/postgres.py:138 - f\"RELEASE SAVEPOINT {self.name}\"",
+        "hit": true,
+        "hit_details": "Results 11 and 12 (duplicate pair at postgres.py:138), same source flows as rollback_to."
+      },
+      {
+        "function_name": "savepoint",
+        "engine": "sqlite (code_before: SQLiteTransaction.savepoint)",
+        "vulnerable_line": "piccolo/engine/sqlite.py:416 - await self.connection.execute(f\"SAVEPOINT {name}\")",
+        "hit": false,
+        "hit_details": "Same gap as postgres: Transaction.savepoint's name parameter is not a modeled source. Partially covered indirectly via the returned Savepoint's rollback_to/release (results 13-16)."
+      },
+      {
+        "function_name": "rollback_to",
+        "engine": "sqlite (code_before: Savepoint.rollback_to)",
+        "vulnerable_line": "piccolo/engine/sqlite.py:313 - f\"ROLLBACK TO SAVEPOINT {self.name}\"",
+        "hit": true,
+        "hit_details": "Results 13 and 14 (duplicate pair at sqlite.py:313), flows from Savepoint.__init__(name) (sqlite.py:307) and SQLiteTransaction.rollback_to(savepoint_name) (sqlite.py:402 -> 406)."
+      },
+      {
+        "function_name": "release",
+        "engine": "sqlite (code_before: Savepoint.release)",
+        "vulnerable_line": "piccolo/engine/sqlite.py:318 - f\"RELEASE SAVEPOINT {self.name}\"",
+        "hit": true,
+        "hit_details": "Results 15 and 16 (duplicate pair at sqlite.py:318), same source flows."
+      }
+    ],
+    "verdict": "HIT (substantially). The real CWE-89 vulnerability - user-provided savepoint names interpolated unquoted into f-strings and executed via connection.execute - is reported by 8 formal Pass 5 alerts (4 unique vulnerable statements: ROLLBACK TO SAVEPOINT and RELEASE SAVEPOINT in both the postgres and sqlite engines). 4 of the 6 advisory functions (rollback_to and release in both engines) are directly hit at the exact vulnerable lines with valid source-to-execution paths. The savepoint() function's own direct injection point (SAVEPOINT {name} at postgres.py:239 / sqlite.py:416) is missed because the source model omits Transaction.savepoint's name parameter, though the same tainted value is caught when it later reaches the flagged rollback_to/release sinks. Root cause of the partial miss: p5-src-008 models Savepoint.__init__(name) and rollback_to(savepoint_name) but not savepoint(name).",
+    "hit_function_count": "4 of 6 advisory functions directly hit; 8 of 18 formal alerts are the vulnerability (results 9-16)"
+  },
+  "cross_cutting_observations": [
+    "No SARIF parsing diagnostics, no native CodeQL py/sql-injection baseline results, and no other-category (NoSQL etc.) findings are mixed into the formal results: the run contains a single rule (py/augur/piccolo/pass5-sql-injection) with 18 results, executionSuccessful=true, and 353 level=none telemetry notifications only.",
+    "The reported sinks all correspond to genuinely executed SQL or (for results 5/17) to template constructions whose compiled output is executed verbatim one default-step downstream - verified against query/base.py:179-193, postgres.py:525-560, sqlite.py:590-630, querystring.py:163-192.",
+    "The bound-parameter channel is correctly excluded: QueryString.compile_string emits $n/? placeholders and keeps args separate, and only argument 0 of fetch/execute/cursor is a sink, so no parameterized value is reported (no false positives of that class among the 18).",
+    "Minor model artifact (does not change any verdict): the ctorArgToFieldRead/initParamToFieldRead summaries wire construction sites of the identically-named Savepoint class across engine files (sqlite.py:406 -> postgres.py:133 and postgres.py:229 -> sqlite.py:313), producing cross-engine flow renderings; each engine's real sink is independently and correctly reported.",
+    "All 8 savepoint alerts and the 7 'uncertain' channel alerts use API-parameter sources with no in-snapshot untrusted caller; this is the declared ORM-library trust model (embedding application boundary). Only the savepoint channels are confirmed by the project's own security fix."
+  ]
+}

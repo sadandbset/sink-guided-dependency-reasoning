@@ -1,0 +1,1076 @@
+{
+  "version": "0.3.0",
+  "metadata": {
+    "run_id": "piccolo-iris-pass5-20261021",
+    "generated_at": "2026-10-20T16:41:12+00:00",
+    "language": "python",
+    "framework": "targ (piccolo CLI)",
+    "model": "glm-5.3",
+    "project": "piccolo",
+    "notes": [
+      "Phase 1 Step 3 (LLM API candidate labeling) for Pass 5 (CWE-89 SQL Injection) only, against the piccolo_vuln source tree; the tree matches the CodeQL DB (piccolo-db) creation sha e4946d858e1aae1a9a4cf7714957d07983d94cde, and every CSV file:line cited in evidence was re-read from that tree during labeling.",
+      "Coverage: all 398 source-candidate rows + 221 sink-candidate rows = 619 candidates, each assigned to exactly one semantic group; 20 source-side groups + 22 sink-side groups (42 label entries). Per-row assignments are in labels/labels_raw_pass5.json. Duplicate CSV rows (identical node/callable/arg/file/line) are recorded there and covered once.",
+      "This run is an in-context LLM labeling session (model glm-5.3 operating the Claude Code agent harness); no external LLM API calls were made. 12 analysis batches were processed; per-batch scope and row counts are recorded in labels_raw_pass5.json.",
+      "Mixed groups carry a representative signature in this file; Phase 2 library generation should expand per-row signatures from labels_raw_pass5.json (e.g. snk-01 covers fetch/execute/cursor on both engines; src-01 covers ~61 distinct CLI command functions).",
+      "pass 1 block: present with zero entries solely to satisfy the labels_schema.json 'passes contains pass_id=1' constraint; no pass-1 labeling was performed in this run.",
+      "Threat model: piccolo is an ORM library with NO HTTP surface (confirmed in detection.json: no web framework imports; the external-input frameworks are the local `piccolo` targ CLI, interactive prompts, files, env). The ORM's public API (Table.raw, WhereRaw, SelectRaw, Alter DDL methods, Savepoint names, clause delegates) is therefore modeled as the trust boundary through which an embedding application's attacker-influenced data enters SQL construction (api_param family).",
+      "Key semantic findings: (1) QueryString is a genuine parameterized compiler - values passed as QueryString args become $n/? bound parameters and never enter SQL text (querystring.py:124-192); the bound_params sink family is labeled none/fp accordingly. (2) The raw-SQL text channels are Table.raw/WhereRaw/SelectRaw argument 0 (source+sink pair src-07/snk-15) - in-library call sites all pass literal templates. (3) The DDL/savepoint identifier channels interpolate names UNQUOTED or quoted-but-unescaped with no allowlist (alter.py:36/117/188, postgres.py:239, sqlite.py:313/416, schema.py) - labeled source tp (src-08) + sink tp (snk-04a/09/10). (4) LIMIT/OFFSET have a proven isinstance(int) guard (src-15 sanitizer). (5) Second-order channel: DB-reflected table/column names are re-interpolated into SQL text (PRAGMA index_list, ROWID lookup, FROM clauses) - summary family src-19. (6) No SQL-syntax-context validation or identifier whitelist exists anywhere in the library; no sanitizer other than the limit/offset int guard and the QueryString bound-args channel itself. (7) Engine-layer receiver-collision noise identified and excluded: postgres.py:41 cursor.fetch(batch_size), error-message f-strings (objects.py:334, query/base.py:426).",
+      "Independence: PyVul ground truth, fix commits, CVE listings and external vulnerability advisories were NOT read; vendor-supplied audit artifacts inside the tree were excluded per detection.json runNote. No source files, databases, extraction results or Augur files were modified."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 5,
+      "focus": "SQL Injection",
+      "cwes": [
+        "089"
+      ],
+      "entries": [
+        {
+          "id": "p5-src-001",
+          "role": "source",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "piccolo.apps.schema.commands.generate",
+            "type": null,
+            "callable": "generate",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "rationale": "targ CLI boundary (argv mapped onto ~61 module-level command functions under piccolo/apps/*/commands/). The `piccolo` console entrypoint (setup.py entry_points, piccolo/main.py:63-79) is run by a local developer/admin, so these are operator-level input, not a remote attacker boundary. Verified SQL-reaching flows from these params all ride the bound-parameter channel: schema generate schema_name -> table_class.raw(literal template, schema_name, tablename) lands in {} placeholders (generate.py:476-485,503-532,570-581,604-610,632-641,651-659); migrations forwards/backwards app_name/migration_id -> Migration table .where() bound args (migrations/tables.py:23-25); user create/change_permissions username -> BaseUser .where() bound args; fixtures load path -> pydantic-validated rows -> INSERT bound VALUES. Kept as source rows for conservative recall, but classified fp for this ORM-library threat model.",
+          "evidence": [
+            "piccolo/main.py:4 'from targ import CLI'; :63-79 cli.register(...) over 12 app configs - argv -> function parameters",
+            "generate.py:476-485 table_class.raw('SELECT ... WHERE schemaname = {} AND tablename = {}', schema_name, tablename) - CLI schema_name lands in a bound {} slot",
+            "piccolo/apps/migrations/tables.py:23-25 query.where(cls.app_name == app_name) - app_name rides the Where bound-args channel",
+            "piccolo/apps/user/commands/create.py:59-70 create(...) - input()-prompted username/email/password become BaseUser row values (bound INSERT args)",
+            "covers 111 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/apps/migrations/commands/backwards.py",
+            "line": 115
+          }
+        },
+        {
+          "id": "p5-src-002",
+          "role": "source",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "input",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "rationale": "12 interactive input()/getpass() prompts (migration backwards/clean confirmations, schema_differ rename confirmations, user create username/email/password/flags, asgi new router/server choices). Local interactive terminal input under operator trust; values either answer y/N booleans, feed file scaffolding, or become bound INSERT/Where values - none enter SQL text.",
+          "evidence": [
+            "piccolo/apps/migrations/commands/backwards.py:81,129 input() y/N confirmations",
+            "piccolo/apps/user/commands/create.py:10-50 input()/getpass() prompts -> BaseUser row values (bound args)",
+            "piccolo/apps/migrations/auto/schema_differ.py:202,278 rename confirmations (auto_input bypasses)",
+            "covers 12 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/apps/migrations/commands/backwards.py",
+            "line": 81
+          }
+        },
+        {
+          "id": "p5-src-003",
+          "role": "source",
+          "classification": "fp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": null,
+            "callable": "environ",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "rationale": "os.environ reads: PICCOLO_CONF module-name resolution (conf/apps.py:365), tester env manipulation, sql_shell subprocess env copy. Operator-level environment configuration; selects which config module loads or which env a test/psql subprocess sees - no path into SQL text.",
+          "evidence": [
+            "piccolo/conf/apps.py:365 os.environ.get(ENVIRONMENT_VARIABLE) - PICCOLO_CONF module resolution (operator trust)",
+            "piccolo/apps/sql_shell/commands/run.py:48 os.environ.copy() for the psql subprocess",
+            "covers 9 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/conf/apps.py",
+            "line": 365
+          }
+        },
+        {
+          "id": "p5-src-004",
+          "role": "source",
+          "classification": "fp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": null,
+            "callable": "argv",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "rationale": "sys.argv reads in piccolo/main.py (DIAGNOSE_FLAG membership test at :34; set(sys.argv) handed to the targ CLI at :108). CLI plumbing only; no direct SQL data flow.",
+          "evidence": [
+            "piccolo/main.py:34 'DIAGNOSE_FLAG in sys.argv'",
+            "piccolo/main.py:108 set(sys.argv) passed to the targ CLI",
+            "covers 2 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/main.py",
+            "line": 34
+          }
+        },
+        {
+          "id": "p5-src-005",
+          "role": "source",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "piccolo.utils.encoding",
+            "type": null,
+            "callable": "load_json",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "rationale": "File reads and JSON deserialization entry points: fixtures load (open(path).read() -> load_json_string -> pydantic model_validate_json -> Table instances -> parameterized INSERTs), utils/encoding.load_json call sites (query/base.py:109, select.py:555/562, pydantic.py:36, sqlite.py:166 - the latter deserializes DB cell content for output), setup.py reading its own README. Fixture/DB content is data-only: it flows into row values and Where comparison values, which QueryString routes to bound parameters (querystring.py:124-192). No file content enters SQL text.",
+          "evidence": [
+            "piccolo/apps/fixtures/commands/load.py:118-119 open(path).read() -> load_json_string -> pydantic validation",
+            "piccolo/utils/encoding.py:30 load_json(data) (orjson/json fallback)",
+            "piccolo/querystring.py:173-192 compile_string keeps args out of the SQL text ($n/? placeholders)",
+            "covers 12 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/base.py",
+            "line": 109
+          }
+        },
+        {
+          "id": "p5-src-006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "open",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "rationale": "open() call sites that are file WRITES (project/app/asgi/migration scaffolding templates, graphviz dot output, SQLite db-file creation), extracted only because extraction matched open() generically. Not input boundaries for pass 5.",
+          "evidence": [
+            "piccolo/apps/migrations/commands/new.py:54,161 open(..., 'w') migration scaffolding writes",
+            "piccolo/engine/sqlite.py:537 open(self.path, 'w') create_db_file",
+            "piccolo/apps/schema/commands/graph.py:112 open(output, 'w') graph output write",
+            "covers 9 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/apps/schema/commands/graph.py",
+            "line": 112
+          }
+        },
+        {
+          "id": "p5-src-007",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "piccolo.table",
+            "type": "Table",
+            "callable": "raw",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "rationale": "The ORM's raw-SQL text boundary: Table.raw(sql, *args) (table.py:964-979) and WhereRaw(sql, *args) (combination.py:109-131) directly make the caller's sql string the QueryString template that engines compile and execute. The *args (positions 2+) ride the safe bound channel, but argument 1 (sql) is executed as SQL structure. This is the classic channel through which an embedding application that concatenates request data into raw SQL becomes injectable - the library itself documents 'use with caution!'. In-library call sites all pass literal templates (schema generate, table_exists), so exploitability requires an embedding app; the channel itself is genuinely attacker-reachable in the ORM trust model.",
+          "evidence": [
+            "piccolo/table.py:964 'def raw(cls, sql: str, *args)' -> :979 Raw(querystring=QueryString(sql, *args))",
+            "piccolo/table.py:967 docstring 'Execute raw SQL queries on the underlying engine - use with caution!'",
+            "piccolo/columns/combination.py:112 WhereRaw.__init__(self, sql, *args) -> :131 self.querystring = QueryString(sql, *args)",
+            "SelectRaw.__init__ carries the same shape (select.py:58 QueryString(sql, *args)) and is captured on the sink side (snk-15)",
+            "covers 2 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/columns/combination.py",
+            "line": 112
+          }
+        },
+        {
+          "id": "p5-src-008",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.methods.alter",
+            "type": "Alter",
+            "callable": "rename_table",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "rationale": "Public ORM/DDL API parameters that are interpolated into DDL/SQL statement text rather than bound parameters: Alter.rename_table(new_name) -> f'RENAME TO {new_name}' (alter.py:36, UNQUOTED); Alter.rename_column(column, new_name) -> f'RENAME COLUMN \"{col}\" TO \"{new_name}\"' (alter.py:63, quoted but not escaped); Alter.set_column_type(old, new, using_expression) -> USING {using_expression} interpolated verbatim (alter.py:117, UNQUOTED); Alter.drop_constraint(constraint_name) -> f'DROP CONSTRAINT IF EXISTS {name}' (alter.py:188, UNQUOTED); Alter.set_schema(schema_name) -> SetSchema DDL (alter.py:560); Savepoint(name)/rollback_to(savepoint_name) -> f'SAVEPOINT {name}' / f'ROLLBACK TO SAVEPOINT {name}' (postgres.py:239/133, sqlite.py:416/313, UNQUOTED). No identifier allowlist or escaping exists on any of these paths. Attacker reachability requires the embedding app or CLI to pass request-influenced strings; in-library callers pass developer/migration-defined names, so classification is tp for the channel with that scope caveat.",
+          "evidence": [
+            "alter.py:36 'return f\"RENAME TO {self.new_name}\"' - unquoted new table name in executed DDL",
+            "alter.py:117 'query += f\" USING {self.using_expression}\"' - verbatim expression interpolation",
+            "alter.py:188 'return f\"DROP CONSTRAINT IF EXISTS {self.constraint_name}\"' - unquoted",
+            "postgres.py:239 'await self.connection.execute(f\"SAVEPOINT {name}\")' - unquoted savepoint name",
+            "sqlite.py:313 f\"ROLLBACK TO SAVEPOINT {self.name}\" - unquoted",
+            "covers 12 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/methods/alter.py",
+            "line": 364
+          }
+        },
+        {
+          "id": "p5-src-009",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.base",
+            "type": "Engine",
+            "callable": "run_querystring",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "rationale": "Internal engine-layer carriers that move already-compiled SQL text (query/querystring/ddl parameters of Engine.run_querystring, Engine.run_ddl, PostgresEngine/SQLiteEngine._run_in_pool, _run_in_new_connection, _run_in_existing_connection) from the QueryString compiler to the driver execution calls. Needed as flow steps so Phase 2 taint can travel from template construction to the execution sinks; the bound-args companions are separately labeled safe (src-10).",
+          "evidence": [
+            "piccolo/engine/base.py:68 run_querystring(querystring, in_pool) / :72 run_ddl(ddl, in_pool)",
+            "postgres.py:489,501 _run_in_pool/_run_in_new_connection(query, args) -> connection.fetch(query, *args)",
+            "sqlite.py:582-595,607-623 _run_in_new/_run_in_existing_connection(query, args) -> connection.execute(query, args)",
+            "covers 10 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/base.py",
+            "line": 68
+          }
+        },
+        {
+          "id": "p5-src-010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.postgres",
+            "type": "PostgresEngine",
+            "callable": "_run_in_pool",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "rationale": "Engine-internal parameter rows that are neither SQL text nor attacker input: bound-args lists (args parameters - values compiled to $n/? placeholders, never SQL text), pool flags (in_pool), query_type/table metadata, connection/cursor objects, Savepoint.transaction references. QueryString.compile_string (querystring.py:163-192) keeps these values out of the SQL text by construction.",
+          "evidence": [
+            "postgres.py:487 _run_in_pool args parameter - bound-parameter channel",
+            "querystring.py:176-187 postgres -> $1..$n, sqlite -> ? placeholders for args",
+            "sqlite.py:585-587 args/query_type/table parameters of _run_in_new_connection",
+            "covers 19 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/base.py",
+            "line": 68
+          }
+        },
+        {
+          "id": "p5-src-011",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "piccolo.querystring",
+            "type": "QueryString",
+            "callable": "__init__",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "rationale": "QueryString.__init__(template, *args) is the central template carrier: any taint entering the template parameter becomes part of the compiled SQL text executed by the engines, while *args ride the bound channel. Modeling this as a summary step lets Phase 2 propagate taint from template construction sites (f-strings, .format, string +=) through QueryString objects to the engine sinks.",
+          "evidence": [
+            "piccolo/querystring.py:61-88 __init__(template, *args) stores template and args separately",
+            "querystring.py:163-192 compile_string() emits $n/? placeholders for args - args are bound, template is SQL text",
+            "querystring.py:93-122 __str__ interpolates values for DISPLAY only and is never executed",
+            "covers 1 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/querystring.py",
+            "line": 63
+          }
+        },
+        {
+          "id": "p5-src-012",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.mixins",
+            "type": "AsOfDelegate",
+            "callable": "as_of",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "rationale": "AsOf(interval) is interpolated into SQL text inside single quotes with no escaping: f\" AS OF SYSTEM TIME '{self.interval}'\" (mixins.py:119). The only validation is isinstance(str) (mixins.py:113-115), which does not block quote break-out. CockroachDB-specific channel; reachable only if an embedding app passes request-influenced intervals.",
+          "evidence": [
+            "mixins.py:119 'return QueryString(f\" AS OF SYSTEM TIME \\'{self.interval}\\'\"'",
+            "mixins.py:113-115 __post_init__ only enforces isinstance(self.interval, str)",
+            "covers 1 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/mixins.py",
+            "line": 320
+          }
+        },
+        {
+          "id": "p5-src-013",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.mixins",
+            "type": "OnConflictDelegate",
+            "callable": "on_conflict",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "rationale": "OnConflictItem.target accepts a raw str which is interpolated into the template as f'ON CONSTRAINT \"{target}\"' (mixins.py:659) - quoted but not escaped, so embedded double quotes break out. Column/tuple targets are safe (quoted db_column_name). Uncertain exploitability (requires str target + attacker-influenced value), so kept as candidate for human review.",
+          "evidence": [
+            "mixins.py:658-659 'if isinstance(target, str): return f\\'ON CONSTRAINT \"{target}\"\\''",
+            "mixins.py:661-664 Column/tuple targets render quoted db_column_name metadata",
+            "covers 1 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/mixins.py",
+            "line": 760
+          }
+        },
+        {
+          "id": "p5-src-014",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "piccolo.columns.combination",
+            "type": "Where",
+            "callable": "__init__",
+            "arg_index": 2,
+            "flow_kind": "param"
+          },
+          "rationale": "Where() and the Column comparison operators (is_in/not_in/like/ilike/not_like/__eq__/__ne__/__lt__/__le__/__gt__/__ge__) route their value/values into QueryString ARGS - the bound-parameter channel: Where.querystring builds template with value='{}' and appends the value to args (combination.py:202-218), values_querystring joins '{}' placeholders (combination.py:192-199). This is the ORM's core parameterization mechanism; passing ordinary values here is safe behavior, not a pass-5 source.",
+          "evidence": [
+            "combination.py:210-218 template = operator.template.format(name=..., value='{}', values='{}'); QueryString(template, *args)",
+            "combination.py:198 template = ', '.join('{}' for _ in values) - is_in/not_in values stay bound",
+            "piccolo/columns/base.py:598-726 comparison operators construct Where(column, value/values) - bound channel",
+            "covers 17 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/columns/base.py",
+            "line": 598
+          }
+        },
+        {
+          "id": "p5-src-015",
+          "role": "sanitizer",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.mixins",
+            "type": "LimitDelegate",
+            "callable": "limit",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "rationale": "Limit/Offset delegates enforce a strict integer type guard before interpolating into SQL text: __post_init__ raises TypeError('Limit must be an integer') / ('Offset must be an integer') (mixins.py:92-94, 131-133), and the templates are f' LIMIT {number}' / f' OFFSET {number}' (mixins.py:98,137). isinstance(int) is a proven-effective whitelist that blocks SQL text injection through these parameters - a genuine sanitizer for pass 5.",
+          "evidence": [
+            "mixins.py:92-94 'if not isinstance(self.number, int): raise TypeError' (Limit)",
+            "mixins.py:131-133 same guard for Offset",
+            "mixins.py:98 'return QueryString(f\" LIMIT {self.number}\")' - int-formatted only",
+            "covers 2 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/mixins.py",
+            "line": 303
+          }
+        },
+        {
+          "id": "p5-src-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.mixins",
+            "type": "ReturningDelegate",
+            "callable": "returning",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "rationale": "Output-shaping API params: distinct(enabled, on) - booleans plus Column objects rendered as quoted names (mixins.py:41-44); returning(columns) - quoted db_column_name with alias (mixins.py:191-201); values(...) - output flags. Values are Column metadata (developer-defined; second-order taint from DB reflection only), booleans, or flags - not attacker text channels.",
+          "evidence": [
+            "mixins.py:44 f\" DISTINCT ON ({column_names})\" - quoted Column full names",
+            "mixins.py:193-197 f'\"{db_column_name}\" AS \"{alias}\"' - quoted metadata",
+            "covers 4 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/mixins.py",
+            "line": 332
+          }
+        },
+        {
+          "id": "p5-src-017",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.methods.select",
+            "type": null,
+            "callable": "where",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "rationale": "Internal delegate transfers that carry ORM clause objects from the public API into querystring assembly: where/order_by/as_of/group_by/values/returning delegate plumbing in select/objects/update/delete/count/exists/insert/refresh and the app-level .where()/.order_by() call sites (user tables, migrations tables, commands). Needed flow steps for Phase 2: Where values ride the bound channel, while OrderBy/AsOf structure rides the template channel - both must propagate to reach their respective sink/safe endpoints.",
+          "evidence": [
+            "select.py:795-797 query += ' WHERE {}'; args.append(self.where_delegate._where.querystring)",
+            "select.py:803-805 order_by rides template channel via args.append(order_by.querystring)",
+            "piccolo/apps/user/tables.py:131,210,236 .where(<Where expr from username>) - comparison values bound",
+            "covers 42 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/apps/migrations/commands/backwards.py",
+            "line": 94
+          }
+        },
+        {
+          "id": "p5-src-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.methods.select",
+            "type": null,
+            "callable": "limit",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "rationale": "limit/offset delegate transfers and IntegerLiteral constants (select.py:423-431, objects.py:239-277): values are int-guarded by Limit/Offset __post_init__ (see src-15), so these transfers cannot carry SQL text injection.",
+          "evidence": [
+            "select.py:423,427 limit_delegate transfers; objects.py:272,277 IntegerLiteral limit constants",
+            "mixins.py:92-94/131-133 int type guards make the channel safe",
+            "covers 4 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/methods/objects.py",
+            "line": 239
+          }
+        },
+        {
+          "id": "p5-src-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "piccolo.apps.schema.commands.generate",
+            "type": null,
+            "callable": "raw",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "rationale": "Literal templates and bound-value arguments at the schema-generate raw() call sites: the six table_class.raw(...) introspection helpers pass LITERAL SQL templates (StringLiteral/Fstring rows) with schema_name/tablename/constraint_name landing in {} placeholder slots (generate.py:476-485,503-532,570-581,604-610,632-641,651-659) - fully parameterized. The generate.py:634 f-string interpolates RowMeta.get_column_name_str(), an internal constant column list. Safe channel.",
+          "evidence": [
+            "generate.py:477-484 'SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = {} AND tablename = {}' with schema_name, tablename as bound args",
+            "generate.py:634 f\"SELECT {RowMeta.get_column_name_str()} FROM information_schema.columns ...\" - internal constant",
+            "schema ListTables (schema.py:135-144) same pattern: QueryString(literal, self.schema_name)",
+            "covers 20 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/apps/schema/commands/generate.py",
+            "line": 478
+          }
+        },
+        {
+          "id": "p5-src-020",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": null,
+            "type": null,
+            "callable": "tablename",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "rationale": "Reads of table/column identifier metadata (_meta.tablename, _meta.db_column_name, get_formatted_tablename()) across the library. These names originate either from developer-defined Table classes (trusted) or from DB reflection (TableStorage.reflect, schema generate, serialisation) - a second-order channel: reflected names are re-interpolated into SQL text unescaped (select.py:786 FROM, indexes.py:31 PRAGMA index_list, sqlite.py:575-577 ROWID lookup, DDL f-strings). No identifier whitelist exists. Modeled as summary steps so Phase 2 can trace reflection output into SQL text; kept at candidate confidence because in-library names are overwhelmingly developer-defined.",
+          "evidence": [
+            "select.py:786 query += f' {columns_str} FROM {self.table._meta.get_formatted_tablename()}'",
+            "indexes.py:30-31 QueryString(f'PRAGMA index_list({tablename})') - unquoted reflected tablename",
+            "sqlite.py:575-577 f'SELECT {pk} FROM {tablename} WHERE ROWID = {cursor.lastrowid}'",
+            "detection.json schema_name_reads family: 91+ reads; names from Table classes or DB reflection",
+            "covers 108 CSV rows (sources); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/methods/alter.py",
+            "line": 50
+          }
+        },
+        {
+          "id": "p5-snk-001",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.postgres",
+            "type": "Connection",
+            "callable": "fetch",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "asyncpg Connection.fetch(query, *args) - the final Postgres/Cockroach SQL execution layer. SQL text is positional argument 0 (postgres.py:496 _run_in_pool, :508 _run_in_new_connection, :531 transaction run_querystring, :553 run_ddl); everything above it is SQL construction. Values passed as *args are bound parameters (see snk-05) and are not part of the SQL text.",
+          "evidence": [
+            "postgres.py:531 'response = await connection.fetch(query, *args)' inside run_querystring",
+            "postgres.py:496/508 connection.fetch(query, *args) in _run_in_pool/_run_in_new_connection",
+            "postgres.py:553 run_ddl -> connection.fetch(ddl) - DDL text executed verbatim",
+            "covers 4 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/postgres.py",
+            "line": 496
+          }
+        },
+        {
+          "id": "p5-snk-002",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.postgres",
+            "type": "Connection",
+            "callable": "cursor",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "asyncpg Connection.cursor(template, *template_args) at AsyncBatch.__aenter__ (postgres.py:59) - prepared-cursor execution with the compiled QueryString template at positional argument 0; template_args are bound.",
+          "evidence": [
+            "postgres.py:57-59 'template, template_args = querystring.compile_string(); self._cursor = await self.connection.cursor(template, *template_args)'",
+            "covers 1 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/postgres.py",
+            "line": 59
+          }
+        },
+        {
+          "id": "p5-snk-003",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.postgres",
+            "type": "Connection",
+            "callable": "execute",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "asyncpg Connection.execute(statement) at postgres.py:132 (ROLLBACK TO SAVEPOINT), :137 (RELEASE SAVEPOINT), :239 (SAVEPOINT) - SQL text at positional argument 0; these statements are built from unquoted savepoint-name f-strings (snk-04a), so tainted names execute as SQL text here.",
+          "evidence": [
+            "postgres.py:132 await self.transaction.connection.execute(f'ROLLBACK TO SAVEPOINT {self.name}')",
+            "postgres.py:239 await self.connection.execute(f'SAVEPOINT {name}')",
+            "covers 3 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/postgres.py",
+            "line": 132
+          }
+        },
+        {
+          "id": "p5-snk-004",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.sqlite",
+            "type": "Connection",
+            "callable": "execute",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "aiosqlite Connection.execute(query, args) - the final SQLite SQL execution layer, SQL text at positional argument 0 (sqlite.py:230 AsyncBatch template, :312/:317 savepoint statements, :416 SAVEPOINT, :595/:623 query+args from run_querystring); the args parameter (argument 1, snk-05) is the bound channel.",
+          "evidence": [
+            "sqlite.py:595 'async with connection.execute(query, args) as cursor' - compiled QueryString output",
+            "sqlite.py:230 await self.connection.execute(template, *template_args) - AsyncBatch",
+            "sqlite.py:623 connection.execute(query, args) in _run_in_existing_connection",
+            "covers 6 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/sqlite.py",
+            "line": 230
+          }
+        },
+        {
+          "id": "p5-snk-005",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.sqlite",
+            "type": "Cursor",
+            "callable": "execute",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "aiosqlite Cursor.execute(statement) at sqlite.py:575 (_get_inserted_pk) - executes an f-string SELECT whose FROM table name and selected column are interpolated dynamic identifiers (second-order channel, see snk-08); cursor.lastrowid is an int.",
+          "evidence": [
+            "sqlite.py:575-578 await cursor.execute(f'SELECT {pk} FROM {tablename} WHERE ROWID = {cursor.lastrowid}')",
+            "covers 1 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/sqlite.py",
+            "line": 575
+          }
+        },
+        {
+          "id": "p5-snk-006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.sqlite",
+            "type": "Connection",
+            "callable": "execute",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "Static/enum-constrained statements executed verbatim: PRAGMA foreign_keys = 1 (sqlite.py:564,592,620), COMMIT (:395), ROLLBACK (:399), BEGIN {TransactionType enum value} (:392 - deferred/immediate/exclusive, enum-validated). No dynamic data reaches the SQL text; these rows are execution-shape matches only.",
+          "evidence": [
+            "sqlite.py:564 await connection.execute('PRAGMA foreign_keys = 1') - literal",
+            "sqlite.py:392 f'BEGIN {self.transaction_type.value}' - TransactionType enum, three fixed values",
+            "covers 11 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/sqlite.py",
+            "line": 391
+          }
+        },
+        {
+          "id": "p5-snk-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.postgres",
+            "type": "Cursor",
+            "callable": "fetch",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "Receiver-collision noise: postgres.py:41 is AsyncBatch.next's self.cursor.fetch(self.batch_size) - fetching result rows with an int batch size, not executing SQL. The aiosqlite twin is cursor.fetchmany (sqlite.py:214). Not a SQL sink.",
+          "evidence": [
+            "postgres.py:41 'data = await self.cursor.fetch(self.batch_size)' - batch size, not SQL text",
+            "covers 1 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/postgres.py",
+            "line": 41
+          }
+        },
+        {
+          "id": "p5-snk-008",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.postgres",
+            "type": null,
+            "callable": "fstring",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "rationale": "Engine-internal SQL statement f-strings that interpolate savepoint names unquoted into executed SQL text: f'SAVEPOINT {name}' (postgres.py:239, sqlite.py:416), f'ROLLBACK TO SAVEPOINT {self.name}' (postgres.py:133, sqlite.py:313), f'RELEASE SAVEPOINT {self.name}' (postgres.py:138, sqlite.py:318). Names come from the Savepoint(name) API (src-08); default names are savepoint_N ints, but caller-supplied names are unvalidated strings.",
+          "evidence": [
+            "postgres.py:239 f'SAVEPOINT {name}' fed directly to connection.execute",
+            "sqlite.py:313,318 f-string savepoint statements executed at :312/:317",
+            "covers 6 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/postgres.py",
+            "line": 133
+          }
+        },
+        {
+          "id": "p5-snk-009",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.postgres",
+            "type": "Savepoint",
+            "callable": "rollback_to",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "rationale": "Savepoint/transaction wrapper functions (rollback_to, release, savepoint on both engines) - they receive a savepoint name and execute the statements built by the snk-04a f-strings. Summary flow steps carry taint from the name parameter to the construction/execution sites.",
+          "evidence": [
+            "postgres.py:131-139 rollback_to/release; sqlite.py:311-319 same",
+            "postgres.py:237-240 savepoint(name) -> f'SAVEPOINT {name}' -> execute",
+            "covers 6 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/postgres.py",
+            "line": 131
+          }
+        },
+        {
+          "id": "p5-snk-010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.sqlite",
+            "type": "Connection",
+            "callable": "execute",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "rationale": "Bound-parameter channel rows: asyncpg *args after the query text (fetch/cursor bound_params rows) and aiosqlite execute(query, args) argument 1. QueryString.compile_string (querystring.py:163-192) converts {} placeholders to $1..$n / ? so these values are sent as parameters, never as SQL text. Deliberately NOT a pass-5 sink - this is the safe channel that distinguishes parameterized calls from text injection.",
+          "evidence": [
+            "sqlite.py:595 execute(query, args) - args are bound parameters",
+            "postgres.py:531 fetch(query, *args) - asyncpg server-side bind",
+            "querystring.py:176-187 $n/? placeholder compilation",
+            "covers 7 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/postgres.py",
+            "line": 59
+          }
+        },
+        {
+          "id": "p5-snk-011",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.postgres",
+            "type": "PostgresEngine",
+            "callable": "run_ddl",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "Engine.run_ddl(ddl) - DDL text executed verbatim as SQL (postgres.py:544 -> fetch at :553; sqlite.py:674). Every DDL f-string (alter.py, create.py, schema.py, drop_index.py) funnels into this channel with no parameterization; a tainted identifier reaching a DDL f-string executes as SQL text.",
+          "evidence": [
+            "postgres.py:553 await connection.fetch(ddl) inside run_ddl",
+            "schema.py:24 'return await self.db.run_ddl(self.ddl, in_pool=in_pool)' - all SchemaDDLBase subclasses funnel here",
+            "covers 1 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/postgres.py",
+            "line": 544
+          }
+        },
+        {
+          "id": "p5-snk-012",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.postgres",
+            "type": "PostgresEngine",
+            "callable": "run_querystring",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "rationale": "Engine/transaction wrapper functions that pass compiled SQL text or QueryString objects toward driver execution: run_querystring (postgres.py:516, sqlite.py:635), _run_in_pool (postgres.py:489), _run_in_new_connection (postgres.py:500, sqlite.py:582), _run_in_existing_connection (sqlite.py:607), AsyncBatch.next/__aenter__ (postgres.py:40,53; sqlite.py:226), _get_inserted_pk (sqlite.py:569). Summary steps so Phase 2 taint propagates from compilation to the snk-01 execution sinks.",
+          "evidence": [
+            "postgres.py:516-531 run_querystring compiles then connection.fetch(query, *args)",
+            "sqlite.py:582-605 _run_in_new_connection -> connection.execute(query, args)",
+            "covers 9 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/postgres.py",
+            "line": 40
+          }
+        },
+        {
+          "id": "p5-snk-013",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "piccolo.engine.sqlite",
+            "type": null,
+            "callable": "fstring",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "rationale": "sqlite.py:576 - the _get_inserted_pk f-string 'SELECT {pk} FROM {tablename} WHERE ROWID = {lastrowid}' interpolates dynamic table/column identifiers (potentially DB-reflection-sourced, second-order) into executed SQL text; lastrowid is an int so only the identifier channel matters.",
+          "evidence": [
+            "sqlite.py:575-578 await cursor.execute(f'SELECT {table._meta.primary_key._meta.db_column_name} FROM {table._meta.tablename} WHERE ROWID = {cursor.lastrowid}')",
+            "covers 1 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/engine/sqlite.py",
+            "line": 576
+          }
+        },
+        {
+          "id": "p5-snk-014",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.methods.alter",
+            "type": null,
+            "callable": "fstring",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "rationale": "ALTER DDL assembly f-strings in alter.py: unquoted interpolations - RENAME TO {new_name} (:36), USING {using_expression} (:117), DROP CONSTRAINT IF EXISTS {constraint_name} (:188); quoted-but-unescaped - RENAME COLUMN (:63), DROP/ADD COLUMN (:70/:83), ALTER COLUMN TYPE (:114/:131), SET DEFAULT (:143), ADD UNIQUE/DROP CONSTRAINT key (:151/:152), SET NOT NULL (:164/:166), SET VARCHAR(length) (:177 int), AddForeignKeyConstraint name/reference (:211-250), DROP/ALTER TABLE tablename (:266/:576). All flow to Engine.run_ddl and execute verbatim. These are the construction points where src-08 API parameters become executed SQL text.",
+          "evidence": [
+            "alter.py:36 f'RENAME TO {self.new_name}' - unquoted, executed via run_ddl",
+            "alter.py:117 query += f' USING {self.using_expression}' - verbatim expression",
+            "alter.py:188 f'DROP CONSTRAINT IF EXISTS {self.constraint_name}' - unquoted",
+            "alter.py:266 query += f' {self.table._meta.get_formatted_tablename()}'",
+            "covers 25 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/methods/alter.py",
+            "line": 36
+          }
+        },
+        {
+          "id": "p5-snk-015",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "piccolo.schema",
+            "type": null,
+            "callable": "fstring",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "rationale": "SchemaManager DDL f-strings in schema.py: CREATE SCHEMA \"{schema_name}\" (:56), DROP SCHEMA \"{schema_name}\" (:80), ALTER SCHEMA ... RENAME TO \"{new_schema_name}\" (:102-103), ALTER TABLE \"{table}\" SET SCHEMA \"{new_schema}\" (:122-126). Quoted but not escaped; schema_name comes from the SchemaManager API (embedding-app controlled). Candidate pending human review since in-library callers pass fixed names.",
+          "evidence": [
+            "schema.py:56 query += f' \"{self.schema_name}\"' (CreateSchema)",
+            "schema.py:126 f'ALTER TABLE {table_name} SET SCHEMA \"{self.new_schema}\"' (MoveTable)",
+            "covers 9 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/schema.py",
+            "line": 55
+          }
+        },
+        {
+          "id": "p5-snk-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.methods.objects",
+            "type": null,
+            "callable": "fstring",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "rationale": "Non-SQL f-strings matched by the AST sweep: objects.py:334 raise ValueError(f'{fk} doesn\\'t seem to be a ForeignKey.') and query/base.py:426 raise Exception(f'No querystring found for the {engine_type} engine.') - error messages, never executed as SQL.",
+          "evidence": [
+            "objects.py:334 ValueError f-string - error message, not SQL",
+            "query/base.py:426 Exception f-string - error message, not SQL",
+            "covers 2 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/base.py",
+            "line": 426
+          }
+        },
+        {
+          "id": "p5-snk-017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.mixins",
+            "type": null,
+            "callable": "QueryString",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "Template construction points whose dynamic parts are provably guarded or metadata-only: LIMIT/OFFSET int-guarded (mixins.py:98,137); DISTINCT ON / GROUP BY / RETURNING quoted Column names (mixins.py:44,194-201,608); ON CONFLICT action_string enum constants; WHERE comparison operator templates from Column metadata with value='{}' bound (column_types.py:91-148,239-275 - interval math is timedelta-typed, Concat keeps str values in {} bound args, MathDelegate int/float-typed); CREATE TABLE / INSERT / UPDATE / DELETE FROM tablename+quoted columns with VALUES/SET {} bound (create.py:68-77, insert.py:101-107, update.py:93-95, delete.py:56-58, table.py:811); select assembly static fragments + FROM tablename (select.py:58? no - 716,783-825); Where combinable templates (combination.py:41-50,199-250); join/m2m/reference DDL from metadata; array_cat/JSON path quoted names (column_types.py:2614). Values ride bound args; identifiers are developer-defined (second-order only, tracked via src-19).",
+          "evidence": [
+            "mixins.py:98 f' LIMIT {self.number}' - int-guarded",
+            "insert.py:105 values = ','.join('{}' ...) - all row values bound",
+            "update.py:89-90 f'\"{db_column_name}\" = {{}}' - SET values bound",
+            "column_types.py:240 f'\"{column_name}\" {operator} INTERVAL {value_string}' - timedelta-derived numeric string",
+            "covers 77 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/columns/base.py",
+            "line": 904
+          }
+        },
+        {
+          "id": "p5-snk-018",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "piccolo.query.mixins",
+            "type": null,
+            "callable": "QueryString",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "Genuinely dynamic identifier/fragment interpolations into SQL text, currently fed by developer metadata or ORM API strings: ORDER BY expression (mixins.py:175-177 - OrderByRaw.sql flows here verbatim); AS OF SYSTEM TIME '{interval}' (mixins.py:119); ON CONFLICT target str (mixins.py:659-664) and target_string/action_string assembly (mixins.py:673-734); PRAGMA index_list({tablename}) unquoted (indexes.py:31); DROP INDEX {index_name} (drop_index.py:37-38 - derived from tablename+column names); CREATE INDEX name/columns (create_index.py:50,72). These are the template-channel construction points a Phase 2 query should alert on if taint reaches them; kept at candidate confidence because in-library inputs are metadata/API-bound.",
+          "evidence": [
+            "mixins.py:175 order_by_strings.append(f'{expression} {order}') - OrderByRaw.sql interpolated verbatim",
+            "indexes.py:31 QueryString(f'PRAGMA index_list({tablename})') - unquoted tablename",
+            "drop_index.py:38 QueryString(f'{query} {index_name}')",
+            "mixins.py:119 f\" AS OF SYSTEM TIME '{self.interval}'\"",
+            "covers 25 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/query/methods/create_index.py",
+            "line": 50
+          }
+        },
+        {
+          "id": "p5-snk-019",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "piccolo.table",
+            "type": null,
+            "callable": "QueryString",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "Raw-SQL template construction points - where the raw API's sql string becomes the executed template: Table.raw -> QueryString(sql, *args) (table.py:979), WhereRaw.__init__ -> QueryString(sql, *args) (combination.py:131), SelectRaw.__init__ -> QueryString(sql, *args) (select.py:58). Argument 0 is the SQL text; the *args are bound (snk-05). Together with src-07 these form the raw-SQL channel pair.",
+          "evidence": [
+            "table.py:979 'return Raw(table=cls, querystring=QueryString(sql, *args))'",
+            "combination.py:131 'self.querystring = QueryString(sql, *args)' (WhereRaw)",
+            "select.py:58 'self.querystring = QueryString(sql, *args)' (SelectRaw)",
+            "covers 3 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/columns/combination.py",
+            "line": 131
+          }
+        },
+        {
+          "id": "p5-snk-020",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "piccolo.apps.schema.commands.generate",
+            "type": null,
+            "callable": "raw",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "rationale": "schema-generate introspection helper functions (get_indexes, get_fk_triggers, get_constraints, get_tablenames, get_table_schema, get_foreign_key_reference) that call table_class.raw(literal template, schema_name, tablename). Summary steps: CLI schema_name (src-01) flows through them into raw()'s bound-args channel (safe), and reflected results flow back out as the src-19 identifier family.",
+          "evidence": [
+            "generate.py:466-485 get_indexes -> table_class.raw(literal, schema_name, tablename)",
+            "generate.py:588-611 get_tablenames -> raw('SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = {}', schema_name)",
+            "covers 6 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/apps/schema/commands/generate.py",
+            "line": 466
+          }
+        },
+        {
+          "id": "p5-snk-021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "piccolo.apps.schema.commands.generate",
+            "type": null,
+            "callable": "raw",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "rationale": "Bound-argument rows at the generate.py raw() call sites: schema_name/tablename/constraint_name/constraint_schema are passed as {}-slot values, compiled to $n/? placeholders. Parameterized by construction - the safe channel.",
+          "evidence": [
+            "generate.py:483-484 schema_name, tablename as raw() args after the literal template",
+            "generate.py:657-658 constraint_name, constraint_schema as bound args",
+            "covers 11 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/apps/schema/commands/generate.py",
+            "line": 476
+          }
+        },
+        {
+          "id": "p5-snk-022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "piccolo.apps.schema.commands.generate",
+            "type": null,
+            "callable": "raw",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "rationale": "Literal-template rows at the generate.py raw() call sites: all six helpers pass constant SQL strings as the template argument (verified generate.py:476-658). The raw-SQL channel itself is real (see snk-15), but these specific call sites carry no dynamic SQL text.",
+          "evidence": [
+            "generate.py:477-482 literal 'SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = {} AND tablename = {}; '",
+            "generate.py:652-655 literal constraint-lookup template",
+            "covers 6 CSV rows (sinks); full row list in labels_raw_pass5.json"
+          ],
+          "location": {
+            "file": "piccolo/apps/schema/commands/generate.py",
+            "line": 476
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,219 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-21",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SQL_Injection\\piccolo\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the piccolo_vuln source tree. The CodeQL database piccolo-db sits INSIDE the source tree (with a piccolo-safe-db sibling copy next to it), so all exploration, file traversal, and evidence collection excluded both directories. The database metadata sourceLocationPrefix matches the explored tree (creation sha e4946d8), so file/line evidence below refers to the same snapshot the database was built from. In line with the experiment independence rules, the vendor-supplied audit artifacts shipped inside the tree (piccolo_vuln/vulnerability_audit_report.md, sql_sinks.csv, the two Chinese-named review reports at the tree root, piccolo-db/baseline-info.json) were NOT read; only first-party library source, CLI wiring, and tests-layout facts were used."
+  },
+  "target": {
+    "project": "piccolo",
+    "projectDescription": "Piccolo 1.1.0 (CHANGES.rst top entry; setup.py VERSION computed from CHANGES) - an async Python ORM library, not a web application: a Table/Column model layer, a QueryString-based parameterized SQL compiler (piccolo/querystring.py), query builders (piccolo/query/methods/*: select/insert/update/delete/objects/raw), DDL/migration machinery (piccolo/apps/migrations, piccolo/query/methods/alter.py), Postgres/SQLite/Cockroach engines over asyncpg/aiosqlite (piccolo/engine/), table reflection (piccolo/table_reflection.py), schema snapshotting/generation (piccolo/apps/schema), fixtures dump/load, a user-admin app over a BaseUser table, and a `piccolo` CLI built on the targ library (piccolo/main.py) exposing the apps as commands.",
+    "pass": 5,
+    "cwes": ["CWE-089"],
+    "focus": "SQL Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\piccolo_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (piccolo-db/codeql-database.yml)",
+      "151 .py files under piccolo/ (the library itself), 194 .py files under tests/, plus top-level piccolo_conf.py / setup.py / profiling/run_profile.py; the DB sourceLocationPrefix covers the whole tree",
+      "pyproject.toml: [tool.black] target-version py38-py310, [tool.mypy] overrides for asyncpg/aiosqlite/jinja2, [tool.pytest.ini_options] markers integration/speed"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\piccolo_vuln\\piccolo-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\piccolo_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "e4946d858e1aae1a9a4cf7714957d07983d94cde",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:21:34.779164900Z"
+    },
+    "baselineLinesOfCode": 32955,
+    "finalised": true,
+    "locationNote": "piccolo-db is nested inside the source tree, and a piccolo-safe-db copy is shipped next to it; both were excluded from all exploration and are excluded from extraction result rows via the path filter in both queries."
+  },
+  "toolchain": {
+    "qlpack": "iris/piccolo-cwe89 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (E:\\codeql)",
+    "compatibilityBasis": "API facts used by the generated queries were verified against the cached python-all 7.1.2 library sources (AstNode.getLocation().getFile(): File with getAbsolutePath()/getShortName(), Location.getStartLine(), Call.getPositionalArg/getAPositionalArg, Call.getFunc, Function.getAnArg/getName/getEnclosingScope/getScope, Parameter.getName/isSelf/getPosition, Attribute.getName/getObject, Subscript.getObject, BinaryExpr.getOp with Mod/Add, StringLiteral, Fstring, class Class, Module.getName/getFile). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name (moduleHint used instead)."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "piccolo CLI (targ)",
+          "kind": "cli",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package +0.45: 'from targ import CLI' (piccolo/main.py:4) - the only CLI framework import in the tree",
+            "route/registration +0.30: main.py:63-79 cli.register(command.callable, group_name=_app_config.app_name, aliases=command.aliases) for the 12 built-in app configs (app, asgi, fixtures, meta, migrations, playground, project, schema, shell, sql_shell, tester, user); commands are plain functions declared in piccolo/apps/*/commands/*.py and listed in each piccolo_app.py APP_CONFIG",
+            "runtime/bootstrap +0.20: piccolo/main.py main() is the `piccolo` console entrypoint (setup.py entry_points); sys.argv is read directly for the --diagnose flag (main.py:34,108)",
+            "directory/layout +0.05: piccolo/apps/*/commands/ convention across 12 apps (~61 module-level functions, CLI argv -> function parameters via targ)"
+          ]
+        },
+        {
+          "name": "asyncpg (Postgres/Cockroach driver)",
+          "kind": "db_driver",
+          "confidence": 1.0,
+          "evidence": [
+            "piccolo/engine/postgres.py:15 asyncpg = LazyLoader(\"asyncpg\", globals(), \"asyncpg\") (and cockroach.py:10); PostgresEngine._run_in_pool/_run_in_new_connection use connection.fetch(query, *args) (postgres.py:496,508), run_querystring passes the compiled template to connection.fetch (postgres.py:531), AsyncBatch.__aenter__ uses connection.cursor(template, *template_args) (postgres.py:59), connection.execute for SAVEPOINT/transaction statements (postgres.py:132,137,239)",
+            "asyncpg is loaded through LazyLoader, so it is a local name, not a resolvable module member - API-graph matching is impossible and sink matching is AST-level"
+          ]
+        },
+        {
+          "name": "aiosqlite (SQLite driver) + sqlite3 (stdlib, adapters only)",
+          "kind": "db_driver",
+          "confidence": 1.0,
+          "evidence": [
+            "piccolo/engine/sqlite.py:21 aiosqlite = LazyLoader(\"aiosqlite\", ...); _run_in_new_connection/_run_in_existing_connection use connection.execute(query, args) (sqlite.py:595,623), AsyncBatch.__aenter__ connection.execute(template, *template_args) (sqlite.py:230), _get_inserted_pk cursor.execute(f\"SELECT ... WHERE ROWID = {cursor.lastrowid}\") (sqlite.py:575)",
+            "sqlite3 (sqlite.py:7) is used ONLY for register_adapter/register_converter and sqlite_version_info - no direct sqlite3 cursor.execute channel exists in library code"
+          ]
+        },
+        { "name": "django", "confidence": 0.0, "evidence": ["no django import anywhere in the library - the Django raw-SQL channels (connection.cursor(), Manager.raw(), RawSQL(), extra()) do not exist here and no rules were fabricated for them"] },
+        { "name": "flask / fastapi", "confidence": 0.0, "evidence": ["no flask/fastapi imports in library code; piccolo is a library consumed BY web apps, it has no HTTP surface of its own"] }
+      ]
+    },
+    "selected": "python + piccolo CLI (targ) as the only external input framework; asyncpg/aiosqlite as the database driver layer",
+    "notes": "references/patterns.md and references/python.md were loaded. No framework reference file matched (django.md/flask.md/fastapi.md are inapplicable: the project is an ORM library with no HTTP layer), so source/sink shapes were derived from repository code per the WORKFLOW.md no-framework-match rule. The ORM's public query-builder API (Table.raw, WhereRaw, OrderByRaw, where/limit/offset/order_by/as_of/values/on_conflict delegates, Column comparison operators) is the trust boundary through which an embedding application's (potentially attacker-controlled) values enter SQL construction, and is modeled as the api_param source family. The QueryString class itself is the parameterized-query core: it keeps {} placeholders and args separate, and engines compile to $1/? bound parameters (querystring.py:163-192) - values passed as QueryString args are the SAFE channel, values interpolated into the template string (f-strings) are the unsafe channel."
+  },
+  "inputBoundaryInventory": {
+    "summary": "The project is an ORM library, so its external-input surface differs from a web app: (1) NO HTTP/API request surface exists in library code (documented absent, not fabricated); (2) the `piccolo` CLI (targ) maps argv onto plain function parameters - ~61 module-level functions under piccolo/apps/*/commands/ (fixture load path, migration app_name/migration_id, schema generate schema_name, user create/change_password/change_permissions username/admin flags, tester pytest_args, project/app new names...); (3) 12 interactive input() prompts (migration backwards/clean confirmations, schema_differ rename confirmations with an auto_input bypass, user create username/email/password/flags, asgi new router/server choices); (4) sys.argv reads in main.py; (5) os.environ: PICCOLO_CONF module resolution (conf/apps.py:365), tester env manipulation, sql_shell subprocess env copy - operator-level trust; (6) file input: fixtures load (open(path).read() -> load_json -> pydantic validation -> parameterized INSERTs), migration files executed via MigrationManager; (7) DB content: table reflection (TableStorage.reflect) and schema generation read table/column/constraint names from information_schema via parameterized raw queries, and those names are re-interpolated into DDL f-strings (intermediate propagation, not external input); (8) the library's public ORM API, through which the embedding application passes values (modeled as api_param). The dominant SQL execution channel is engine-layer: asyncpg connection.fetch/execute/cursor and aiosqlite connection.execute, all fed by QueryString.compile_string() output; the unsafe channel is f-string/concat template construction (LIMIT/OFFSET/AS OF/ORDER BY delegates, engine SAVEPOINT/BEGIN/ROWID statements, ALTER DDL statements, Raw/WhereRaw/OrderByRaw template arguments).",
+    "sourceFamilies": [
+      {
+        "family": "cli_command_params",
+        "evidence": [
+          "targ CLI: piccolo/main.py:4 'from targ import CLI'; :63-79 cli.register(command.callable, ...) over 12 app configs; argv -> function parameters",
+          "example commands reaching SQL/DDL: piccolo/apps/schema/commands/generate.py:912 'async def generate(schema_name: str = \"public\")' -> create_table_class_from_db -> table_class.raw(..., schema_name, tablename) (schema_name lands in a parameterized {} slot); piccolo/apps/fixtures/commands/load.py:94 'async def load(path: str = \"fixture.json\", ...)' -> open(path).read() -> load_json -> INSERT; piccolo/apps/user/commands/create.py:59 create(...) built from input() prompts; piccolo/apps/migrations/commands/forwards.py:136 / backwards.py:160 (app_name, migration_id, fake, preview) -> Migration table queries (parameterized)",
+          "path-based approximation: all module-level functions in piccolo/apps/*/commands/*.py are extracted; targ registration (piccolo_app.py APP_CONFIG.commands) is not resolved syntactically, so helper functions (e.g. get_indexes, load_json_string) are included as candidates and left for labeling to filter"
+        ]
+      },
+      {
+        "family": "interactive_input",
+        "evidence": [
+          "piccolo/apps/user/commands/create.py:10,15,18,22,28,39,50 input() prompts (username, email, password, admin, superuser, active) -> BaseUser row values (parameterized INSERT)",
+          "piccolo/apps/migrations/auto/schema_differ.py:202,278 input() rename confirmations (auto_input bypasses them); backwards.py:81,129 and clean.py:60 y/N confirmations; asgi/commands/new.py:29,35 router/server choices (file generation, not SQL)"
+        ]
+      },
+      {
+        "family": "sys_argv",
+        "evidence": [
+          "piccolo/main.py:34 'DIAGNOSE_FLAG in sys.argv'; :108 set(sys.argv) passed to the targ CLI"
+        ]
+      },
+      {
+        "family": "environment",
+        "evidence": [
+          "piccolo/conf/apps.py:365 os.environ.get(ENVIRONMENT_VARIABLE) - PICCOLO_CONF module name (operator-level trust, selects which config module is loaded, not SQL data)",
+          "piccolo/apps/tester/commands/run.py:26,29,37 os.environ set/get/del (test runner); piccolo/apps/sql_shell/commands/run.py:48 os.environ.copy() for the psql subprocess"
+        ]
+      },
+      {
+        "family": "file_input",
+        "evidence": [
+          "piccolo/apps/fixtures/commands/load.py:118-119 open(path).read() -> load_json_string -> pydantic model_validate_json -> Table instances -> parameterized INSERT (values stay in the bound-args channel)",
+          "piccolo/utils/encoding.py:30 load_json(data) (orjson/json fallback); call sites: fixtures load.py:32, engine/sqlite.py:166, query/base.py:109, query/methods/select.py:555,562, utils/pydantic.py:36",
+          "piccolo/apps/migrations/commands/new.py:54,161 open(...,'w') - file WRITES (migration scaffolding), extracted only as context, not SQL sources"
+        ]
+      },
+      {
+        "family": "orm_api_params (library trust boundary)",
+        "evidence": [
+          "Raw SQL channels: piccolo/table.py:964 Table.raw(cls, sql, *args) -> Raw(querystring=QueryString(sql, *args)); piccolo/columns/combination.py:112 WhereRaw.__init__(self, sql, *args); OrderByRaw(sql) (mixins.py:143-147) - the sql/template string argument directly becomes the SQL template",
+          "Where values: piccolo/columns/base.py:598-726 Column.is_in/not_in/like/ilike/not_like/__eq__/__lt__/__le__/__gt__/__ge__ -> Where(column, value/values) -> QueryString(template, value) - value is a BOUND arg (safe channel), but the boundary is still extracted",
+          "Clause delegates whose arguments are interpolated INTO the template (unsafe channel): piccolo/query/mixins.py:98 Limit.querystring f\" LIMIT {self.number}\"; :119 AsOf f\" AS OF SYSTEM TIME '{self.interval}'\"; :137 Offset f\" OFFSET {self.number}\"; :144-177 OrderBy/OrderByRaw f\" ORDER BY {expression} {order}\"; :608 GroupBy f\" GROUP BY {columns_names}\"; :44 DISTINCT ON; :201 RETURNING",
+          "Engine-layer string params: Engine.run_ddl(ddl) (base.py:72, postgres.py:544, sqlite.py:674), PostgresEngine._run_in_pool/_run_in_new_connection(query, args) (postgres.py:489,500), SQLiteEngine._run_in_new_connection/_run_in_existing_connection(query, args) (sqlite.py:582,607), Savepoint name -> f\"SAVEPOINT {name}\" (postgres.py:237-240, sqlite.py:414-417), rollback_to(savepoint_name) -> f\"ROLLBACK TO SAVEPOINT {self.name}\" (postgres.py:131-139, sqlite.py:311-319)",
+          "DDL name params: piccolo/query/methods/alter.py:364 rename_table(new_name); :375 rename_column(column, new_name); :391 set_column_type(old, new, using_expression) - using_expression is interpolated verbatim (alter.py:117 'query += f\" USING {self.using_expression}\"'); :493 drop_constraint(constraint_name); :560 set_schema(schema_name); QueryString.__init__(template, *args) (querystring.py:61)"
+        ]
+      },
+      {
+        "family": "schema_name_reads (dynamic table/column name propagation)",
+        "evidence": [
+          "91 reads of _meta.tablename / _meta.db_column_name in non-test library code; these names originate either from Table class definitions (developer-controlled) or from DB reflection (TableStorage.reflect / schema generate), and are interpolated into SQL templates by f-strings in select.py:786 (FROM {get_formatted_tablename()}), alter.py DDL statements, create.py DDL",
+          "piccolo/table.py _meta.get_formatted_tablename() call sites are extracted alongside the attribute reads as the direct feed point of dynamic table names into SQL text"
+        ]
+      },
+      {
+        "family": "internal_transfers (app code -> ORM SQL layer)",
+        "evidence": [
+          "piccolo/apps/schema/commands/generate.py:476,503,570,604,632,651 table_class.raw(<literal template>, schema_name, tablename) - schema_name originates from the generate(schema_name) CLI param; lands in parameterized {} slots",
+          "piccolo/apps/user/tables.py:131,210,235 and apps/user/commands/change_permissions.py:29,49 .where(<Where expr built from username>) - username originates from CLI args/input(); the comparison value rides the bound-args channel",
+          "piccolo/apps/migrations/tables.py:23-25 .order_by/.where with column refs; fixtures load.py on_conflict via insert queries"
+        ]
+      }
+    ],
+    "absentInputChannels": [
+      "No HTTP request surface: no request.GET/POST/body, no route parameters, no web framework handlers exist in library code (the README targets FastAPI/Flask/Django integration but none is bundled). No http_* source families were emitted.",
+      "No message-queue/task-queue consumers (no celery/rq/dramatiq imports).",
+      "Config values (piccolo_conf.py DB engine config, engine.config.get('host'/'user'/...) reads in sql_shell) are operator-level configuration, not attacker input; recorded here, not emitted as source rows."
+    ]
+  },
+  "sinkInventory": {
+    "summary": "The final SQL execution layer is entirely inside piccolo/engine/: asyncpg connection.fetch(query, *args) / connection.execute(statement) / connection.cursor(template, *template_args) for Postgres+Cockroach, and aiosqlite connection.execute(query, args) / cursor.execute(statement) for SQLite. Everything above it is SQL construction: QueryString templates (parameterized {} placeholders compiled to $n/? bound parameters), DDL string assembly (f-strings in alter.py/create.py), and engine-internal statement f-strings (SAVEPOINT/BEGIN/ROLLBACK TO SAVEPOINT/PRAGMA/ROWID lookup). The dangerous sink modeling target is the SQL text argument (positional index 0) of the execution calls; the bound-parameter channels (asyncpg *args after the query, aiosqlite execute(query, args) argument 1) are extracted separately so parameterized calls are distinguishable from text injection.",
+    "sqlExecutionMembers": {
+      "observed": [
+        "connection.fetch (asyncpg) - postgres.py:41 (cursor.fetch batch), 496 (_run_in_pool), 508 (_run_in_new_connection), 531 (transaction connection, run_querystring), 553 (run_ddl) - SQL text at positional arg 0",
+        "connection.execute (asyncpg) - postgres.py:132,137 (ROLLBACK TO/RELEASE SAVEPOINT), 239 (SAVEPOINT) - SQL text at positional arg 0",
+        "connection.cursor (asyncpg) - postgres.py:59 (AsyncBatch.__aenter__, template at arg 0)",
+        "connection.execute (aiosqlite) - sqlite.py:230 (AsyncBatch template), 312,317 (savepoint stmts), 392 (BEGIN), 395 (COMMIT), 399 (ROLLBACK), 416 (SAVEPOINT), 564,592,620 (PRAGMA), 595,623 (query, args) - SQL text at positional arg 0, bound args at arg 1",
+        "cursor.execute (aiosqlite cursor) - sqlite.py:575 (_get_inserted_pk f-string SELECT) - SQL text at positional arg 0"
+      ],
+      "notObserved": [
+        "cursor.executemany, cursor.executescript, cursor.callproc - no occurrences in non-test library code; no rules emitted for them",
+        "psycopg / psycopg2 / SQLAlchemy text() / from_statement() / executescript - not imported anywhere; no rules emitted",
+        "django channel (connection.cursor() from django.db, Manager.raw(), RawSQL(), QuerySet.extra(), from_statement()) - project does not use Django; no rules emitted",
+        "direct sqlite3 DB-API usage (sqlite3.connect(...).execute) - the stdlib sqlite3 module is used only for register_adapter/register_converter/sqlite_version_info in engine/sqlite.py"
+      ]
+    },
+    "rawSqlChannels": {
+      "observed": [
+        "Table.raw(cls, sql, *args) - piccolo/table.py:964-979 -> Raw -> Query._run (query/base.py:176-192) -> engine.run_querystring -> connection.fetch/execute; SQL template is positional arg 0, bound args are args 1+",
+        "WhereRaw(sql, *args) - piccolo/columns/combination.py:109-131; OrderByRaw(sql) - piccolo/query/mixins.py:143-147 (docstring-only usage in library code: select.py:594)",
+        "QueryString(template, *args) - 57 non-test call sites; the template argument (positional 0) is the SQL-structure carrier"
+      ]
+    },
+    "dynamicSqlConstruction": {
+      "observed": [
+        "QueryString f-string templates: mixins.py:44 (DISTINCT ON), 98 (LIMIT), 119 (AS OF SYSTEM TIME), 137 (OFFSET), 177 (ORDER BY), 201 (RETURNING), 608 (GROUP BY); table.py:811 (insert VALUES row); column_types.py:143-148 (comparison column templates); drop_index.py:38; indexes.py:31 (PRAGMA index_list)",
+        "Engine statement f-strings fed directly to execution calls: postgres.py:239 f\"SAVEPOINT {name}\", sqlite.py:312-318 f\"ROLLBACK TO SAVEPOINT {self.name}\"/f\"RELEASE SAVEPOINT {self.name}\", sqlite.py:392 f\"BEGIN {self.transaction_type.value}\", sqlite.py:416 f\"SAVEPOINT {name}\", sqlite.py:575-577 f\"SELECT {pk} FROM {tablename} WHERE ROWID = {cursor.lastrowid}\" (interpolates a dynamic tablename), postgres.py:403 f'CREATE EXTENSION IF NOT EXISTS \"{extension}\"'",
+        "SQL assembly by += then QueryString(query, *args): select.py:778-825 (SELECT ... FROM/joins/WHERE/GROUP BY/ORDER BY/LIMIT/OFFSET), mixins.py:676-696 (ON CONFLICT ... SET \"col\"={}); captured via the dynamic_sql_template family (non-literal QueryString template argument) and via construction nodes inside SQL-producing functions (default_querystrings/*_ddl/...)",
+        "DDL f-string statements: alter.py (RENAME TO / RENAME COLUMN / DROP COLUMN / ADD COLUMN / ALTER COLUMN ... TYPE ... USING {using_expression} / SET DEFAULT / ADD UNIQUE / DROP CONSTRAINT / ADD CONSTRAINT ... REFERENCES / SET VARCHAR(length)), create.py (CREATE TABLE), migrations auto DDL; these strings flow to Engine.run_ddl",
+        "template.format(name=..., value='{}', values='{}') in Where.querystring (combination.py:210-218) - a .format() construction whose result is the QueryString template"
+      ]
+    },
+    "safeChannelNotes": [
+      "QueryString.compile_string (querystring.py:163-192) keeps args out of the SQL text: postgres/cockroach get $1..$n placeholders, sqlite gets ? placeholders - values passed as QueryString args are bound parameters, NOT SQL text",
+      "Where values, insert row values, fixture data, user-admin values all ride the bound-args channel; the bound_params sink family records this channel separately so parameterized calls are not flagged as text injection",
+      "QueryString.__str__ (querystring.py:93-122) interpolates values into a display string via template.format - it is documentation/debug output, never executed; it is deliberately NOT a sink family"
+    ]
+  },
+  "extractionQueries": {
+    "sources": "iris/extraction/sources.ql - 10-column contract identical to the arches/django runs: node, role('source_candidate'), callable, flow_kind, receiver, moduleHint, arg_index, file, line, match_kind",
+    "sinks": "iris/extraction/sinks.ql - same 10-column contract with role 'sink_candidate'",
+    "executionMode": "codeql query run + codeql bqrs decode (NOT database analyze / SARIF); plain multi-column select queries with no @kind problem metadata - a problem-shaped query is the wrong shape for candidate tables and no @kind table is assumed to exist",
+    "excludedPaths": "/tests/, /piccolo-db/, /piccolo-safe-db/, /piccolo_migrations/ (generated migration code), /docs/ (no Python)"
+  },
+  "uncoveredCases": [
+    "LazyLoader dynamic imports: asyncpg/aiosqlite are assigned to local names at import time (postgres.py:15, sqlite.py:21, cockroach.py:10), so API-graph resolution of connection.fetch/execute/cursor to library APIs is impossible; ALL sink rows are AST-level (match_kind 'ast') and receiver-name-based, with receiver-collision noise left to labeling",
+    "Method-name-based ORM API matching: api_param/internal_transfer families match (enclosing class name, method name) pairs; subclass overrides, monkey-patching, and dynamic dispatch through self.* proxies (e.g. FrozenQuery.__getattr__) are not traced",
+    "Keyword-argument transfers (e.g. Savepoint(name=...), OnConflictItem(target=...), SetColumnType(using_expression=...)) are not captured by the positional internal_transfer family; dataclass __init__s (OrderByRaw.sql, SetColumnType.using_expression, Readable.template) are generated code with no AST parameter node - they are only observable at their consumption sites (SQL-producing functions)",
+    "targ CLI registration is not resolved: command functions are approximated by file path (piccolo/apps/*/commands/*.py, module-level functions); helpers defined in the same files are included as candidates",
+    "Cross-function SQL assembly: strings built in one function and passed to QueryString/execute in another (select.py default_querystrings query += ...) are captured only at the final construction point (dynamic_sql_template) and via construction nodes inside SQL-producing function names (default_querystrings, *_querystrings, ddl, *_ddl, _get_joins); other intermediate assignments are not tracked at extraction time (taint tracking in Phase 2 handles propagation)",
+    "DB reflection results (TableStorage.tables, RowMeta fields in schema generate) enter SQL construction as schema names; the schema_name family captures the read points (_meta.tablename / _meta.db_column_name / get_formatted_tablename()) but no taint step from reflection queries to those names is modeled yet",
+    "JsonOperator / call_chain SQL fragments in column_types.py and select.py build column-path strings dynamically; only the f-string construction nodes inside SQL-producing functions capture them"
+  ],
+  "referencesLoaded": [
+    "WORKFLOW.md (pass table: pass 5 = CWE-089 SQL Injection, Pass5_SQLInjection.ql; extraction contract in section 4.3)",
+    "references/patterns.md (cross-language rosetta stone, source/sink families, SQL bind-param sanitizer guidance)",
+    "references/python.md (Python imports, extraction focus, decorator/string-literal pitfalls, over-broad source warning)",
+    "assets/extraction/python_sources.ql.tmpl and python_sinks.ql.tmpl (starter contracts - stubs, bodies generated from repo evidence)",
+    "references/django.md, flask.md, fastapi.md were NOT loaded: no matching framework detected (ORM library, no HTTP layer)"
+  ]
+}
