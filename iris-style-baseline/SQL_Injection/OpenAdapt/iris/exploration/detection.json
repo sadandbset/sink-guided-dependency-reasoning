@@ -1,0 +1,233 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-20",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SQL_Injection\\OpenAdapt\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the OpenAdapt_vuln source tree. The CodeQL database OpenAdapt-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded OpenAdapt-db. The database metadata sourceLocationPrefix matches the explored tree (creation sha 0a0208e), so file/line evidence below refers to the same snapshot the database was built from."
+  },
+  "target": {
+    "project": "openadapt",
+    "projectDescription": "OpenAdapt 0.1.0 (pyproject.toml [tool.poetry]) - 'GUI Process Automation with Transformers': a desktop app that records GUI activity (screenshots, keyboard/mouse ActionEvents, WindowEvents) into a local SQLite database via SQLAlchemy 1.4.43 ORM/Core, replays them with strategies (NaiveReplayStrategy, StatefulReplayStrategy, ...), scrubs PII/PHI with presidio, and offers a nicegui 1.2.16 native desktop UI (openadapt/app) for recording, DB import/export (bz2-compressed SQLite files) and visualization. Alembic 1.8.1 manages the schema; python-fire 0.4.0 provides the CLI (record/replay/share/scrub/utils entry points). The audit target is the data access layer (openadapt/crud.py, openadapt/db.py, openadapt/models.py), the app UI (openadapt/app), the recorders (openadapt/record.py, events.py) and the CLI entry points.",
+    "pass": 5,
+    "cwes": ["CWE-089"],
+    "focus": "SQL Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\OpenAdapt_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (OpenAdapt-db/codeql-database.yml)",
+      "the database source archive (src.zip) covers 53 .py files: 38 under openadapt/, 9 under alembic/, 5 under tests/, plus setup.py",
+      "pyproject.toml declares python 3.10.x and poetry packaging; pyproject scripts visualize/record/replay/app point at openadapt.* modules"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\OpenAdapt_vuln\\OpenAdapt-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\OpenAdapt_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "0a0208ee5d405492fc476025874aa2265ee3bce6",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:21:21.565013200Z"
+    },
+    "baselineLinesOfCode": 4868,
+    "finalised": true,
+    "locationNote": "OpenAdapt-db is nested inside the source tree; it was excluded from all exploration and will be excluded from extraction result rows via the path filter in both queries. The database snapshot also covers tests/ (5 files), so both queries filter /OpenAdapt-db/ and /tests/ paths; candidate rows therefore come from openadapt/ (minus tests), alembic/ and setup.py only. Note: sql_sinks.csv and a Chinese-language audit report (漏洞审查报告.md) exist at the OpenAdapt_vuln repo root - they are treated as ground-truth-like artifacts and were NOT opened (see constraintsHonored)."
+  },
+  "toolchain": {
+    "qlpack": "iris/openadapt-cwe89 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (recorded from OpenAdapt-db/codeql-database.yml creationMetadata.cliVersion; `codeql version` was not executed in this round because the task contract defers all CodeQL invocation)",
+    "compatibilityBasis": "API facts used by the generated queries were cross-checked against the cached python-all 7.1.2 library sources: AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), Call.getFunc/getPositionalArg, Function.getAnArg/getName/getEnclosingScope, Parameter.getName/isSelf/getPosition (semmle/python/Function.qll:283/286/280), Attribute.getName/getObject, Subscript.getObject, BinaryExpr.getOp with Mod/Add, StringLiteral (semmle/python/Exprs.qll:535), Fstring (semmle/python/Exprs.qll:627), Assign.getATarget()/getValue() (semmle/python/AstGenerated.qll class Assign_ : Expr getATarget(), Expr getValue()), Dict.getAValue() (semmle/python/Exprs.qll:379), class Class. The two queries reuse the structural shapes already proven on this same CLI + pack combination in the arches/django CWE-89 runs of this series (moduleHintOf/receiverHint/receiverHintOfCall/calledNameOf helpers, bindingset[path] excludedPath, AST-cast matching with unbound receivers, no QL classes, no API::Node-to-DataFlow::Node assignment, moduleHint variable naming instead of `module`). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name. No template placeholders remain. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "nicegui (desktop UI framework, native mode)",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package +0.45: `from nicegui import app, ui` (openadapt/app/main.py:5), `from nicegui import ui` (openadapt/app/cards.py:2, openadapt/app/util.py:5, openadapt/app/objects/local_file_picker.py:6); nicegui 1.2.16 pinned in pyproject.toml",
+            "route/decorator +0.30: widget/event-handler registrations - ui.input(...) (cards.py:44), ui.button(...).on_click / ui.icon(...).on(\"click\", ...) (main.py:36-46, cards.py:28-33), ui.dialog (cards.py:11, 26, 42), ui.switch (cards.py:12), ui.checkbox (cards.py:35)",
+            "runtime/bootstrap +0.20: ui.run(title=\"OpenAdapt Client\", native=True, ...) (main.py:72-78) - native mode runs the UI in a local desktop webview (loopback), NOT a network HTTP server; app.native.window_args/start_args (main.py:17-18)",
+            "directory/layout +0.05: openadapt/app/{main,cards,util}.py + openadapt/app/objects/{console,local_file_picker}.py"
+          ]
+        },
+        {
+          "name": "python-fire CLI",
+          "kind": "cli",
+          "confidence": 0.75,
+          "evidence": [
+            "import/package +0.45: `import fire` in record.py:22, replay.py:6, scrub.py:21, share.py:13, utils.py:5; fire 0.4.0 pinned",
+            "route/registration +0.30: 8 fire.Fire(...) registration sites - fire.Fire(record) (record.py:647, 651), fire.Fire(replay) (replay.py:50, 54), fire.Fire({\"send\": send_recording, \"receive\": receive_recording}) (share.py:106), fire.Fire(get_functions(__name__)) dynamic (scrub.py:281, utils.py:508, 525)",
+            "pyproject console scripts: record = openadapt.record:start, replay = openadapt.replay:start, app = openadapt.app.main:run_app, visualize = openadapt.visualize:main"
+          ]
+        },
+        {
+          "name": "sqlalchemy (data access layer - listed for context, not an input framework)",
+          "kind": "data-layer",
+          "confidence": null,
+          "evidence": [
+            "sqlalchemy 1.4.43 pinned; `import sqlalchemy as sa` (db.py:1, crud.py:8, models.py:7); Session/declarative_base setup in openadapt/db.py:51-53; ORM query chains db.query(...).filter(...) in crud.py; Core insert db.execute(sa.insert(table), to_insert) at crud.py:48; engine.begin() connection.execute(sql) at crud.py:180",
+            "no fastapi/flask/django/tornado/aiohttp imports anywhere in the project source: the nicegui app is the only UI surface and it runs in native desktop mode; NO HTTP request objects, NO route handlers receiving request data, and NO request/response API exist in the analyzed code (nicegui's FastAPI/Socket.IO internals live in the library, which is not part of the CodeQL database)"
+          ]
+        }
+      ]
+    },
+    "selected": "nicegui native desktop UI (primary, confidence 1.0 - the only user-facing input surface; local webview, not a network boundary) + python-fire CLI (0.75)",
+    "notes": "references/python.md and references/patterns.md were loaded. There is no nicegui reference in augur-0.3.0/references/ (checked: aspnet, csharp, django, echo, express, fastapi, flask, gin, go, java, javascript, patterns, python, spring only); django.md/flask.md/fastapi.md were NOT loaded because no django/flask/fastapi imports or routes exist in the project source. python.md's source families were remapped onto this project's actual boundaries: instead of HTTP request input, the external input surfaces are nicegui widget input (ui.input), the local file picker (LocalFilePicker), fire CLI parameters, and file/env/config reads; python.md's SQL sink family (cursor.execute / ORM raw SQL) maps onto this project's two execute call sites (SQLAlchemy Session.execute and engine Connection.execute)."
+  },
+  "inputBoundaryInventory": {
+    "summary": "OpenAdapt is a local desktop application, so input boundaries are UI events, CLI arguments, files and configuration - there is NO HTTP/API request surface in the analyzed code (recorded as not observed). The trust-relevant boundaries are: (1) the nicegui recording-name prompt - ui.input (openadapt/app/cards.py:44-49) captures free text; the entered name is concatenated into a shell command `Popen(\"python3 -m openadapt.record \" + name, shell=True)` (cards.py:76-79) which spawns the record CLI, whose fire-registered record(task_description) parameter (openadapt/record.py:507-508) stores the text as Recording.task_description in the DB via create_recording -> crud.insert_recording (parameterized ORM insert); (2) the nicegui import dialog - LocalFilePicker returns a user-chosen file path (cards.py:21-24, local_file_picker.py:87-91 msg[\"args\"][\"data\"][\"path\"]) and on_import(selected_file) (openadapt/app/util.py:20-28) bz2-decompresses that file over openadapt.db, which makes the ENTIRE database content (including recording.platform and recording.task_description) attacker-controllable through an imported file; (3) the fire CLI - record/replay/share/send/receive entry points take task_description/strategy_name/timestamp/recording_id/wormhole_code (record.py:507, replay.py:20, share.py:70/86); `python -m openadapt.share send --recording_id=N` drives the export chain that reaches raw SQL execution; dynamic fire.Fire(get_functions(__name__)) registrations (scrub.py:281, utils.py:508/525) expose every public function of those modules as CLI commands (not statically resolvable); (4) files - open() (config .env reads in config.py:37, crud.py:167/:170 env-file rewrite, app/main.py:30 logo, app/build.py:23 spec, app/util.py:21/:36 db files) and bz2.BZ2File (app/util.py:22/:37, the DB import/export channel); (5) environment/config - os.getenv (config.py:146), python-dotenv load_dotenv/find_dotenv (config.py:23-24), read_env_file (config.py:27-47) and ~42 config.<ATTR> reads (operator-level trust: DB_URL, DB_FNAME, SCRUB_*, OPENAI_API_KEY consumed across the package); (6) the database itself - recordings read back via ORM (get_recording_by_id, get_latest_recording, _get) expose DB-derived values (recording.platform, recording.task_description etc.) whose reads are concentrated in crud.py:142 (inside the raw-SQL f-string), record.py:521, utils.py:309-370, visualize.py:149/248-249. The dominant SQL execution channels are exactly two: db.execute(sa.insert(table), to_insert) (crud.py:48, SQLAlchemy Core parameterized insert used by the event writers) and connection.execute(sql) (crud.py:180, engine.begin() over a RAW SQL STRING built by export_sql's f-string at crud.py:142 from DB-derived recording values - the injection-shaped channel). The ORM chains db.query(...).filter(...)/.order_by(...)/.filter_by(...) (crud.py:103-246) and db.add/commit/refresh (crud.py:112-114) compile to parameterized SQL and are not raw-SQL sinks.",
+    "sourceFamilies": [
+      {
+        "family": "ui_input_widget",
+        "evidence": [
+          "openadapt/app/cards.py:44-49 recording_prompt: ui.input(label=\"Name\", placeholder=\"test\", autocomplete=options, on_change=lambda e: result.set_text(e)) - the ONLY text input widget in the project; the typed text becomes the recording name/task description",
+          "openadapt/app/cards.py:21 `result = await LocalFilePicker(\".\")` and openadapt/app/objects/local_file_picker.py:101 `result = await LocalFilePicker(\"~\", multiple=True)` - the file-picker dialog returning user-selected file paths (used by the import flow)",
+          "ui.switch (cards.py:12, dark mode) and ui.checkbox (cards.py:35, delete-after-import flag) are boolean settings toggles, not data inputs - not emitted"
+        ]
+      },
+      {
+        "family": "ui_event_payload",
+        "evidence": [
+          "openadapt/app/objects/local_file_picker.py:87 self.path = Path(msg[\"args\"][\"data\"][\"path\"]) inside handle_double_click(msg) - nicegui grid event message subscript read; the innermost msg[\"args\"] subscript is emitted as the boundary node"
+        ]
+      },
+      {
+        "family": "cli_fire",
+        "evidence": [
+          "8 fire.Fire registration sites: record.py:647 `fire.Fire(record)` (inside start()), record.py:651 (__main__), replay.py:50/54 `fire.Fire(replay)`, share.py:106 fire.Fire({\"send\": send_recording, \"receive\": receive_recording}), scrub.py:281 / utils.py:508 / utils.py:525 fire.Fire(get_functions(__name__)) - dynamic registrations whose targets cannot be resolved statically (see uncoveredCases)",
+          "resolvable registered functions and their parameters: record(task_description) (record.py:507-508, position 0), replay(strategy_name, timestamp=None) (replay.py:20-22, positions 0/1), send_recording(recording_id) (share.py:70, position 0 - drives export_recording_to_folder -> crud.export_recording -> export_sql -> create_db -> connection.execute(sql)), receive_recording(wormhole_code) (share.py:86, position 0)",
+          "openadapt/app/cards.py:76-79 Popen(\"python3 -m openadapt.record \" + name, shell=True) - the UI spawns the record CLI with the user-entered name; emitted as a cli_spawn row marking the UI->CLI bridge (the shell-concat itself is a Pass-2 command-injection shape, out of Pass-5 scope but recorded as propagation context)",
+          "fixed-argument process calls NOT emitted (constant commands): os.system(\"alembic upgrade head\") (crud.py:176), run([\"alembic\", \"upgrade\", \"head\"]) (scripts/reset_db.py:18), wormhole send/receive list-arg calls (share.py:61/93)"
+        ]
+      },
+      {
+        "family": "file_input",
+        "evidence": [
+          "openadapt/app/util.py:20-28 on_import(selected_file): `with open(src, \"wb\") as f: with bz2.BZ2File(selected_file, \"rb\") as f2: copyfileobj(f2, f)` - decompresses a user-chosen bz2 file ONTO openadapt.db, replacing the whole database (DB-content trust boundary); the selected path comes from LocalFilePicker via select_import (cards.py:19-37, import_button on_click=lambda: f(selected_file.text, delete.value))",
+          "open() sites: config.py:37 (read_env_file .env), crud.py:167 (env file read) and :170 (env file write), app/main.py:30 (logo.png read), app/build.py:23 (OpenAdapt.spec), app/util.py:21/:36 (openadapt.db read/write)",
+          "bz2.BZ2File sites: app/util.py:22 (import channel), :37 (export channel); copyfileobj: app/util.py:23/:38",
+          "content reads: app/main.py:30 open(...).read(), crud.py:168 f.readlines(); Image.open(buffer) (models.py:246) reads image bytes from a DB-derived buffer"
+        ]
+      },
+      {
+        "family": "db_read_recording_columns",
+        "evidence": [
+          "openadapt/crud.py:142 export_sql: sql = f\"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')\" - 8 DB-derived column reads interpolated into a raw SQL string; recording.task_description and recording.platform are string columns populated from the UI/CLI input and from imported DB files",
+          "other recording.<column> reads: crud.py:227/231/246 (recording.timestamp into _get filters), record.py:521, utils.py:309/310/369/370 (monitor dims), visualize.py:149 (scrub.scrub_text(recording.task_description)), visualize.py:248/249 (recording.id)",
+          "the Recording model columns are declared at openadapt/models.py:27-34 (id, timestamp, monitor_width, monitor_height, double_click_interval_seconds, double_click_distance_pixels, platform, task_description)"
+        ]
+      },
+      {
+        "family": "config_env",
+        "evidence": [
+          "~42 config.<ATTR> reads across openadapt/ (cache.py 3, crud.py 8, models.py 3, record.py 1, scripts/reset_db.py 2, scrub.py 13, share.py 2, strategies/mixins/openai.py 3, strategies/naive.py 1, utils.py 5, visualize.py 1) - operator-level trust (config.DB_URL/DB_FNAME drive the DB engine; config.ENV_FILE_PATH is read/written by create_db)",
+          "config.py:23-24 find_dotenv()/load_dotenv(); config.py:27-47 read_env_file(file_path) with open()/line parsing; config.py:49 DB_FNAME = env_vars.get(\"DB_FNAME\"); config.py:146 os.getenv(var_name) in getenv_fallback - operator-level environment trust, not attacker input"
+        ]
+      },
+      {
+        "family": "internal_transfer_to_sql_layer",
+        "evidence": [
+          "wrapper functions whose bodies directly execute SQL: _insert (openadapt/crud.py:30-53, body contains db.execute(sa.insert(table), to_insert) at :48) and create_db (openadapt/crud.py:150-184, body contains connection.execute(sql) at :180)",
+          "call sites handing values into _insert: crud.py:62 (insert_action_event: _insert(event_data, ActionEvent, action_events)), :71 (insert_screenshot), :80 (insert_window_event), :94 (insert_perf_stat) - event_data carries recorded GUI event data (keyboard/mouse text, window titles) from record.py's multiprocessing writers",
+          "call site handing values into create_db: crud.py:209 create_db(recording_id, sql) inside export_recording - argument 1 is the raw SQL string built by export_sql (crud.py:208) - the DB-content -> raw-SQL hand-off",
+          "export_sql itself (crud.py:126-147) does NOT execute SQL (it only builds the string), so the export_sql(recording_id) call at crud.py:208 is not an internal_transfer row; its output is captured at the create_db argument row and its inputs at the db_read rows"
+        ]
+      }
+    ],
+    "sinkFamilies": {
+      "channelInventory": {
+        "sessionExecuteCoreInsert": "openadapt/crud.py:48 result = db.execute(sa.insert(table), to_insert) inside _insert - SQLAlchemy 1.4 Session.execute with a Core insert statement at argument 0 and the row-value list at argument 1; values are bound by the Core layer (parameterized channel), the statement object is constructed at the call site (sa.insert)",
+        "connectionExecuteRawString": "openadapt/crud.py:179-180 with engine.begin() as connection: connection.execute(sql) inside create_db - SQLAlchemy Connection.execute with a RAW SQL STRING at argument 0; the string is the f-string built by export_sql (crud.py:142) from DB-derived recording values and reaches this call as create_db's sql parameter (crud.py:209) - the only injection-shaped execution channel in the project",
+        "sqlObjectConstruction": "openadapt/crud.py:48 sa.insert(table) - SQLAlchemy Core statement construction call (module alias sa, member insert), directly executed as argument 0 of db.execute; recorded as a candidate intermediate node with its direct execution relationship",
+        "dynamicSqlConstruction": "openadapt/crud.py:142 f\"INSERT INTO recording VALUES ({recording.id}, ..., '{recording.platform}', '{recording.task_description}')\" assigned to the local variable `sql` - string-interpolated SQL fragment (no quoting/escaping of string columns); executed cross-function via export_recording -> create_db -> connection.execute",
+        "ormParameterized": "db.query(Recording).filter_by(id=recording_id) (crud.py:123), db.query(...).filter(...).order_by(...).all() (crud.py:103-107, 219-223), db.add/db.commit/db.refresh (crud.py:112-114) - SQLAlchemy ORM compiled-to-parameterized-SQL channels, NOT raw-SQL sinks",
+        "alembicMigrations": "alembic/versions/*.py contain only add_column/alter_column style ops (op/sa column definitions, no op.execute/text calls); alembic/env.py's execute reference is a docstring - no project-level SQL execution in the migration tree; os.system(\"alembic upgrade head\") (crud.py:176) runs migrations via shell (Pass-2 shape, not a Pass-5 sink)",
+        "absentChannels": "NOT OBSERVED in this snapshot: DB-API cursor.execute/executemany/executescript/callproc (no cursor objects anywhere; the DB-API cursor lives inside the sqlalchemy/sqlite3 driver, which is not part of the database), SQLAlchemy text()/from_statement(), Query.raw()/extra() (no Django), psycopg/psycopg2, mogrify, connection-level executescript, raw string execution anywhere else. No sink rules were fabricated for these; they are recorded here as absent."
+      },
+      "dynamicSqlSites": [
+        "openadapt/crud.py:142 (crud.py, export_sql): f-string SQL INSERT with 8 interpolated recording columns, two of them quoted only by literal single quotes ('{recording.platform}', '{recording.task_description}') - the only dynamic SQL construction in the project (config.py:61/159 f\"sqlite:///{DB_FPATH}\" are connection URLs, not SQL)"
+      ],
+      "parameterizedSites": "openadapt/crud.py:48 db.execute(sa.insert(table), to_insert) - Core insert with bound values; all ORM chains in crud.py:103-246 - parameterized by construction. These carry companion bound_params rows / are not modeled as raw-SQL sinks.",
+      "sanitizingShapes": "None observed on the export_sql/create_db path: the f-string at crud.py:142 performs no escaping/quoting of interpolated values (contrast with Django's quote_name pattern). The import path (on_import) performs no validation of the bz2 content beyond decompression. These are recorded as context for the labeling/filtering stages; sanitizer modeling is not part of this extraction round."
+    },
+    "nonVulnerabilityNote": "The raw-SQL execution chain (export_sql f-string -> create_db connection.execute) is driven by DB-derived recording values whose ultimate origins are (a) the UI/CLI task_description text (user-controlled, cards.py:44 -> Popen -> record CLI -> ORM insert) and (b) entire imported database files (on_import overwrites openadapt.db with a user-chosen bz2 file, app/util.py:20-28). Whether these origins constitute a realistic attacker boundary for a local desktop app is a labeling/triage decision - the chain is recorded as a candidate, not presumed vulnerable. The Core insert path (crud.py:48) is parameterized. No HTTP request path exists in the analyzed code.",
+    "propagationChains": [
+      "UI text -> SQL: ui.input name (cards.py:44) -> Popen(\"python3 -m openadapt.record \" + name) (cards.py:76) -> fire record(task_description) (record.py:507) -> create_recording (record.py:432) -> crud.insert_recording (crud.py:110, ORM parameterized) -> Recording.task_description in DB",
+      "DB import -> DB content: LocalFilePicker (cards.py:21 / local_file_picker.py:87) -> on_import(selected_file) (util.py:20) -> bz2.BZ2File -> copyfileobj -> openadapt.db replaced - DB content becomes untrusted",
+      "DB content -> raw SQL: share send --recording_id (share.py:70) -> export_recording_to_folder (share.py:32) -> crud.export_recording (crud.py:199) -> get_recording_by_id (crud.py:122, ORM read) -> recording.<columns> (crud.py:142) -> f-string sql -> create_db(recording_id, sql) (crud.py:209) -> connection.execute(sql) (crud.py:180)",
+      "Recorded events -> parameterized SQL: record.py writers -> crud.insert_* -> _insert -> db.execute(sa.insert(table), to_insert) (crud.py:48)"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution is deferred to the next round per the task contract (generation only).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO row is expected to resolve at API level: the only SQL APIs (sa.insert, Session/Connection execute) live in the sqlalchemy library which is NOT part of the CodeQL database, so import chains cannot resolve to library modules; nicegui widgets (ui.input) and fire.Fire are likewise external library calls with no in-snapshot module. The column is kept for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, name conventions). The execute-member matching is receiver-name-agnostic (any <obj>.execute(...) matches): both observed sites are SQLAlchemy execute calls (db = Session() at crud.py:23, connection from engine.begin() at crud.py:179), but the query cannot prove receiver identity; name-collision noise is possible and is left to the labeling step."
+    },
+    "flowKinds": {
+      "sources": ["ui_input", "ui_event", "cli", "cli_spawn", "file", "db_read", "config", "env", "internal_transfer"],
+      "sinks": ["sql_text", "bound_params", "sql_percent_format", "sql_format_call", "sql_fstring", "sql_concat", "internal_sql_wrapper", "sql_object_construction"]
+    },
+    "exclusions": [
+      "paths containing /tests/ (5 files of the database snapshot; excluded per the workflow noise rules)",
+      "/OpenAdapt-db/ (the CodeQL database directory nested inside the source tree)"
+    ],
+    "expectedVolume": "roughly 100-125 source rows (ui_input 3, ui_event 1, cli: 8 fire.Fire rows + 5 registered-function parameter rows + 1 Popen row, file ~14, db_read ~19, config ~44, env 3, internal_transfer 14: four _insert call sites x 3 positional args + one create_db call site x 2) and roughly 9-12 sink rows (2 execute sql_text rows, 1 bound_params row, ~4 construction rows - the crud.py:142 f-string via the sql-variable assignment shape plus 3 non-SQL f-strings inside create_db caught by the inside-SQL-function shape, 2 internal_sql_wrapper rows, 1 sql_object_construction row). Tiny volumes are expected and honest: this is a ~4.9k LOC application with exactly two SQL execution call sites, in line with the task contract that absent families are recorded rather than fabricated."
+  },
+  "uncoveredCases": [
+    "Dynamic fire registrations: fire.Fire(utils.get_functions(__name__)) (scrub.py:281) and fire.Fire(get_functions(__name__)) (utils.py:508, 525) expose every public function of those modules as CLI commands at runtime (inspect.getmembers over sys.modules); their targets cannot be resolved statically, so their parameters are NOT emitted as cli rows. Only the fire.Fire call nodes themselves are emitted.",
+    "No HTTP/API request boundary exists in the analyzed code: nicegui runs in native desktop mode and its FastAPI/Socket.IO server internals live in the nicegui library, which is not part of the CodeQL database. UI event handler closures (on_change=lambda e: ...) and their lambda parameters are not modeled directly; the ui.input widget call node is the emitted boundary instead.",
+    "UI label/checkbox value reads (selected_file.text, delete.value in cards.py:32) are not emitted as separate families: selected_file.text is the import file path (path-shaped, Pass-1 relevance) and delete.value is a boolean flag; the file content itself enters via the file family (open/bz2.BZ2File/copyfileobj).",
+    "Name-based matching caveats: fireRegisteredFunction resolves registered functions by bare name (record/replay/send_recording/receive_recording are unique module-level names in this snapshot, so no false positives here, but the shape is name-based); db_read rows match any <obj named recording>.<column-name> attribute read regardless of the object's actual origin (strategy constructors also receive a `recording` parameter); internal SQL wrapper resolution (callsSqlWrapper) is name-only and subject to dynamic dispatch ambiguity.",
+    "export_sql is NOT an internal SQL wrapper (its body builds the string but does not execute it): the export_sql(recording_id) call at crud.py:208 is not an internal_transfer row, and cross-function value flow (export_sql's return -> local sql -> create_db argument 1 -> connection.execute) is not traced at extraction time; the chain is instead covered by the db_read rows at crud.py:142 (inputs), the sql_fstring construction row (the string), the create_db internal_sql_wrapper row and the create_db argument-1 transfer row at crud.py:209 (the hand-off), and the sql_text row at crud.py:180 (the execution).",
+    "The construction family's inside-SQL-function condition (b) intentionally also captures non-SQL f-strings located inside functions that directly execute SQL (create_db's f\"recording_{recording_id}.db\", f\"{config.ENV_FILE_PATH}-{t}\", f\"DB_FNAME={db_fname}\\n\" at crud.py:161/164/169) - these are filename/env-line constructions, expected as candidate noise for the labeling step to reject; %-format/.format/concat construction subshapes exist in the query but produce no rows in this snapshot (no such sites observed).",
+    "Keyword-argument hand-offs into SQL wrapper functions are not captured by internal_transfer (positional arguments only, positions 0-9).",
+    "API-level (ApiGraphs) resolution is not attempted: sqlalchemy, nicegui, fire, bz2 and dotenv are external libraries not included in the CodeQL database, so no row can resolve at API level; all rows are match_kind 'ast'.",
+    "The ORM query chains (db.query/filter/order_by/add/commit/refresh) and the alembic ops tree are not extracted as sinks (parameterized/compiled channels); sqlalchemy Session.execute/Connection.execute definitions live in the external library and cannot be extracted as sql_api_def rows - this project has no project-defined raw-SQL API definitions.",
+    "Pass-2-shaped channels recorded for context but NOT extracted as Pass-5 rows: Popen(..., shell=True) with UI name concatenation (cards.py:76), os.system(\"alembic upgrade head\") (crud.py:176), subprocess.run wormhole calls (share.py:61/93), run([\"alembic\",...]) (scripts/reset_db.py:18).",
+    "Compile/runtime validation of both queries is deferred with execution: per the task contract, CodeQL was not invoked in this round (no query run, no bqrs decode, no query compile). The queries reuse the exact structural shapes (helpers, bindingset annotations, AST-cast matching, no QL classes, moduleHint naming) that compiled and ran clean against CodeQL CLI 2.25.1 + codeql/python-all 7.1.x in the arches and django CWE-89 runs of this series; the additionally used Assign.getATarget()/getValue(), Dict.getAValue() and Parameter.getPosition() APIs were verified against the cached python-all 7.1.2 sources."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "sibling-run artifacts of this series for column-contract consistency: iris_manual/SQL_Injection/django/iris/extraction/sources.ql and sinks.ql (NOT ground truth - generated artifacts of the same experiment series)"
+  ],
+  "referencesNotApplicable": [
+    "augur-0.3.0/references/django.md, flask.md, fastapi.md: no django/flask/fastapi usage exists in the project source (nicegui native mode; no HTTP routes)",
+    "no nicegui/python-fire/sqlalchemy reference exists in augur-0.3.0/references/ (checked directory listing)"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: sql_sinks.csv and 漏洞审查报告.md at the OpenAdapt_vuln repo root were NOT opened during this step (they were only observed in the directory listing to be explicitly avoided); no CVE descriptions, fix commits or external vulnerability write-ups were consulted. Candidate families are derived from repository evidence and the loaded language/pattern references only. OpenAdapt-db was used solely to read codeql-database.yml and the src.zip path listing (metadata/scope) and was otherwise excluded. Project source, the database, and the Augur installation were not modified. Only the three Phase-1 Step-1/2 artifacts under iris_manual/SQL_Injection/OpenAdapt/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). CodeQL execution and LLM labeling are deferred to later steps per the task contract; run_manifest.json and summary.md belong to Step 0 / post-execution steps and were not fabricated."
+  }
+}

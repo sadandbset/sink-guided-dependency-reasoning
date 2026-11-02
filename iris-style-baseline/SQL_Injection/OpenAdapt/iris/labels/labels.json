@@ -1,0 +1,2924 @@
+{
+  "version": "0.3.0",
+  "metadata": {
+    "run_id": "openadapt-cwe89-pass5-labeling-20261020",
+    "generated_at": "2026-10-20T12:54:16+00:00",
+    "language": "python",
+    "framework": "nicegui (native desktop UI) + python-fire CLI; SQLAlchemy 1.4 data layer",
+    "model": "glm-5.3",
+    "project": "openadapt",
+    "notes": [
+      "Pass 5 (CWE-89 SQL Injection) labeling only; 131 CSV candidate rows (121 source + 10 sink) processed in 5 inline batches by the session model.",
+      "Model: glm-5.3 (the Claude Code session model performing inline labeling; no external LLM API call was made; determinism guardrails: fixed confidence values, rule-consistent rationales).",
+      "3 duplicate source rows merged (identical AST nodes): crud.py:164 ENV_FILE_PATH emitted twice; strategies/mixins/openai.py:32 and :41 emitted under two moduleHints; see labels_raw_pass5.json.",
+      "The pass_id 1 block is a schema-compatibility placeholder with zero entries: assets/labels_schema.json imposes a passes.contains constraint requiring a pass_id=1 item in every labels.json. Pass 1 (Path Traversal) was NOT labeled in this round; pass 5 is the only labeled pass.",
+      "No sanitizer exists on the export_sql -> create_db -> connection.execute chain (crud.py:142/209/180): the f-string performs no escaping of interpolated values. The only sanitizer-labeled node is the parameterized bound-values channel db.execute(sa.insert(table), to_insert) at crud.py:48 (classification fp per the bind-params FP heuristic).",
+      "No HTTP/API request boundary exists in the analyzed code (nicegui runs in native desktop mode); the attacker-relevant input boundaries are the UI name prompt (ui.input -> Popen -> record CLI), the DB import channel (on_import replaces openadapt.db from a user-chosen bz2 file), the fire CLI, and operator-level env/config (not attacker input).",
+      "The confirmed CWE-89 chain is second-order: external task_description / imported DB content -> Recording row -> export_sql f-string (crud.py:142) -> create_db sql parameter (crud.py:209) -> connection.execute (crud.py:180). The DB round-trip is modeled by the db_read source labels at crud.py:142; end-to-end CLI-param tracking would need an additional summary step (flagged for human review).",
+      "ORM chains (db.query/filter/order_by/add/commit) and the Core insert at crud.py:48 are parameterized channels and were not labeled as sinks (per WORKFLOW.md SQL bind-params FP heuristic)."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "22",
+        "23",
+        "36",
+        "73"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 5,
+      "focus": "SQL Injection",
+      "cwes": [
+        "89"
+      ],
+      "entries": [
+        {
+          "id": "pass5-sink-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": null,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 30
+          },
+          "rationale": "Internal wrapper whose only SQL execution is the parameterized Core insert at crud.py:48 (bound values); no SQL text is built or executed in its body. Not a raw-SQL wrapper for CWE-89.",
+          "evidence": [
+            "openadapt/crud.py:30-53: _insert body - only the parameterized Core insert at crud.py:48"
+          ]
+        },
+        {
+          "id": "pass5-sink-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "db",
+            "callable": "execute",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 48
+          },
+          "rationale": "Argument 0 of db.execute (crud.py:48) is a Core sa.insert(table) statement object compiled by SQLAlchemy with bound parameters - not a SQL string; the table/column identifiers come from the statically defined models (openadapt/models.py), not user input. No raw SQL text at this call.",
+          "evidence": [
+            "openadapt/crud.py:48: argument 0 is the sa.insert(table) statement object (compiled, parameterized)"
+          ]
+        },
+        {
+          "id": "pass5-sink-003",
+          "role": "sanitizer",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "db",
+            "callable": "execute",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 48
+          },
+          "rationale": "Parameterized channel: db.execute(sa.insert(table), to_insert) at crud.py:48 supplies row values as bound parameters (SQLAlchemy Core insert, executemany semantics, crud.py:30-53); values are never concatenated into SQL text. Per the SQL bind-params sanitizer pattern (references/python.md section 5, references/patterns.md section 10) this blocks CWE-89 value injection - safe channel, hence classification fp.",
+          "evidence": [
+            "openadapt/crud.py:48: db.execute(sa.insert(table), to_insert) - Core insert with bound values"
+          ]
+        },
+        {
+          "id": "pass5-sink-004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "sa",
+            "callable": "insert",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 48
+          },
+          "rationale": "SQLAlchemy Core statement construction from the ORM table model; identifiers are static (openadapt/models.py) and values are bound separately (crud.py:48 argument 1). Not a raw-SQL sink: object construction alone does not constitute an exploitable channel.",
+          "evidence": [
+            "openadapt/crud.py:48: sa.insert(table) - Core statement construction from static models"
+          ]
+        },
+        {
+          "id": "pass5-sink-005",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "fstring",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 142
+          },
+          "rationale": "Dynamic raw-SQL construction (crud.py:142, export_sql): 8 DB-derived Recording columns interpolated into an INSERT statement with no escaping; the two string columns (platform, task_description) are wrapped only in literal single quotes, so a single quote in the value breaks out of the SQL value context. The string is executed via export_recording -> create_db -> connection.execute (crud.py:208-209, 180). Labeled as a sink at the construction site (in addition to the executing sink at crud.py:180) to surface where untrusted data enters SQL structure.",
+          "evidence": [
+            "openadapt/crud.py:142: f-string INSERT with 8 unescaped DB-derived column interpolations",
+            "openadapt/crud.py:208-209: export_recording -> create_db(recording_id, sql)"
+          ]
+        },
+        {
+          "id": "pass5-sink-006",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "create_db",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 150
+          },
+          "rationale": "Internal SQL wrapper: create_db(recording_id, sql) executes its parameter 1 verbatim via connection.execute(sql) at crud.py:180 (inside engine.begin()). Argument 1 receives the raw SQL string built by export_sql (crud.py:208-209) from DB-derived recording values - the module-boundary execution wrapper of the injection chain. Sink signature: parameter index 1.",
+          "evidence": [
+            "openadapt/crud.py:150: def create_db(recording_id, sql)",
+            "openadapt/crud.py:180: connection.execute(sql) - parameter 1 executed verbatim"
+          ]
+        },
+        {
+          "id": "pass5-sink-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "fstring",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 161
+          },
+          "rationale": "Non-SQL f-string inside create_db: builds the output database filename f\"recording_{recording_id}.db\" (crud.py:161); never executed as SQL. Captured by the inside-SQL-function construction shape; expected candidate noise.",
+          "evidence": [
+            "openadapt/crud.py:161: db_fname = f\"recording_{recording_id}.db\" (filename, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-sink-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "fstring",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 164
+          },
+          "rationale": "Non-SQL f-string inside create_db: builds the env-file backup path f\"{config.ENV_FILE_PATH}-{t}\" (crud.py:164); never executed as SQL. Captured by the inside-SQL-function construction shape; expected candidate noise.",
+          "evidence": [
+            "openadapt/crud.py:164: shutil.copyfile(config.ENV_FILE_PATH, f\"{config.ENV_FILE_PATH}-{t}\")"
+          ]
+        },
+        {
+          "id": "pass5-sink-009",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "fstring",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 169
+          },
+          "rationale": "Non-SQL f-string inside create_db: builds the env-file line f\"DB_FNAME={db_fname}\\n\" (crud.py:169); never executed as SQL. Captured by the inside-SQL-function construction shape; expected candidate noise.",
+          "evidence": [
+            "openadapt/crud.py:169: lines[1] = f\"DB_FNAME={db_fname}\\n\" (env line, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-sink-010",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "connection",
+            "callable": "execute",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 180
+          },
+          "rationale": "SQLAlchemy Connection.execute (engine.begin(), crud.py:179-180) with a RAW SQL STRING at argument 0: the text built by the export_sql f-string (crud.py:142) reaches this call as create_db's sql parameter (crud.py:209). The string is executed with no parameterization of the interpolated recording values - the CWE-89 execution sink completing the chain DB content -> f-string SQL text -> execute. Impact is confined to the locally created recording_{id}.db database, but the injection (quote breakout from platform/task_description) is real.",
+          "evidence": [
+            "openadapt/crud.py:179-180: with engine.begin() as connection: connection.execute(sql)",
+            "openadapt/crud.py:142: sql = f\"INSERT INTO recording VALUES (...{recording.task_description}')\"",
+            "openadapt/crud.py:209: create_db(recording_id, sql) hand-off"
+          ]
+        },
+        {
+          "id": "pass5-src-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/build.py",
+            "line": 23
+          },
+          "rationale": "File read of static/operational content; the data never reaches SQL statement text (no SQL construction or execution consumes it).",
+          "evidence": [
+            "openadapt/app/build.py:23: packaging spec file read"
+          ]
+        },
+        {
+          "id": "pass5-src-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "file",
+            "type": "f",
+            "callable": "readlines",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/build.py",
+            "line": 24
+          },
+          "rationale": "File read of static/operational content; the data never reaches SQL statement text (no SQL construction or execution consumes it).",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/build.py:24: Attribute() candidate row (flow_kind=file)"
+          ]
+        },
+        {
+          "id": "pass5-src-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.cache",
+            "type": "config",
+            "callable": "CACHE_DIR_PATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/cache.py",
+            "line": 18
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/cache.py:18: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.cache",
+            "type": "config",
+            "callable": "CACHE_ENABLED",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/cache.py",
+            "line": 19
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/cache.py:19: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-005",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.cache",
+            "type": "config",
+            "callable": "CACHE_VERBOSITY",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/cache.py",
+            "line": 20
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/cache.py:20: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-006",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "openadapt.app.cards",
+            "type": null,
+            "callable": "LocalFilePicker",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/cards.py",
+            "line": 21
+          },
+          "rationale": "DB-import trust boundary: user-chosen file path feeds on_import (app/util.py:20-28), which bz2-decompresses the chosen file over openadapt.db, replacing the entire database. This makes every Recording column read at crud.py:142 (including platform and task_description) attacker-controlled, feeding the raw-SQL f-string executed at crud.py:180. The file -> DB -> ORM-read -> SQL-text flow is not directly trackable (DB round-trip); modeled via the db_read source labels; human review of this trust decision is required.",
+          "evidence": [
+            "openadapt/app/cards.py:21: result = await LocalFilePicker(\".\")",
+            "openadapt/app/cards.py:32: import_button on_click=lambda: f(selected_file.text, delete.value)",
+            "openadapt/app/util.py:20-28: on_import bz2-decompresses the chosen file over openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-007",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "openadapt.app.cards",
+            "type": "ui",
+            "callable": "input",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/cards.py",
+            "line": 44
+          },
+          "rationale": "The only text input widget in the project (cards.py:44-49); the typed name is concatenated into Popen(\"python3 -m openadapt.record \" + name, shell=True) (cards.py:76-79) and becomes record's task_description, i.e. the ultimate origin of the tainted Recording.task_description later interpolated unescaped into raw SQL at crud.py:142. Path crosses a shell process boundary and a DB round-trip (not directly trackable); recorded as origin-of-taint context, flagged for manual review. (The Popen concatenation itself is a Pass-2 command-injection shape.)",
+          "evidence": [
+            "openadapt/app/cards.py:44-49: ui.input(label=\"Name\", ..., on_change=lambda e: result.set_text(e))",
+            "openadapt/app/cards.py:71: name = result.text.__getattribute__(\"value\")",
+            "openadapt/app/cards.py:76-79: Popen(\"python3 -m openadapt.record \" + name, shell=True)"
+          ]
+        },
+        {
+          "id": "pass5-src-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "openadapt.app.cards",
+            "type": null,
+            "callable": "Popen",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/cards.py",
+            "line": 76
+          },
+          "rationale": "Pass-2 shape: shell=True command string concatenated with the UI-entered name (cards.py:76-79); out of Pass-5 scope. Recorded as the UI -> CLI bridge that carries the recording name into record(task_description) - the SQL-relevant taint is modeled at the task_description/DB-read labels instead.",
+          "evidence": [
+            "openadapt/app/cards.py:76-79: PROC = Popen(\"python3 -m openadapt.record \" + name, shell=True)"
+          ]
+        },
+        {
+          "id": "pass5-src-009",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "dotenv",
+            "type": null,
+            "callable": "find_dotenv",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/config.py",
+            "line": 23
+          },
+          "rationale": "Environment-variable read (operator-level trust, config.py); value used for configuration defaults, never enters SQL text.",
+          "evidence": [
+            "openadapt/config.py:23: dotenv bootstrap (operator-level)"
+          ]
+        },
+        {
+          "id": "pass5-src-010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "dotenv",
+            "type": null,
+            "callable": "load_dotenv",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/config.py",
+            "line": 24
+          },
+          "rationale": "Environment-variable read (operator-level trust, config.py); value used for configuration defaults, never enters SQL text.",
+          "evidence": [
+            "openadapt/config.py:24: dotenv bootstrap (operator-level)"
+          ]
+        },
+        {
+          "id": "pass5-src-011",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/config.py",
+            "line": 37
+          },
+          "rationale": "Operator-level .env / env-file read (config.py:37, crud.py:167-171) used for configuration parsing/rewrite; never enters SQL statement text.",
+          "evidence": [
+            "openadapt/config.py:37: read_env_file .env parsing (operator-level)"
+          ]
+        },
+        {
+          "id": "pass5-src-012",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.config",
+            "type": "env_vars",
+            "callable": "env_vars",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/config.py",
+            "line": 42
+          },
+          "rationale": "Environment-variable read (operator-level trust, config.py); value used for configuration defaults, never enters SQL text.",
+          "evidence": [
+            "openadapt/config.py:42: env_vars subscript in read_env_file (operator-level)"
+          ]
+        },
+        {
+          "id": "pass5-src-013",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.config",
+            "type": "env_vars",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/config.py",
+            "line": 49
+          },
+          "rationale": "Environment-variable read (operator-level trust, config.py); value used for configuration defaults, never enters SQL text.",
+          "evidence": [
+            "openadapt/config.py:49: DB_FNAME = env_vars.get(\"DB_FNAME\") (operator-level .env)"
+          ]
+        },
+        {
+          "id": "pass5-src-014",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": "os",
+            "callable": "getenv",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/config.py",
+            "line": 146
+          },
+          "rationale": "Environment-variable read (operator-level trust, config.py); value used for configuration defaults, never enters SQL text.",
+          "evidence": [
+            "openadapt/config.py:146: os.getenv fallback (operator-level)"
+          ]
+        },
+        {
+          "id": "pass5-src-015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 62
+          },
+          "rationale": "Recorded GUI event data flows into _insert (crud.py:30-53), which executes the parameterized Core insert db.execute(sa.insert(table), to_insert) at crud.py:48 - values are bound by SQLAlchemy Core (executemany-style bound parameters), never concatenated into SQL text. Safe channel for CWE-89.",
+          "evidence": [
+            "openadapt/crud.py:62: _insert(event_data, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-016",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 62
+          },
+          "rationale": "Not data: the argument is the ORM table model class / module-level buffer list handed to _insert (crud.py:30-53); the executed statement is compiled from the statically defined models (openadapt/models.py) with bound parameter values (crud.py:48). No SQL text construction.",
+          "evidence": [
+            "openadapt/crud.py:62: _insert(ActionEvent, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 2,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 62
+          },
+          "rationale": "Not data: the argument is the ORM table model class / module-level buffer list handed to _insert (crud.py:30-53); the executed statement is compiled from the statically defined models (openadapt/models.py) with bound parameter values (crud.py:48). No SQL text construction.",
+          "evidence": [
+            "openadapt/crud.py:62: _insert(action_events, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 71
+          },
+          "rationale": "Recorded GUI event data flows into _insert (crud.py:30-53), which executes the parameterized Core insert db.execute(sa.insert(table), to_insert) at crud.py:48 - values are bound by SQLAlchemy Core (executemany-style bound parameters), never concatenated into SQL text. Safe channel for CWE-89.",
+          "evidence": [
+            "openadapt/crud.py:71: _insert(event_data, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 71
+          },
+          "rationale": "Not data: the argument is the ORM table model class / module-level buffer list handed to _insert (crud.py:30-53); the executed statement is compiled from the statically defined models (openadapt/models.py) with bound parameter values (crud.py:48). No SQL text construction.",
+          "evidence": [
+            "openadapt/crud.py:71: _insert(Screenshot, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-020",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 2,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 71
+          },
+          "rationale": "Not data: the argument is the ORM table model class / module-level buffer list handed to _insert (crud.py:30-53); the executed statement is compiled from the statically defined models (openadapt/models.py) with bound parameter values (crud.py:48). No SQL text construction.",
+          "evidence": [
+            "openadapt/crud.py:71: _insert(screenshots, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 80
+          },
+          "rationale": "Recorded GUI event data flows into _insert (crud.py:30-53), which executes the parameterized Core insert db.execute(sa.insert(table), to_insert) at crud.py:48 - values are bound by SQLAlchemy Core (executemany-style bound parameters), never concatenated into SQL text. Safe channel for CWE-89.",
+          "evidence": [
+            "openadapt/crud.py:80: _insert(event_data, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 80
+          },
+          "rationale": "Not data: the argument is the ORM table model class / module-level buffer list handed to _insert (crud.py:30-53); the executed statement is compiled from the statically defined models (openadapt/models.py) with bound parameter values (crud.py:48). No SQL text construction.",
+          "evidence": [
+            "openadapt/crud.py:80: _insert(WindowEvent, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-023",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 2,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 80
+          },
+          "rationale": "Not data: the argument is the ORM table model class / module-level buffer list handed to _insert (crud.py:30-53); the executed statement is compiled from the statically defined models (openadapt/models.py) with bound parameter values (crud.py:48). No SQL text construction.",
+          "evidence": [
+            "openadapt/crud.py:80: _insert(window_events, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-024",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 94
+          },
+          "rationale": "Recorded GUI event data flows into _insert (crud.py:30-53), which executes the parameterized Core insert db.execute(sa.insert(table), to_insert) at crud.py:48 - values are bound by SQLAlchemy Core (executemany-style bound parameters), never concatenated into SQL text. Safe channel for CWE-89.",
+          "evidence": [
+            "openadapt/crud.py:94: _insert(event_perf_stat, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-025",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 94
+          },
+          "rationale": "Not data: the argument is the ORM table model class / module-level buffer list handed to _insert (crud.py:30-53); the executed statement is compiled from the statically defined models (openadapt/models.py) with bound parameter values (crud.py:48). No SQL text construction.",
+          "evidence": [
+            "openadapt/crud.py:94: _insert(PerformanceStat, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "_insert",
+            "arg_index": 2,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 94
+          },
+          "rationale": "Not data: the argument is the ORM table model class / module-level buffer list handed to _insert (crud.py:30-53); the executed statement is compiled from the statically defined models (openadapt/models.py) with bound parameter values (crud.py:48). No SQL text construction.",
+          "evidence": [
+            "openadapt/crud.py:94: _insert(performance_stats, ...) call site",
+            "openadapt/crud.py:30-53: _insert(event_data, table, buffer) body",
+            "openadapt/crud.py:48: result = db.execute(sa.insert(table), to_insert) (Core insert, bound values)"
+          ]
+        },
+        {
+          "id": "pass5-src-027",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "config",
+            "callable": "DB_URL",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 135
+          },
+          "rationale": "Operator-level configuration attribute consumed as the SQLAlchemy engine URL (sqlite:///<path>, config.py:52-62) - a connection URL, not SQL statement text; never interpolated into a query.",
+          "evidence": [
+            "openadapt/crud.py:135: sa.create_engine(config.DB_URL) (connection URL, not SQL text)"
+          ]
+        },
+        {
+          "id": "pass5-src-028",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "id",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 142
+          },
+          "rationale": "crud.py:142 export_sql: f\"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')\" - Recording column read from the ORM query result (get_recording_by_id, crud.py:139) and interpolated unescaped into a raw SQL string, executed verbatim via create_db -> connection.execute (crud.py:209, 180). Sink-side flow is certain (direct f-string interpolation, no quoting/escaping beyond literal single quotes). Attacker control conditional: machine-generated in the normal recording flow (record.py:431-458 / DB-assigned), but arbitrary after a DB import (app/util.py:20-28 replaces the entire database). Retained as candidate pending human review of the import trust boundary.",
+          "evidence": [
+            "openadapt/crud.py:139: recording = get_recording_by_id(recording_id) (ORM read)",
+            "openadapt/crud.py:142: sql = f\"INSERT INTO recording VALUES (...{recording.platform}, '{recording.task_description}')\"",
+            "openadapt/crud.py:208-209: create_db(recording_id, sql); crud.py:180: connection.execute(sql)",
+            "attacker control: record.py:507-508 task_description CLI param; app/util.py:20-28 on_import replaces openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-029",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "timestamp",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 142
+          },
+          "rationale": "crud.py:142 export_sql: f\"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')\" - Recording column read from the ORM query result (get_recording_by_id, crud.py:139) and interpolated unescaped into a raw SQL string, executed verbatim via create_db -> connection.execute (crud.py:209, 180). Sink-side flow is certain (direct f-string interpolation, no quoting/escaping beyond literal single quotes). Attacker control conditional: machine-generated in the normal recording flow (record.py:431-458 / DB-assigned), but arbitrary after a DB import (app/util.py:20-28 replaces the entire database). Retained as candidate pending human review of the import trust boundary.",
+          "evidence": [
+            "openadapt/crud.py:139: recording = get_recording_by_id(recording_id) (ORM read)",
+            "openadapt/crud.py:142: sql = f\"INSERT INTO recording VALUES (...{recording.platform}, '{recording.task_description}')\"",
+            "openadapt/crud.py:208-209: create_db(recording_id, sql); crud.py:180: connection.execute(sql)",
+            "attacker control: record.py:507-508 task_description CLI param; app/util.py:20-28 on_import replaces openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-030",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "monitor_width",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 142
+          },
+          "rationale": "crud.py:142 export_sql: f\"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')\" - Recording column read from the ORM query result (get_recording_by_id, crud.py:139) and interpolated unescaped into a raw SQL string, executed verbatim via create_db -> connection.execute (crud.py:209, 180). Sink-side flow is certain (direct f-string interpolation, no quoting/escaping beyond literal single quotes). Attacker control conditional: machine-generated in the normal recording flow (record.py:431-458 / DB-assigned), but arbitrary after a DB import (app/util.py:20-28 replaces the entire database). Retained as candidate pending human review of the import trust boundary.",
+          "evidence": [
+            "openadapt/crud.py:139: recording = get_recording_by_id(recording_id) (ORM read)",
+            "openadapt/crud.py:142: sql = f\"INSERT INTO recording VALUES (...{recording.platform}, '{recording.task_description}')\"",
+            "openadapt/crud.py:208-209: create_db(recording_id, sql); crud.py:180: connection.execute(sql)",
+            "attacker control: record.py:507-508 task_description CLI param; app/util.py:20-28 on_import replaces openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-031",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "monitor_height",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 142
+          },
+          "rationale": "crud.py:142 export_sql: f\"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')\" - Recording column read from the ORM query result (get_recording_by_id, crud.py:139) and interpolated unescaped into a raw SQL string, executed verbatim via create_db -> connection.execute (crud.py:209, 180). Sink-side flow is certain (direct f-string interpolation, no quoting/escaping beyond literal single quotes). Attacker control conditional: machine-generated in the normal recording flow (record.py:431-458 / DB-assigned), but arbitrary after a DB import (app/util.py:20-28 replaces the entire database). Retained as candidate pending human review of the import trust boundary.",
+          "evidence": [
+            "openadapt/crud.py:139: recording = get_recording_by_id(recording_id) (ORM read)",
+            "openadapt/crud.py:142: sql = f\"INSERT INTO recording VALUES (...{recording.platform}, '{recording.task_description}')\"",
+            "openadapt/crud.py:208-209: create_db(recording_id, sql); crud.py:180: connection.execute(sql)",
+            "attacker control: record.py:507-508 task_description CLI param; app/util.py:20-28 on_import replaces openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-032",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "double_click_interval_seconds",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 142
+          },
+          "rationale": "crud.py:142 export_sql: f\"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')\" - Recording column read from the ORM query result (get_recording_by_id, crud.py:139) and interpolated unescaped into a raw SQL string, executed verbatim via create_db -> connection.execute (crud.py:209, 180). Sink-side flow is certain (direct f-string interpolation, no quoting/escaping beyond literal single quotes). Attacker control conditional: machine-generated in the normal recording flow (record.py:431-458 / DB-assigned), but arbitrary after a DB import (app/util.py:20-28 replaces the entire database). Retained as candidate pending human review of the import trust boundary.",
+          "evidence": [
+            "openadapt/crud.py:139: recording = get_recording_by_id(recording_id) (ORM read)",
+            "openadapt/crud.py:142: sql = f\"INSERT INTO recording VALUES (...{recording.platform}, '{recording.task_description}')\"",
+            "openadapt/crud.py:208-209: create_db(recording_id, sql); crud.py:180: connection.execute(sql)",
+            "attacker control: record.py:507-508 task_description CLI param; app/util.py:20-28 on_import replaces openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-033",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "double_click_distance_pixels",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 142
+          },
+          "rationale": "crud.py:142 export_sql: f\"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')\" - Recording column read from the ORM query result (get_recording_by_id, crud.py:139) and interpolated unescaped into a raw SQL string, executed verbatim via create_db -> connection.execute (crud.py:209, 180). Sink-side flow is certain (direct f-string interpolation, no quoting/escaping beyond literal single quotes). Attacker control conditional: machine-generated in the normal recording flow (record.py:431-458 / DB-assigned), but arbitrary after a DB import (app/util.py:20-28 replaces the entire database). Retained as candidate pending human review of the import trust boundary.",
+          "evidence": [
+            "openadapt/crud.py:139: recording = get_recording_by_id(recording_id) (ORM read)",
+            "openadapt/crud.py:142: sql = f\"INSERT INTO recording VALUES (...{recording.platform}, '{recording.task_description}')\"",
+            "openadapt/crud.py:208-209: create_db(recording_id, sql); crud.py:180: connection.execute(sql)",
+            "attacker control: record.py:507-508 task_description CLI param; app/util.py:20-28 on_import replaces openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-034",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "platform",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 142
+          },
+          "rationale": "crud.py:142 export_sql: f\"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')\" - Recording column read from the ORM query result (get_recording_by_id, crud.py:139) and interpolated unescaped into a raw SQL string, executed verbatim via create_db -> connection.execute (crud.py:209, 180). Sink-side flow is certain (direct f-string interpolation, no quoting/escaping beyond literal single quotes). Attacker control: normally sys.platform (record.py:456, machine constant), but the DB-import channel (on_import, app/util.py:20-28, replaces openadapt.db with a user-chosen bz2 file) makes it fully attacker-controlled; second-order flow confirmed at the SQL-text level, control contingent on the import boundary - flagged for human review.",
+          "evidence": [
+            "openadapt/crud.py:139: recording = get_recording_by_id(recording_id) (ORM read)",
+            "openadapt/crud.py:142: sql = f\"INSERT INTO recording VALUES (...{recording.platform}, '{recording.task_description}')\"",
+            "openadapt/crud.py:208-209: create_db(recording_id, sql); crud.py:180: connection.execute(sql)",
+            "attacker control: record.py:507-508 task_description CLI param; app/util.py:20-28 on_import replaces openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-035",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "task_description",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 142
+          },
+          "rationale": "crud.py:142 export_sql: f\"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')\" - Recording column read from the ORM query result (get_recording_by_id, crud.py:139) and interpolated unescaped into a raw SQL string, executed verbatim via create_db -> connection.execute (crud.py:209, 180). Sink-side flow is certain (direct f-string interpolation, no quoting/escaping beyond literal single quotes). Attacker control: the column is populated from external input - the fire CLI parameter record(task_description) (record.py:507-508), fed by the nicegui name prompt via Popen (cards.py:44, 76-79) and stored through the parameterized ORM insert (crud.py:110-115); the DB-import channel (on_import, app/util.py:20-28) can also replace the whole DB. Full external-source -> DB -> raw-SQL-text flow exists (second-order via DB round-trip); flagged for human confirmation of the round-trip step.",
+          "evidence": [
+            "openadapt/crud.py:139: recording = get_recording_by_id(recording_id) (ORM read)",
+            "openadapt/crud.py:142: sql = f\"INSERT INTO recording VALUES (...{recording.platform}, '{recording.task_description}')\"",
+            "openadapt/crud.py:208-209: create_db(recording_id, sql); crud.py:180: connection.execute(sql)",
+            "attacker control: record.py:507-508 task_description CLI param; app/util.py:20-28 on_import replaces openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-036",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "config",
+            "callable": "ENV_FILE_PATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 164
+          },
+          "rationale": "Operator-level configuration attribute on the export/create_db path (env-file path, set_db_url, DB_FPATH): used for the sqlite file path and the .env rewrite in create_db (crud.py:160-171). Path-shaped (Pass-1 relevance), not SQL statement text.",
+          "evidence": [
+            "openadapt/crud.py:164: config.ENV_FILE_PATH on the create_db/restore_db path (file path / env config, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-037",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "config",
+            "callable": "set_db_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 165
+          },
+          "rationale": "Operator-level configuration attribute on the export/create_db path (env-file path, set_db_url, DB_FPATH): used for the sqlite file path and the .env rewrite in create_db (crud.py:160-171). Path-shaped (Pass-1 relevance), not SQL statement text.",
+          "evidence": [
+            "openadapt/crud.py:165: config.set_db_url on the create_db/restore_db path (file path / env config, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-038",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 167
+          },
+          "rationale": "File read of static/operational content; the data never reaches SQL statement text (no SQL construction or execution consumes it).",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py:167: open() candidate row (flow_kind=file)"
+          ]
+        },
+        {
+          "id": "pass5-src-039",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "config",
+            "callable": "ENV_FILE_PATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 167
+          },
+          "rationale": "Operator-level configuration attribute on the export/create_db path (env-file path, set_db_url, DB_FPATH): used for the sqlite file path and the .env rewrite in create_db (crud.py:160-171). Path-shaped (Pass-1 relevance), not SQL statement text.",
+          "evidence": [
+            "openadapt/crud.py:167: config.ENV_FILE_PATH on the create_db/restore_db path (file path / env config, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-040",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "file",
+            "type": "f",
+            "callable": "readlines",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 168
+          },
+          "rationale": "Operator-level .env / env-file read (config.py:37, crud.py:167-171) used for configuration parsing/rewrite; never enters SQL statement text.",
+          "evidence": [
+            "openadapt/crud.py:167-171: env-file read/rewrite in create_db (DB_FNAME line, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-041",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 170
+          },
+          "rationale": "File read of static/operational content; the data never reaches SQL statement text (no SQL construction or execution consumes it).",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py:170: open() candidate row (flow_kind=file)"
+          ]
+        },
+        {
+          "id": "pass5-src-042",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "config",
+            "callable": "ENV_FILE_PATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 170
+          },
+          "rationale": "Operator-level configuration attribute on the export/create_db path (env-file path, set_db_url, DB_FPATH): used for the sqlite file path and the .env rewrite in create_db (crud.py:160-171). Path-shaped (Pass-1 relevance), not SQL statement text.",
+          "evidence": [
+            "openadapt/crud.py:170: config.ENV_FILE_PATH on the create_db/restore_db path (file path / env config, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-043",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "config",
+            "callable": "DB_URL",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 173
+          },
+          "rationale": "Operator-level configuration attribute consumed as the SQLAlchemy engine URL (sqlite:///<path>, config.py:52-62) - a connection URL, not SQL statement text; never interpolated into a query.",
+          "evidence": [
+            "openadapt/crud.py:173: sa.create_engine(config.DB_URL) (connection URL, not SQL text)"
+          ]
+        },
+        {
+          "id": "pass5-src-044",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "config",
+            "callable": "DB_FPATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 182
+          },
+          "rationale": "Operator-level configuration attribute on the export/create_db path (env-file path, set_db_url, DB_FPATH): used for the sqlite file path and the .env rewrite in create_db (crud.py:160-171). Path-shaped (Pass-1 relevance), not SQL statement text.",
+          "evidence": [
+            "openadapt/crud.py:182: config.DB_FPATH on the create_db/restore_db path (file path / env config, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-045",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "config",
+            "callable": "ENV_FILE_PATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 193
+          },
+          "rationale": "Operator-level configuration attribute on the export/create_db path (env-file path, set_db_url, DB_FPATH): used for the sqlite file path and the .env rewrite in create_db (crud.py:160-171). Path-shaped (Pass-1 relevance), not SQL statement text.",
+          "evidence": [
+            "openadapt/crud.py:193: config.ENV_FILE_PATH on the create_db/restore_db path (file path / env config, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-046",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "config",
+            "callable": "ENV_FILE_PATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 194
+          },
+          "rationale": "Operator-level configuration attribute on the export/create_db path (env-file path, set_db_url, DB_FPATH): used for the sqlite file path and the .env rewrite in create_db (crud.py:160-171). Path-shaped (Pass-1 relevance), not SQL statement text.",
+          "evidence": [
+            "openadapt/crud.py:194: config.ENV_FILE_PATH on the create_db/restore_db path (file path / env config, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-047",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "config",
+            "callable": "set_db_url",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 195
+          },
+          "rationale": "Operator-level configuration attribute on the export/create_db path (env-file path, set_db_url, DB_FPATH): used for the sqlite file path and the .env rewrite in create_db (crud.py:160-171). Path-shaped (Pass-1 relevance), not SQL statement text.",
+          "evidence": [
+            "openadapt/crud.py:195: config.set_db_url on the create_db/restore_db path (file path / env config, not SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-048",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "create_db",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 209
+          },
+          "rationale": "fire CLI parameter ('share send --recording_id', share.py:70 / crud.py:209). Used only to select the recording via the parameterized ORM filter get_recording_by_id (crud.py:123) and to build output filenames (share.py:39-43, crud.py:161); it never enters SQL text. It is the reachability trigger of the export chain (export_recording_to_folder -> crud.export_recording -> export_sql -> create_db -> connection.execute), not a taint source.",
+          "evidence": [
+            "openadapt/crud.py:123: db.query(Recording).filter_by(id=recording_id).first() (parameterized)",
+            "openadapt/crud.py:161: db_fname = f\"recording_{recording_id}.db\" (filename, not SQL)",
+            "share.py:70-76: send_recording(recording_id) -> export_recording_to_folder"
+          ]
+        },
+        {
+          "id": "pass5-src-049",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": null,
+            "callable": "create_db",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 209
+          },
+          "rationale": "Hand-off node: export_sql's return value (the raw SQL string built at crud.py:142) is passed as positional argument 1 of create_db (crud.py:209) and executed verbatim at crud.py:180 inside its body. Labeled as a summary step so the construction-site -> execution-site propagation survives module-boundary flow modeling; the primary sinks are the create_db wrapper (crud.py:150) and connection.execute (crud.py:180).",
+          "evidence": [
+            "openadapt/crud.py:208: sql = export_sql(recording_id)",
+            "openadapt/crud.py:209: t, db_file_path = create_db(recording_id, sql)",
+            "openadapt/crud.py:180: connection.execute(sql)"
+          ]
+        },
+        {
+          "id": "pass5-src-050",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "timestamp",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 227
+          },
+          "rationale": "DB-derived Recording column consumed only as a parameterized ORM filter value (_get, crud.py:217-223) - compiled to bound parameters by SQLAlchemy, never interpolated into SQL text.",
+          "evidence": [
+            "openadapt/crud.py:227: recording.timestamp into _get filter (crud.py:217-223, parameterized ORM)"
+          ]
+        },
+        {
+          "id": "pass5-src-051",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "timestamp",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 231
+          },
+          "rationale": "DB-derived Recording column consumed only as a parameterized ORM filter value (_get, crud.py:217-223) - compiled to bound parameters by SQLAlchemy, never interpolated into SQL text.",
+          "evidence": [
+            "openadapt/crud.py:231: recording.timestamp into _get filter (crud.py:217-223, parameterized ORM)"
+          ]
+        },
+        {
+          "id": "pass5-src-052",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.crud",
+            "type": "recording",
+            "callable": "timestamp",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/crud.py",
+            "line": 246
+          },
+          "rationale": "DB-derived Recording column consumed only as a parameterized ORM filter value (_get, crud.py:217-223) - compiled to bound parameters by SQLAlchemy, never interpolated into SQL text.",
+          "evidence": [
+            "openadapt/crud.py:246: recording.timestamp into _get filter (crud.py:217-223, parameterized ORM)"
+          ]
+        },
+        {
+          "id": "pass5-src-053",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "openadapt.app.objects.local_file_picker",
+            "type": "msg",
+            "callable": "msg",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/objects/local_file_picker.py",
+            "line": 87
+          },
+          "rationale": "nicegui grid event payload read (msg[\"args\"][\"data\"][\"path\"], local_file_picker.py:87) carrying the user-chosen import file path into the import channel (LocalFilePicker -> on_import -> openadapt.db replacement). Indirect origin of the DB-content taint interpolated at crud.py:142; flagged for manual review.",
+          "evidence": [
+            "openadapt/app/objects/local_file_picker.py:87: self.path = Path(msg[\"args\"][\"data\"][\"path\"])",
+            "openadapt/app/util.py:20-28: on_import(selected_file) replaces openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-054",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "package": null,
+            "module": "openadapt.app.objects.local_file_picker",
+            "type": null,
+            "callable": "LocalFilePicker",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/objects/local_file_picker.py",
+            "line": 101
+          },
+          "rationale": "LocalFilePicker call in the module's __main__ demo (pick_file, local_file_picker.py:100-108); the returned path is only displayed (ui.notify), not consumed by the import flow. Retained for recall; low manual-review priority.",
+          "evidence": [
+            "openadapt/app/objects/local_file_picker.py:100-102: demo pick_file() under __main__"
+          ]
+        },
+        {
+          "id": "pass5-src-055",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "file",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/main.py",
+            "line": 30
+          },
+          "rationale": "File read of static/operational content; the data never reaches SQL statement text (no SQL construction or execution consumes it).",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/main.py:30: Attribute() candidate row (flow_kind=file)"
+          ]
+        },
+        {
+          "id": "pass5-src-056",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/main.py",
+            "line": 30
+          },
+          "rationale": "File read of static/operational content; the data never reaches SQL statement text (no SQL construction or execution consumes it).",
+          "evidence": [
+            "openadapt/app/main.py:30: open(...).read() - logo.png asset read"
+          ]
+        },
+        {
+          "id": "pass5-src-057",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.models",
+            "type": "config",
+            "callable": "ACTION_TEXT_SEP",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/models.py",
+            "line": 136
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/models.py:136: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-058",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.models",
+            "type": "config",
+            "callable": "ACTION_TEXT_NAME_PREFIX",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/models.py",
+            "line": 137
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/models.py:137: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-059",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.models",
+            "type": "config",
+            "callable": "ACTION_TEXT_NAME_SUFFIX",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/models.py",
+            "line": 138
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/models.py:138: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-060",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "PIL",
+            "type": "Image",
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/models.py",
+            "line": 246
+          },
+          "rationale": "PIL Image.open over a DB-derived screenshot buffer (models.py:246); image decoding, not SQL.",
+          "evidence": [
+            "openadapt/models.py:246: Image.open(...) over a DB-derived screenshot buffer"
+          ]
+        },
+        {
+          "id": "pass5-src-061",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.strategies.naive",
+            "type": "config",
+            "callable": "REPLAY_STRIP_ELEMENT_STATE",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/strategies/naive.py",
+            "line": 56
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/strategies/naive.py:56: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-062",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.strategies.mixins.openai",
+            "type": "config",
+            "callable": "OPENAI_API_KEY",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/strategies/mixins/openai.py",
+            "line": 32
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/strategies/mixins/openai.py:32: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-063",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.strategies.mixins.openai",
+            "type": "config",
+            "callable": "OPENAI_MODEL_NAME",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/strategies/mixins/openai.py",
+            "line": 41
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/strategies/mixins/openai.py:41: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-064",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.record",
+            "type": "config",
+            "callable": "RECORD_READ_ACTIVE_ELEMENT_STATE",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/record.py",
+            "line": 231
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/record.py:231: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-065",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "openadapt.record",
+            "type": null,
+            "callable": "record",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/record.py",
+            "line": 508
+          },
+          "rationale": "fire-exposed CLI parameter (record.py:507-508; pyproject console script 'record') and ultimate origin of Recording.task_description (create_recording -> crud.insert_recording, crud.py:110-115, parameterized ORM insert). The tainted value reaches the raw-SQL f-string at crud.py:142 only after a process boundary (Popen, cards.py:76) and a DB round-trip, which data-flow tracking cannot follow directly; the DB-resident side is modeled by the db_read source labels at crud.py:142. Needs an explicit summary step or manual confirmation for end-to-end tracking.",
+          "evidence": [
+            "openadapt/record.py:507-508: def record(task_description: str)",
+            "openadapt/record.py:456-459: recording_data['task_description']=...; crud.insert_recording (parameterized)",
+            "openadapt/crud.py:142: f-string SQL interpolation of recording.task_description",
+            "openadapt/app/cards.py:76-79: Popen(\"python3 -m openadapt.record \" + name, shell=True)"
+          ]
+        },
+        {
+          "id": "pass5-src-066",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.record",
+            "type": "recording",
+            "callable": "timestamp",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/record.py",
+            "line": 521
+          },
+          "rationale": "recording.timestamp (create_recording result, record.py:521) used as the recording_timestamp key for the event writers; consumed via the parameterized Core inserts (crud.py:48); never enters SQL text.",
+          "evidence": [
+            "openadapt/record.py:521: recording_timestamp = recording.timestamp (writers -> parameterized inserts)"
+          ]
+        },
+        {
+          "id": "pass5-src-067",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.record",
+            "type": "fire",
+            "callable": "Fire",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/record.py",
+            "line": 647
+          },
+          "rationale": "python-fire CLI registration node (fire.Fire(...)); registers functions as CLI commands but carries no data that reaches SQL text. (Registrations via get_functions(__name__) at scrub.py:281 / utils.py:525 are dynamic and cannot be resolved statically - see detection.json uncoveredCases.)",
+          "evidence": [
+            "openadapt/record.py:647: fire.Fire(...) registration"
+          ]
+        },
+        {
+          "id": "pass5-src-068",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.record",
+            "type": "fire",
+            "callable": "Fire",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/record.py",
+            "line": 651
+          },
+          "rationale": "python-fire CLI registration node (fire.Fire(...)); registers functions as CLI commands but carries no data that reaches SQL text. (Registrations via get_functions(__name__) at scrub.py:281 / utils.py:525 are dynamic and cannot be resolved statically - see detection.json uncoveredCases.)",
+          "evidence": [
+            "openadapt/record.py:651: fire.Fire(...) registration"
+          ]
+        },
+        {
+          "id": "pass5-src-069",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.replay",
+            "type": null,
+            "callable": "replay",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/replay.py",
+            "line": 15
+          },
+          "rationale": "fire CLI parameter of replay (replay.py:14-16); consumed for strategy lookup and the parameterized ORM filter crud.get_recording (crud.py:214) - never enters SQL text.",
+          "evidence": [
+            "openadapt/replay.py:14-30: strategy lookup + crud.get_recording (parameterized)"
+          ]
+        },
+        {
+          "id": "pass5-src-070",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.replay",
+            "type": null,
+            "callable": "replay",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/replay.py",
+            "line": 16
+          },
+          "rationale": "fire CLI parameter of replay (replay.py:14-16); consumed for strategy lookup and the parameterized ORM filter crud.get_recording (crud.py:214) - never enters SQL text.",
+          "evidence": [
+            "openadapt/replay.py:20-22: crud.get_recording(timestamp) -> db.query(...).filter (parameterized)"
+          ]
+        },
+        {
+          "id": "pass5-src-071",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.replay",
+            "type": "fire",
+            "callable": "Fire",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/replay.py",
+            "line": 50
+          },
+          "rationale": "python-fire CLI registration node (fire.Fire(...)); registers functions as CLI commands but carries no data that reaches SQL text. (Registrations via get_functions(__name__) at scrub.py:281 / utils.py:525 are dynamic and cannot be resolved statically - see detection.json uncoveredCases.)",
+          "evidence": [
+            "openadapt/replay.py:50: fire.Fire(...) registration"
+          ]
+        },
+        {
+          "id": "pass5-src-072",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.replay",
+            "type": "fire",
+            "callable": "Fire",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/replay.py",
+            "line": 54
+          },
+          "rationale": "python-fire CLI registration node (fire.Fire(...)); registers functions as CLI commands but carries no data that reaches SQL text. (Registrations via get_functions(__name__) at scrub.py:281 / utils.py:525 are dynamic and cannot be resolved statically - see detection.json uncoveredCases.)",
+          "evidence": [
+            "openadapt/replay.py:54: fire.Fire(...) registration"
+          ]
+        },
+        {
+          "id": "pass5-src-073",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scripts.reset_db",
+            "type": "config",
+            "callable": "DB_FPATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scripts/reset_db.py",
+            "line": 12
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scripts/reset_db.py:12: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-074",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scripts.reset_db",
+            "type": "config",
+            "callable": "DB_FPATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scripts/reset_db.py",
+            "line": 13
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scripts/reset_db.py:13: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-075",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "SCRUB_CONFIG_TRF",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 26
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:26: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-076",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "SCRUB_IGNORE_ENTITIES",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 34
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:34: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-077",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "ACTION_TEXT_NAME_PREFIX",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 52
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:52: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-078",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "ACTION_TEXT_NAME_SUFFIX",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 53
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:53: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-079",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "ACTION_TEXT_SEP",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 55
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:55: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-080",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "SCRUB_LANGUAGE",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 60
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:60: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-081",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "ACTION_TEXT_NAME_PREFIX",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 69
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:69: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-082",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "ACTION_TEXT_NAME_SUFFIX",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 70
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:70: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-083",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "ACTION_TEXT_SEP",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 72
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:72: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-084",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "SCRUB_CHAR",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 88
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:88: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-085",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "SCRUB_FILL_COLOR",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 92
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:92: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-086",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "config",
+            "callable": "SCRUB_KEYS_HTML",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 229
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py:229: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-087",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.scrub",
+            "type": "fire",
+            "callable": "Fire",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/scrub.py",
+            "line": 281
+          },
+          "rationale": "python-fire CLI registration node (fire.Fire(...)); registers functions as CLI commands but carries no data that reaches SQL text. (Registrations via get_functions(__name__) at scrub.py:281 / utils.py:525 are dynamic and cannot be resolved statically - see detection.json uncoveredCases.)",
+          "evidence": [
+            "openadapt/scrub.py:281: fire.Fire(...) registration"
+          ]
+        },
+        {
+          "id": "pass5-src-088",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "file",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/setup.py",
+            "line": 23
+          },
+          "rationale": "File read of static/operational content; the data never reaches SQL statement text (no SQL construction or execution consumes it).",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/setup.py:23: Attribute() candidate row (flow_kind=file)"
+          ]
+        },
+        {
+          "id": "pass5-src-089",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/setup.py",
+            "line": 23
+          },
+          "rationale": "File read of static/operational content; the data never reaches SQL statement text (no SQL construction or execution consumes it).",
+          "evidence": [
+            "setup.py:23: packaging file read (long_description)"
+          ]
+        },
+        {
+          "id": "pass5-src-090",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "file",
+            "type": null,
+            "callable": "read",
+            "arg_index": null,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/setup.py",
+            "line": 24
+          },
+          "rationale": "File read of static/operational content; the data never reaches SQL statement text (no SQL construction or execution consumes it).",
+          "evidence": [
+            "setup.py:24: packaging file read (long_description)"
+          ]
+        },
+        {
+          "id": "pass5-src-091",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/setup.py",
+            "line": 24
+          },
+          "rationale": "File read of static/operational content; the data never reaches SQL statement text (no SQL construction or execution consumes it).",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/setup.py:24: open() candidate row (flow_kind=file)"
+          ]
+        },
+        {
+          "id": "pass5-src-092",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.share",
+            "type": "config",
+            "callable": "ZIPPED_RECORDING_FOLDER_PATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/share.py",
+            "line": 36
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/share.py:36: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-093",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.share",
+            "type": "config",
+            "callable": "ZIPPED_RECORDING_FOLDER_PATH",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/share.py",
+            "line": 43
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/share.py:43: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-094",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "openadapt.share",
+            "type": null,
+            "callable": "send_recording",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/share.py",
+            "line": 70
+          },
+          "rationale": "fire CLI parameter ('share send --recording_id', share.py:70 / crud.py:209). Used only to select the recording via the parameterized ORM filter get_recording_by_id (crud.py:123) and to build output filenames (share.py:39-43, crud.py:161); it never enters SQL text. It is the reachability trigger of the export chain (export_recording_to_folder -> crud.export_recording -> export_sql -> create_db -> connection.execute), not a taint source.",
+          "evidence": [
+            "openadapt/share.py:70-76: send_recording(recording_id) -> export_recording_to_folder",
+            "openadapt/crud.py:123: filter_by(id=recording_id) parameterized ORM filter"
+          ]
+        },
+        {
+          "id": "pass5-src-095",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.share",
+            "type": null,
+            "callable": "receive_recording",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/share.py",
+            "line": 86
+          },
+          "rationale": "Drives the external 'wormhole receive' list-argument command (Pass-2 shape, share.py:93-97); no SQL path.",
+          "evidence": [
+            "openadapt/share.py:93-97: subprocess.run([\"wormhole\", \"receive\", wormhole_code])"
+          ]
+        },
+        {
+          "id": "pass5-src-096",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.share",
+            "type": "fire",
+            "callable": "Fire",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/share.py",
+            "line": 106
+          },
+          "rationale": "python-fire CLI registration node (fire.Fire(...)); registers functions as CLI commands but carries no data that reaches SQL text. (Registrations via get_functions(__name__) at scrub.py:281 / utils.py:525 are dynamic and cannot be resolved statically - see detection.json uncoveredCases.)",
+          "evidence": [
+            "openadapt/share.py:106: fire.Fire(...) registration"
+          ]
+        },
+        {
+          "id": "pass5-src-097",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/util.py",
+            "line": 21
+          },
+          "rationale": "DB-import channel: on_import (app/util.py:20-28) decompresses the user-chosen bz2 file over openadapt.db (copyfileobj), replacing the entire database. This makes every Recording column read at crud.py:142 attacker-controlled, feeding the raw-SQL f-string executed at crud.py:180. The file-content -> DB -> ORM-read -> SQL-text flow is not directly trackable by data-flow analysis (DB round-trip); modeled via the db_read source labels; manual review required.",
+          "evidence": [
+            "openadapt/app/util.py:20-23: with open(src, \"wb\") as f: with bz2.BZ2File(selected_file, \"rb\") as f2: copyfileobj(f2, f)"
+          ]
+        },
+        {
+          "id": "pass5-src-098",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "bz2",
+            "type": "bz2",
+            "callable": "BZ2File",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/util.py",
+            "line": 22
+          },
+          "rationale": "DB-import channel: on_import (app/util.py:20-28) decompresses the user-chosen bz2 file over openadapt.db (copyfileobj), replacing the entire database. This makes every Recording column read at crud.py:142 attacker-controlled, feeding the raw-SQL f-string executed at crud.py:180. The file-content -> DB -> ORM-read -> SQL-text flow is not directly trackable by data-flow analysis (DB round-trip); modeled via the db_read source labels; manual review required.",
+          "evidence": [
+            "openadapt/app/util.py:20-23: bz2.BZ2File(selected_file, \"rb\") decompresses over openadapt.db"
+          ]
+        },
+        {
+          "id": "pass5-src-099",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "shutil",
+            "type": null,
+            "callable": "copyfileobj",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/util.py",
+            "line": 23
+          },
+          "rationale": "DB-import channel: on_import (app/util.py:20-28) decompresses the user-chosen bz2 file over openadapt.db (copyfileobj), replacing the entire database. This makes every Recording column read at crud.py:142 attacker-controlled, feeding the raw-SQL f-string executed at crud.py:180. The file-content -> DB -> ORM-read -> SQL-text flow is not directly trackable by data-flow analysis (DB round-trip); modeled via the db_read source labels; manual review required.",
+          "evidence": [
+            "openadapt/app/util.py:23: copyfileobj(f2, f) - DB replacement"
+          ]
+        },
+        {
+          "id": "pass5-src-100",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/util.py",
+            "line": 36
+          },
+          "rationale": "DB-export channel (on_export, app/util.py:31-50): reads openadapt.db and writes a bz2 copy for sharing; no SQL execution and no input into SQL text.",
+          "evidence": [
+            "openadapt/app/util.py:31-50: on_export compresses openadapt.db for sharing (no SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-101",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "bz2",
+            "type": "bz2",
+            "callable": "BZ2File",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/util.py",
+            "line": 37
+          },
+          "rationale": "DB-export channel (on_export, app/util.py:31-50): reads openadapt.db and writes a bz2 copy for sharing; no SQL execution and no input into SQL text.",
+          "evidence": [
+            "openadapt/app/util.py:31-50: on_export compresses openadapt.db for sharing (no SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-102",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "shutil",
+            "type": null,
+            "callable": "copyfileobj",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/app/util.py",
+            "line": 38
+          },
+          "rationale": "DB-export channel (on_export, app/util.py:31-50): reads openadapt.db and writes a bz2 copy for sharing; no SQL execution and no input into SQL text.",
+          "evidence": [
+            "openadapt/app/util.py:31-50: on_export compresses openadapt.db for sharing (no SQL)"
+          ]
+        },
+        {
+          "id": "pass5-src-103",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "config",
+            "callable": "DT_FMT",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 23
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py:23: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-104",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": "os",
+            "callable": "getenv",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 42
+          },
+          "rationale": "Environment-variable read (operator-level trust, config.py); value used for configuration defaults, never enters SQL text.",
+          "evidence": [
+            "openadapt/utils.py:42: os.getenv (operator-level)"
+          ]
+        },
+        {
+          "id": "pass5-src-105",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "config",
+            "callable": "IGNORE_WARNINGS",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 48
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py:48: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-106",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "config",
+            "callable": "filter_log_messages",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 48
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py:48: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-107",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "recording",
+            "callable": "monitor_width",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 309
+          },
+          "rationale": "DB-derived monitor dimensions consumed for plot layout / image sizing (utils.py); never enters SQL text.",
+          "evidence": [
+            "openadapt/utils.py:309: recording.monitor_width used for plot/image layout only"
+          ]
+        },
+        {
+          "id": "pass5-src-108",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "recording",
+            "callable": "monitor_height",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 310
+          },
+          "rationale": "DB-derived monitor dimensions consumed for plot layout / image sizing (utils.py); never enters SQL text.",
+          "evidence": [
+            "openadapt/utils.py:310: recording.monitor_height used for plot/image layout only"
+          ]
+        },
+        {
+          "id": "pass5-src-109",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "recording",
+            "callable": "monitor_width",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 369
+          },
+          "rationale": "DB-derived monitor dimensions consumed for plot layout / image sizing (utils.py); never enters SQL text.",
+          "evidence": [
+            "openadapt/utils.py:369: recording.monitor_width used for plot/image layout only"
+          ]
+        },
+        {
+          "id": "pass5-src-110",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "recording",
+            "callable": "monitor_height",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 370
+          },
+          "rationale": "DB-derived monitor dimensions consumed for plot layout / image sizing (utils.py); never enters SQL text.",
+          "evidence": [
+            "openadapt/utils.py:370: recording.monitor_height used for plot/image layout only"
+          ]
+        },
+        {
+          "id": "pass5-src-111",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "config",
+            "callable": "SCRUB_ENABLED",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 372
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py:372: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-112",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "config",
+            "callable": "DIRNAME_PERFORMANCE_PLOTS",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 487
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py:487: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-113",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "config",
+            "callable": "DIRNAME_PERFORMANCE_PLOTS",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 488
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py:488: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-114",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.utils",
+            "type": "fire",
+            "callable": "Fire",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/utils.py",
+            "line": 525
+          },
+          "rationale": "python-fire CLI registration node (fire.Fire(...)); registers functions as CLI commands but carries no data that reaches SQL text. (Registrations via get_functions(__name__) at scrub.py:281 / utils.py:525 are dynamic and cannot be resolved statically - see detection.json uncoveredCases.)",
+          "evidence": [
+            "openadapt/utils.py:525: fire.Fire(...) registration"
+          ]
+        },
+        {
+          "id": "pass5-src-115",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "openadapt.visualize",
+            "type": "config",
+            "callable": "SCRUB_ENABLED",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/visualize.py",
+            "line": 30
+          },
+          "rationale": "Operator-level configuration attribute (sourced from the local .env via openadapt/config.py; set by the machine operator, not an attacker-reachable input for this native desktop app); consumed as configuration and never interpolated into SQL statement text.",
+          "evidence": [
+            "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/visualize.py:30: Attribute candidate row (flow_kind=config)"
+          ]
+        },
+        {
+          "id": "pass5-src-116",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.visualize",
+            "type": "recording",
+            "callable": "task_description",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/visualize.py",
+            "line": 149
+          },
+          "rationale": "DB-derived Recording.task_description passed to scrub.scrub_text for display (visualize.py:149) - a Pass-7-relevant display context, not SQL; no SQL text construction.",
+          "evidence": [
+            "openadapt/visualize.py:149: scrub.scrub_text(recording.task_description) (display context)"
+          ]
+        },
+        {
+          "id": "pass5-src-117",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.visualize",
+            "type": "recording",
+            "callable": "id",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/visualize.py",
+            "line": 248
+          },
+          "rationale": "DB-derived Recording.id used for display/plot identification in visualize.py; never enters SQL text.",
+          "evidence": [
+            "openadapt/visualize.py:248: recording.id used for display/identification"
+          ]
+        },
+        {
+          "id": "pass5-src-118",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "openadapt.visualize",
+            "type": "recording",
+            "callable": "id",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln/openadapt/visualize.py",
+            "line": 249
+          },
+          "rationale": "DB-derived Recording.id used for display/plot identification in visualize.py; never enters SQL text.",
+          "evidence": [
+            "openadapt/visualize.py:249: recording.id used for display/identification"
+          ]
+        }
+      ]
+    }
+  ]
+}

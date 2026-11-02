@@ -1,0 +1,165 @@
+{
+  "triage_metadata": {
+    "task": "Independent LLM path re-review of Augur IRIS Pass 5 (CWE-89 SQL Injection) formal results for OpenAdapt",
+    "generated_at": "2026-10-21",
+    "reviewer_model": "glm-5.3",
+    "sarif_reviewed": "results/pass5.sarif",
+    "formal_rule_id": "py/augur/openadapt/pass5-sql-injection",
+    "source_tree": "dataset/codeql_databases/sql_injection_dbs/OpenAdapt_vuln",
+    "constraints_observed": [
+      "Formal SARIF, original labels, and CodeQL queries were not modified.",
+      "PyVul ground truth, CVE descriptions, and fix commits were not read during path review; the ground-truth comparison below uses only the vulnerability record supplied by the user in the task prompt (export_sql / commit 9dc1850918e81648b9885dd8a1be836d5e8d95ef).",
+      "Diagnostic query results and native CodeQL py/sql-injection baseline results are not counted as Pass 5 formal TPs."
+    ],
+    "formal_result_inventory": {
+      "total_results_in_sarif": 3,
+      "all_results_rule_id": "py/augur/openadapt/pass5-sql-injection",
+      "other_rule_ids_present": false,
+      "diagnostic_notifications_in_results": false,
+      "native_baseline_results_mixed_in": false,
+      "note": "The SARIF run contains exactly one rule and three results, all anchored in openadapt/crud.py at lines 142, 150, and 180. The toolExecutionNotifications (py/baseline/expected-extracted-files, cli/file-coverage-baseline, cli/platform) are extraction/telemetry notices only, not CWE-89 findings, and were excluded."
+    }
+  },
+  "alerts": [
+    {
+      "alert_id": "pass5-result-1",
+      "sarif_location": "openadapt/crud.py:142:15-282 (Fstring construction of INSERT statement in export_sql)",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "source": {
+        "location": "openadapt/crud.py:142 (Attribute reads on the ORM object `recording` returned by get_recording_by_id, crud.py:139)",
+        "kind": "database-resident second-order source",
+        "attacker_control": "Displayed threadFlows track the leading columns {recording.id} (col 48-60), {recording.timestamp} (col 64-83), {recording.monitor_width} (col 87-110), {recording.monitor_height} (col 114-138). The strongest control evidence is on the string columns interpolated later in the same f-string, '{recording.platform}' and '{recording.task_description}' (labeled tp in labels.json pass5-src-034/-035): task_description originates from the nicegui Name prompt (app/cards.py:44-49) passed via Popen(\"python3 -m openadapt.record \" + name, shell=True) (app/cards.py:76-79) to record(task_description) (record.py:507-520) and stored through the parameterized ORM insert; the DB-import channel (app/util.py:20-23, on_import, bz2-decompresses a user-chosen file over openadapt.db) can additionally make every column arbitrary. Numeric columns are machine-generated in the normal flow and only attacker-controlled after a DB import."
+      },
+      "sink": {
+        "location": "openadapt/crud.py:142",
+        "kind": "raw SQL text construction (f-string with 8 unescaped interpolations; string columns wrapped only in literal single quotes)",
+        "caveat": "By itself this location is string construction, not execution. It is counted as likely_tp only because the constructed string is verifiably executed at crud.py:180 on the same chain (see pass5-result-3); the alert anchors the exact code construct where untrusted values enter SQL text."
+      },
+      "path_review": {
+        "propagation_matches_code": true,
+        "details": "ThreadFlows are intra-expression (Attribute -> Fstring at crud.py:142), consistent with the real code: sql = f\"INSERT INTO recording VALUES ({recording.id}, ..., '{recording.platform}', '{recording.task_description}')\". Interpolation is unescaped; a single quote in platform/task_description breaks out of the SQL value context. The message text repeated per path is a multi-path artifact, not a fabricated flow."
+      },
+      "controllable_sql_portion": "All 8 value positions of the INSERT's VALUES clause. No identifier (table name `recording` is a literal), no ORDER BY / WHERE structure positions are attacker-controlled; this is a value-position injection via quote breakout, which is sufficient for CWE-89 here because values are concatenated, not bound.",
+      "parameter_binding_or_barrier_evidence": "None on this chain: no escaping, no whitelist, no validation anywhere between the ORM read (crud.py:139) and the f-string (crud.py:142). The only bound-parameter channel in the project, db.execute(sa.insert(table), to_insert) at crud.py:48, is a different call site and does not protect this chain.",
+      "preconditions": [
+        "A Recording row exists for the requested recording_id (get_recording_by_id returns truthy; otherwise `return sql` at crud.py:147 would raise UnboundLocalError before any sink).",
+        "The recording contains attacker-influenced column values: task_description entered via the UI Name prompt / record CLI, or any column after a DB import via on_import.",
+        "The export chain is invoked (see pass5-result-3 reachability)."
+      ],
+      "fp_category_checks": {
+        "orm_safe_query_misflagged": false,
+        "fixed_sql_constant_misflagged": false,
+        "test_or_migration_script_misflagged": false,
+        "admin_config_misflagged": false,
+        "other_vulnerability_class_mixed_in": false
+      },
+      "rationale": "The f-string at crud.py:142 is the project's only dynamic SQL construction and it interpolates DB-resident, externally-influenced values (task_description/platform in the normal flow; all columns after a DB import) with no escaping. Although the alert's own codeFlows stop at construction, the constructed text is executed verbatim at crud.py:180 (independently confirmed), so the flagged defect is real."
+    },
+    {
+      "alert_id": "pass5-result-2",
+      "sarif_location": "openadapt/crud.py:150:29-32 (Parameter `sql`, position 1, of create_db)",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "source": {
+        "location": "openadapt/crud.py:142 (recording.<col> Attribute reads; same source family as pass5-result-1)",
+        "kind": "database-resident second-order source (task_description/platform attacker-influenced; numeric columns attacker-controlled only via DB import)"
+      },
+      "sink": {
+        "location": "openadapt/crud.py:150 (def create_db(recording_id, sql)) — the parameter is executed verbatim at crud.py:180",
+        "kind": "internal raw-SQL execution wrapper parameter (module-boundary sink for the injection chain)",
+        "caveat": "The sink node is a formal parameter, not a call. It is a valid sink only because create_db's body passes it directly to connection.execute (crud.py:180) with no transformation; verified in the real source."
+      },
+      "path_review": {
+        "propagation_matches_code": true,
+        "details": "codeFlow: recording.<col> @142 -> Fstring @142 -> sql local (assignment @142, return @147) -> export_sql() call value @208 -> sql local @208 -> create_db argument 1 @209 -> create_db sql parameter @150. Verified against the real code: crud.py:208 `sql = export_sql(recording_id)`, crud.py:209 `t, db_file_path = create_db(recording_id, sql)`, create_db body executes `connection.execute(sql)` at crud.py:180 inside `with engine.begin()`. Every step exists in the real source; no over-generalized summary was needed (the summary label pass5-src-049 deliberately added no extra edge, and none is required — the default dataflow covers the hand-off)."
+      },
+      "controllable_sql_portion": "The entire SQL statement text passed as create_db parameter 1: INSERT INTO recording VALUES (...) with all 8 unescaped interpolated values.",
+      "parameter_binding_or_barrier_evidence": "None. create_db performs no sanitization of `sql`; it only builds the target sqlite file (f\"recording_{recording_id}.db\" @161), rewrites the .env DB_FNAME line (@167-171), runs `alembic upgrade head` (@176), then executes the string raw (@179-180)."
+      ,
+      "preconditions": [
+        "Recording exists for recording_id.",
+        "Attacker-influenced column content (UI name / CLI task_description, or DB import).",
+        "export_recording invoked (share.py send flow or equivalent)."
+      ],
+      "fp_category_checks": {
+        "orm_safe_query_misflagged": false,
+        "fixed_sql_constant_misflagged": false,
+        "test_or_migration_script_misflagged": false,
+        "admin_config_misflagged": false,
+        "other_vulnerability_class_mixed_in": false
+      },
+      "rationale": "The parameter-to-execution link is real and directly verified: create_db executes its parameter 1 verbatim via connection.execute at crud.py:180. The taint reaching this parameter is the f-string output built from attacker-influenced DB content. This is a genuine sink-node representation of the injection chain, not a wrapper over a parameterized query (contrast with _insert/crud.py:48, correctly excluded)."
+    },
+    {
+      "alert_id": "pass5-result-3",
+      "sarif_location": "openadapt/crud.py:180:28-31 (argument 0 of connection.execute in create_db)",
+      "verdict": "likely_tp",
+      "confidence": 0.95,
+      "source": {
+        "location": "openadapt/crud.py:142 (recording.<col> Attribute reads; same source family)",
+        "kind": "database-resident second-order source; task_description is externally supplied (app/cards.py:44-49 -> Popen @76-79 -> record.py:507-520 -> parameterized ORM store -> DB), all columns controllable after on_import DB replacement (app/util.py:20-23)"
+      },
+      "sink": {
+        "location": "openadapt/crud.py:180, inside `with engine.begin() as connection:` (engine from sa.create_engine(config.DB_URL) @173)",
+        "kind": "real SQL execution: SQLAlchemy 1.4 Connection.execute with a plain string argument compiles/executes it as literal SQL text (text() semantics) with no parameterization of the interpolated recording values"
+      },
+      "path_review": {
+        "propagation_matches_code": true,
+        "details": "codeFlow extends pass5-result-2's chain by one step: create_db sql parameter @150 -> connection.execute argument @180. All intermediate nodes verified in the real source: crud.py:142 (f-string), 147 (return sql), 208 (export_sql() call), 209 (create_db argument 1), 150 (parameter), 179-180 (engine.begin / connection.execute). No fabricated edges, no over-generalized summary or diagnostic artifact involved."
+      },
+      "reachability": {
+        "entry_points": [
+          "share.py:70-76 send_recording (fire CLI: `python -m openadapt.share send --recording_id=N`) -> export_recording_to_folder (share.py:32) -> crud.export_recording (crud.py:199-211) -> export_sql + create_db",
+          "crud.export_recording is a module-level public function also registered through fire-based dynamic CLI surfaces (utils.get_functions), but the documented share send command alone establishes reachability"
+        ],
+        "ui_button_status": "The app UI 'Share' icon (app/main.py:44-45) raises NotImplementedError; reachability rests on the CLI entry point, which is a real, documented usage path (share.py module docstring).",
+        "permission_conditions": "None beyond local execution of the CLI; the app is a native desktop tool and the DB is local SQLite."
+      },
+      "controllable_sql_portion": "Full statement text of the INSERT, all 8 VALUES positions. Value-context injection via single-quote breakout in platform/task_description (normal flow) or arbitrary text in any column (post-import). Structural positions (table name) are literals and not controllable.",
+      "parameter_binding_or_barrier_evidence": "None on the executed statement: connection.execute(sql) passes the tainted string as the statement itself. Impact is confined to the newly created local sqlite database recording_{recording_id}.db (created by create_db after `alembic upgrade head`), not the main openadapt.db — but the injection itself (arbitrary SQL executed against that database, e.g. tampering with rows written by the export) is real.",
+      "preconditions": [
+        "Recording with the given recording_id exists (otherwise UnboundLocalError at crud.py:147 before any execution).",
+        "Column content attacker-influenced: task_description from UI/CLI text, or any column after DB import (app/util.py:20-23).",
+        "Operator runs the export/share flow with that recording_id."
+      ],
+      "fp_category_checks": {
+        "orm_safe_query_misflagged": false,
+        "fixed_sql_constant_misflagged": false,
+        "test_or_migration_script_misflagged": false,
+        "admin_config_misflagged": false,
+        "other_vulnerability_class_mixed_in": false,
+        "second_order_note": "The source is DB-resident (second-order/stored injection). The external-input -> DB leg (UI prompt -> Popen -> record CLI -> parameterized ORM insert) and the import channel (on_import) are documented but not tracked by the SARIF codeFlows; the DB-read nodes at crud.py:142 were deliberately modeled as sources. This is a modeling choice backed by the real attacker-influenced population paths, not an over-generalized source."
+      },
+      "rationale": "Complete, real, verified chain: externally influenced Recording columns -> unescaped f-string SQL text (crud.py:142) -> create_db parameter (crud.py:209/150) -> Connection.execute literal-SQL execution (crud.py:180). All nodes exist in the real source, the sink truly executes SQL, and no barrier exists on the chain. The displayed threadFlows happen to track the four leading (mostly numeric) columns whose normal-flow values are machine-generated; their exploitability rests on the DB-import channel, while the string columns platform/task_description (attacker-influenced in the normal flow via the same f-string) provide the primary injection vector. Since all 8 interpolations share the single `sql` string reaching the sink, the alert is a true positive regardless of which column's path is displayed."
+    }
+  ],
+  "summary": {
+    "total_formal_alerts": 3,
+    "likely_tp": 3,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "statement": "CodeQL 分析成功，且本轮命中 3 条正式 CWE-89 SQL 注入污点路径（同一漏洞链的三个锚点：构造点 crud.py:142、执行包装形参 crud.py:150、真实执行点 crud.py:180）。所有路径均经真实源码逐节点核验，链上无参数化/转义屏障。未发现诊断结果或原生 CodeQL 基线结果混入正式结果。"
+  },
+  "ground_truth_hit_assessment": {
+    "question": "Is the real vulnerability in this project (PyVul record: export_sql, commit 9dc1850918e81648b9885dd8a1be836d5e8d95ef, CWE-89) hit by the Pass 5 formal results?",
+    "hit": true,
+    "confidence": 0.95,
+    "vulnerability": "SQL Injection via export_sql due to missing parameterized queries (CWE-89)",
+    "mapping": {
+      "ground_truth_function": "export_sql",
+      "ground_truth_file": "openadapt/crud.py (vulnerable snapshot used for this experiment)",
+      "vulnerable_code": "sql = f\"INSERT INTO recording VALUES ({recording.id}, {recording.timestamp}, {recording.monitor_width}, {recording.monitor_height}, {recording.double_click_interval_seconds}, {recording.double_click_distance_pixels}, '{recording.platform}', '{recording.task_description}')\"  (crud.py:142)",
+      "vulnerable_code_matches_snapshot": "Exact textual match with openadapt/crud.py:142 in the analyzed source tree, including the surrounding export_sql body (docstring, get_recording_by_id lookup, conditional construction, `return sql`).",
+      "fix_description_consistency": "The upstream fix replaced the f-string with a placeholder VALUES (?, ?, ...) template plus a separately returned values tuple (parameterization). This confirms the f-string construction at crud.py:142 was the vulnerability — precisely the construct flagged by all three formal results.",
+      "hit_by": [
+        "pass5-result-1: crud.py:142 — the f-string construction inside the vulnerable function export_sql itself.",
+        "pass5-result-2: crud.py:150 — the sql parameter through which export_sql's output is handed to the executing wrapper create_db (export_recording, crud.py:208-209).",
+        "pass5-result-3: crud.py:180 — connection.execute(sql), where the vulnerable export_sql output is actually executed."
+      ],
+      "attacker_control_path_confirmed": "task_description (user text via nicegui Name prompt / record CLI) and platform reach the f-string through the DB round-trip; the DB import channel can control all columns. Same second-order qualification as the labels: sink-side flow is certain; the external-input -> DB leg is documented (cards.py:44/76-79, record.py:507-520, app/util.py:20-23) but crosses process/persistence boundaries."
+    },
+    "execution_condition_note": "The executed SQL runs against the locally created recording_{id}.db export database (create_db), which matches the vulnerability's real semantics (export_sql generates the INSERT consumed by the export chain). The injection is real CWE-89; its blast radius is the local export DB rather than the main openadapt.db.",
+    "conclusion": "命中。Pass 5 正式结果的三个告警锚定的正是真实漏洞函数 export_sql 的污点构造点及其唯一执行链（export_sql -> create_db -> connection.execute），行号与代码逐字符吻合，且链上无任何参数化或转义防护。"
+  }
+}
