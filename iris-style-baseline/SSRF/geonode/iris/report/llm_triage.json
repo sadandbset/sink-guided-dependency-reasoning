@@ -1,0 +1,317 @@
+{
+  "triage_metadata": {
+    "target_rule": "py/augur/geonode/pass3-ssrf",
+    "sarif_file": "results/pass3.sarif",
+    "sarif_summary": "CodeQL 分析成功：SARIF 含 1 个 run、1 条正式规则 py/augur/geonode/pass3-ssrf、10 条正式告警（均为该规则，kind/level 为 CodeQL 缺省 error）。没有解析诊断（diagnostic）类结果，也没有可选原生 CodeQL SSRF 基线查询结果混入——本文件只复核这 10 条正式告警。",
+    "source_snapshot": "dataset/codeql_databases/ssrf_dbs/geonode_vuln（commit abd1baf3d709265604010b7b15c8bfcc2a72a252，只读）",
+    "reviewer": "independent LLM path review (CWE-918)",
+    "constraints_obeyed": "未读取 PyVul 真值、修复提交与 CVE 公告；未读取源码目录中的 geonode_ssrf_cve_application_report.md / geonode_ssrf_vulnerability_audit_report.md（疑似真值衍生文档）；未修改 SARIF、labels、正式查询。用户在任务提示中直接提供的 GHSA/commit 信息仅用于命中比对。",
+    "verdict_counts": { "likely_tp": 9, "likely_fp": 1, "uncertain": 0, "total": 10 },
+    "key_crosscutting_findings": {
+      "no_sanitizer_modeled_anywhere": "全部 10 条告警路径上不存在有效的 scheme 白名单、解析后 IP 限制或重定向再校验。唯一的 host 级控制是 proxy 的 PROXY_ALLOWED_HOSTS 字符串白名单（proxy/views.py:109-146），但 (a) settings.DEBUG=True 时整体跳过（:109）；(b) 任何注册过 Service.base_url 的 host 会被动态加入白名单（:136-138），而服务注册仅 @login_required；(c) extract_ip_or_domain 的正则 ^(?:http://|https://)([a-zA-Z0-9.-]+) 在首个非 [a-zA-Z0-9.-] 字符处截断，@/%40 编码的 userinfo 会欺骗白名单比对（见 alert_8，即真实漏洞）。",
+      "url_transform_not_sanitizing": "所有路径上的 urljoin/urlsplit/urlparse/URL.from_text().normalize() 只做解析与规范化，不改变也不会限制攻击者可控的 host/port/scheme（proxy/views.py:98-99,167-179；services/models.py:81-92 仅重组 query；thumbs/utils.py:187-188 的 PUBLIC_LOCATION→LOCATION 替换仅当 URL 前缀匹配本站 OGS 地址时才发生）。因此条目 3（base URL/相对 URL/urljoin 处理）在所有 TP 路径上的结论均为：转换存在但不构成对目标主机的约束。",
+      "sinks_are_real_network_io": "除 alert_2（smart_open 本地路径）外，其余 sink 均为真实网络请求执行：HttpClient.request 内部 requests.Session().get/action（utils.py:1218-1248，session.verify=False、默认跟随重定向）、requests.get（wms.py:284）、requests.Session().get（geonodeharvester.py:701）、arcrest.Catalog（arcgis.py:410，urllib 网络读取）、OWSLib openURL（thumbs/utils.py:421）。仅创建 Request/解析 URL 的站点没有单独立为告警。",
+      "duplication_note": "alert_5/alert_6 的 sink 是 HttpClient.request 内部的最终 requests 调用（utils.py:1236/1248），与 alert_1（base.py:81 外层 http_client.request 调用点）和 alert_7（utils.py:1883 外层 http_client.get 调用点）是同一条污点链的两级粒度。按污点路径本身判定为 TP，但作为独立 finding 属于重复计数（10 条告警 ≈ 7 条独立污点链）。",
+      "file_local_read_mix": "alert_2 的 sink 是 smart_open.open(uri=<urlparse(...).path>)——无 scheme、无 netloc 的本地路径，属本地文件读取（CWE-22 素材，按标注约定单独记录），已按 CWE-918 判为 likely_fp，未计入 TP。除此之外没有 file:/测试代码/诊断类结果混入正式计数。"
+    }
+  },
+  "alerts": [
+    {
+      "alert_index": 0,
+      "rule_id": "py/augur/geonode/pass3-ssrf",
+      "location": "geonode/harvesting/harvesters/arcgis.py:410",
+      "sink_code": "self._arc_catalog = arcrest.Catalog(self.remote_url)",
+      "sink_type": "arcrest.Catalog(url) —— arcrest 库内部用 urllib 对该 URL 发起真实 HTTP 请求获取 REST catalog JSON",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "taint_paths": [
+        {
+          "source": "geonode/harvesting/harvesters/wms.py:130 — from_django_record: cls(record.remote_url, ...)（二阶 DB 字段 Harvester.remote_url）",
+          "path": "record.remote_url → harvester 构造（base.py:79-80 self.remote_url=remote_url）→ arc_catalog property → arcrest.Catalog(self.remote_url)（arcgis.py:410）"
+        },
+        {
+          "source": "geonode/harvesting/harvesters/geonodeharvester.py:1253 — _from_django_record: target_class(record.remote_url, ...)（同一二阶字段的另一工厂）",
+          "path": "同上"
+        }
+      ],
+      "source_assessment": "真实不可信输入：Harvester.remote_url 的写入路径有两条——(a) /api/v2/harvesters/ 管理员 API；(b) 服务注册时自动建 harvester：serviceprocessors/wms.py:145-149 与 arcgis.py:129-133 都执行 Harvester.objects.create(remote_url=instance.service_url)，而 Service.base_url 来自任意已登录用户提交的 CreateServiceForm.url（@login_required register_service，无 URL host 校验）。因此 (b) 使该二阶 source 对低权限已认证用户可影响。入口真实可达（服务注册→自动建 harvester→celery harvest 任务调用 arc_catalog）。",
+      "controllability": "整个 URL（scheme+host+port+path）二阶可控（由注册时的 service URL 决定，事后经 DB 传递）。",
+      "urljoin_base_handling": "无 urljoin/base URL 处理；self.remote_url 原样传入 arcrest.Catalog。",
+      "protections": "无。remote_url 无 scheme/host 校验；harvesting 视图权限（管理员直接创建）只影响 (a) 路径，不约束 (b) 路径。",
+      "conditions": "需已认证用户注册一个 ArcGIS/WMS 服务触发自动 harvester 创建，且 harvest/更新任务实际运行（update_availability/initiate_update_harvestable_resources 在注册时即被调用，wms.py:154-155/arcgis.py:138-139）。",
+      "reasons": "污点链每一步都有源码支撑（from_django_record 工厂、self.remote_url 赋值、arc_catalog 属性消费），sink 是真实网络请求，host 完全可控且无任何校验。属二阶 SSRF（攻击面为已认证用户 + 异步任务），与 M5 摘要边建模一致。置信 medium 因依赖 (b) 自动创建链或管理员操作。",
+      "trusted_fixed_url_or_feature": "否——这是 harvesting 功能按设计要抓取远端资源，但抓取目标可由非管理员用户经服务注册间接指定（例如指向内网地址/云元数据端点），构成 CWE-918 意义上的 SSRF。"
+    },
+    {
+      "alert_index": 1,
+      "rule_id": "py/augur/geonode/pass3-ssrf",
+      "location": "geonode/services/serviceprocessors/base.py:81",
+      "sink_code": "resp, _ = http_client.request(self.url)",
+      "sink_type": "geonode.utils.HttpClient.request → 内部 requests.Session action(url=...)（utils.py:1218-1236）——真实网络请求",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "taint_paths": [
+        {
+          "source": "geonode/services/forms.py:64 — CreateServiceForm.clean: url = self.cleaned_data.get(\"url\")（表单字段，已认证用户输入）",
+          "path": "forms.py:64 url → :68 get_service_handler(base_url=url) → serviceprocessors/__init__.py:68 handler(base_url, ...) → arcgis.py:68 ArcMapServiceHandler.__init__ url → base.py:70 self.url = url → base.py:81 probe(): http_client.request(self.url)"
+        },
+        {
+          "source": "geonode/services/models.py:82 — Service._get_service_url: urlparse(self.base_url)（二阶 DB 字段 Service.base_url）",
+          "path": "models.py:82 base_url → service_url property → services/views.py:94 _get_service_handler: get_service_handler(service.service_url, ...) → 同上 handler 构造 → base.py:81 probe()"
+        }
+      ],
+      "source_assessment": "真实不可信输入：(1) CreateServiceForm.url 由任意已登录用户在 register_service（@login_required）提交；clean_url（forms.py:54-59）只查唯一性，不做任何 URL/host 校验；(2) Service.base_url 二阶（DB 持久化后由 _get_service_handler 在 harvest/rescan 时重新服务端抓取）。两条入口都真实可达：表单 clean() 在注册请求中同步调用 get_service_handler（forms.py:68）并 probe()（forms.py:72）。",
+      "controllability": "整个 URL（scheme+host+port+path）可控（表单直接）或二阶可控（DB）。",
+      "urljoin_base_handling": "无。self.url 原样传入 http_client.request。",
+      "protections": "无。表单对 URL 无校验（除 max_length=512 与前端 type=url 属性）；probe 前无 host 白名单；HttpClient session.verify=False。",
+      "conditions": "已认证用户（无管理员门槛）提交服务注册表单即触发同步 fetch；后续 rescan/harvest 触发二阶路径。",
+      "reasons": "codeFlows 0/1（表单直达）与 2/3（二阶 base_url）均有完整源码支撑：handler 注册表动态分派（__init__.py:64-68）与 self.url 赋值（base.py:69-70）真实存在，probe 在表单验证阶段被调用（forms.py:72）。污点链、入口、sink 全部成立。codeFlow 0 与 1 的差异仅是构造的 handler 分支（arcgis.py:68 与 arcgis.py:214 两个处理器构造点），M1/M2 摘要边的跨 handler 传播在此为可接受近似（同一用户 URL 分派到任一 handler 时 self.url 均为该 URL）。",
+      "trusted_fixed_url_or_feature": "服务探测按设计需抓取用户给的 URL（功能性行为），但目标对任意已认证用户完全开放且无 host 约束，允许指向内网/元数据端点——按 CWE-918 判 TP。"
+    },
+    {
+      "alert_index": 2,
+      "rule_id": "py/augur/geonode/pass3-ssrf",
+      "location": "geonode/storage/data_retriever.py:116",
+      "sink_code": "smart_open.open(uri=self._original_file_uri, mode=\"rb\")",
+      "sink_type": "smart_open.open(uri=...)——uri 无远端 scheme 时为本地文件读取，不是网络请求",
+      "verdict": "likely_fp",
+      "confidence": "high",
+      "taint_paths": [
+        {
+          "source": "geonode/geoserver/helpers.py:2160 — is_monochromatic_image(instance.thumbnail_url)（二阶 DB 字段 ResourceBase.thumbnail_url）",
+          "path": "helpers.py:2160 thumbnail_url → utils.py:1844 is_monochromatic_image(image_url) → :1881 url → :1887 else 分支（is_local_static 为真）→ get_thumb_handler(url) → :1855 _thumb_path = urlparse(url[...]).path → :1856-1857 storage_manager.exists/open(_thumb_path) → storage/manager.py:146/154 open 回退 DataItemRetriever(_file=name) → data_retriever.py:37/55 self._original_file_uri=_file → :115-117 smart_open.open(uri=...)"
+        },
+        {
+          "source": "geonode/base/api/views.py:1346 — file_data = request.data[\"file\"]（set_thumbnail API，IsAuthenticated+UserHasPerms）",
+          "path": "views.py:1346 file_data → :1367 resource.thumbnail_url = file_data（经 URLValidator+png/jpg/jpeg 后缀校验）→ 同上链"
+        }
+      ],
+      "source_assessment": "source 本身是真实不可信输入（thumbnail_url 可由已认证用户写入），但传播到 sink 的值不再含 scheme/netloc：utils.py:1855 取的是 urlparse(...).path——netloc 被剥离，只余路径。data_retriever.py:56 smart_open.parse_uri 对无 scheme 字符串按本地路径处理。",
+      "controllability": "仅本地文件路径部分可控；无法控制协议、主机或端口，因此无法让 smart_open 发起对任意 host 的网络请求。",
+      "urljoin_base_handling": "urlparse(...).path 截取相当于把 URL 降级为路径——这正是不构成 SSRF 的原因（不改变为受控远端目标，反而移除了远端能力）。",
+      "protections": "set_thumbnail 的 URLValidator 限制 scheme 为 http/https/ftp/ftps 且要求图片扩展名（views.py:1360-1362）——即使该约束被绕过（helpers.py:2160 的读取方并不重新校验），到 sink 的值仍是被剥离 netloc 的 .path。",
+      "conditions": "需 thumbnail_url 指向本站 STATIC_URL 前缀（is_local_static 为真）才会进入 get_thumb_handler 分支，且 storage_manager.open 首次打开失败才回退 DataItemRetriever。",
+      "reasons": "sink 收到的是无 scheme 的本地路径：per 复核标准第 4 条（仅处理本地文件不算 SSRF）与第 9 条（file:/本地读取混入），该告警对 CWE-918 不成立。传播关系本身是真实的（codeFlow 与源码逐行吻合），潜在问题是本地任意路径读取（CWE-22 素材）——按 query_generation_notes §4 的约定该项已单独记录、不计入 CWE-918。故判 likely_fp（针对本 pass 的 SSRF 判定，非否定潜在本地读取风险）。"
+    },
+    {
+      "alert_index": 3,
+      "rule_id": "py/augur/geonode/pass3-ssrf",
+      "location": "geonode/harvesting/harvesters/geonodeharvester.py:702",
+      "sink_code": "get_record_by_id_response = self.http_session.get(f\"{self.remote_url}/catalogue/csw\", params={...})",
+      "sink_type": "requests.Session().get(url)（self.http_session 为 requests.Session，geonodeharvester 构造时创建）——真实网络请求",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "taint_paths": [
+        {
+          "source": "geonode/harvesting/harvesters/wms.py:130 — from_django_record: cls(record.remote_url, ...)（二阶 Harvester.remote_url）",
+          "path": "record.remote_url → harvester __init__ self.remote_url → _get_resource_details（geonodeharvester.py:692-711）→ http_session.get(f\"{self.remote_url}/catalogue/csw\")"
+        },
+        {
+          "source": "geonode/harvesting/harvesters/geonodeharvester.py:1253 — _from_django_record: target_class(record.remote_url, ...)（同一二阶字段）",
+          "path": "同上"
+        }
+      ],
+      "source_assessment": "同 alert_0：Harvester.remote_url 经管理员 API 或任意已认证用户的服务注册自动创建链（wms.py:149 / arcgis.py:133 remote_url=instance.service_url）写入。_get_resource_details 在 harvest 执行流程中被调用（对每个可收获资源生成描述）。入口真实可达。",
+      "controllability": "主机/协议/端口二阶可控；路径固定为 \"/catalogue/csw\" + 固定 CSW 查询参数。可让服务器向任意内网 host:port 的 /catalogue/csw 发 GET。",
+      "urljoin_base_handling": "f-string 拼接而非 urljoin；host 部分即用户可控的 remote_url 前缀，拼接不产生约束。",
+      "protections": "无（无 host 校验；http_session 无 redirect 限制）。",
+      "conditions": "需 harvest 任务运行到详情获取阶段；source 侧同 alert_0 的条件。",
+      "reasons": "污点链与 sink 均有源码支撑；攻击影响为 host 可控、path 固定的服务端 GET（可探测内网端口/服务）。二阶 + 路径固定使其严重性低于全 URL 控制，判 likely_tp（medium confidence）。",
+      "trusted_fixed_url_or_feature": "否——remote geonode harvesting 是功能设计，但目标主机可由非管理员用户间接指定。"
+    },
+    {
+      "alert_index": 4,
+      "rule_id": "py/augur/geonode/pass3-ssrf",
+      "location": "geonode/thumbs/utils.py:421",
+      "sink_code": "u = openURL(base_url, data, method, timeout=timeout, auth=None, headers=headers)",
+      "sink_type": "OWSLib openURL——内部用 urllib 发起真实 HTTP 请求（getmap 的 WMS GetMap 请求）",
+      "verdict": "likely_tp",
+      "confidence": "medium",
+      "taint_paths": [
+        {
+          "source": "geonode/thumbs/thumbnails.py:260 — locations.append([instance.ows_url or ogc_server_settings.LOCATION, [instance.alternate], []])（二阶 DB 字段 Dataset.ows_url）",
+          "path": "thumbnails.py:260 ows_url → :357 返回 locations → :119/_datasets_locations → :140-146 get_map(ogc_server, ...) → thumbs/utils.py:149 ogc_server_location → :183 thumbnail_url = ogc_server_location → :220 f\"{thumbnail_url}{wms_endpoint}\" → getmap(:318) → :319 base_url → :421 openURL(base_url, ...)"
+        }
+      ],
+      "source_assessment": "Dataset.ows_url / MapLayer.ows_url 存放远端服务的 OWS URL，来源为 harvesting 产生的 dataset（用户注册服务的远端 URL 派生）或 MapLayer 记录（thumbs/thumbnails.py:274+ 遍历 maplayers，其 ows_url 同为远端服务派生）。二阶 source 成立（标注 P3-S-0102/P3-S-0104）。缩略图生成在 dataset 保存/信号触发时执行，入口真实可达。",
+      "controllability": "host/scheme/port 二阶可控（ows_url 的 netloc）；path 后拼接 getmap 查询。攻击者经注册服务间接决定抓取主机。",
+      "urljoin_base_handling": "utils.py:187-188 的 PUBLIC_LOCATION→LOCATION 替换只在 thumbnail_url 以本站 geoserver 公网地址开头时发生，对任意其它 host 无影响；f-string 拼接 wms_endpoint 不构成约束。",
+      "protections": "无 host 校验；getmap 请求头仅在 URL 前缀为 LOCATION 时附加 geoserver 凭据（:206-213），不影响目标可达性。",
+      "conditions": "需要一个 ows_url 非本站 geoserver 的 Dataset/Map（由用户注册的远端服务 harvest 产生）且触发其缩略图生成。",
+      "reasons": "codeFlow 与源码逐步吻合（260→357→119→140→146→149→183→220→319→421），sink 为真实网络请求，host 二阶可控且无校验。置信 medium：攻击链较长（注册服务→harvest→缩略图信号），且部分场景 ows_url 回落为固定 ogc_server_settings.LOCATION。",
+      "trusted_fixed_url_or_feature": "否——缩略图抓取按设计可指向远端 OWS 服务，但该服务地址可由非管理员用户注册时决定。"
+    },
+    {
+      "alert_index": 5,
+      "rule_id": "py/augur/geonode/pass3-ssrf",
+      "location": "geonode/utils.py:1236",
+      "sink_code": "response = action(url=url, data=data, headers=headers, timeout=_req_tout, stream=stream, verify=verify)",
+      "sink_type": "requests.Session 动态方法调用（getattr(session, method.lower())）——HttpClient 的最终网络分发，真实网络请求",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "taint_paths": [
+        {
+          "source": "geonode/services/forms.py:64 — CreateServiceForm url（已认证用户服务注册 URL）",
+          "path": "同 alert_1 路径 → base.py:81 http_client.request(self.url) → utils.py:1185 url 参数 → :1236 action(url=url)（最终 requests 分发）"
+        },
+        {
+          "source": "geonode/geoserver/helpers.py:2160 — instance.thumbnail_url（二阶）",
+          "path": "同 alert_7 路径 → utils.py:1883 http_client.get(url) → :1257/1259 self.request(url) → :1185 → :1236"
+        },
+        {
+          "source": "geonode/services/models.py:82 — Service.base_url 二阶（service_url 属性）",
+          "path": "同 alert_1 codeFlow 2/3 路径"
+        }
+      ],
+      "source_assessment": "与 alert_1/alert_7 完全相同的 source 集合（服务注册表单 URL、thumbnail_url 二阶、Service.base_url 二阶），全部真实可达，见对应条目。",
+      "controllability": "同 alert_1（全 URL）与 alert_7（全 URL，受 URLValidator scheme/扩展名约束）。",
+      "urljoin_base_handling": "无（url 原样进入 requests）。",
+      "protections": "无（session.verify=False；重定向默认跟随）。",
+      "conditions": "同 alert_1/alert_7。",
+      "reasons": "该告警是 alert_1 与 alert_7 两条已确认污点链在 HttpClient.request 内部 sink 的重复呈现（模型同时把外层 http_client.request 调用点和内层 action(url=)/session.get 调用点都列为 sink）。污点路径本身成立，故 likely_tp；作为独立 finding 建议与 alert_1/alert_7 去重（同一底层请求）。"
+    },
+    {
+      "alert_index": 6,
+      "rule_id": "py/augur/geonode/pass3-ssrf",
+      "location": "geonode/utils.py:1248",
+      "sink_code": "response = session.get(url, headers=headers, timeout=self.timeout)",
+      "sink_type": "requests.Session.get——action 为 None 时的回退分支，真实网络请求",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "taint_paths": [
+        {
+          "source": "geonode/services/forms.py:64 — CreateServiceForm url",
+          "path": "同 alert_1 → utils.py:1185 → :1248（else 分支）"
+        },
+        {
+          "source": "geonode/geoserver/helpers.py:2160 — instance.thumbnail_url 二阶",
+          "path": "同 alert_7 → :1257/1259 → :1185 → :1248"
+        },
+        {
+          "source": "geonode/services/models.py:82 — Service.base_url 二阶",
+          "path": "同 alert_1 codeFlow 2/3"
+        }
+      ],
+      "source_assessment": "同 alert_5。",
+      "controllability": "同 alert_5。",
+      "urljoin_base_handling": "无。",
+      "protections": "无。",
+      "conditions": "同 alert_5；本分支仅在 method 无对应 session 方法（非 GET/POST/PUT/DELETE 等小写方法名）时执行，可达性稍窄但 GET 回退场景（action 为 None）可发生。",
+      "reasons": "与 alert_5 相同：真实污点链的内部 sink 重复呈现。likely_tp，建议与 alert_1/alert_7/alert_5 去重。"
+    },
+    {
+      "alert_index": 7,
+      "rule_id": "py/augur/geonode/pass3-ssrf",
+      "location": "geonode/utils.py:1883",
+      "sink_code": "req, stream_content = http_client.get(url, timeout=5)",
+      "sink_type": "http_client.get → HttpClient.request → requests.Session——真实网络请求",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "taint_paths": [
+        {
+          "source": "geonode/base/api/views.py:1346 — file_data = request.data[\"file\"]（set_thumbnail PUT，permission_classes=[IsAuthenticated, UserHasPerms]）",
+          "path": "views.py:1346 file_data →（URLValidator + png/jpeg/jpg 后缀校验，:1360-1362）→ :1367 resource.thumbnail_url = file_data → resource.save() → 信号/同步链 → geoserver/helpers.py:2160 或 geoserver/signals.py:143 is_monochromatic_image(instance.thumbnail_url) → utils.py:1844 image_url → :1881 url = image_url if is_absolute(...) else urljoin(SITEURL, image_url) → :1882 非 local static → :1883 http_client.get(url)"
+        },
+        {
+          "source": "geonode/geoserver/helpers.py:2160 — instance.thumbnail_url 直接读取（二阶，含历史/其它写入方）",
+          "path": "同上后半段"
+        },
+        {
+          "source": "geonode/geoserver/signals.py:143 — is_monochromatic_image(instance.thumbnail_url)（Dataset post_save 信号）",
+          "path": "同上后半段"
+        }
+      ],
+      "source_assessment": "真实不可信输入：set_thumbnail 允许任意对该资源有权限的已认证用户把 thumbnail_url 设为任意 http/https/ftp/ftps URL（host 无任何约束）。读取方（helpers.py:2160 geoserver 同步、signals.py:143 post_save 信号）在之后的服务端流程中触发服务端抓取。入口与消费均真实可达。",
+      "controllability": "整个 URL（scheme 受限 http/https/ftp/ftps；path 需以 .png/.jpeg/.jpg 结尾；host/port 完全可控）。",
+      "urljoin_base_handling": "utils.py:1881 的 urljoin 仅对相对 URL 生效（补 SITEURL 前缀）；绝对 URL 原样使用。is_local_static（:1846-1848）只在 STATIC_URL/SITEURL 前缀时走本地分支，任意外网/内网 host 会进入 :1883 网络抓取。",
+      "protections": "URLValidator 只限制 scheme 与扩展名，不限 host（views.py:1359-1362）；is_monochromatic_image 消费侧无校验；http_client verify=False、跟随重定向。无有效 SSRF 防护。",
+      "conditions": "已认证用户对某资源有权限（UserHasPerms，资源所有者即可）→ set_thumbnail；随后该资源的 geoserver 同步或保存信号触发读取。无需管理员。",
+      "reasons": "完整的一阶→二阶写入→读取→fetch 链全部有源码支撑（views.py:1346/1367 写入；helpers.py:2160、signals.py:143 读取；utils.py:1883 抓取），sink 为真实网络请求，host 可控。CWE-918 成立（受限 scheme/后缀不影响指向内网/元数据端点）。"
+    },
+    {
+      "alert_index": 8,
+      "rule_id": "py/augur/geonode/pass3-ssrf",
+      "location": "geonode/proxy/views.py:195",
+      "sink_code": "response, content = http_client.request(_url, method=request.method, data=_data.encode(\"utf-8\"), headers=headers, timeout=timeout, user=user)",
+      "sink_type": "http_client.request → requests.Session——真实网络请求（proxy 视图的服务端代理抓取）",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "real_vulnerability_match": "本告警与任务给出的真实漏洞（commit 79ac6e70419c2e0261548bed91c159b54ff35b8d / GHSA-pxg5-h34r-7q8p，proxy 白名单 @/%40 绕过）为同一函数同一路径——见 real_vulnerability_hit 字段。",
+      "taint_paths": [
+        {
+          "source": "geonode/proxy/views.py:97 — raw_url = url or request.GET[\"url\"]（匿名 GET 参数 ?url=，视图仅 @requires_csrf_token）",
+          "path": "request.GET[\"url\"] → :98 urljoin(SITEURL, raw_url)（仅对以 / 开头的相对 URL 生效）→ :99-105 urlsplit/locator 重组 → :140 白名单校验（可绕过，见下）→ :167-172 urlparse + geturl 重组 → :179 URL.from_text().normalize().to_text()（仅规范化）→ :181-183 可能追加 access_token 查询参数 → :191 SITEURL→geoserver LOCATION 替换（仅前缀匹配时）→ :194-195 http_client.request(_url)"
+        },
+        {
+          "source": "geonode/utils.py:422 / proxy/views.py:161 — request.META.get(\"HTTP_AUTHORIZATION\")（匿名请求头，get_headers/get_token_from_auth_header 提取 token）",
+          "path": "auth_header → utils.py:425 access_token → :452 返回 → proxy/views.py:155 access_token → :183 _url = f\"{_url}{query_separator}access_token={access_token}\" → :195。此路径仅把污点放进查询串（query-only 控制），URL 主体仍来自 ?url=；单独看为弱路径，不改变本告警整体判定。"
+        }
+      ],
+      "source_assessment": "最强的信任边界：/proxy/?url= 为匿名可达（无认证、无权限检查，仅 CSRF token 装饰——对 GET 无实际阻碍）。codeFlow 2（request.GET[\"url\"] → _url）即真实漏洞利用路径。",
+      "controllability": "整个 URL（scheme+host+port+path+query）匿名可控。",
+      "urljoin_base_handling": ":98 的 urljoin 只处理以 \"/\" 开头的相对 URL（拼到 SITEURL 上）；绝对 URL 原样通过。:167-179 的 urlparse/URL.from_text 只做解析与规范化（去 ../、重编码），不限制目标主机。故所有 URL 处理均不改变攻击者对 host/port/scheme 的控制。",
+      "protections": {
+        "claimed": "PROXY_ALLOWED_HOSTS 白名单（views.py:109-146，sec_chk_hosts=True 且非 DEBUG 时执行 validate_host(extract_ip_or_domain(raw_url), PROXY_ALLOWED_HOSTS)）",
+        "assessment": "无效防护，三重可绕过：(1) extract_ip_or_domain（geonode/utils.py:1910-1927，与真实漏洞 code_before 逐字一致：域名正则 ^(?:http://|https://)([a-zA-Z0-9.-]+) 在 % 或 @ 处截断）——url=http://whitelisted.example%40internal-host:8080/... 时提取出白名单 host，而 requests 解析 userinfo 后实际连接 internal-host:8080，即真实漏洞的 @/%40 userinfo 混淆；(2) settings.DEBUG=True 时整个校验跳过（:109）；(3) :136-138 把所有已注册 Service.base_url 的 host 动态加入白名单，而服务注册仅 @login_required，任意已认证用户可注册任意 host 自动放行。此外无 scheme 白名单、无解析后 IP 限制、无 DNS 解析/防重绑定、无重定向再校验（requests 默认跟随重定向）。"
+      },
+      "conditions": "匿名可达；sec_chk_hosts 默认 True，但如上白名单本身可绕过。http_client session.verify=False（TLS 不校验，非 CWE-918 范畴但放大风险）。",
+      "reasons": "source（匿名 ?url=）→ URL 处理（仅规范化）→ 唯一防护（字符串 host 白名单，存在用户信息混淆绕过）→ 真实网络请求，全链路源码复核成立。这是全应用最直接的 SSRF，且与已知真实漏洞（proxy 白名单绕过，全读型 SSRF）同位。"
+    },
+    {
+      "alert_index": 9,
+      "rule_id": "py/augur/geonode/pass3-ssrf",
+      "location": "geonode/services/serviceprocessors/wms.py:284",
+      "sink_code": "response = requests.get(f\"{base_url}api/ows_endpoints/\", {}, timeout=30, verify=False)",
+      "sink_type": "requests.get——真实网络请求（GeoNodeServiceHandler.ows_endpoint 探测远端 geonode 的 OWS 端点）",
+      "verdict": "likely_tp",
+      "confidence": "medium-high",
+      "taint_paths": [
+        {
+          "source": "geonode/services/forms.py:64 — CreateServiceForm url（已认证用户服务注册 URL）",
+          "path": "forms.py:64 → :68 get_service_handler → __init__.py:68 handler(base_url) → (codeFlow 经 arcgis.py:68/214 的 handler 构造点为 M1/M2 动态分派的跨 handler 近似；真实路径为 wms.py:264-267 GeoNodeServiceHandler.__init__ → base.py:70 self.url) → wms.py:282 url = urlsplit(self.url) → :283 base_url = f\"{url.scheme}://{url.netloc}/\" → :284 requests.get(f\"{base_url}api/ows_endpoints/\")"
+        },
+        {
+          "source": "geonode/services/models.py:82 — Service.base_url 二阶（service_url 属性，services/views.py:94 消费）",
+          "path": "同上后半段"
+        }
+      ],
+      "source_assessment": "同 alert_1：任意已认证用户注册服务时提交的 URL（或二阶 Service.base_url）。GeoNodeServiceHandler（wms.py:260，GN_WMS 类型）在服务注册/harvest 流程中被分派构造；parsed_service property（wms.py:271）调用 ows_endpoint()，注册流程即触发。",
+      "controllability": "host/scheme/port 完全可控（urlsplit 取用户 URL 的 scheme+netloc 拼 base_url）；path 固定为 \"api/ows_endpoints/\"。",
+      "urljoin_base_handling": "f-string 拼接（非 urljoin）；urlsplit 仅提取 netloc，不限制目标。",
+      "protections": "无 host 校验；verify=False。",
+      "conditions": "已认证用户注册（或 rescan）一个 GeoNode/GN_WMS 类型服务。",
+      "reasons": "sink 为真实 requests.get，host 可控、无校验，链路有源码支撑。codeFlow 中 arcgis.py:68/214 作为中转是 handler 注册表动态分派的模型近似（所有 handler 共享 base.ServiceHandlerBase.__init__ 的 self.url 赋值），对结论无影响：对 GN_WMS 注册，self.url 即用户 URL。置信 medium-high（依赖 GeoNode 类型 handler 的分派路径与 ows_endpoint 的调用时机）。"
+    }
+  ],
+  "real_vulnerability_hit": {
+    "vulnerability": {
+      "commit": "https://github.com/GeoNode/geonode/commit/79ac6e70419c2e0261548bed91c159b54ff35b8d",
+      "cwe": "CWE-918",
+      "function_changed": "extract_ip_or_domain",
+      "advisory_summary": "proxy 白名单可通过 @ 与 %40（编码 @）绕过：GET /proxy/?url=http://development.demo.geonode.org%40geoserver:8080/geoserver/web 使 extract_ip_or_domain 提取出白名单 host，而浏览器/requests 实际连接 userinfo 之后的真实 host，实现全读 SSRF。"
+    },
+    "vulnerable_code_present_in_snapshot": {
+      "verified": true,
+      "evidence": "分析快照为修复前版本：geonode/utils.py:1910-1927 的 extract_ip_or_domain 与 commit 的 code_before 逐字一致（无 unquote、无 remove_credentials_from_url）；geonode/proxy/views.py:140 的调用点 validate_host(extract_ip_or_domain(raw_url), PROXY_ALLOWED_HOSTS) 即被修复加固的校验点；:194-195 http_client.request(_url, ...) 为漏洞利用时实际发出的服务端请求。"
+    },
+    "hit": true,
+    "matched_alert": {
+      "alert_index": 8,
+      "location": "geonode/proxy/views.py:195",
+      "matching_codeflow": "codeFlow 2：geonode/proxy/views.py:97（request.GET[\"url\"]，即告警利用的 GET /proxy/?url= 入口）→ geonode/proxy/views.py:195（http_client.request(_url)，即白名单被绕过后实际抓取内部服务的 sink）",
+      "explanation": "正式告警 py/augur/geonode/pass3-ssrf 命中了该真实漏洞的完整污点路径：匿名 ?url= 参数（source）→ proxy 视图的规范化处理 → 可绕过的 PROXY_ALLOWED_HOSTS 校验（extract_ip_or_domain，即 commit 修改的函数所在的校验链）→ 服务端网络请求（sink）。告警锚定的 sink 行与 codeFlow 与漏洞利用链完全重合。"
+    },
+    "caveats": [
+      "Augur 查询未把 PROXY_ALLOWED_HOSTS 建模为 barrier（query_generation_notes §4 有明确记录），因此该告警证明的是 source→sink 污点路径的命中，而非『检测到了白名单绕过』本身——即便白名单不可绕过该告警也会触发。以命中/未命中口径衡量：漏洞所在函数链与 source→sink 路径被正式告警覆盖，判定为命中。",
+      "commit 修改的 extract_ip_or_domain 是校验函数（既非 source 也非 sink），任何污点型查询都不会把告警锚定在该函数行上；对应的漏洞判定锚点是其所在的 proxy 请求路径，即 alert_8。",
+      "其余 9 条告警（服务注册 probe、thumbnail 抓取、harvester、缩略图 openURL 等）与本 commit 无关，属于同应用内其它独立的 SSRF 面。"
+    ]
+  },
+  "summary": {
+    "formal_alerts_reviewed": 10,
+    "verdicts": { "likely_tp": 9, "likely_fp": 1, "uncertain": 0 },
+    "independent_taint_chains": "去重后约 7 条独立污点链：(1) 匿名 /proxy/?url= → http_client.request（alert_8，含真实漏洞）；(2) 服务注册 URL → handler probe → http_client.request（alert_1，alert_5/6 为其内部 sink 重复）；(3) 服务注册 URL → GeoNodeServiceHandler.ows_endpoint → requests.get（alert_9）；(4) set_thumbnail/thumbnail_url 二阶 → is_monochromatic_image → http_client.get（alert_7，alert_5/6 重复）；(5) Harvester.remote_url 二阶 → arcrest.Catalog（alert_0）；(6) Harvester.remote_url 二阶 → http_session.get(/catalogue/csw)（alert_3）；(7) Dataset/MapLayer.ows_url 二阶 → getmap → openURL（alert_4）。",
+    "excluded_from_tp": "alert_2（smart_open 本地路径读取，CWE-22 素材，按约定不计入 CWE-918）；无诊断查询、无原生基线、无测试代码结果计入。",
+    "bottom_line": "CodeQL 分析成功，本轮命中 10 条正式 SSRF 污点路径告警，独立复核判定 9 likely_tp / 1 likely_fp，且包含对项目真实漏洞（proxy 白名单 @/%40 绕过，commit 79ac6e7）的命中。"
+  }
+}

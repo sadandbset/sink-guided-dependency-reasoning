@@ -1,0 +1,148 @@
+{
+  "experiment": "label-studio IRIS/Augur Pass 3 CWE-918 (SSRF) — independent LLM path re-review",
+  "reviewed_at": "2026-10-20",
+  "sarif": "results/pass3.sarif",
+  "rule_id": "py/augur/label-studio/pass3-ssrf",
+  "source_of_truth": "DB source snapshot extracted from label-studio-db/src.zip (not the on-disk variant tree)",
+  "formal_alert_count": 5,
+  "diagnostic_only_alerts": 0,
+  "summary": {
+    "likely_tp": 5,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "notes": "All 5 SARIF results carry the formal ruleId py/augur/label-studio/pass3-ssrf; no diagnostics-query results, no native CodeQL baseline results, and no file:/URL-parse-only findings are present in the SARIF, so all 5 count as formal CWE-918 candidates. Every alert was confirmed against real source in the DB snapshot."
+  },
+  "alerts": [
+    {
+      "alert_index": 0,
+      "rule_id": "py/augur/label-studio/pass3-ssrf",
+      "location": "label_studio/ml/api_connector.py:81",
+      "sink": "label_studio/ml/api_connector.py:81 — self.http.request(method, *args, **kwargs) inside BaseHTTPAPI.request; requests.Session.request performs the actual HTTP call",
+      "source_locations": [
+        "label_studio/ml/models.py:115 (MLBackend.healthcheck → self.url)",
+        "label_studio/ml/models.py:118 (MLBackend.setup → self.url)",
+        "label_studio/ml/models.py:122 (MLBackend.api property → MLApi(url=self.url))",
+        "label_studio/ml/models.py:325 (MLBackend.get_versions → self.url)"
+      ],
+      "codeflow_count": 4,
+      "taint_path": [
+        "MLBackend.url (models.TextField, ml/models.py:46) — attacker-written via POST /api/ml (MLBackendListAPI, permission_required projects_change, serializer MLBackendSerializer fields='__all__')",
+        "ml/models.py:101/109/122/325 — MLApi(url=...) constructed with the field value",
+        "ml/api_connector.py:41-42 — BaseHTTPAPI.__init__ stores self._url = url",
+        "ml/api_connector.py:126-129 — _get_url: url = self._url; url += '/'; urllib.parse.urljoin(url, fixed suffix) — suffix is a literal ('health', 'setup', 'predict', 'train', 'versions', ...), so urljoin only appends a fixed path to the attacker-controlled base",
+        "ml/api_connector.py:141/143 — self.post(url=url)/self.get(url=url)",
+        "ml/api_connector.py:79-81 — BaseHTTPAPI.request forwards **kwargs to requests.Session.request → real network I/O"
+      ],
+      "attacker_control": "Full base URL (scheme, host, port, path) of the outbound request; the urljoin suffixes are fixed literals. Attacker is any authenticated user with projects_change on the project (organization owner/admin, project manager role; not the server operator).",
+      "reachability": "Real and immediate: MLBackendSerializer.validate() (ml/serializers.py:15-35) itself calls MLBackend.healthcheck_(url) and MLBackend.setup_(url, project) synchronously while handling POST /api/ml, so the server-side fetch executes during the attacker's own request. Background paths (update_state on project save, train, predict) provide additional triggers.",
+      "protection_analysis": "MLBackendSerializer.validate_url (ml/serializers.py:11) calls validate_upload_url(value, block_local_urls=settings.ML_BLOCK_LOCAL_IP). Scheme check (http/https only) is always on, but private-IP blocking is gated by ML_BLOCK_LOCAL_IP, default False (core/settings/base.py:601). Even when enabled, validate_ip (core/utils/io.py:199-217) covers only 0.0.0.0, 127/8, 10/8, 172.16/12, 192.168/16 — IPv6, IPv4-mapped, link-local 169.254.169.254 (cloud metadata), and CGNAT 100.64/10 are not blocked, and the separate DNS-resolution TOCTOU window exists. No allow-list, no redirect re-validation, no post-connection peer check on this path.",
+      "urljoin_assessment": "urljoin's arg 1 (suffix) is always a fixed literal in every _request call ('health', 'train', 'predict', 'setup', 'webhook', 'job_status', 'delete', 'duplicate_model', 'versions'); the attacker-controlled value is arg 0 (base). The join does not neutralize host/port control — the attacker-chosen host and port survive unchanged.",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "Source is an API-writable attacker-controlled TextField (not operator env, not a literal), the sink is a genuine requests.Session.request network call, and the path is reachable synchronously from an authenticated, non-admin API endpoint. Scheme is restricted to http/https but host/port/path are fully attacker-chosen, and the only private-IP defense is default-off and incomplete. This is a textbook authenticated-SSRF threat model."
+    },
+    {
+      "alert_index": 1,
+      "rule_id": "py/augur/label-studio/pass3-ssrf",
+      "location": "label_studio/core/utils/io.py:224",
+      "sink": "label_studio/core/utils/io.py:224 — requests.get(url, *args, **kwargs) inside ssrf_safe_get",
+      "source_locations": [
+        "label_studio/data_import/uploader.py:239 — url = request.data.get('url')"
+      ],
+      "codeflow_count": 1,
+      "taint_path": [
+        "POST /api/projects/{pk}/import (ImportAPI, data_import/api.py:176-190, permission_required projects_change), request content-type application/x-www-form-urlencoded",
+        "data_import/uploader.py:239 — url = request.data.get('url') (direct request-field source)",
+        "data_import/uploader.py:258 → tasks_from_url(file_upload_ids, project, request.user, url, ...) (uploader.py:125)",
+        "data_import/uploader.py:131-132 — ssrf_safe_get(url, verify=..., stream=True, ...)",
+        "core/utils/io.py:220-224 — validate_upload_url(url, block_local_urls=settings.SSRF_PROTECTION_ENABLED) then requests.get(url)"
+      ],
+      "attacker_control": "Full URL string taken verbatim from request.data['url'] — host, port, path, and query are fully attacker-chosen; scheme constrained to http/https by validate_upload_url's rejection guard.",
+      "reachability": "Real and synchronous: ImportAPI.post → load_tasks (uploader.py:220) → tasks_from_url → ssrf_safe_get on the request thread (the async ProjectImport variant is a DB-mediated duplicate of the same sink). Requires an authenticated projects_change user.",
+      "protection_analysis": "validate_upload_url (core/utils/io.py:172-196) always enforces http/https and DNS resolvability, but private-IP blocking is gated by SSRF_PROTECTION_ENABLED, default False (core/settings/base.py:405). When enabled, validate_ip (io.py:199-217) blocks only 0.0.0.0 and the four classic IPv4 private blocks — 169.254.169.254 cloud metadata, 100.64/10 CGNAT, all IPv6 forms (incl. ::1, ::ffff:0:0/96 mapped), 192.0.2.0/24 etc. pass; the DNS lookup and the requests.get use separate resolutions (TOCTOU/DNS-rebinding window); requests follows redirects with allow_redirects=True and the post-connection peer re-check at io.py:227-229 only runs when SSRF_PROTECTION_ENABLED is true. In the default configuration there is no host restriction at all.",
+      "urljoin_assessment": "No urljoin on this path; the URL string is passed through unchanged after format validation.",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "The classic import-by-URL SSRF: a verbatim attacker-supplied URL from an authenticated projects_change request reaches requests.get with only a scheme guard and a default-off, incomplete private-IP guard. Sink is a real network fetch and the flow executes on the request thread. This is the exact flow whose defense (validate_ip) the project's own SSRF-hardening work targets."
+    },
+    {
+      "alert_index": 2,
+      "rule_id": "py/augur/label-studio/pass3-ssrf",
+      "location": "label_studio/webhooks/utils.py:53",
+      "sink": "label_studio/webhooks/utils.py:52-53 — requests.post(webhook.url, headers=webhook.headers, json=data, timeout=...) inside run_webhook_sync",
+      "source_locations": [
+        "label_studio/webhooks/utils.py:53 — webhook.url (Webhook model field read; same expression is the sink argument, zero-step path)"
+      ],
+      "codeflow_count": 0,
+      "taint_path": [
+        "POST /api/webhooks (WebhookListAPI, webhooks/api.py:46-49, permission_classes = [IsAuthenticated] — any authenticated organization member, no projects_change required)",
+        "WebhookSerializer (fields include 'url' and 'headers', webhooks/serializers.py:14-18) — url is models.URLField (webhooks/models.py:38): Django URLField performs only syntax validation, no scheme allow-list, no host/private-IP check",
+        "Webhook instance persisted (DB-mediated)",
+        "Any later webhook-triggering event (emit_webhooks / emit_webhooks_for_instance via the api_webhook decorators and signals) → run_webhook_sync (webhooks/utils.py:40-60)",
+        "webhooks/utils.py:52-53 — requests.post(webhook.url, headers=webhook.headers, ...)"
+      ],
+      "attacker_control": "Full URL (host, port, path, query) plus full control of the outbound request headers (Webhook.headers JSONField) and partial control of the JSON body. Effective schemes are http/https because requests rejects other schemes (InvalidSchema), but host/port/path are entirely attacker-chosen.",
+      "reachability": "Real: creating a webhook requires only IsAuthenticated, and webhook delivery fires on ordinary application events (project/task/annotation actions), including actions performed by the attacker themselves. The SARIF shows no codeFlows because the source node (webhook.url) is itself argument 0 of requests.post — a legitimate zero-step taint path, not a modeling artifact of the source=sink kind that would indicate a fabricated flow; the DB-mediated write side is the user's own /api/webhooks POST.",
+      "protection_analysis": "None on this path: no validate_upload_url, no scheme allow-list beyond URLField syntax, no private-IP or redirect checks, no allow-list of destinations. Header injection is bounded by requests' own header handling. Delivery is fire-and-forget (exceptions swallowed at utils.py:58-60), which also makes it a silent blind SSRF primitive.",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "Weakest-privilege SSRF in the set: any authenticated org member (including low-privilege annotator accounts) can register an arbitrary URL that the server later POSTs to with attacker-chosen headers. Sink is a real requests.post network call; no defense exists anywhere on the path. The absent codeFlows reflect the trivial source=sink node, which the underlying source evidence (Webhook.url written via /api/webhooks) fully substantiates."
+    },
+    {
+      "alert_index": 3,
+      "rule_id": "py/augur/label-studio/pass3-ssrf",
+      "location": "label_studio/io_storages/s3/utils.py:38",
+      "sink": "label_studio/io_storages/s3/utils.py:38 — session.client('s3', config=..., **settings) where settings['endpoint_url'] = s3_endpoint; botocore performs real HTTP(S) requests to endpoint_url on client operations",
+      "source_locations": [
+        "label_studio/io_storages/s3/models.py:66 — self.s3_endpoint passed as positional arg 4 of get_client_and_resource (S3StorageMixin.get_client_and_resource)",
+        "label_studio/io_storages/s3/models.py:186 — self.s3_endpoint passed to AWS.get_blob_metadata (s3/utils.py:79 → :95 → get_client_and_resource)"
+      ],
+      "codeflow_count": 2,
+      "taint_path": [
+        "POST /api/storages/s3 (ImportStorageListAPI / ExportStorageListAPI, io_storages/api.py:22-59, permission_required projects_change; S3ImportStorageSerializer/S3ExportStorageSerializer Meta.fields = '__all__', so s3_endpoint is writable)",
+        "S3StorageMixin.s3_endpoint (models.TextField, io_storages/s3/models.py:53) persisted",
+        "io_storages/s3/models.py:61-67 or :179-187 — self.s3_endpoint read and passed to get_client_and_resource",
+        "io_storages/s3/utils.py:35-37 — s3_endpoint = s3_endpoint or get_env('S3_ENDPOINT'); settings['endpoint_url'] = s3_endpoint",
+        "io_storages/s3/utils.py:38 — session.client('s3', ..., **settings) → the client is then used for real network operations: validate_connection → head_bucket / list_objects_v2 (models.py:91/100, invoked at storage-creation time from the serializer validate, io_storages/s3/serializers.py:43 and api.py:72), iterkeys/get_data on sync"
+      ],
+      "attacker_control": "Full endpoint URL (scheme http/https, host, port, base path) of every S3 API request botocore makes for this storage. AWS credentials signed for the attacker endpoint are also exposed to it (SigV4 signing of requests to the attacker-chosen host).",
+      "reachability": "Real and synchronous: the storage serializers call validate_connection() during POST /api/storages/* handling, so a network request to the attacker endpoint occurs within the attacker's request (io_storages/api.py:68-73 comment explicitly describes this double-check).",
+      "protection_analysis": "No validate_upload_url, no scheme/host/private-IP validation of s3_endpoint anywhere on the path; botocore accepts arbitrary http/https endpoint_url. Not covered by SSRF_PROTECTION_ENABLED or ML_BLOCK_LOCAL_IP.",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "The endpoint_url flows verbatim from an API-writable TextField into a boto3 client whose operations perform real server-side HTTP to that endpoint, exercised during the storage-validate request itself. Note this is a distinct vector from the validate_ip defense — it is not guarded by any of the project's SSRF protections."
+    },
+    {
+      "alert_index": 4,
+      "rule_id": "py/augur/label-studio/pass3-ssrf",
+      "location": "label_studio/io_storages/s3/utils.py:39",
+      "sink": "label_studio/io_storages/s3/utils.py:39 — session.resource('s3', config=..., **settings) with settings['endpoint_url'] = s3_endpoint; the resource's bucket/object operations (iterkeys models.py:128-135, get_data models.py:165-167) perform botocore HTTP to the endpoint",
+      "source_locations": [
+        "label_studio/io_storages/s3/models.py:66 — self.s3_endpoint (get_client_and_resource call)",
+        "label_studio/io_storages/s3/models.py:186 — self.s3_endpoint (get_blob_metadata path)"
+      ],
+      "codeflow_count": 4,
+      "taint_path": "Same as alert 3, continuing to the session.resource construction at s3/utils.py:39; the returned resource is used by S3ImportStorageBase.iterkeys/get_data for ListObjectsV2/GetObject HTTP calls to the attacker-chosen endpoint.",
+      "attacker_control": "Same as alert 3: full endpoint URL (host, port, base path), http/https schemes accepted by botocore.",
+      "reachability": "Real: same /api/storages/s3 write path (projects_change); resource-based operations run during storage sync (ImportStorageSyncAPI) and task import from the bucket.",
+      "protection_analysis": "None, as in alert 3.",
+      "verdict": "likely_tp",
+      "confidence": "high",
+      "reasoning": "Same evidence chain as alert 3 (resource vs client construction of the identical get_client_and_resource call). Not a duplicate count of the same SARIF result — it is a distinct sink line whose downstream operations genuinely issue network requests."
+    }
+  ],
+  "cross_cutting_observations": [
+    "Threat model: every modeled source requires authentication, but none requires server-operator/admin trust. projects_change maps to organization owner/admin and project-manager roles; the webhook endpoint requires only IsAuthenticated (any org member). Authentication limits attacker identity, not URL value control — these are genuine untrusted-input SSRF boundaries, not trusted/fixed-destination configurations.",
+    "The three fixed-destination sinks reviewed as FP in Phase 1 (sqlite.org DLL download, hardcoded pypi.org check, fixed tele.labelstud.io telemetry) are correctly absent from the SARIF.",
+    "The deferred Redis sink (non-HTTP protocol) is correctly absent; it is not counted here.",
+    "No file: local-read, URL-parse-only, test-code, or diagnostics findings appear among the 5 formal results — the ruleId filter and pinned sink locations held.",
+    "The barrier model marks validate_upload_url call sites but deliberately does not prune the fetch paths; given SSRF_PROTECTION_ENABLED=False and ML_BLOCK_LOCAL_IP=False by default (core/settings/base.py:405/601) plus the incomplete subnet list even when enabled, this does not change any verdict here.",
+    "Result 2 (webhooks) has no codeFlows in the SARIF because the source node and sink argument are the same expression (webhook.url at utils.py:53 is argument 0 of requests.post at :52) — a zero-step path, still a formal alert under the ruleId."
+  ],
+  "real_vulnerability_hit_assessment": {
+    "question": "Was the real PyVul vulnerability (commit 55dd6af, 'More exhaustive IP validation for SSRF defenses', function validate_ip in core/utils/io.py) hit by this pass?",
+    "answer": "Yes — hit by alerts 1 and 0.",
+    "detail": "The user-supplied fix strengthens validate_ip (core/utils/io.py:199), the exact barrier invoked by validate_upload_url. In this DB snapshot validate_ip blocks only 0.0.0.0 and 127/8, 10/8, 172.16/12, 192.168/16, missing link-local 169.254.0.0/16 (cloud metadata 169.254.169.254), CGNAT 100.64/10, IPv6 loopback/ULA/IPv4-mapped ranges, TEST-NETs and others — i.e. the SSRF defense is bypassable even when enabled. The two guarded flows are exactly: (1) alert 1, io.py:224 requests.get inside ssrf_safe_get, guarded by validate_upload_url(url, block_local_urls=settings.SSRF_PROTECTION_ENABLED) at io.py:221 — the direct, primary hit on the fixed defense; (2) alert 0, ml/api_connector.py:81 ML-backend transport, guarded at input by MLBackendSerializer.validate_url → validate_upload_url(value, block_local_urls=settings.ML_BLOCK_LOCAL_IP) (ml/serializers.py:11) — same weakened validate_ip, secondary hit. Alerts 2 (webhooks) and 3/4 (S3 endpoint_url) are additional true SSRF vectors but are not guarded by validate_ip at all, so they are related findings, not instances of the specific bypass fixed by 55dd6af.",
+    "basis": "User-provided commit metadata in the review request; PyVul truth files, the fix repository state, and CVE announcements were not read."
+  }
+}

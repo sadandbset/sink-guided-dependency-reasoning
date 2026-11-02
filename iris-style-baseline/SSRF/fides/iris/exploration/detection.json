@@ -1,0 +1,240 @@
+{
+  "step": "Step 1 - Explore and detect",
+  "target": "fides",
+  "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\fides_vuln\\fides-db",
+  "source_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\fides_vuln",
+  "timestamp": "2026-10-20",
+  "language": "python",
+  "language_evidence": [
+    "fides-db/codeql-database.yml: primaryLanguage: python, creationMetadata.cliVersion: 2.25.1, baselineLinesOfCode: 165681, sourceLocationPrefix is the fides_vuln repo root (DB relative paths look like src/fides/...)",
+    "repository layout: src/fides/ application package with api/ (FastAPI webserver), cli/ (click CLI), core/ (client library), connectors/ (okta/aws), config/ (pydantic settings); 532 .py files under src/",
+    "pyproject.toml / setup.py / requirements.txt present at repo root"
+  ],
+  "codeql_environment": {
+    "cli_version": "2.25.1 (verified via `codeql version`, unpacked at E:\\codeql)",
+    "python_query_library": "codeql/python-all 7.1.x (7.1.1 and 7.1.2 cached under C:\\Users\\lzh\\.codeql\\packages; workspace qlpack.yml declares codeql/python-all: \"*\" as name iris/fides-cwe918)",
+    "api_surface_note": "Extraction queries use only `import python` AST APIs verified against the locally cached python-all 7.1.2 library: AstNode.getLocation()/getScope()/toString(), Location.getFile()/getStartLine(), File.getRelativePath(), Call.getFunc()/getArg(int)/getAKeyword(), Keyword.getArg()/getValue(), Attribute.getName()/getObject(), Name.getId(), Subscript.getObject()/getIndex(), StringLiteral.getText(), Assign.getATarget(), Function.getName()/getArg(int)/getAKeywordOnlyArg()/getADecorator() (returns the decorator func Expr, e.g. the `router.put` attribute for `@router.put(...)`), Parameter.asName()/getDefault() (via Function.getArg/getKeywordOnlyArg bindings). No AstNode.getFile(), no module-named QL variables (moduleHint is used), no API::Node vs DataFlow::Node mixing, no QL classes are defined in the extraction queries, no @kind is declared (plain multi-column select for `codeql query run` + `bqrs decode`).",
+    "dbscheme": "semmlecode.python.dbscheme"
+  },
+  "scope": {
+    "passes": [3],
+    "cwes": ["918", "099", "610"],
+    "focus": "Server-Side Request Forgery (CWE-918 primary, per user instruction)"
+  },
+  "framework_candidates": [
+    {
+      "framework": "fastapi",
+      "kind": "web-framework",
+      "confidence": 1.0,
+      "classification": "primary",
+      "evidence": {
+        "import_evidence": {
+          "score": 0.45,
+          "snippets": [
+            "`from fastapi import ...` throughout the API layer, e.g. fides/api/api/v1/endpoints/admin.py:4, config_endpoints.py:3, connection_endpoints.py:5, fides/api/api/deps.py:3",
+            "fides/api/util/api_router.py:4 `from fastapi import APIRouter as FastAPIRouter` (custom APIRouter subclass adding trailing-slash route aliases)",
+            "fides/api/api/v1/api.py:28-30 `from fides.api.util.api_router import APIRouter` / `api_router = APIRouter()`"
+          ]
+        },
+        "route_evidence": {
+          "score": 0.30,
+          "snippets": [
+            "169 route decorators across the endpoints package: @router.get (71), @router.post (33), @router.patch (25), @router.put (24), @router.delete (15), plus @HEALTH_ROUTER.get (3), @SYSTEM_ROUTER.* (6), @SYSTEM_CONNECTIONS_ROUTER.* (4), @VALIDATE_ROUTER.post (1), @GENERATE_ROUTER.post (1), @ADMIN_ROUTER.post (1), @SYSTEM_CONNECTION_INSTANTIATE_ROUTER.post (1)",
+            "fides/api/api/v1/endpoints/router_factory.py:107-110 nested-factory route registration `@router.post(name=\"Create\", path=\"/\", response_model=fides_model, dependencies=[Security(verify_oauth_client_prod, scopes=[...])])`"
+          ]
+        },
+        "runtime_bootstrap_evidence": {
+          "score": 0.20,
+          "snippets": [
+            "fides/api/app_setup.py:91 `fastapi_app = FastAPI(title=\"fides\", version=app_version)`",
+            "fides/api/app_setup.py:109 `fastapi_app.include_router(router)`",
+            "fides/api/main.py:52 `app = create_fides_app()`"
+          ]
+        },
+        "layout_evidence": {
+          "score": 0.05,
+          "snippets": [
+            "src/fides/api/api/v1/endpoints/ with ~30 endpoint modules (connection, saas_config, storage, messaging, privacy_request, policy_webhook, drp, consent_request, identity_verification, oauth, admin, ...)"
+          ]
+        }
+      }
+    },
+    {
+      "framework": "pydantic",
+      "kind": "validation-library",
+      "confidence": 0.7,
+      "classification": "secondary (request-body schemas and connection/secrets validation models; constrains shapes of URL-bearing inputs but is not a routing framework)",
+      "evidence": [
+        "fides/api/schemas/connection_configuration/connections_secrets_https.py:11-17 `class HttpsSchema(ConnectionConfigSecretsSchema): url: str; authorization: str = Field(sensitive=True)` - URL-bearing request-body model",
+        "fides/api/schemas/connection_configuration/connection_secrets_fides.py:14-20 `class FidesConnectorSchema: uri: str ... _required_components = [\"uri\", \"username\", \"password\"]`",
+        "fides/api/schemas/saas/saas_config.py ClientConfig/SaaSConfig models (protocol/host) validated from PUT /connection/{key}/saas_config body"
+      ]
+    },
+    {
+      "framework": "requests",
+      "kind": "http-client-library",
+      "confidence": 0.9,
+      "classification": "secondary (primary outbound-HTTP sink surface for CWE-918: webhook HTTPSConnector, SaaS AuthenticatedClient transport, email dispatch, CLI/core client)",
+      "evidence": [
+        "`import requests` in fides/api/service/connectors/http_connector.py:4, fides/api/service/messaging/message_dispatch_service.py:6, fides/core/api.py:4, fides/cli/utils.py:11, fides/core/user.py:5",
+        "`from requests import PreparedRequest, Request, Response, Session` in fides/api/service/connectors/saas/authenticated_client.py:11 and the authentication strategy modules",
+        "`from requests import PreparedRequest, post` in fides/api/service/saas_request/override_implementations/authentication_strategy_{adobe_campaign,friendbuy_nextgen,heap,yotpo_reviews}.py",
+        "call sites verified in source: requests.post/get/put/delete in http_connector.py:48, message_dispatch_service.py:418/471/492/512, core/api.py:28-130, core/user.py:34-112; requests.Session.send in authenticated_client.py:207"
+      ]
+    },
+    {
+      "framework": "httpx",
+      "kind": "http-client-library",
+      "confidence": 0.65,
+      "classification": "secondary (Fides-to-Fides connector and privacy-request polling transport)",
+      "evidence": [
+        "fides/api/service/connectors/fides/fides_client.py:5-6 `import httpx` / `from httpx import AsyncClient, Client, ...`",
+        "call sites: httpx.post (fides_client.py:59), httpx Client.send (fides_client.py:125, 227, 271), httpx AsyncClient.get (request_service.py:108, 113)"
+      ]
+    },
+    {
+      "framework": "sqlalchemy",
+      "kind": "orm-library",
+      "confidence": 0.5,
+      "classification": "informational-below-secondary-threshold (persistence layer: ConnectionConfig/MessagingConfig/PolicyWebhook rows carry URL-bearing request-body data into the connector execution path)",
+      "evidence": [
+        "fides/api/models/connectionconfig.py ConnectionConfig.secrets JSON column; fides/api/models/messaging.py MessagingConfig.details/secrets; fides/api/models/policy.py:582/608 PolicyPreWebhook/PolicyPostWebhook joined to a ConnectionConfig"
+      ]
+    },
+    {
+      "framework": "click",
+      "kind": "cli-framework",
+      "confidence": 0.55,
+      "classification": "informational (CLI entry family: fides/cli commands with options such as --org-url (fides/cli/options.py:174-191); a separate input boundary from the FastAPI API surface)",
+      "evidence": [
+        "fides/cli/options.py:174 okta_org_url_option `--org-url` ... maps to org_url function parameters of CLI commands",
+        "fides/cli/utils.py:59/80/281 functions taking server_url/org_url that lead to requests calls / Okta SDK clients"
+      ]
+    }
+  ],
+  "primary_framework": "fastapi",
+  "framework_notes": [
+    "FastAPI is the primary web framework (score 1.00 >= 0.75 threshold); references/fastapi.md was loaded in addition to references/python.md and references/patterns.md.",
+    "Routes are registered via decorators `@<router>.<verb>(...)` on module-level or factory-nested functions (no handler classes), so source extraction keys on decorator-detected handler functions and their parameters, per references/fastapi.md section 6 (no standalone Decorator AST type; getADecorator() returns the decorator func Expr).",
+    "Dependency-injected parameters (default value is a Depends(...)/Security(...) call) are excluded from handler-parameter source extraction; they are framework wiring, not client payload. Header/Cookie defaults are kept as client input.",
+    "The custom APIRouter (fides/api/api/util/api_router.py) registers each route twice (with and without trailing slash); this only affects reachability, not source shapes.",
+    "Auth context: connection/saas-config/messaging endpoints are protected by OAuth client scopes (e.g. CONNECTION_CREATE_OR_UPDATE on PUT CONNECTION_SECRETS at connection_endpoints.py:199-204, MESSAGING_CREATE_OR_UPDATE at messaging_endpoints.py:463-469); privacy-request creation requires either an authenticated token or identity verification. Privileged-but-untrusted operators can still submit URL-bearing config bodies, so these remain source candidates (reachability noted, not judged here)."
+  ],
+  "references_loaded": [
+    "WORKFLOW.md",
+    "references/patterns.md",
+    "references/python.md",
+    "references/fastapi.md",
+    "assets/extraction/README.md",
+    "assets/extraction/extract_sources.ql.tmpl",
+    "assets/extraction/extract_sinks.ql.tmpl",
+    "assets/extraction/python_sources.ql.tmpl",
+    "assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "repo_survey": {
+    "project_identity": [
+      "Fides (privacy engineering platform): FastAPI webserver under src/fides/api (REST API, privacy request execution worker), click CLI under src/fides/cli, thin client library under src/fides/core, external connectors under src/fides/connectors.",
+      "Server-side network activity is concentrated in the connector layer: HTTPSConnector (webhooks), SaaSConnector/AuthenticatedClient (third-party SaaS APIs), FidesConnector/FidesClient (child Fides servers), email dispatch (message_dispatch_service)."
+    ],
+    "http_routes": [
+      "169 route decorators across the endpoints package; URL-bearing routes relevant to Pass 3:",
+      "fides/api/api/v1/endpoints/connection_endpoints.py:199-231 `@router.put(CONNECTION_SECRETS)` put_connection_config_secrets(unvalidated_secrets: connection_secrets_schemas, verify: Optional[bool] = True) - request body union includes HttpsSchema.url, FidesConnectorSchema.uri and SaaS secrets (domain/host placeholders); with verify=True (default) it immediately calls connection_status -> test_connection -> live network requests (scope CONNECTION_CREATE_OR_UPDATE)",
+      "fides/api/api/v1/endpoints/connection_endpoints.py:166/187 PATCH/DELETE and :234-250 GET CONNECTION_TEST (re-triggers connection test from saved secrets)",
+      "fides/api/api/v1/endpoints/saas_config_endpoints.py:129 PUT /connection/{key}/saas_config (SaaSConfig body incl. client_config protocol/host), :156 PATCH, :281/:364 POST validate/verify (drives SaaS test requests and OAuth token requests)",
+      "fides/api/api/v1/endpoints/messaging_endpoints.py:88 POST /messaging/config (MessagingConfig details/secrets, e.g. mailgun domain), :260/:296/:317 PUT config-by-key/upsert, :463-489 POST MESSAGING_TEST -> dispatch_message (scope MESSAGING_CREATE_OR_UPDATE)",
+      "fides/api/api/v1/endpoints/privacy_request_endpoints.py POST privacy requests (Identity/DRP bodies) - identity values later fill SaaS request path placeholders via assign_placeholders/map_param_values",
+      "fides/api/api/v1/endpoints/policy_webhook_endpoints.py pre/post policy webhook management (webhook -> ConnectionConfig linkage; the webhook URL itself lives in ConnectionConfig secrets)",
+      "fides/api/api/v1/endpoints/storage_endpoints.py:78-578 storage config CRUD (S3/azure-blob/object-store; object-storage protocols, not CWE-918 HTTP - documented, not extracted)",
+      "fides/api/api/v1/endpoints/drp_endpoints.py, consent_request_endpoints.py, identity_verification_endpoints.py, manual_webhook_endpoints.py - identity/verification bodies"
+    ],
+    "request_input_surfaces": [
+      "request-body pydantic models as handler parameters (primary external boundary; includes URL/uri/host/domain-bearing secrets and config bodies listed above)",
+      "path/query handler parameters (e.g. connection_key: FidesKey, verify: Optional[bool])",
+      "request.headers.get(...) reads: fides/api/api/v1/endpoints/saas_config_endpoints.py:267 `referer = request.headers.get(\"Referer\")` (OAuth connection verification), privacy_notice/privacy_experience endpoints (unescape header), dataset_endpoints.py:310 (content-type), fides/api/main.py:84 (X-Fides-source)",
+      "plain request.headers read: fides/api/api/v1/endpoints/privacy_preference_endpoints.py:298 `request_headers = request.headers`",
+      "no direct request.query_params/path_params/cookies/json accessor usage was found in the endpoints package (input arrives as typed handler parameters instead)",
+      "CLI/environment boundaries: fides/cli click options (--org-url, fides/cli/options.py:174-191), config.cli.server_url (pydantic settings from FIDES__* env vars / toml, fides/config/cli_settings.py:33-53) read at fides/cli/utils.py:106/115/154, function params server_url/org_url in fides/cli/utils.py and fides/core/user.py"
+    ],
+    "outbound_network_surfaces": [
+      "fides/api/service/connectors/http_connector.py:48 `requests.post(url=config.url, headers=headers, json=request_body)` in HTTPSConnector.execute - config.url from ConnectionConfig secrets (HttpsSchema.url, persisted from PUT CONNECTION_SECRETS body); reached via PrivacyRequest.trigger_policy_webhook (fides/api/models/privacy_request.py:833+ -> get_connector(webhook.connection_config)) from run_webhooks_and_report_status (request_runner_service.py:155) and directly by privacy request execution",
+      "fides/api/service/connectors/saas/authenticated_client.py:207 `self.session.send(prepared_request)` (requests.Session.send) - PreparedRequest built at :63-69 with url=f\"{self.uri}{request_params.path}\"; self.uri supplied by SaaSConnector.build_uri (saas_connector.py:141-143: f\"{client_config.protocol}://{assign_placeholders(host, self.secrets)}\") or OAuth token-request config (authentication_strategy_oauth2_base.py:71-83)",
+      "fides/api/service/connectors/saas_connector.py:137/287/436/539 `client.send(prepared_request, ...)` - AuthenticatedClient.send wrapper invocations (test_connection, retrieve_data, mask_data, consent)",
+      "fides/api/service/authentication/authentication_strategy_oauth2_base.py:92 `client.send(prepared_request, ignore_errors=True)` - OAuth2 token refresh against token-request host from saas config/secrets",
+      "fides/api/service/saas_request/override_implementations/*: bare post(...) calls imported from requests - authentication_strategy_adobe_campaign.py:73 (fixed https://ims-na1.adobelogin.com/ims/exchange/jwt), authentication_strategy_friendbuy_nextgen.py:52 (https://{domain}/v1/authorization, domain from secrets), authentication_strategy_heap.py:48 (https://{domain}/api/public/v0/auth_token), authentication_strategy_yotpo_reviews.py:44 (https://api.yotpo.com/core/v3/stores/{store_id}/access_tokens); *_request_overrides.py use AuthenticatedClient.send (braze:36, domo:40, friendbuy:33, mailchimp:58/97, twilio:41/80)",
+      "fides/api/service/messaging/message_dispatch_service.py:418 requests.post (mailchimp/mandrillapp fixed URL), :471 requests.get and :492/:512 requests.post (mailgun: fixed base_url https://api.mailgun.net|https://api.eu.mailgun.net with {api_version}/{domain} path from MessagingConfig details)",
+      "fides/api/service/connectors/fides/fides_client.py:59 httpx.post (login), :125/:227/:271 self.session.send (httpx.Client) - uri from FidesConnectorSchema.uri (ConnectionConfig secrets); constructed at fides_connector.py:57 `FidesClient(uri=config.uri, ...)`",
+      "fides/api/service/privacy_request/request_runner_service.py:679 `client.session.send(request)` (httpx) - child-server result transfer during privacy request execution",
+      "fides/api/service/privacy_request/request_service.py:108/113 `await client.get(url, ...)` (httpx.AsyncClient) in poll_server_for_completion - url = f\"{server_url}{V1_URL_PREFIX}{PRIVACY_REQUESTS}?request_id=...\" (server_url from FidesConnector polling context)",
+      "fides/core/api.py:28-130 requests.get/post/put/delete (CLI-side resource API against server_url), fides/core/user.py:34-112 requests.post/get/put (login/user management), fides/cli/utils.py:106/115 bare get()/put() imported from requests (registration against config.cli.server_url)",
+      "fides/connectors/okta.py:58 / fides/core/system.py:189 get_okta_client(okta_config) - network I/O inside the okta SDK using orgUrl from CLI --org-url option or credentials config"
+    ],
+    "url_construction_surfaces": [
+      "fides/api/service/connectors/saas/authenticated_client.py:63-69 Request(method=..., url=f\"{self.uri}{request_params.path}\", ...).prepare() - request construction (not a sink by itself; the session.send at :207 is the sink)",
+      "fides/api/service/connectors/saas_connector.py:141-143 build_uri(): f\"{client_config.protocol}://{assign_placeholders(host, self.secrets)}\" - base-URI construction from saas config host + secrets placeholders",
+      "fides/api/service/authentication/authentication_strategy_oauth2_base.py:71-83 - OAuth token-request base URI from token_request.client_config or root client config host",
+      "fides/api/service/pagination/pagination_strategy_link.py:44-60 - next_link read from response.links/body, urlsplit(next_link).path + parsed query replace the next request path (second-order response-derived URL; see coverage_gaps)",
+      "fides/core/api.py:10-19 generate_resource_url(): f\"{url}{API_PREFIX}/{resource_type}/{resource_id}\" - CLI-side URL assembly from caller-supplied url",
+      "urllib usage in this project is parse-only (urllib.parse urlparse/urlsplit/urlencode/quote/unquote); urllib.request.urlopen and urlretrieve are NOT used anywhere in src/ (verified by grep)"
+    ],
+    "auth_boundaries": [
+      "PUT/PATCH CONNECTION_SECRETS, saas config, messaging config endpoints require OAuth scopes (CONNECTION_CREATE_OR_UPDATE, SAAS_CONFIG_*, MESSAGING_CREATE_OR_UPDATE) - authenticated/privileged clients, not anonymous users; test/verify flags on these endpoints trigger the outbound requests immediately",
+      "privacy request creation: either authenticated (PRIVACY_REQUEST_CREATE scope / client credentials) or unauthenticated with identity verification (email code); webhook/connector execution then happens server-side from DB-persisted config",
+      "policy pre/post webhooks execute during privacy request runs (request_runner_service.py:155-200) using the ConnectionConfig attached to each PolicyWebhook - server-side trigger of operator-configured URLs",
+      "SaaS request paths also interpolate identity data (assign_placeholders over privacy-request identities), while the host/protocol come from saas config + secrets",
+      "recorded as evidence for later labeling; no reachability verdicts are made in this phase"
+    ],
+    "excluded_from_extraction": [
+      "fides-db/ nested CodeQL database directory inside the source root (excluded from all source scanning, evidence gathering and annotation; extraction scope is restricted to relative paths under src/fides/, which also excludes the repo-root tests/, scripts/, noxfiles/, clients/ and docs/ trees)",
+      "root-level pre-existing analysis artifacts (ssrf_analysis_report.md, ssrf_sinks.csv, ssrf_sinks.json, enhanced_ssrf_sinks.csv, fides_ssrf_*.md, fides_vuln_complete_analysis.md, stage2/stage3 artifacts, security_email_*.md, FINAL_REPORT.md, TASK_COMPLETE.md, QUICK_REFERENCE.md, baseline-info.json) were NOT read: they look like pre-existing vulnerability-analysis artifacts, and this phase forbids consulting vulnerability ground truth, CVE descriptions, fix diffs or pre-located vulnerable lines",
+      "request.url / request.method / request.headers iteration in middleware (fides/api/main.py:80-106) are framework/metadata values used for logging - documented, not extracted",
+      "boto3 S3 storage upload/download (storage endpoints and storage layer) - object-storage SDK, not an HTTP URL fetch; out of CWE-918 sink scope"
+    ]
+  },
+  "extraction_plan": {
+    "pass_key": "ssrf",
+    "source_families": [
+      "positional parameters (index i) of functions decorated with @<router>.<verb>(...) in src/fides/api/api/**, excluding parameters whose default value is a Depends(...)/Security(...) call (flow kind param; FastAPI path/query/body parameters)",
+      "keyword-only parameters of those handlers (flow kind param, arg index -1)",
+      "request.headers.get(...) calls in src/fides/api/** (flow kind return; starlette request header container)",
+      "plain request.headers reads in src/fides/api/** not consumed as an attribute/call/subscript base (flow kind field)",
+      "config.cli.server_url attribute reads in src/fides/cli/** and src/fides/core/** (flow kind field; env/toml-configured server URL)",
+      "server_url/org_url parameters of functions in src/fides/cli/** and src/fides/core/** (flow kind param; click option / config boundary)",
+      "ConnectionConfig .secrets attribute reads in src/fides/api/service/** (self.configuration.secrets / self.secrets / connection_config.secrets; flow kind field) - earliest project-internal materialization of URL/uri/domain-bearing request-body data persisted via the connection secrets endpoints",
+      "messaging_config.details / messaging_config.secrets attribute reads in message_dispatch_service.py (flow kind field) - email/SMS dispatch config carrying domain/API data from the messaging endpoints",
+      "get_saas_config() call results in src/fides/api/service/** (flow kind return) - SaaS client config (protocol/host) persisted from the saas config endpoints"
+    ],
+    "sink_families": [
+      "requests.get/post/put/delete/patch/head/request(...) calls (object Name id 'requests') with node = positional argument 0 when no url= keyword is present, node = url= keyword value otherwise (flow kind argument)",
+      "bare post(...) calls in src/fides/api/service/saas_request/override_implementations/** (imported from requests) with node = url= keyword value (flow kind argument, arg index -1)",
+      "bare get(...)/put(...) calls in src/fides/cli/utils.py (imported from requests) with node = call, URL at positional argument 0",
+      "session.send(...) calls (func Attribute 'send' on object Attribute 'session'): requests.Session.send in authenticated_client.py; httpx.Client.send in fides_client.py and request_runner_service.py (flow kind argument, arg index 0)",
+      "httpx.post(...) calls (object Name id 'httpx') with URL at positional argument 0 (fides_client.py)",
+      "AsyncClient .get(url) calls in request_service.py on objects named client/async_client (flow kind argument, arg index 0)",
+      "client.send(prepared_request, ...) wrapper invocations in src/fides/api/service/** (AuthenticatedClient.send; URL assembled inside the wrapper from ConnectionConfig secrets / saas config host) - flow kind argument, arg index 0",
+      "AuthenticatedClient(uri, ...) constructor calls in src/fides/api/service/** (URI at positional argument 0) and FidesClient(...) constructor calls with node = uri= keyword value (fides connector)",
+      "get_okta_client(okta_config) calls in src/fides/connectors/** and src/fides/core/** (okta_config carries orgUrl; network I/O inside the okta SDK)"
+    ],
+    "notes": [
+      "Extraction rules were derived only from repository evidence and the CWE-918 pass focus; no vulnerability ground truth, CVE descriptions, fix diffs, or pre-located vulnerable lines were consulted (pre-existing root-level analysis artifacts were deliberately not read).",
+      "Both extraction queries are plain multi-column select queries (no @kind metadata) for use with `codeql query run` + `codeql bqrs decode`; they are not intended for `codeql database analyze` SARIF output.",
+      "CSV column order matches the prior-project convention (calibre-web): node, candidate_type, callable, flow_kind, receiver, moduleHint, arg_index, line, file:line, expression. arg_index is -1 when not applicable.",
+      "flow_kind vocabulary: param/return/field/argument as in prior projects.",
+      "AST-literal matching (e.g. requests.get by object Name 'requests', httpx.post by object Name 'httpx') is used because CodeQL resolved-API modeling is not guaranteed for every optional dependency; every matched call-site family was individually confirmed against this source tree, and import resolution must be validated during LLM labeling.",
+      "urllib.request.urlopen / urlretrieve / aiohttp / http.client are NOT used anywhere in src/ (verified by grep; urllib usage is parse-only) - no candidates and no coverage gap for those APIs.",
+      "No file:/data: scheme loading exists in this source tree; nothing extracted for non-HTTP schemes. Local-only file reads are not CWE-918 sinks and are not extracted.",
+      "Scope restriction to src/fides/** excludes the nested fides-db CodeQL database directory and all repo-root test/harness trees by construction."
+    ]
+  },
+  "coverage_gaps": [
+    "sendgrid SDK: fides/api/service/messaging/message_dispatch_service.py:552-575 sg = sendgrid.SendGridAPIClient(...); sg.client.templates.get(...); sg.client.mail.send.post(...) - real HTTP to fixed api.sendgrid.com endpoints performed inside the sendgrid package (not in this database); only reachable URL-shaping data is the template/mail payload, not the URL. Not extracted as a sink.",
+    "twilio SDK: message_dispatch_service.py _twilio_sms_dispatcher `Client(account_sid, auth_token)` + client.messages.create(...) - network I/O inside the twilio package against fixed twilio endpoints; not extracted.",
+    "okta SDK: get_okta_client(okta_config) call sites are extracted, but the HTTP requests to {orgUrl}/api/v1/... happen inside the okta package; intra-library flows are invisible to taint tracking. orgUrl originates from the CLI --org-url option or a credentials config file.",
+    "fideslog analytics: fides/cli/utils.py:201/243 `client.send(event)` on the analytics client - telemetry HTTP performed inside the fideslog SDK; not extracted.",
+    "mailchimp transactional dispatcher (message_dispatch_service.py:418) posts to the fixed constant https://mandrillapp.com/api/1.0/messages/send - extracted as a requests sink for completeness, but the URL is a literal; only the payload is config-derived.",
+    "mailgun dispatchers (:471/:492/:512) use fixed base URLs with {api_version}/{domain} path segments from MessagingConfig details - the domain does not control the host; labeling should weigh this.",
+    "Second-order (response-derived) URLs: pagination_strategy_link.py builds the next request path from a next_link read out of the previous SaaS response (response.links or body); this response-to-URL propagation needs a summary step in Phase 2 if labeling considers it in-scope.",
+    "Async hand-off: privacy requests are created via the API and executed in a worker process (request_runner/graph tasks) with data passed through a Redis cache (privacy_request.cache_identity etc.). Source (endpoint body) and sinks (connector execution) therefore live in different call stacks; realistic taint paths require cache/queue summary modeling in Phase 2.",
+    "httpx Client.build_request / Request(...).prepare() calls (fides_client.py:96-104, authenticated_client.py:63-69) construct request objects but do not perform network I/O; only the subsequent .send() sites are extracted as sinks.",
+    "boto3 S3 storage upload and azure-blob/object-store storage configs (storage_endpoints.py) use object-storage SDKs, not HTTP URL fetches; excluded from CWE-918 sink scope and documented here."
+  ]
+}

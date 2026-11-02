@@ -1,0 +1,241 @@
+{
+  "step": "Step 1 - Explore and detect",
+  "target": "geonode (Django geospatial content-management application; commit abd1baf3d709265604010b7b15c8bfcc2a72a252, Django==3.2.21 per requirements.txt)",
+  "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\geonode_vuln\\geonode-db",
+  "source_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\geonode_vuln",
+  "timestamp": "2026-10-20",
+  "language": "python",
+  "language_evidence": [
+    "geonode-db/codeql-database.yml: primaryLanguage: python, creationMetadata.cliVersion: 2.25.1, baselineLinesOfCode: 91741, sourceLocationPrefix = geonode_vuln repo root (relative paths therefore look like geonode/proxy/views.py)",
+    "repository layout: single application package geonode/ (~972 .py files in the whole tree) with manage.py, setup.py, requirements.txt at repo root; 972 .py files total outside geonode-db/",
+    "requirements.txt:5 `Django==3.2.21`; the geonode/ package is the GeoNode application (Django project + ~30 apps: base, layers, maps, proxy, services, harvesting, geoserver, security, monitoring, thumbs, upload, resource, catalogue, ...)"
+  ],
+  "codeql_environment": {
+    "cli_version": "2.25.1 (verified via `codeql version`, unpacked at E:\\codeql)",
+    "python_query_library": "codeql/python-all 7.1.2 cached under C:\\Users\\lzh\\.codeql\\packages (7.1.1 and 7.1.2 present); workspace qlpack.yml declares codeql/python-all: \"*\"",
+    "api_surface_note": "Extraction queries use only `import python` AST APIs verified against the locally cached python-all 7.1.2 library: AstNode.getLocation()/getScope()/toString(), Location.getFile()/getStartLine(), File.getRelativePath(), Call.getFunc()/getArg(int), Attribute.getName()/getObject(), Name.getId(), Subscript.getObject()/getIndex(), StringLiteral.getText(), Function.getName()/getArg(int), Parameter (Name-or-Tuple node; names read via asName().getId()), AssignStmt with getATarget()/getValue() and Scope.getName() for class-scope field definitions. No AstNode.getFile(), no API::Node vs DataFlow::Node mixing, no QL classes are defined in the extraction queries, no @kind is declared (plain multi-column select for `codeql query run` + `bqrs decode`). The QL variable for module paths is named moduleHint ('module' is a QL keyword). Compile-checked pitfall (verified with `codeql query compile --check-only`, CLI 2.25.1): an inline if-then-else value is NOT accepted on the right-hand side of `=` ('expected a term but found an expression'), and a helper predicate must bind every argument in each of its disjuncts; receiver hints are therefore bound via the disjunctive predicate requestReceiverHint(Attribute, string) instead. Both extraction queries pass `codeql query compile --check-only` cleanly.",
+    "dbscheme": "semmlecode.python.dbscheme"
+  },
+  "scope": {
+    "passes": [3],
+    "cwes": ["918", "099", "610"],
+    "focus": "Server-Side Request Forgery (CWE-918 primary, per user instruction)"
+  },
+  "framework_candidates": [
+    {
+      "framework": "django",
+      "kind": "web-framework",
+      "confidence": 1.0,
+      "classification": "primary",
+      "evidence": {
+        "import_evidence": {
+          "score": 0.45,
+          "snippets": [
+            "requirements.txt:5 `Django==3.2.21`",
+            "geonode/settings.py: Django settings module (INSTALLED_APPS with ~30 geonode apps + django.contrib apps, MIDDLEWARE, DATABASES, urls ROOT_URLCONF)",
+            "every app uses django imports: django.conf settings, django.http HttpResponse, django.views, django.db models, django.urls include/url"
+          ]
+        },
+        "route_evidence": {
+          "score": 0.3,
+          "snippets": [
+            "geonode/urls.py: urlpatterns with url(r\"^services/\", include(\"geonode.services.urls\")) (:74), ^harvesters/ (:86), ^api/v2/ DRF router (:119-123), tastypie include(api.urls) (:124), ^gs/ geoserver proxy (:171), `urlpatterns += geonode.proxy.urls.urlpatterns` (:185)",
+            "geonode/proxy/urls.py:25 `url(r\"^proxy/\", views.proxy, name=\"proxy\")` - the generic /proxy/ endpoint",
+            "function views + class-based views throughout (geonode/proxy/views.py:69 `@requires_csrf_token def proxy(request, ...)`, View subclasses e.g. OWSListView)"
+          ]
+        },
+        "runtime_bootstrap_evidence": {
+          "score": 0.2,
+          "snippets": [
+            "manage.py at repo root; geonode/wsgi.py WSGI application; geonode/celery_app.py celery bootstrap; geonode/apps.py AppConfig"
+          ]
+        },
+        "layout_evidence": {
+          "score": 0.05,
+          "snippets": [
+            "standard Django project layout: geonode/{settings.py,urls.py,wsgi.py,apps.py} plus per-app {models,views,urls,forms,tests,migrations}"
+          ]
+        }
+      }
+    },
+    {
+      "framework": "django-rest-framework (+ dynamic-rest)",
+      "kind": "web-framework (API layer)",
+      "confidence": 0.8,
+      "classification": "secondary",
+      "evidence": [
+        "import evidence (+0.45): geonode/settings.py:481 \"rest_framework\" in INSTALLED_APPS, :534-536 rest_framework.authentication/oauth2_provider authentication; geonode/base/api/views.py, geonode/layers/api/views.py, geonode/harvesting/api/views.py, geonode/upload/api/views.py, geonode/management_commands_http/views.py import rest_framework (APIView/ViewSet/serializers) and dynamic-rest",
+        "route evidence (+0.30): geonode/urls.py:119-123 DRF router + rest_framework.urls included under /api/v2/; harvesting/api/urls.py ListPatchRouter /harvesters/ + /harvesting-sessions/",
+        "layout evidence (+0.05): per-app api/ packages (base/api, layers/api, maps/api, harvesting/api, upload/api, resource/api)"
+      ]
+    },
+    {
+      "framework": "django-tastypie",
+      "kind": "web-framework (legacy v1 API)",
+      "confidence": 0.75,
+      "classification": "secondary",
+      "evidence": [
+        "import evidence (+0.45): geonode/settings.py:494 \"tastypie\" in INSTALLED_APPS; requirements.txt:45 django-tastypie<0.15.0; geonode/api/api.py + geonode/api/resourcebase_api.py define tastypie Resources (TypeFilteredResource etc.)",
+        "route evidence (+0.30): geonode/urls.py:124 `url(r\"\", include(api.urls))` mounts the v1 /api/... endpoints; per-resource prepend_urls sub-routes"
+      ]
+    },
+    {
+      "framework": "django-oauth-toolkit / django-allauth (auth stack)",
+      "kind": "auth-provider framework",
+      "confidence": 0.75,
+      "classification": "secondary (inbound OAuth2/OIDC provider; the only outbound fetch is the allauth OIDC profile call with settings-derived URL)",
+      "evidence": [
+        "import evidence (+0.45): geonode/settings.py:497 \"oauth2_provider\", :501-503 allauth apps; geonode/security/oauth2_servers.py OIDCServer wires oauthlib endpoints",
+        "route evidence (+0.30): geonode/urls.py:112 `url(r\"^o/\", ...)` oauth2_provider base+oidc urlpatterns; :113-114 /api/o/v4/tokeninfo and /api/o/v4/userinfo",
+        "geonode/people/adapters.py:253 GenericOpenIDConnectAdapter (allauth) is the GeoNode-as-client side; its PROFILE_URL comes from settings.SOCIALACCOUNT_PROVIDERS (admin config, not request data)"
+      ]
+    },
+    {
+      "framework": "celery",
+      "kind": "task-queue framework",
+      "confidence": 0.65,
+      "classification": "secondary (async execution of harvesting/thumbnail tasks; remote URL fetches triggered from celery tasks)",
+      "evidence": [
+        "import evidence (+0.45): geonode/celery_app.py; geonode/harvesting/tasks.py @shared_task harvesting_scheduler/harvesting_dispatcher/harvest_resources; geonode/tasks/ package",
+        "runtime evidence (+0.20): celery.sh / celery-cmd at repo root; django-celery-results in INSTALLED_APPS"
+      ]
+    },
+    {
+      "framework": "requests (python-requests HTTP client)",
+      "kind": "http-client-library",
+      "confidence": 0.75,
+      "classification": "secondary (the ONLY real outbound-HTTP client used by this application; ~19 modules `import requests`)",
+      "evidence": [
+        "geonode/utils.py:34 `import requests`; geonode/utils.py:1163-1282 class HttpClient composes requests.Session per request (session creation :1218, adapter mount :1230, session.verify=False :1231, dispatch action(url=url,...) :1236, fallback session.get(url,...) :1248); module-level singleton `http_client = HttpClient()` at :1282",
+        "direct requests.get/post/put/delete call sites in geoserver/security.py, geoserver/geofence.py, geoserver/createlayer/utils.py, geoserver/management/commands/*, br/management/commands/backup.py + restore.py, monitoring/utils.py, monitoring/service_handlers.py, monitoring/management/commands/updategeoip.py, people/adapters.py, services/serviceprocessors/wms.py, harvesting/harvesters/base.py",
+        "harvesters keep requests.Session instances on self.http_session (harvesting/harvesters/wms.py:119, geonodeharvester.py:116/484/997, arcgis.py:140/256/394)"
+      ]
+    },
+    {
+      "framework": "OWSLib / arcrest / smart_open / pycsw (remote-geodata client libraries)",
+      "kind": "http-client-wrapper libraries",
+      "confidence": 0.6,
+      "classification": "secondary (library calls that trigger network I/O inside external library code not present in this database; extracted as wrapper sinks, see coverage_gaps)",
+      "evidence": [
+        "OWSLib: geonode/harvesting/harvesters/wms.py:29-30 `from owslib.map import wms111, wms130` / `from owslib.util import clean_ows_url`; wms111.WebMapService_1_1_1 / wms130.WebMapService_1_3_0 constructors at :78/:92; geoserver/helpers.py:67 `from owslib.wcs import WebCoverageService` (call at :1312); layers/views.py:27 `from owslib.wfs import WebFeatureService` (call at :271); thumbs/utils.py function-local `from owslib.util import openURL, ...` (call at :421); catalogue/backends/generic.py:27 `from owslib.util import http_post` (call at :146), :26 CatalogueServiceWeb",
+        "arcrest: harvesting/harvesters/arcgis.py:34 `import arcrest`; arcrest.MapService/ImageService (:347/:350), arcrest.Catalog(self.remote_url) (:410)",
+        "smart_open: geonode/storage/data_retriever.py:25 `import smart_open`; smart_open.open(uri=..., mode=\"rb\") (:115-117) fetches remote http(s) file URIs",
+        "pycsw: catalogue/views.py csw_global_dispatch feeds the raw QUERY_STRING/environ to pycsw server.Csw (harvest-capable CSW endpoint)"
+      ]
+    }
+  ],
+  "primary_framework": "django",
+  "framework_notes": [
+    "Django is the primary framework (score 1.00 >= 0.75); references/django.md was loaded in addition to references/python.md and references/patterns.md. DRF/tastypie/celery are secondary frameworks merged into the same extraction pass with framework tag metadata in the receiver/module columns.",
+    "Unlike the framework-only django database of a prior run, this database contains the FULL GeoNode application: views, forms, DRF/tastypie APIs, celery tasks and models are all in scope, so source extraction anchors on the application's own request boundaries (Django request fields, DRF request.data/query_params, form fields, CLI options) instead of framework internals.",
+    "Auth/reachability facts verified in source: geonode/proxy/views.py:69-70 the /proxy/ view carries ONLY @requires_csrf_token - no login_required, no permission decorator; its host allow-list (PROXY_ALLOWED_HOSTS, checked at :140 only when not settings.DEBUG, :109) is auto-extended with every registered remote Service base_url host (:136-138). geonode/services registration requires login (views.py:57 register_service @login_required). DRF harvester writes require admin (IsAdminOrListOnly, harvesting/api/views.py:38-57) but harvester LIST is public. tastypie/DRF v2 APIs carry per-viewset permissions.",
+    "The generic proxy is the canonical SSRF shape of this application: request.GET[\"url\"] (proxy/views.py:97) -> urljoin/URL.from_text normalization (:98/:167-179) -> http_client.request(_url, ...) (:194) with request.body forwarded as the outbound body (:185).",
+    "Django request-field reads (request.GET/POST/META/body/COOKIES/headers, self.request.<field>, DRF request.data/query_params) are extracted as the general source family; specific URL-shaped entries (request.GET[\"url\"], request.data[\"file\"] of set_thumbnail, form url field, Harvester.remote_url model field) are additionally extracted as focused families.",
+    "settings-derived URLs (OGC_SERVER LOCATION, SITEURL, CATALOGUE URL, SOCIALACCOUNT_PROVIDERS PROFILE_URL) are operator/admin configuration; per the SSRF FP heuristics they are treated as FP material, so settings reads are NOT extracted as sources, and config-URL sink call sites are still extracted as sink candidates (the LLM labeling step decides their role).",
+    "HttpResponseRedirect flows (e.g. documents document_embed redirecting to doc_url) produce HTTP redirect responses (Pass 9 / CWE-601 material), not server-side fetches; they are not extracted as CWE-918 sinks."
+  ],
+  "references_loaded": [
+    "WORKFLOW.md",
+    "references/patterns.md",
+    "references/python.md",
+    "references/django.md",
+    "assets/extraction/README.md",
+    "assets/extraction/extract_sources.ql.tmpl",
+    "assets/extraction/extract_sinks.ql.tmpl",
+    "assets/extraction/python_sources.ql.tmpl",
+    "assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "repo_survey": {
+    "http_entry_points": [
+      "Django WSGI application (geonode/wsgi.py) -> ROOT_URLCONF geonode/urls.py urlpatterns; apps mounted: /services/ (:74), /harvesters/ (:86, empty urlpatterns - harvesting REST API actually lives under /api/v2/ via the DRF router), /security/ (:102), /o/ oauth2_provider (:112), /api/o/v4/* tokeninfo/userinfo/roles/users (:113-118), /api/v2/ DRF + management_commands_http + facets (:119-123), /api/... tastypie v1 (:124), /upload/ (:165), /gs/ geoserver proxy (:171), /proxy/ + /download/ + /api/ows_endpoints/ (:185, from geonode/proxy/urls.py:25-27)",
+      "geonode/proxy/views.py:70 proxy(request, url=None, ...) - /proxy/?url=<remote-url> (no auth decorator; CSRF token required for unsafe methods); geonode/geoserver/views.py:417 geoserver_proxy(request, proxy_path, downstream_path, ...) - /gs/... path-derived URL constrained to the geoserver backend LOCATION prefix, delegates to proxy() at :466",
+      "geonode/services/urls.py:27-34 - /services/register/ (register_service, @login_required), service detail/edit/rescan/remove/harvest (@login_required); DRF /api/v2/harvesters/ HarvesterViewSet (harvesting/api/views.py:49, write=admin-only) with remote_url payload; DRF ResourceBaseViewSet actions incl. set_thumbnail (geonode/base/api/views.py:1340) accepting an arbitrary image URL string"
+    ],
+    "request_input_surfaces": [
+      "request.GET[\"url\"] - geonode/proxy/views.py:92/:97 (the proxy target URL; PRIMARY source); request.body - :185 (forwarded as outbound body); request.META.get(\"HTTP_AUTHORIZATION\") - :160-161 (token exchange for the forwarded request)",
+      "request.GET / request.POST / request.META / request.body / request.headers / request.COOKIES / request.FILES field reads: ~165 GET/POST + ~66 META/body/headers/COOKIES/FILES + 12 self.request.<field> occurrences across non-test geonode views (security/views.py, base/views.py, layers/views.py, geoserver/views.py + helpers.py:1711, maps/views.py, monitoring/views.py, facets/views.py, api/views.py, base/auth.py:37-46, catalogue/views.py:57-59, etc.)",
+      "DRF request.data / request.query_params reads: ~35 occurrences (base/api/views.py:655-1501 incl. set_thumbnail request.data[\"file\"] :1346, layers/api/views.py:128/:257, harvesting/api/mixins.py:36, management_commands_http/mixins.py:29, resource/api/views.py:66, facets/views.py, base/api/filters.py)",
+      "Django forms: geonode/services/forms.py:36-47 CreateServiceForm.url - plain forms.CharField (max_length=512, HTML widget type=url only; no scheme/host validation); clean_url (:54-59) checks uniqueness only; clean() (:61-81) performs the remote connection DURING form validation via get_service_handler(base_url=url) (:68) and service_handler.probe() (:72)",
+      "tastypie v1 API request reads: geonode/api/resourcebase_api.py:443/:446 request.GET.get(\"limit\"/\"offset\"); geonode/api/api.py CommonModelApi get_search",
+      "CLI boundaries: geonode/monitoring/management/commands/updategeoip.py:61 requests.get(options['url'], ...) - --url CLI option (:42, default hardcoded GeoLite2 URL); geonode/geoserver/management/commands/importlayers.py:63 host = options.get(\"host\") or settings.SITEURL -> :152 client.post(urljoin(self.host, \"/api/v2/uploads/upload/\"), ...)",
+      "environment reads: geonode/settings.py has ~99 os.environ reads (operator configuration - excluded from sources per SSRF FP heuristics); only 5 non-settings env reads exist (importlayers ADMIN_USERNAME/ADMIN_PASSWORD credentials, setupsociallogins client id/secret, utils.py:1150 BACKEND selector) - none propagate into outbound URL construction"
+    ],
+    "outbound_network_surfaces": [
+      "geonode/utils.py HttpClient (class :1163, singleton http_client :1282) - the central wrapper; final requests I/O at :1236 action(url=url, ...) [keyword url] and :1248 session.get(url, ...); session.verify=False at :1231. Callers of http_client.request/get/post (URL at positional arg 0): proxy/views.py:194 (user URL), services/serviceprocessors/base.py:81 probe (user service URL), utils.py:1883 is_monochromatic_image (thumbnail_url DB value), thumbs/background.py:351 (XYZ tile URL from settings template), maps/views.py:414 (SITEURL-internal), geoserver/views.py:623, geoserver/helpers.py:127/1012/1030/1066/1082/1617/1648/1665/1680, geoserver/ows.py:182 (geoserver/settings URLs; helpers.py:1012-1082 can carry layer.remote_service.service_url - user-registered remote service)",
+      "direct requests.* call sites (URL at positional arg 0): harvesting/harvesters/base.py:334 download_resource_file - requests.get(url, stream=True) fetching the remote-declared download_url; services/serviceprocessors/wms.py:284 requests.get(f\"{base_url}api/ows_endpoints/\", ..., verify=False) on the user-supplied service URL; people/adapters.py:265 requests.get(self.profile_url) (settings-derived OIDC profile); monitoring/service_handlers.py:196/:215 and monitoring/utils.py:140/:157 (monitoring service URLs from DB/config, verify=False); geoserver/security.py:94/157/188/216, geoserver/geofence.py:253/292/316/342/369, geoserver/createlayer/utils.py:219, geoserver/management/commands/set_default_gridsets.py:50/85, create_tile_layers.py:97/107, br backup.py:342-396 + restore.py:719-759 (OGC_SERVER LOCATION config; backup/restore also follow href values parsed from geoserver responses), monitoring/management/commands/updategeoip.py:61 (CLI --url), geoserver/management/commands/importlayers.py:152 client.post (CLI --host)",
+      "harvester sessions (requests.Session on self.http_session / http_session param, URL at positional arg 0, base = Harvester.remote_url DB value): harvesting/harvesters/wms.py:203 get_capabilities; geonodeharvester.py:145/159/201/578/674/701/758/939 (f\"{self.remote_url}/api[v2]...\" URLs) and :1274 _check_availability(http_session, url, ...); arcgis.py:156/:277 http_session.get(harvestable_resource.unique_identifier) (DB-stored remote layer URL)",
+      "library-wrapper fetch constructors (network I/O inside external libraries): WebMapService factory - harvesters/wms.py:54 (wms111/wms130 constructors :78/:92), called at services/serviceprocessors/wms.py:96/:272 and harvesters/wms.py:157; WebCoverageService - geoserver/helpers.py:1312; WebFeatureService - layers/views.py:271; owslib openURL - thumbs/utils.py:421 getmap (base_url = thumbnail/ows URL from DB fields); owslib http_post - catalogue/backends/generic.py:146 (config CSW URL); CatalogueServiceWeb.__init__ - catalogue/backends/generic.py:56 (config URL, skip_caps default True); arcrest.MapService/ImageService/Catalog - harvesters/arcgis.py:347/:350/:410; smart_open.open(uri=...) - storage/data_retriever.py:115 (remote file URI from upload/metadata remote_files)"
+    ],
+    "url_construction_surfaces": [
+      "geonode/proxy/views.py:98 urljoin(settings.SITEURL, raw_url) for relative proxy URLs; :167-172 urlparse(raw_url) + _replace + geturl; :179 URL.from_text(_url).normalize() (hyperlink); :183 access_token query append; :191-192 SITEURL->ogc_server LOCATION string replaces",
+      "geonode/services/models.py:81-96 Service.service_url/_get_service_url - urlparse(self.base_url) + extra_queryparams (DB base_url re-fetched on rescan/harvest); services/views.py:94 get_service_handler(service.service_url, ...)",
+      "harvesters: geonodeharvester.py:129/:497 base_api_url = f\"{self.remote_url}/api[v2]\"; wms.py:174 f\"{wms_url.scheme}://{wms_url.netloc}{wms_url.path}\"; arcgis.py:74 parse_remote_url + urlunparse unique_identifier construction; harvester copy_resource takes the remote-declared distribution.download_url (harvesters/base.py:205) into download_resource_file (:211)",
+      "geonode/geoserver/views.py:376-402 check_geoserver_access raw_url = ogc_server_settings.LOCATION + downstream_path + path (base settings, path from request route); :466 proxy(request, url=raw_url, ...)",
+      "geonode/utils.py:176/:183/:198 OGC_Server properties urljoin(LOCATION/PUBLIC_LOCATION, ...); :1393-1415 get_legend_url; :1651/1670/1691 set_resource_default_links (instance.ows_url or urljoin(ogc_server public_url, \"ows\") -> Link.url rows); :1881 urljoin(settings.SITEURL, image_url) in is_monochromatic_image; :1904 build_absolute_uri helper = urljoin(settings.SITEURL, url)",
+      "geonode/thumbs/utils.py:219 getmap(f\"{thumbnail_url}{wms_endpoint}\") where thumbnail_url comes from _datasets_locations (thumbnails.py:260 instance.ows_url or ogc LOCATION; :308 dataset.remote_service.service_url for remote map layers)",
+      "display-only build_absolute_uri/urljoin uses (NOT sinks; base=settings or request, value=model fields): base/api/serializers.py:230-281/457, base/templatetags/base_tags.py:352, invitations/views.py:92, documents/models.py:104/:151, groups/models.py:259, security/permissions.py:455/487/501, upload/api/serializers.py:186, layers/models.py:333, maps/views.py:413, catalogue/metadataxsl/models.py:46, resource/utils.py:232/:363-366, base/models.py:1614-1618 (save_thumbnail relative->absolute)",
+      "geonode/settings.py:2003-2004 Azure ACCESS_TOKEN_URL/AUTHORIZE_URL constants; :1092 urljoin(SITEURL, \"/catalogue/csw\")"
+    ],
+    "db_content_url_fields": [
+      "geonode/services/models.py:56 Service.base_url (URLField, unique) - set from CreateServiceForm.url user POST; ALSO auto-extends the proxy host allow-list (proxy/views.py:136-138)",
+      "geonode/harvesting/models.py:59 Harvester.remote_url (URLField) - set via DRF /api/v2/harvesters/ payload (admin-only write) and via service registration; fetched by all harvester workers",
+      "geonode/base/models.py:881 ResourceBase.thumbnail_url (TextField, no URL validation) - set to an ARBITRARY user URL by the set_thumbnail API (base/api/views.py:1346-1367, URLValidator + image-extension check only); later fetched server-side by is_monochromatic_image (utils.py:1883) with no host check",
+      "geonode/base/models.py:1773 Link.url (TextField 1000) - populated from remote metadata: harvested distribution URLs, Document.doc_url, WMS ops URLs from GetCapabilities, legend URLs",
+      "geonode/documents/models.py:52 Document.doc_url (URLField) - user-supplied external document URL (DocumentUploadView form_valid); used for display/redirect, persisted into Link.url (resource/utils.py:364-383)",
+      "geonode/layers/models.py:123 Dataset.ows_url (URLField) - harvested remote WMS URL or geoserver default; fetched by thumbnail GetMap and geoserver/helpers.py describe calls",
+      "geonode/maps/models.py:259 MapLayer.ows_url (URLField) - remote map layer OWS URL used by map thumbnails",
+      "geonode/monitoring/models.py:144 monitoring Service.url (URLField) - admin-configured monitored endpoint, fetched by monitoring/service_handlers.py:196/:215"
+    ],
+    "excluded_from_extraction": [
+      "geonode-db/ nested CodeQL database directory inside the source root (excluded from all source scanning and evidence gathering; the extraction scope filter path.matches(\"geonode/%\") cannot match geonode-db/ paths since position 7 is '-' vs '/', and no tool in this phase reads anything under geonode-db/)",
+      "root-level files geonode_ssrf_cve_application_report.md, geonode_ssrf_vulnerability_audit_report.md, geonode_unfixed_ssrf_cve_status_report.md, github_private_vuln_report.md, security_email_geonode_ssrf.md, ssrf_analysis_report.md, ssrf_dataflow_analysis.md, ssrf_sinks.csv and the file named 第一次 were NOT read: they look like pre-existing vulnerability-analysis artifacts, and this phase forbids consulting vulnerability ground truth, CVE descriptions, fix diffs or pre-located findings",
+      "geonode/tests/ package, any */tests/ tree, tests.py and test_*.py modules (e.g. geonode/proxy/tests.py, geonode/security/tests.py) - unit/integration tests, FP per global heuristics; note their mocks (proxy tests mock geonode.proxy.views.http_client.request; harvester tests mock requests.Session) only corroborate the sink census",
+      "geonode/*/migrations/* and geonode/locale/** - generated code / translation data",
+      "repo-root build/dev tooling outside the geonode/ package: pavement.py (paver script with requests.head/get at :109/:135, urllib Request+urlopen at :274-275/:1082 - CLI/build tooling, not the deployed Django application; documented as a coverage boundary), scripts/, hooks/, package/",
+      "settings.* attribute reads - operator configuration (SITEURL, OGC_SERVER, CATALOGUE, SOCIALACCOUNT_PROVIDERS); per SSRF FP heuristics admin-configured endpoints are FP material, so no settings/env source family is emitted (only 5 non-settings env reads exist and none flow into URLs)",
+      "Django HttpResponse/HttpResponseRedirect redirect flows (e.g. documents/views.py document_embed -> HttpResponseRedirect(document.doc_url)) - client-side redirect responses, Pass 9 (CWE-601) material, not server-side fetches",
+      "License.url (base/models.py:263) and MenuItem.url (base/models.py:1811) model fields - display-only links; geonode/api/api.py docstring-only request examples (layers/api/views.py:108-118 `requests.request(\"PUT\", ...)` appears inside a docstring, not executable code)",
+      "internal URL parsing-only helpers (urljoin/urlparse/urlsplit/URL.from_text/geturl usages) are recorded in url_construction_surfaces but intentionally NOT extracted as sinks; they matter only when tied to a real fetch call site"
+    ]
+  },
+  "extraction_plan": {
+    "pass_key": "ssrf",
+    "source_families": [
+      "Django request-field reads: request.<field> and self.request.<field> for client-controlled fields GET/POST/COOKIES/META/FILES/body/headers/path/path_info/method/scheme plus DRF data/query_params (flow kind field)",
+      "URL-shaped request-entry subscripts: request.GET[...]/request.POST[...]/request.data[...] subscript reads whose string index is URL-ish (url, host, file, doc_url, remote_url, base_url, download_url, href, link, sitemap_url, thumbnail_url) - captures proxy request.GET[\"url\"] and set_thumbnail request.data[\"file\"] precisely (flow kind field)",
+      "form cleaned_data URL-ish reads: self.cleaned_data[...] / self.cleaned_data.get(...) in forms modules (flow kind field / return)",
+      "caller-controlled resource-locator parameters anchored to verified handler/wrapper definitions: proxy(url), geoserver_proxy(proxy_path, downstream_path), ServiceHandlerBase.__init__(url), WmsServiceHandler/GeoNodeServiceHandler/ArcMapServiceHandler/ArcImageServiceHandler.__init__(url), get_service_handler(base_url), BaseHarvesterWorker.__init__(remote_url), ArcgisHarvesterWorker.__init__(remote_url), download_resource_file(url), is_monochromatic_image(image_url), thumbs get_map(ogc_server_location)/getmap(base_url) (flow kind param, real arg index)",
+      "form field definition: CreateServiceForm.url forms.CharField assignment in geonode/services/forms.py (flow kind field)",
+      "DB-content URL model field definitions (class-scope AssignStmt, value is a models.* call): Service.base_url, Harvester.remote_url, ResourceBase.thumbnail_url, Link.url, Document.doc_url, Dataset.ows_url, MapLayer.ows_url, monitoring Service.url (flow kind field)",
+      "CLI option boundaries: updategeoip options['url'] subscript and importlayers options.get(\"host\") call (flow kind field / return)"
+    ],
+    "sink_families": [
+      "http_client.request/get/post(url, ...) - the central GeoNode HttpClient wrapper; URL at positional argument 0 (16 call sites)",
+      "HttpClient internal final I/O: action(url=url, ...) [keyword url] and session.get(url, ...) in geonode/utils.py - the actual requests.Session dispatch (recorded with argIndex -1 for the keyword case)",
+      "requests.get/post/put/delete(...) module-level calls - URL at positional argument 0 (~34 call sites: geoserver security/geofence/createlayer/commands, br backup/restore, monitoring, updategeoip CLI, OIDC profile, serviceprocessors wms, download_resource_file)",
+      "requests.Session-backed harvester sessions: self.http_session.<get|post>(...) and http_session.<get|post>(...) in harvesting/harvesters/* - URL at positional argument 0 (13 call sites)",
+      "management command session: client.post(urljoin(self.host, ...)) in importlayers.py - URL at positional argument 0",
+      "library wrapper fetches (network I/O inside external libs, recorded as wrapper sinks): WebMapService(...) factory calls and wms111/wms130 constructors, WebCoverageService(...), WebFeatureService(...), owslib openURL(...), owslib http_post(...), CatalogueServiceWeb.__init__(url=... keyword), arcrest.MapService/ImageService/Catalog(...), smart_open.open(uri=... keyword)"
+    ],
+    "extraction_output_columns": [
+      "n (AST node)",
+      "candidate type literal (source_candidate / sink_candidate)",
+      "callableName",
+      "flowKind (param | return | field | argument)",
+      "receiverHint",
+      "moduleHint (dotted module path; variable named moduleHint because `module` is a QL keyword)",
+      "argIndex (0-based positional index of the URL argument; -1 when the URL is a keyword argument or not applicable)",
+      "line (n.getLocation().getStartLine())",
+      "location (file:line)",
+      "expression text (n.toString())"
+    ]
+  },
+  "coverage_gaps": [
+    "httpx / aiohttp / grequests / httplib2 are NOT imported anywhere in the geonode package - no candidate families are emitted for them, and none should be fabricated. urllib.request.urlopen/urlretrieve appear only in repo-root pavement.py (build tooling outside the geonode/ package scope) and in tests - both excluded and documented",
+    "The actual byte-level network I/O for OWSLib (WebMapService/WebCoverageService/WebFeatureService/openURL/http_post), arcrest and smart_open happens INSIDE those third-party libraries, whose source is not part of this database. Their constructor/wrapper call sites in geonode code are extracted as wrapper sink candidates; taint flow modeling into the library internals would need additional summary steps in Phase 2 (MySummaries.qll)",
+    "DRF/tastypie implicit deserialization: request.data -> serializer -> model field (e.g. HarvesterSerializer carrying remote_url) is framework glue; the extraction captures the request.data reads and the model field definitions, but the serializer-level plumbing itself may need summary edges in Phase 2",
+    "Second-order (DB-content) propagation is captured as model-field source candidates (Service.base_url, Harvester.remote_url, ResourceBase.thumbnail_url, Link.url, Document.doc_url, Dataset.ows_url, MapLayer.ows_url, monitoring Service.url); whether a given instance is attacker-influenced is a labeling/context question, not provable from the AST alone",
+    "geoserver_proxy (/gs/) builds its URL from the request path but constrains the base to ogc_server_settings.LOCATION; the extraction records its route-derived parameters as source candidates - path-prefix confinement is a labeling-stage judgment",
+    "pycsw harvest capability (csw_global_dispatch forwarding the raw QUERY_STRING to pycsw server.Csw) performs any remote fetch inside the pycsw library, which is not part of this database; only the request-entry surfaces are extracted here"
+  ]
+}

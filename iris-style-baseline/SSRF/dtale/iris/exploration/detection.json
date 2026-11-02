@@ -1,0 +1,214 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-20",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SSRF\\dtale\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (exploration + candidate extraction query generation) against the dtale_vuln source tree (D-Tale, git sha 063423aa). The CodeQL database dtale-db was created from the same tree (sourceLocationPrefix is the repo root itself; creation sha 063423aa matches), so file/line evidence below is verified against the checked-out snapshot. The nested dtale-db/ directory inside the source root is excluded from all exploration, scanning and evidence. Pre-existing analysis artifacts at the source root (ssrf_analyzer.py, ssrf_precise_analyzer.py, ssrf_sinks.csv, ssrf_sinks.json, high/medium/low_priority_sinks.csv, dtale_ssrf_*_report*.md, ssrf_vulnerability_report.md, ssrf_cost_estimation.md, ssrf_precise_analysis_report.md) were NOT opened (operator rule: no vulnerability ground truth, no pre-located vulnerable lines); they are excluded from row generation via the path filter. Per operator instruction, this step only generates exploration/detection.json and extraction/sources.ql + extraction/sinks.ql; codeql query run / bqrs decode, LLM labeling and all Phase 2 stages are deferred."
+  },
+  "target": {
+    "project": "dtale (D-Tale)",
+    "projectDescription": "D-Tale is the combination of a Flask back-end and a React front-end for viewing & analyzing Pandas data structures (dtale/ package). It runs as a local web server (dtale.app.show / build_app, DtaleFlask(Flask) at app.py:120/:315), from the command line (dtale.cli.script main click command with pluggable data loaders under dtale/cli/loaders/), inside Jupyter notebooks, and can be embedded in Django (dtale/django/dispatcher.py WSGI mounting) or Streamlit. Attacker-relevant input surface: the Flask HTTP API (~85 @dtale.route endpoints in views.py; authentication exists via dtale/auth.py but is DISABLED by default: global_state.AUTH_SETTINGS = {'active': False, ...} at global_state.py:38, requires_auth only short-circuits when active, applied through @app.before_request at app.py:457-458). The data-loading endpoints accept URLs: /web-upload (views.py:3921) reads 'url' and 'proxy' straight from the query string and forwards them to the CLI data loaders, which fetch remote http(s) resources through dtale.cli.clickutils.handle_path (clickutils.py:239-249 -> requests.get at :244). Outbound network access: requests.get is the only real HTTP-client call in the tree (5 sites).",
+    "pass": 3,
+    "cwes": ["CWE-918"],
+    "focus": "Server-Side Request Forgery (SSRF)",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\dtale_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (dtale-db/codeql-database.yml)",
+      "dtale/ package (38389 baseline lines of code in DB): views.py (~4300 lines, 85 Flask routes), app.py, cli/ (click command + 8 loaders), dash_application/ (plotly dash charts app), auth.py, config.py, utils.py, global_state.py",
+      "top-level setup.py + requirements.txt (Flask, dash, requests, pandas, ...)"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\dtale_vuln\\dtale-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\dtale_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "063423aa433c5342885415df51b2d988df309720",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-29T01:06:48.298700900Z"
+    },
+    "baselineLinesOfCode": 38389,
+    "finalised": true,
+    "scopeNotes": "The DB covers the repository tree including the top-level tests/ directory. The nested dtale-db/ directory and the pre-existing SSRF analysis artifacts at the source root (ssrf_analyzer.py, ssrf_precise_analyzer.py, ssrf_sinks.csv/json, *_priority_sinks.csv, dtale_ssrf_* report markdown files, ssrf_vulnerability_report.md, ssrf_cost_estimation.md, ssrf_precise_analysis_report.md) are NOT part of the DB source and were not opened. Row generation filters tests/, test_*.py, conftest.py, dtale-db and the root ssrf_*.py analyzer script paths."
+  },
+  "toolchain": {
+    "qlpack": "iris/dtale-cwe918 (dependencies: codeql/python-all: \"*\")",
+    "packResolutionExpected": "codeql/python-all resolved from the local pack cache at C:\\Users\\lzh\\.codeql\\packages (query run deferred; the API surface used by both queries mirrors the validated SSRF/core extraction pair: import python + import semmle.python.ApiGraphs, API::moduleImport(...).getMember(...).getACall(), Location-API file/line access)",
+    "codeqlCli": "2.25.1"
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "flask",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package: requirements.txt 'Flask<2.3; python_version >= 3.7' / 'Flask<=1.1.4; python_version < 3.7'; dtale/app.py:19 'from flask import (...)', :27 'from flask.testing import FlaskClient', :30 'from flask_compress import Compress'",
+            "route: dtale/views.py 85 '@dtale.route(...)' handler registrations on the Flask blueprint (e.g. :3921 '/web-upload', :3886 '/upload', :3977 '/datasets'); dtale/auth.py:10 '@app.route(\"/login\", methods=[\"GET\", \"POST\"])'",
+            "runtime/bootstrap: dtale/app.py:120 'class DtaleFlask(Flask)', :315 'app = DtaleFlask(...)', :457-458 '@app.before_request @auth.requires_auth', :522 'auth.setup_auth(app)', :525 'app = dash_views.add_dash(app)'; request data read through flask.request in views.py/auth.py (52 request.* attribute reads)",
+            "layout: dtale/templates/ + dtale/static/ (Jinja templates and static assets served by Flask)"
+          ]
+        },
+        {
+          "name": "dash (plotly dash; served INSIDE the Flask app; no augur reference exists)",
+          "confidence": 0.95,
+          "evidence": [
+            "import/package: requirements.txt dash + dash-bootstrap-components + dash-colorscales + dash_daq; dtale/dash_application/views.py:4 'import dash', :5 'from dash.dependencies import Input, Output, State'",
+            "route/callback: 35+ '@app.callback' sites (dash_application/views.py 22, custom_geojson.py 3, drilldown_modal.py 4, extended_aggregations.py 3, lock_zoom.py 1, saved_charts.py 2) with Input/Output/State callback properties",
+            "runtime/bootstrap: dtale/dash_application/views.py:61 'class DtaleDash(dash.Dash)', :104 'def add_dash(server)' mounted at dtale/app.py:525",
+            "layout: dtale/dash_application/ (charts.py, layout/, components/)"
+          ]
+        },
+        {
+          "name": "django (embedding helper only; not a Django app)",
+          "confidence": 0.05,
+          "evidence": [
+            "layout only: dtale/django/dispatcher.py - WSGI path-dispatcher utilities (pop_path_info/shift_path_info copied from werkzeug.wsgi, environ.get('SCRIPT_NAME') at :55) used to mount the Flask WSGI app under a Django URL; no Django views/models/urls code in this tree"
+          ]
+        }
+      ]
+    },
+    "selected": "flask (primary web framework and owner of the HTTP input boundary); dash is an in-process charts sub-application mounted on the Flask server",
+    "notes": "references/flask.md was loaded for Flask source/sink shapes. references/dash.md does not exist in Augur 0.3.0; dash callback inputs are therefore assessed from repository evidence only (see uncoveredCases: dash callback parameters have no path to network I/O in this tree and are not extracted as sources).",
+    "customBoundaryEvidence": [
+      "dtale/views.py:3921 '@dtale.route(\"/web-upload\")' -> web_upload (def at :3923): data_type/url/proxy are read from the query string via get_str_arg(request, ...) at :3929-3931 and forwarded to load_csv/load_json/load_excel (path=url, proxy=proxy) at :3933/:3939/:3945/:3951 - the URL/proxy entry point into the remote-fetch loader chain",
+      "dtale/utils.py:114 get_str_arg / :134 get_json_arg / :151 get_int_arg / :171 get_float_arg / :191 get_bool_arg - the five query-string reader wrappers, each built on 'val = r.args.get(name)' (the actual flask.request.args access)",
+      "dtale/cli/clickutils.py:239-249 handle_path(path, kwargs): 'if is_url(path): ... resp = requests.get(path, **req_kwargs)' at :244, with the caller-supplied 'proxy' injected as requests proxies (dict(http=proxy, https=proxy)) at :241-243 - the single shared remote-fetch funnel",
+      "dtale/cli/loaders/csv_loader.py:29 / excel_loader.py:31 / json_loader.py:38 - the three loaders that pass their 'path' through handle_path before pd.read_csv/read_excel/read_json",
+      "dtale/auth.py:37 requires_auth + global_state.py:38 AUTH_SETTINGS = {'active': False, ...} - authentication is opt-in; in the default deployment every route above is unauthenticated"
+    ]
+  },
+  "inputBoundaryInventory": {
+    "summary": "Attackers face a Flask HTTP API with ~85 routes that is UNAUTHENTICATED by default (auth.py requires_auth only gates when [auth] active is configured in dtale.ini; global default is False). Input is read (1) from the query string through five wrapper functions get_str_arg/get_int_arg/get_float_arg/get_bool_arg/get_json_arg (142 call sites: views.py 120, column_analysis.py 20, query.py 2; each wrapper is 'r.args.get(name)' in utils.py:114-204); (2) directly via request.args.to_dict() (views.py:1429, :3799, :3814, :3825); (3) from JSON request bodies via request.json.get(...) / bare request.json (views.py:1677, :1785, :1791, :3991, :4008, :4153); (4) from form bodies via request.form.get/[...] / membership (views.py:3871-3880 build_csv_kwargs, auth.py:20-25 login); (5) uploaded files via request.files (views.py:3888-3891); (6) CLI options of the 'dtale' click command (dtale/cli/script.py 22 @click.option decorators plus dynamically generated --<loader>-path/--<loader>-proxy options from LOADER_PROPS via clickutils.py loader_options :87-97); (7) environment variables (DTALE_CONFIG, DTALE_CLI_LOADERS, JUPYTERHUB_SERVICE_PREFIX, DTALE_MIN/MAX_PORT, WERKZEUG_RUN_MAIN, VSCODE_PID/VSCODE_INJECTION; 10 os.environ.get sites + 1 request.environ.get); (8) the dtale.ini configuration file (config.py:23 config.read(path), located via DTALE_CONFIG or $HOME/.config/dtale.ini). Outbound network access is issued exclusively through requests.get (5 call sites); the web-upload -> loader_func -> handle_path -> requests.get chain is the dominant SSRF-relevant flow (url AND proxy both attacker-supplied).",
+    "sourceFamilies": [
+      {
+        "family": "http_query_arg_call",
+        "evidence": [
+          "dtale/utils.py:114 get_str_arg / :134 get_json_arg / :151 get_int_arg / :171 get_float_arg / :191 get_bool_arg - each reads 'val = r.args.get(name)' from flask.request.args (str/json/int/float/bool conversions; no URL validation of any kind)",
+          "142 wrapper call sites: views.py 120 (e.g. :3930 'url = get_str_arg(request, \"url\")', :3931 'proxy = get_str_arg(request, \"proxy\")' in web_upload; :3979 dataset name in /datasets; :4283 report type), column_analysis.py 20 (self.* = get_*_arg(req, ...) at :85-:688), query.py 2 (:197 get_bool_arg(req, \"filtered\"))",
+          "first argument is the flask request object under whatever name the scope uses ('request' in views.py routes, 'req' in column_analysis.py/query.py)"
+        ]
+      },
+      {
+        "family": "request_args_to_dict",
+        "evidence": [
+          "dtale/views.py:1429 'params = request.args.to_dict()' (popup title parameter echo), :3799/:3814/:3825 'params = chart_url_params(request.args.to_dict())' (chart export CSV/code/all endpoints) - full query-string dictionaries"
+        ]
+      },
+      {
+        "family": "request_json_read",
+        "evidence": [
+          "dtale/views.py:1677 'json.loads(request.json.get(\"ranges\", \"{}\"))' (save-range-highlights POST), :1785/:1791 request.json.get(\"visibility\")/get(\"toggle\") (update-visibility POST), :3991 'request.json.get(\"columns\")' (build-column-copy POST), :4008 request.json.get(p) for start/end/rows/columns (build-row-copy POST), :4153 'cfg = request.json' (merge POST, full body dict)"
+        ]
+      },
+      {
+        "family": "request_form_read",
+        "evidence": [
+          "dtale/views.py:3871 'sep_type = request.form.get(\"separatorType\")', :3875 request.form.get(\"separator\"), :3876 request.form[\"separator\"], :3879 '\"header\" in request.form', :3880 request.form[\"header\"] - build_csv_kwargs, the /upload CSV parsing options",
+          "dtale/auth.py:20 '(request.form.get(p) for p in [\"username\", \"password\"])' and :25 'request.form[\"username\"]' - login credentials (only consumed by authenticate)"
+        ]
+      },
+      {
+        "family": "request_files_read",
+        "evidence": [
+          "dtale/views.py:3888 'if not request.files:', :3890 'for filename in request.files:', :3891 'contents = request.files[filename]' - the /upload multipart file boundary (filename extension selects csv/xls/parquet handling; contents feed pd.read_csv/read_excel/read_parquet, not network)"
+        ]
+      },
+      {
+        "family": "cli_arg",
+        "evidence": [
+          "dtale/cli/script.py:19 '@click.command(name=\"main\")' with 22 '@click.option(...)' decorators (:20 --host, :21 --port, ... - host/app-root/name etc. feed server bootstrap, build_url)",
+          "dtale/cli/clickutils.py:87-97 loader_options(key, params) builds the click options '--<loader>-path' and '--<loader>-proxy' for every registered loader from LOADER_PROPS (csv_loader.py:11-12 path/proxy, json_loader.py:10-11, excel_loader.py:11-12, parquet_loader.py:10); these values flow find_loader -> loader_func(**kwargs) -> handle_path(path, kwargs) -> requests.get - the CLI twin of the /web-upload flow (local operator input, weaker attacker model)"
+        ]
+      },
+      {
+        "family": "env_read",
+        "evidence": [
+          "dtale/config.py:28 'os.environ.get(\"DTALE_CONFIG\") or \"$HOME/.config/dtale.ini\"' (config file location), dtale/cli/loaders/__init__.py:108 os.environ.get(\"DTALE_CLI_LOADERS\") (custom loader module directory), dtale/app.py:597/:598 DTALE_MIN_PORT/DTALE_MAX_PORT, :621 JUPYTERHUB_SERVICE_PREFIX (app root), dtale/utils.py:42 WERKZEUG_RUN_MAIN, dtale/views.py:1248/:1250 VSCODE_PID/VSCODE_INJECTION, dtale/dash_application/layout/layout.py:106 VSCODE_PID",
+          "dtale/app.py:425 'request.environ.get(\"werkzeug.server.shutdown\")' - WSGI request environment read (server-internal key, not attacker data)"
+        ]
+      },
+      {
+        "family": "config_file",
+        "evidence": [
+          "dtale/config.py:23 'config.read(path)' on a six.moves.configparser ConfigParser - loads dtale.ini ([show]/[app]/[auth] sections: host/port/theme/auth credentials/admin-facing; the auth [auth] active flag is the only security gate in the deployment)"
+        ]
+      }
+    ],
+    "excludedFromSources": [
+      "internal helper parameters that merely forward already-derived URLs are NOT listed as sources (handle_path 'path'/'kwargs' in clickutils.py, loader_func 'path'/'proxy' in cli/loaders/*, load_zip 'url' in datasets.py) - they are covered on the sink side as funnel/wrapper candidates; the earliest untrusted boundary for the /web-upload flow is get_str_arg(request, 'url'/'proxy') at views.py:3930-3931",
+      "dash callback parameters (35+ @app.callback sites under dash_application/): user-controlled via the charts UI, but no code path in this tree leads from a callback value to network I/O (charts are built from in-memory dataframes; custom_geojson.py load_geojson parses base64 upload contents locally) - not extracted, recorded as a coverage decision",
+      "dtale/django/dispatcher.py WSGI environ path handling (PATH_INFO/SCRIPT_NAME): routing glue for embedding, no network path",
+      "data_id path/route parameters on the 85 views.py routes: dataframe lookup keys into global_state, not resource locators for network fetches"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "extraction/sources.ql",
+      "extraction/sinks.ql"
+    ],
+    "executionModel": "codeql query run + codeql bqrs decode (raw multi-column candidate tables); NOT database analyze / SARIF. Plain multi-column select queries on purpose: @kind problem is the wrong shape for candidate tables and @kind table is not assumed to exist.",
+    "columnContract": [
+      "node - candidate AST node (location-backed, decodes as file:line:col)",
+      "role - 'source_candidate' / 'sink_candidate' literal column",
+      "callableName - wrapper/parameter/attribute/API member name at the candidate",
+      "flowKind - family key (see sourceFamilies/sinkFamilies)",
+      "receiver - syntactic receiver hint (base name of the object expression, enclosing class name for function rows, '' if none)",
+      "moduleHint - external module name for API rows ('requests', 'urllib.parse') or dotted python module path of the candidate (variable intentionally named moduleHint; 'module' is not a valid QL variable name)",
+      "argIndex - 0-based positional index of the input/URL-carrying argument where applicable, -1 when not applicable",
+      "file - absolute path via AstNode.getLocation().getFile().getAbsolutePath() (AstNode.getFile() does not exist)",
+      "line - 1-based start line via AstNode.getLocation().getStartLine()",
+      "matchKind - 'api' (CodeQL-resolved real API call via API graphs) or 'ast' (syntax-level match)"
+    ],
+    "csvFieldOrder": "node,role,callableName,flowKind,receiver,moduleHint,argIndex,file,line,matchKind (identical to the earlier SSRF/core, mlflow and maltrail extraction CSVs)",
+    "sourceQueryFamilies": [
+      "http_query_arg_call - calls of get_str_arg/get_int_arg/get_float_arg/get_bool_arg/get_json_arg (ast; argIndex 1 = position of the literal query-parameter-name argument, the tainted value is the call result)",
+      "request_args_dict - request.args.to_dict() calls (ast, argIndex -1)",
+      "request_json - request.json.get(...) calls (ast, argIndex 0) and bare request.json attribute reads not already covered by a .get call (ast, argIndex -1)",
+      "request_form - request.form.get(...) calls (ast, argIndex 0), request.form[...] subscripts (ast, argIndex -1) and bare request.form attribute reads (ast, argIndex -1)",
+      "request_files - request.files attribute reads (ast, argIndex -1)",
+      "cli_arg - click.option(...) decorator/dynamic option-construction calls under dtale/cli (ast, argIndex 0 = option name argument)",
+      "env - os.environ.get(...) / request.environ.get(...) calls (ast, argIndex 0) and os.environ[...] subscripts (ast, argIndex -1)",
+      "config_file - config.read(path) configparser load (ast, argIndex 0)"
+    ],
+    "sinkQueryFamilies": [
+      "arg/api - requests.get calls resolved through API graphs (alias-aware; argIndex 0 = URL argument)",
+      "arg/ast - syntactic requests.get(...) shapes (intentionally redundant with the api family; argIndex 0)",
+      "internal_path_funnel - handle_path(...) call sites: the shared remote-fetch funnel (ast, argIndex 0 = path argument)",
+      "internal_loader_wrapper - functions whose body calls handle_path (csv/json/excel loader_func: the /web-upload and CLI entry into the funnel)",
+      "internal_fetch_wrapper - functions whose body directly issues a requests.get fetch (handle_path, load_zip, kill, is_up, app reaper closure _func)",
+      "url_parse - urllib.parse.parse_qsl/urlencode/quote/unquote references (charts.py:91-94/:199, utils.py:49/:56 PY2/PY3 shims): URL parse/encode construction, NOT final network I/O; emitted only as summary-labeling candidates"
+    ],
+    "excludedPaths": "tests/, test_*.py, conftest.py, dtale-db (nested CodeQL database), ssrf_analyzer.py, ssrf_precise_analyzer.py (pre-existing analysis artifacts at the source root)"
+  },
+  "uncoveredCases": [
+    "pandas IO URL fetching: pd.read_csv/read_json/read_excel (csv_loader.py:31, json_loader.py:44, excel_loader.py:33) receive whatever handle_path returns, and pd.read_parquet (parquet_loader.py:33) receives the raw 'path' WITHOUT handle_path - pandas itself performs remote http(s) reads for URL paths inside the library. This is library-internal behavior not provable from this source tree, so these call sites are not emitted as sinks; listed as a possible coverage gap (a URL reaching pd.read_parquet directly from /web-upload parquet branch views.py:3956 is fetchable only via pandas internals).",
+    "dash callback inputs (35+ @app.callback sites): user-controlled chart parameters with no network path in this tree - not extracted (no source-to-network propagation provable).",
+    "flask_ngrok: dtale/app.py:764 'from flask_ngrok import _run_ngrok' / :766 ACTIVE_HOST = _run_ngrok() / :821 Timer thread - starts an ngrok tunnel subprocess (network side effect without an explicit URL argument in this source); not a URL-parameterized fetch, not emitted.",
+    "plotly topojson/geojson fetching: dash_application/topojson_injections.py patches plotly.js fetchTopojson - the fetch executes in the BROWSER (client-side), not in this Python process; custom_geojson.py load_geojson decodes base64 upload contents locally (no URL). Neither is server-side SSRF.",
+    "dynamic custom CLI loaders: DTALE_CLI_LOADERS env (cli/loaders/__init__.py:108 build_loaders) imports arbitrary python modules that may define new LOADER_KEY/LOADER_PROPS - module-loading behavior out of Pass 3 scope.",
+    "django embedding: dtale/django/dispatcher.py only shifts WSGI path segments; no django views/models exist in the tree.",
+    "absent_apis (zero call sites in this tree, verified by scan - NOT emitted, per operator rule 'only APIs proven present'): requests.post/put/head/delete/patch/request/Session, httpx.* , aiohttp.*, urllib.request.urlopen, urllib.request.urlretrieve, urllib.request.Request, socket.create_connection."
+  ],
+  "referencesLoaded": [
+    "WORKFLOW.md",
+    "references/patterns.md",
+    "references/python.md",
+    "references/flask.md"
+  ],
+  "constraintsHonored": [
+    "No vulnerability ground truth, CVE descriptions, fix diffs or pre-located vulnerable lines were read; the pre-existing ssrf_* / dtale_ssrf_* artifacts in the source root were left unopened",
+    "Source and database trees not modified; Augur installation not modified",
+    "Only exploration/detection.json, extraction/sources.ql and extraction/sinks.ql generated; CodeQL not executed; LLM labeling not performed",
+    "Nested dtale-db directory excluded from exploration, scanning and evidence",
+    "QL variables named moduleHint (never 'module'); locations via getLocation() API only; no QL classes with unbound this; no API::Node/DataFlow::Node mixing; bindingset declared on string predicates used with matches(); no {{...}} template placeholders remain; queries are plain multi-column selects compatible with codeql query run + bqrs decode"
+  ]
+}

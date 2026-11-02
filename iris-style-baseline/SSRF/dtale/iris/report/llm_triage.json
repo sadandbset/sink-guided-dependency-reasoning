@@ -1,0 +1,118 @@
+{
+  "metadata": {
+    "run_id": "dtale-cwe918-pass3-llm-triage",
+    "generated_at": "2026-10-20",
+    "model": "glm-5.3",
+    "reviewer": "independent LLM path re-review (no modification to SARIF, labels, or queries)",
+    "scope": "ruleId py/augur/dtale/pass3-ssrf formal alerts in results/pass3.sarif only; diagnostics and native CodeQL baselines excluded",
+    "target": "dtale_vuln source tree (git 063423aa), DB dtale-db",
+    "constraints_honored": [
+      "original SARIF untouched",
+      "labels.json untouched",
+      "formal query untouched",
+      "no PyVul ground truth / fix commits / CVE bulletins were read from external sources during triage (the fix-commit block in the operator's second task prompt is operator-supplied input and is used only for the separate hit-assessment section below)"
+    ]
+  },
+  "sarif_summary": {
+    "runs": 1,
+    "tool": "CodeQL",
+    "rules": ["py/augur/dtale/pass3-ssrf"],
+    "formal_results": 1,
+    "diagnostic_results": 0,
+    "note": "The single result is a formal CWE-918 taint-path alert with 4 codeFlows; no diagnostics-only content is present in this SARIF."
+  },
+  "triage": [
+    {
+      "alert_index": 0,
+      "ruleId": "py/augur/dtale/pass3-ssrf",
+      "verdict": "likely_tp",
+      "confidence": 0.92,
+      "sink": {
+        "file": "dtale/cli/clickutils.py",
+        "line": 244,
+        "expression": "resp = requests.get(path, **req_kwargs)",
+        "function": "handle_path (def at clickutils.py:238)"
+      },
+      "source": {
+        "file": "dtale/views.py",
+        "line": 3930,
+        "expression": "url = get_str_arg(request, \"url\")",
+        "function": "web_upload (route /web-upload registered at views.py:3921)",
+        "boundary": "flask request.args query parameter 'url' (get_str_arg -> r.args.get, dtale/utils.py:114-124)"
+      },
+      "code_flows_reviewed": 4,
+      "code_flow_branches": [
+        "codeFlow 0: views.py:3930 url -> views.py:3933 load_csv(path=url) (data_type=='csv') -> csv_loader.py:28-29 kwargs.pop('path') -> clickutils.py:238 handle_path -> clickutils.py:244 requests.get",
+        "codeFlow 1: views.py:3930 url -> views.py:3945 load_json(path=url) (data_type=='json') -> json_loader.py:32-38 kwargs.pop('path') -> clickutils.py:238 -> clickutils.py:244",
+        "codeFlow 2: views.py:3930 url -> views.py:3951 load_excel(path=url) (data_type=='excel') -> excel_loader.py:28-29/31 kwargs.pop('path')/handle_path(path,kwargs) -> clickutils.py:238 -> clickutils.py:244",
+        "codeFlow 3: views.py:3930 url -> views.py:3939 load_csv(path=url, delimiter='\\t') (data_type=='tsv') -> csv_loader.py:28-29 -> clickutils.py:238 -> clickutils.py:244"
+      ],
+      "taint_path_verified_in_source": true,
+      "questions": {
+        "q1_source_is_attacker_influenced_request_boundary": {
+          "answer": true,
+          "reasoning": "get_str_arg reads request.args.get('url') (dtale/utils.py:114-124). The /web-upload route (dtale/views.py:3921) is served by the dtale Flask app. Authentication is off by default: global_state.py:38 AUTH_SETTINGS = {'active': False, ...}; setup_auth returns immediately when inactive (auth.py:8-9) and the app-level before_request gate (app.py:457-459, auth.requires_auth) short-circuits to f(*args) when inactive (auth.py:40-41). In the default deployment any network peer who can reach the listener can issue GET /web-upload?type=csv&url=... — an untrusted-input threat model holds. The analyzed tree (git 063423aa) contains no enable_web_uploads gate in web_upload; the route is unconditionally active. Jupyter/VSCode/standalone deployments all register the same route."
+        },
+        "q2_real_data_propagation_to_network_url": {
+          "answer": true,
+          "reasoning": "All four codeFlows correspond to real, line-verified source statements: views.py:3933/3939/3945/3951 pass url as the path= keyword to load_csv/load_json/load_excel; each loader wrapper receives it in **kwargs and pops it (csv_loader.py:29, json_loader.py:38, excel_loader.py:29), then calls handle_path(path, kwargs) (excel via excel_loader.py:31); handle_path passes path verbatim as positional argument 0 of requests.get (clickutils.py:244). The kwargs keyword->**kwargs hop matches actual Python call semantics (load_csv(path=url, proxy=proxy) -> kwargs={'path': url, 'proxy': proxy}); no modeled edge is unsupported by source."
+        },
+        "q3_base_url_urljoin_processing": {
+          "answer": "no_base_url_processing",
+          "reasoning": "No urljoin, base-URL concatenation, or URL rewriting exists anywhere on the funnel path. is_url (clickutils.py:234-235) is a pure http:// / https:// prefix test; the attacker-supplied string is forwarded to requests.get verbatim. There is no code-mediated host/port/protocol change to reason about — the attacker directly selects the effective target host, port and path."
+        },
+        "q4_sink_performs_real_network_request": {
+          "answer": true,
+          "reasoning": "requests.get(path, **req_kwargs) at clickutils.py:244 is a real synchronous HTTP(S) GET issued by the server process; the response body is returned through resp_handler (handle_str_content -> BytesIO(resp.content), clickutils.py:230-231, or resp.json()/resp.text for the JSON loader, json_loader.py:35-36) and loaded into pandas, then surfaced to the caller by load_new_data (views.py:3974). This is an actual remote fetch, not a Request-object construction or URL parse. The assert resp.status_code == 200 (clickutils.py:245) additionally reflects fetch success/failure through the exception_decorator error path, so even non-parseable responses leak reachability state (semi-blind at minimum; response content itself is reflected when it parses as csv/json/excel)."
+        },
+        "q5_attacker_controlled_url_scope": {
+          "answer": "full_url_scheme_limited_to_http_https",
+          "reasoning": "The attacker controls the entire URL string from the 'url' query parameter: scheme is constrained to http/https by the is_url prefix check (file:, data:, gopher: blocked on this funnel), but host, port, path, query and userinfo are fully attacker-chosen. Exploitability: classic full-target SSRF against internal services (e.g. http://127.0.0.1:<port>, RFC1918 ranges, cloud metadata endpoints over http), arbitrary external target, and port scanning with status oracle via the status-code assert / parse errors. Additionally the same request's 'proxy' parameter (views.py:3931) is placed into req_kwargs['proxies'] = dict(http=proxy, https=proxy) (clickutils.py:240-243), giving attacker control of the egress proxy — a secondary request-redirection channel that the formal alert (arg 0 only) intentionally does not count."
+        },
+        "q6_effective_protections": {
+          "answer": "none_effective",
+          "reasoning": "The only check on the tainted URL is the is_url http/https prefix test (clickutils.py:234-235). There is no host allow-list, no post-parse IP restriction, no private/loopback/link-local or DNS-rebinding defense, no redirect-target re-validation (requests follows redirects by default with no hook on this path), and no network-layer isolation in code. requires_auth is a route gate that is disabled by default (global_state.py:38) and not a data-flow sanitizer in any case. No sanitizer label survived Phase 1 review (p3-sup-0001 rejected), so no barrier is modeled or exists."
+        },
+        "q7_trusted_fixed_url_or_allowed_feature": {
+          "answer": false,
+          "reasoning": "The fetched URL is not a fixed literal, not an administrator-configured address, and not an internal-lifecycle endpoint. It is an end-user-supplied remote-resource reference by design ('Load From the Web'). The fixed-target sinks elsewhere in the tree (datasets.py:40 load_zip with hardcoded GitHub literals, internal kill/is_up/reaper fetches on build_url(ACTIVE_PORT, ACTIVE_HOST)) were correctly excluded from this alert's model."
+        },
+        "q8_static_path_reachability": {
+          "answer": "reachable",
+          "reasoning": "Entry is a registered Flask route (@dtale.route('/web-upload'), views.py:3921) on the dtale blueprint of the running app, not an internal helper invoked under special conditions. Parameters arrive from the query string of any unauthenticated HTTP GET/POST in the default deployment (auth inactive, auth.py:40-41). No permission condition, feature flag, or environment precondition gates web_upload in this tree — the branch dispatch (data_type csv/tsv/json/excel) is itself attacker-selected via the 'type' parameter. The alert is not based on a local-only view of handle_path; the full route->handler->loader->funnel chain is verified."
+        },
+        "q9_file_or_parse_or_test_or_diagnostics_contamination": {
+          "answer": false,
+          "reasoning": "Every path node is production code inside the dtale package (views.py, cli/loaders/*, cli/clickutils.py) — no tests/, no docs/ demo apps, no pure urllib.parse processing rows (all 12 were labeled none/fp and unmodeled), no file: local reads on the tainted path (is_url blocks non-http(s) schemes before the fetch), and the SARIF contains no diagnostics-query results (single rule, single formal result). The alert is a clean formal CWE-918 taint path."
+        }
+      },
+      "notes": [
+        "Coverage gap (correctly excluded, not counted): the parquet branch (views.py:3969 -> parquet_loader.py:34 pd.read_parquet without handle_path) fetches only if pandas/fsspec resolves the URL internally — not provable in-tree and not part of this alert.",
+        "Proxy-channel flow (views.py:3931 -> clickutils.py:243 proxies kwarg) terminates without a formal alert because the reviewed sink label pins requests.get argument 0 only; documented in query_generation_notes.md §6 and deliberately not widened.",
+        "All four codeFlows share one sink node (clickutils.py:244) and one source line (views.py:3930); they represent the csv/tsv/json/excel type dispatch branches inside web_upload and were each individually confirmed against the source lines cited above."
+      ]
+    }
+  ],
+  "summary": {
+    "total_formal_alerts": 1,
+    "likely_tp": 1,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "statement": "CodeQL 分析命中 1 条正式 CWE-918 污点路径告警（ruleId py/augur/dtale/pass3-ssrf），经独立源码复核判定为 likely_tp（置信度 0.92）：未认证的 /web-upload 路由的 url 查询参数完整控制 requests.get 的目标 URL（scheme 限 http/https，host/port/path 全可控），仅有 is_url 前缀检查，无任何主机白名单、私网 IP 拦截或重定向校验。"
+  },
+  "real_vulnerability_hit_check": {
+    "task": "operator-supplied fix-commit block (man-group/dtale commit 954f6be1a06ff8629ead2c85c6e3f8e2196b3df2, CWE-918, 'Updated web data uploads to be turned off by default') — assess whether the Pass 3 formal analysis hit this real vulnerability",
+    "hit": true,
+    "match_confidence": 0.95,
+    "matched_function": "web_upload",
+    "analysis": {
+      "analyzed_version": "git 063423aa — pre-fix: verified that dtale/views.py web_upload (3923-3974) contains NO enable_web_uploads check; the gate shown in the fix's code_after is absent from the analyzed tree, so the analyzed code is the vulnerable version.",
+      "vulnerable_flow_in_fix": "The fix's core functional change is the enable_web_uploads default-off gate added at the top of web_upload (code_after), plus settings plumbing (set_app_settings, base_render_template, update_settings) to propagate the flag. The security-relevant flow the fix disables is exactly: web_upload reads url/proxy from the request -> load_csv/load_json/load_excel -> handle_path -> requests.get.",
+      "alert_flow": "The single formal alert's codeFlows start at web_upload's url read (views.py:3930) and pass through the load_csv/load_json/load_excel calls at views.py:3933/3939/3945/3951 before reaching requests.get at clickutils.py:244. The alert message itself names the /web-upload 'url' query parameter on the unauthenticated route (views.py:3921) with full-URL attacker control.",
+      "function_level_match": "web_upload — the entry function of every tainted path — is one of the fix commit's changed functions. The alert's sink sits in the shared funnel handle_path (clickutils.py:244) rather than inside web_upload, but the codeFlow proves the path originates in web_upload, and the fix's own warning text ('Web uploads are vulnerable to blind server side request forgery') describes precisely this funnel. The other three changed functions are flag-plumbing only and carry no vulnerable flow themselves.",
+      "attack_surface_match": "The advisory describes SSRF via the 'Load From the Web' feature (/web-upload). The alert identifies the same route, same parameters, and full host/port/path control — a direct match. (Minor nuance: the advisory's 'access files on the server' phrasing would require a file: target, which is_url blocks on this funnel; the confirmed core exposure is full-target HTTP(S) SSRF against internal/external hosts, semi-blind with content reflection when the response parses as csv/json/excel.)",
+      "counting_rule": "This hit is scored against the single formal Augur Pass 3 alert (py/augur/dtale/pass3-ssrf), not against any diagnostics or native-CodeQL baseline output, per the run's counting rules."
+    },
+    "conclusion": "命中：本輪唯一的正式 Pass 3 告警即真实漏洞的核心污点路径（/web-upload -> web_upload -> loader -> handle_path -> requests.get），且被判定为 likely_tp；修复提交引入的 enable_web_uploads 默认关闭门正是针对该路径的防护。1 条正式告警，1 条 likely_tp，精确命中真实 CWE-918 漏洞。"
+  }
+}

@@ -1,0 +1,233 @@
+{
+  "step": "Step 1 - Explore and detect",
+  "target": "label-studio (Heartex annotation tool, version 1.5.0dev)",
+  "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\label-studio_vuln\\label-studio-db",
+  "source_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\ssrf_dbs\\label-studio_vuln",
+  "timestamp": "2026-10-20",
+  "language": "python",
+  "language_evidence": [
+    "label-studio-db/codeql-database.yml: primaryLanguage: python, creationMetadata.cliVersion: 2.25.1, baselineLinesOfCode: 33202, sourceLocationPrefix = label-studio_vuln repo root (relative paths therefore look like label_studio/data_import/uploader.py)",
+    "repository layout: single application package label_studio/ with Django apps (core, data_import, data_export, data_manager, io_storages, ml, organizations, projects, tasks, users, webhooks, labels_manager) plus manage.py, server.py, setup.py at package root",
+    "label_studio/__init__.py: package_name = 'label-studio', __version__ = '1.5.0dev'; setup.py entry point 'label-studio=label_studio.server:main'"
+  ],
+  "codeql_environment": {
+    "cli_version": "2.25.1 (verified via `codeql version`, unpacked at E:\\codeql)",
+    "python_query_library": "codeql/python-all 7.1.2 and 7.1.1 cached under C:\\Users\\lzh\\.codeql\\packages\\codeql; workspace qlpack.yml should declare codeql/python-all: \"*\"",
+    "api_surface_note": "Extraction queries use only `import python` AST APIs verified against the locally cached python-all 7.1.2 library (same surface validated on the earlier django/calibre-web/core SSRF runs): AstNode.getLocation()/getScope()/toString(), Location.getFile()/getStartLine(), File.getRelativePath(), Call.getFunc()/getArg(int), Attribute.getName()/getObject(), Name.getId(), Parameter.asName().getId(), StringLiteral.getText(), Function.getName()/getArg(int). No AstNode.getFile(), no API::Node vs DataFlow::Node mixing, no QL classes defined in extraction queries, no @kind declared (plain multi-column select for `codeql query run` + `bqrs decode --format=csv`).",
+    "dbscheme": "semmlecode.python.dbscheme"
+  },
+  "scope": {
+    "passes": [3],
+    "cwes": ["918", "099", "610"],
+    "focus": "Server-Side Request Forgery (CWE-918 primary, per user instruction)"
+  },
+  "project_purpose": "Label Studio is an open-source multi-type data-labeling/annotation tool. It runs a Django web server (entry points: `label-studio` CLI -> label_studio/server.py:main, and manage.py) exposing a Django REST Framework API under /api/ (projects, tasks, import, export, storage backends, ML backends, webhooks). Annotators/project collaborators import tasks (files or URLs), connect external cloud storage (S3/GCS/Azure/Redis/local files), attach machine-learning backends (HTTP services) for predictions/training, and register webhooks that the server POSTs to on annotation events. These import-by-URL, ML-backend, webhook, and storage-endpoint features are exactly the surfaces where the server issues outbound network requests driven by API-supplied values.",
+  "framework_candidates": [
+    {
+      "framework": "django",
+      "kind": "web-framework",
+      "confidence": 1.0,
+      "classification": "primary",
+      "evidence": {
+        "import_evidence": {
+          "score": 0.45,
+          "snippets": [
+            "django imports throughout: django.conf.settings, django.urls.path/include/re_path, django.db.models, django.contrib.admin; label_studio/core/settings/base.py full Django settings module",
+            "Django app layout: label_studio/{core,data_import,data_manager,data_export,io_storages,ml,organizations,projects,tasks,users,webhooks,labels_manager} each with models.py/api.py/urls.py"
+          ]
+        },
+        "route_evidence": {
+          "score": 0.30,
+          "snippets": [
+            "label_studio/core/urls.py:48-89 urlpatterns with re_path/path routes including include('data_import.urls'), include('ml.urls'), include('webhooks.urls'), include('io_storages.urls'), include('projects.urls')",
+            "DRF class-based views: data_import/api.py:171 ImportAPI(generics.CreateAPIView), ml/api.py:77 MLBackendListAPI(generics.ListCreateAPIView), webhooks/api.py:58 WebhookListAPI, io_storages/api.py:25 ImportStorageListAPI"
+          ]
+        },
+        "runtime_bootstrap_evidence": {
+          "score": 0.2,
+          "snippets": [
+            "label_studio/server.py: main() -> InputArgs, start_label_studio, django setup; label_studio/manage.py:22 execute_from_command_line(sys.argv)",
+            "label_studio/core/settings/{base,label_studio}.py settings modules, EMAIL_BACKEND dummy default"
+          ]
+        },
+        "layout_evidence": {
+          "score": 0.05,
+          "snippets": [
+            "standard Django project layout: single label_studio package containing settings, urls, apps, manage.py, server.py"
+          ]
+        }
+      }
+    },
+    {
+      "framework": "django-rest-framework",
+      "kind": "api-framework",
+      "confidence": 0.9,
+      "classification": "secondary (request-input materialization layer for all API endpoints)",
+      "evidence": [
+        "rest_framework imports in nearly every api.py: generics, APIView, serializers, permissions (e.g. data_import/api.py:17, ml/api.py:11, webhooks/api.py:8, io_storages/api.py:4)",
+        "request.data / request.query_params / request.FILES reads across API views (41/13/4 occurrences respectively in non-test code), e.g. data_import/uploader.py:162 url = request.data.get('url')",
+        "ModelSerializer field bindings that carry API input into DB rows: webhooks/serializers.py WebhookSerializer (url field), ml/serializers.py MLBackendSerializer (url field validated in validate_url)"
+      ]
+    },
+    {
+      "framework": "requests (python-requests)",
+      "kind": "http-client-library",
+      "confidence": 0.9,
+      "classification": "secondary (the primary outbound-HTTP client actually used by application code)",
+      "evidence": [
+        "label_studio/webhooks/utils.py:24 requests.post(webhook.url, headers=webhook.headers, json=data, timeout=...) - webhook delivery",
+        "label_studio/ml/api_connector.py:6 import requests; :52 session = requests.Session(); :83 self.http.request(method, *args, **kwargs) - ML backend transport (BaseHTTPAPI.request)",
+        "label_studio/core/utils/common.py:362 requests.get(pypi_url, timeout=10) - version check against hardcoded pypi.org URL",
+        "label_studio/core/utils/contextlog.py:177 requests.post(url='https://tele.labelstud.io', json=payload, timeout=3.0) - usage telemetry, hardcoded URL",
+        "label_studio/core/utils/windows_sqlite_fix/__init__.py:26 requests.get(url, verify=False) - sqlite3.dll download from hardcoded sqlite.org URL at startup (Windows only)",
+        "label_studio/io_storages/gcs/models.py:176 auth_request = requests.Request() - object construction passed to google-auth compute_engine.IDTokenCredentials, NOT a network call by itself"
+      ]
+    },
+    {
+      "framework": "urllib.request (stdlib http client)",
+      "kind": "http-client-library",
+      "confidence": 0.75,
+      "classification": "secondary (task-import URL fetch)",
+      "evidence": [
+        "label_studio/data_import/uploader.py:20 `from urllib.request import urlopen`; single call site at line 123 `with urlopen(url, context=ctx) as file:` inside tasks_from_url(); the url argument originates from request.data.get('url') at line 162 (POST /api/projects/{pk}/import)"
+      ]
+    },
+    {
+      "framework": "boto3 / botocore (S3 client)",
+      "kind": "storage-client-library",
+      "confidence": 0.75,
+      "classification": "secondary (S3-compatible storage; endpoint URL is API-suppliable)",
+      "evidence": [
+        "label_studio/io_storages/s3/utils.py:29-41 session = boto3.Session(...); client = session.client('s3', config=..., **settings); resource = session.resource('s3', ...) where settings['endpoint_url'] = s3_endpoint (line 37-39, from S3ImportStorage.s3_endpoint model field or S3_ENDPOINT env)",
+        "label_studio/io_storages/s3/models.py:52-53 s3_endpoint = models.TextField(...) - writable via POST /api/storages/s3 (io_storages/api.py ImportStorageListAPI, permission projects_change)"
+      ]
+    },
+    {
+      "framework": "redis-py",
+      "kind": "storage-client-library (non-HTTP network)",
+      "confidence": 0.6,
+      "classification": "secondary (Redis import/export storage; host/port API-suppliable, non-HTTP network I/O recorded separately)",
+      "evidence": [
+        "label_studio/io_storages/redis/models.py:57 r = redis.StrictRedis(db=db, charset='utf-8', decode_responses=True, **redis_config); :66-70 redis_config built from self.host/self.port/self.password model fields; :59 r.ping() tests connection"
+      ]
+    },
+    {
+      "framework": "google-cloud-storage / azure-storage-blob",
+      "kind": "storage-client-library",
+      "confidence": 0.5,
+      "classification": "informational-below-secondary-threshold (endpoints fixed to cloud provider domains; credentials API-suppliable but URLs are bucket-relative)",
+      "evidence": [
+        "label_studio/io_storages/gcs/models.py: GCSStorageMixin uses google_storage.Client and blob.generate_signed_url (presigned URL generation, returned to the client, not fetched server-side); :126 socket.getaddrinfo('metadata.google.internal', 80) - fixed-host DNS probe",
+        "label_studio/io_storages/azure_blob/models.py:58-59 connection_string built from account_name/account_key with fixed EndpointSuffix=core.windows.net; generate_blob_sas used for :119 SAS URLs - no caller-controlled endpoint host"
+      ]
+    }
+  ],
+  "primary_framework": "django (+ DRF)",
+  "framework_notes": [
+    "Django + Django REST Framework is the primary stack (score 1.00 / 0.90). references/django.md was loaded in addition to references/python.md and references/patterns.md.",
+    "IMPORTANT scope fact: this CodeQL database contains ONLY the label_studio application package (~33k LOC). Django itself, DRF, requests, boto3, redis-py, google-cloud-storage are external pip dependencies whose sources are NOT in the database. Extraction therefore anchors on application-level call sites (urlopen call in data_import, requests.* calls in webhooks/ml/core utils, boto3/redis client construction in io_storages) and on DRF request-object attribute reads, not on framework internals.",
+    "All API endpoints require authentication (DRF Token/session; core/settings). Endpoint-level permissions observed: ImportAPI = projects_change (data_import/api.py:172), MLBackendListAPI = projects_change (ml/api.py:78), WebhookListAPI = IsAuthenticated + organization membership (webhooks/api.py:58-60), ImportStorageListAPI = projects_change (io_storages/api.py:26). These are project-collaborator level, NOT admin-only: any authenticated user with project-change rights (or, for webhooks, any organization member) can supply the URLs that reach the network sinks. Permission checks limit attacker identity but not the trust level of the URL values themselves (per references/django.md middleware/auth note).",
+    "Three genuine user-driven outbound-HTTP flows exist: (1) task import by URL: POST /api/projects/{pk}/import with form body url= -> load_tasks (uploader.py:143) -> tasks_from_url (uploader.py:114) -> urlopen(url) (uploader.py:123) with SSL certificate verification disabled (ctx.check_hostname=False, ctx.verify_mode=ssl.CERT_NONE, lines 118-120) and an optional url_is_local guard gated by settings.SSRF_PROTECTION_ENABLED (line 175); (2) webhook delivery: Webhook.url/headers written by any organization member via /api/webhooks (no local-IP check) -> requests.post(webhook.url, headers=webhook.headers, ...) (webhooks/utils.py:24); (3) ML backend calls: MLBackend.url written via /api/ml (validate_url applies url_is_local only when settings.ML_BLOCK_LOCAL_IP is true, ml/serializers.py:10-13) -> MLApi(BaseHTTPAPI) -> requests.Session.request (ml/api_connector.py:81-83), with URL suffixes joined via urllib.parse.urljoin (api_connector.py:132).",
+    "Fixed-destination outbound HTTP (FP material for CWE-918 but recorded for completeness): pypi.org version check (core/utils/common.py:362), tele.labelstud.io telemetry (core/utils/contextlog.py:177, URL is a literal), sqlite.org dll download at startup with verify=False (core/utils/windows_sqlite_fix/__init__.py:26, Windows-only, URL built from a constant filename).",
+    "Non-HTTP network connections recorded separately: boto3 S3 client/resource with API-suppliable endpoint_url (io_storages/s3/utils.py:40-41), redis.StrictRedis with API-suppliable host/port (io_storages/redis/models.py:57), socket.gethostbyname inside the url_is_local guard (core/utils/io.py:177, DNS resolution performed by the sanitizer check itself).",
+    "Redirect-producing Django responses are client-side navigation (Pass 9 / CWE-601 material) and are NOT extracted as CWE-918 sinks; the RedirectView at core/urls.py:49 targets a fixed path.",
+    "url_is_local (core/utils/io.py:171-192) is a sanitizer candidate: resolves the hostname via socket.gethostbyname then rejects 0.0.0.0 and the four RFC1918-style private subnets. It is applied to the import URL (uploader.py:175, gated by settings.SSRF_PROTECTION_ENABLED) and to ML backend URLs (ml/serializers.py:10-13, gated by settings.ML_BLOCK_LOCAL_IP). Webhook URLs have no such check. Its check-then-fetch structure (separate DNS resolution in url_is_local vs. the later fetch in urlopen) is a TOCTOU shape that the labeling/analysis stages should keep in mind, but that does not affect candidate extraction."
+  ],
+  "references_loaded": [
+    "WORKFLOW.md",
+    "references/patterns.md",
+    "references/python.md",
+    "references/django.md",
+    "assets/extraction/README.md",
+    "assets/extraction/extract_sources.ql.tmpl",
+    "assets/extraction/extract_sinks.ql.tmpl",
+    "assets/extraction/python_sources.ql.tmpl",
+    "assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "repo_survey": {
+    "http_entry_points": [
+      "CLI: label_studio/server.py main() parses sys.argv (line 269 parse_input_args(sys.argv[1:])) and boots Django; label_studio/manage.py:22 execute_from_command_line(sys.argv) - operator boundary, not remote-attacker boundary",
+      "API root: label_studio/core/urls.py:56-65 includes organizations/projects/data_import/data_manager/data_export/users/tasks/io_storages/ml/webhooks/labels_manager urls under ^api/; data_import/urls.py: path('<int:pk>/import', api.ImportAPI...) -> /api/projects/{pk}/import (data import by URL); ml/urls.py MLBackend endpoints under /api/ml; webhooks/urls.py /api/webhooks; io_storages/urls.py /api/storages/*",
+      "View dispatch: DRF generics.CreateAPIView / APIView post/put/get methods receive `request` (rest_framework.request.Request); request.data/query_params/FILES materialize the client payload (e.g. data_import/api.py:209 load_tasks(request, project); webhooks/api.py:65 perform_create(serializer); ml/api.py:99 perform_create)"
+    ],
+    "request_input_surfaces": [
+      "import-by-URL: data_import/uploader.py:162 `url = request.data.get('url')` inside load_tasks (form-urlencoded POST body); line 167 str_to_json(url) short-circuits when the value parses as JSON; line 175 optional SSRF guard; line 177 tasks_from_url(file_upload_ids, project, request, url)",
+      "request field reads in non-test application code (grep counts): request.user 121 (identity, not data), request.GET 42, request.data 41, request.query_params 13, request.POST 5, request.META 4, request.FILES 4, request.body 1; plus self.request.data/query_params/GET in class-based views (e.g. data_import/api.py:273,301,394,403)",
+      "serializer-carried input into DB rows: webhooks/serializers.py WebhookSerializer Meta fields include 'url' and 'headers' -> webhooks/models.py:42 url = models.URLField, :56 headers = models.JSONField (values persist and later flow to requests.post); ml/serializers.py MLBackendSerializer validate_url(value) receives the POSTed 'url' (line 9) and attrs['url'] read at line 19; io_storages s3/models.py:52 s3_endpoint TextField and redis/models.py:21-31 host/port TextFields persist storage endpoints written via /api/storages/*",
+      "environment/CLI boundary: core/utils/params.py:102-110 get_env() reads os.environ.get('LABEL_STUDIO_'+name | 'HEARTEX_'+name | name); get_env used in ml/api_connector.py:25-34 (timeout config), io_storages/s3/utils.py:22-37 (AWS credentials and S3_ENDPOINT), server.py, settings; sys.argv at server.py:269 and manage.py:22"
+    ],
+    "outbound_network_surfaces": [
+      "data_import/uploader.py:123 `with urlopen(url, context=ctx) as file:` - urllib.request.urlopen, URL at positional argument 0, value = request.data.get('url'); SSL verification disabled (lines 118-120); optional url_is_local guard at 175 gated by settings.SSRF_PROTECTION_ENABLED",
+      "webhooks/utils.py:24-29 `requests.post(webhook.url, headers=webhook.headers, json=data, timeout=settings.WEBHOOK_TIMEOUT)` - webhook.url (URLField) and webhook.headers (JSONField) are organization-member-writable via /api/webhooks; no local-IP guard on webhook delivery",
+      "ml/api_connector.py:81-83 `def request(self, method, *args, **kwargs): ... return self.http.request(method, *args, **kwargs)` - requests.Session.request, the single transport for all ML backend traffic; URL built in _get_url via urllib.parse.urljoin(self._url, url_suffix) (line 128-132) from MLBackend.url (ml/models.py:48-49 TextField, API-writable via /api/ml with the ML_BLOCK_LOCAL_IP-gated url_is_local validation); invoked from ml/serializers.py:14/20 (healthcheck_/setup_ at model creation) and ml/models.py MLBackend.{healthcheck,setup,api,train,predict_tasks,interactive_annotating,get_versions} and ml/api_connector.py:249 get_ml_api(project)",
+      "core/utils/common.py:362 `response = requests.get(pypi_url, timeout=10).text` - hardcoded 'https://pypi.org/pypi/.../json' version check (operator-triggered, fixed destination)",
+      "core/utils/contextlog.py:177 `requests.post(url=url, json=payload, timeout=3.0)` with url = 'https://tele.labelstud.io' literal (usage telemetry)",
+      "core/utils/windows_sqlite_fix/__init__.py:26 `resp = requests.get(url, verify=False)` with url = 'https://www.sqlite.org/2021/' + fixed filename (startup, Windows-only dll download)",
+      "io_storages/s3/utils.py:29-41 boto3.Session(...).client('s3', ...)/resource('s3', ...) with settings['endpoint_url'] = s3_endpoint when supplied - S3 endpoint from the API-writable S3ImportStorage/S3ExportStorage.s3_endpoint field or S3_ENDPOINT env; actual network I/O inside boto3 (not in this database)",
+      "io_storages/redis/models.py:57-59 redis.StrictRedis(db=..., **redis_config).ping() - host/port from API-writable model fields; non-HTTP network connection",
+      "io_storages/gcs/models.py:176 requests.Request() - object construction for google-auth signing, not a network call; gcs/models.py:126 socket.getaddrinfo('metadata.google.internal', 80) - fixed-host DNS probe; core/utils/io.py:177 socket.gethostbyname(domain) - DNS resolution inside the url_is_local sanitizer check (domain is the user URL)"
+    ],
+    "url_construction_surfaces": [
+      "ml/api_connector.py:128-132 _get_url: appends '/' then urllib.parse.urljoin(url, url_suffix) - joins MLBackend.url (API-supplied base) with fixed suffixes ('health','train','predict','setup','webhook','validate','versions','duplicate_model','delete','job_status')",
+      "data_import/uploader.py:122 `filename = url.rsplit('/', 1)[-1]` - basename extraction from the import URL (filename only, feeds SimpleUploadedFile name)",
+      "urlparse usage (parsing only, NOT sinks by themselves): core/utils/io.py:172 (url_is_local), io_storages/s3/utils.py:46 and gcs/models.py:132 and azure_blob/models.py:113 (storage URI scheme/bucket/key decomposition for presigned-URL generation)",
+      "io_storages/base_models.py:70-83 resolve_uri/generate_http_url - convert gs://azure-blob:// URIs into presigned HTTP URLs returned to the annotating client; the server does not fetch these URLs itself (GCS/Azure presigned URL generation, S3 presign via client.generate_presigned_url at s3/utils.py:58)"
+    ],
+    "excluded_from_extraction": [
+      "label-studio-db/ nested CodeQL database directory inside the source root (excluded from all source scanning and evidence gathering; the extraction scope filter path.matches(\"label_studio/%\") cannot match label-studio-db/ paths because '-' != '_' at position 6, and no tool in this phase reads anything under label-studio-db/)",
+      "root-level files ssrf_*.md, ssrf_sinks.csv, ssrf_sinks.json, label_studio_ssrf_cve_application_report.md found in the source root were NOT read: they look like pre-existing vulnerability-analysis artifacts, and this phase forbids consulting vulnerability ground truth or pre-located findings",
+      "label_studio/tests/ tree, label_studio/core/examples/ and label_studio/ml/examples/ (sample payloads/docs), and every */migrations/ directory (generated schema code)",
+      "frontend/ (bundled JS), docs/, deploy/ (non-Python or non-analyzed), label_studio/annotation_templates/ and templates/ (data files)",
+      "request.user / request.session reads (121/11 occurrences) - authenticated identity and server-side session state, not attacker-controlled data content",
+      "settings.* reads (django.conf.settings) - operator configuration; per SSRF FP heuristics, admin/env-configured endpoints (e.g. settings.HOSTNAME, EMAIL_BACKEND dummy, S3_ENDPOINT env default) are FP material; only the API-writable model-field variants of these values are extracted as sources",
+      "django.contrib.admin site (core/urls.py:86) - Django's own admin UI; its request handling lives in the Django framework, which is not part of this database",
+      "localfiles storage (io_storages/localfiles/models.py) - local filesystem reads via Path/open (Pass 1 territory, not CWE-918 network I/O); core/views.py:169 localfiles_data serves files from LOCAL_FILES_DOCUMENT_ROOT with safe_join containment",
+      "HTTP redirects (RedirectView at core/urls.py:49, project/task API responses) - client-side navigation, Pass 9 / CWE-601 material, not server-side fetches"
+    ]
+  },
+  "extraction_plan": {
+    "pass_key": "ssrf",
+    "source_families": [
+      "request.<field> attribute reads for client-controlled fields data/FILES/query_params/GET/POST/META/body on a `request` name (flow kind field) - DRF request materialization of POST/GET payloads; verified primary instance: uploader.py:162 request.data.get('url')",
+      "self.request.<field> reads (class-based views) for the same field set (flow kind field)",
+      "tasks_from_url(file_upload_ids, project, request, url) `url` parameter at index 3 in label_studio/data_import/uploader.py - proven to receive request.data.get('url') from load_tasks (flow kind param)",
+      "webhook.url / webhook.headers attribute reads in label_studio/webhooks/utils.py - DB fields written by organization members via /api/webhooks, consumed by requests.post (flow kind field)",
+      "self.url attribute reads in label_studio/ml/models.py - MLBackend.url DB field written via /api/ml, consumed by healthcheck_/setup_/api/get_versions_ (flow kind field)",
+      "MLBackendSerializer.validate_url(self, value) `value` parameter at index 1 in label_studio/ml/serializers.py and attrs['url'] subscript reads in the same module - direct request-payload entry of ML backend URLs (flow kind param / field)",
+      "self.s3_endpoint attribute reads in label_studio/io_storages/s3/models.py - API-writable S3 endpoint flowing into boto3 client construction (flow kind field)",
+      "self.host / self.port / self.password attribute reads in label_studio/io_storages/redis/models.py get_client - API-writable Redis connection parameters (flow kind field)",
+      "get_env(...) calls (label_studio-wide) and os.environ.get(...)/os.getenv(...) calls - environment boundary feeding ML timeouts, AWS credentials, and the S3_ENDPOINT endpoint fallback (flow kind return)",
+      "sys.argv attribute reads in label_studio/server.py and label_studio/manage.py - CLI boundary (operator input; kept for labeling recall, expected FP for remote SSRF)"
+    ],
+    "sink_families": [
+      "urlopen(<url>, ...) calls - urllib.request.urlopen, URL at positional argument 0 (data_import/uploader.py:123)",
+      "requests.post(...) calls with URL at positional argument 0 or as keyword `url` (webhooks/utils.py:24; contextlog.py:177 uses the keyword form)",
+      "requests.get(...) calls with URL at positional argument 0 or as keyword `url` (core/utils/common.py:362; windows_sqlite_fix/__init__.py:26)",
+      "self.http.request(method, *args, **kwargs) calls in label_studio/ml/api_connector.py - requests.Session.request transport for all ML backend traffic; URL arrives via **kwargs (keyword `url`) from MLApi._request -> self.post/self.get, argIndex recorded as -1",
+      "session.client('s3', ...)/session.resource('s3', ...) calls in label_studio/io_storages/s3/utils.py - boto3 S3 client construction with optional endpoint_url in **settings kwargs, argIndex -1; network I/O inside boto3 (coverage gap)",
+      "redis.StrictRedis(db=..., **redis_config) call in label_studio/io_storages/redis/models.py - non-HTTP network connection with host/port in **redis_config, argIndex -1"
+    ],
+    "extraction_output_columns": [
+      "n (AST node)",
+      "candidate type literal (source_candidate / sink_candidate)",
+      "callableName",
+      "flowKind (param | return | field | argument)",
+      "receiverHint",
+      "moduleHint (dotted module path; variable named moduleHint because `module` is a QL keyword)",
+      "argIndex (-1 when not applicable or keyword-only)",
+      "line (n.getLocation().getStartLine())",
+      "location (file:line)",
+      "expression text (n.toString())"
+    ]
+  },
+  "coverage_gaps": [
+    "Django / DRF / requests / boto3 / redis-py / google-cloud-storage / azure-storage-blob library internals are NOT in this database (only label_studio application code, ~33k LOC). The final network I/O of requests.Session.request, boto3's HTTP stack, and redis-py lives in external libraries; sinks are therefore anchored at the application call sites (self.http.request(...), session.client('s3', ...), redis.StrictRedis(...)), and taint must reach those call sites' arguments to be reported.",
+    "requests keyword-form URL arguments: contextlog.py:177 passes the URL as keyword url= to requests.post (a hardcoded literal, no taint value); the extraction records keyword-form requests.get/post calls with argIndex -1. For webhooks/utils.py:24 and common.py:362 / windows_sqlite_fix:26 the URL is positional argument 0 and argIndex is 0. Call.getArg(int) cannot read keyword arguments; flows that reach requests.* calls via keyword `url=` other than the literal at contextlog.py:177 would need keyword-argument modeling in later stages.",
+    "DB-mediated flows (webhook.url, MLBackend.url, S3ImportStorage.s3_endpoint, Redis host/port) cross HTTP requests (written via one API request, used in a later request or background signal). Intra-procedure/inter-procedure taint analysis cannot bridge the database; these are extracted as field-read sources (webhook.url, self.url, self.s3_endpoint, self.host/port) so the pass-3 taint query can still link them to the sinks, mirroring the 'DB content reused into sinks' source family from references/patterns.md.",
+    "DRF serializer internals (validated_data materialization) are framework code outside this database; serializer field entry points are approximated by extracting the validated field handlers that exist in application code (MLBackendSerializer.validate_url parameter, attrs['url'] subscript in ml/serializers.py) and by the request.data attribute-read source family.",
+    "webhooks/models.py imports requests but never calls it (unused import); no sink is emitted for it.",
+    "gcs/models.py:176 requests.Request() is object construction for google-auth credential signing, not network I/O; not extracted as a sink. GCS/Azure presigned-URL generation returns URLs to the browser without a server-side fetch - not CWE-918 sinks.",
+    "socket.gethostbyname in core/utils/io.py:177 is the DNS lookup inside the url_is_local sanitizer guard (its domain argument is user-controlled, but its purpose is validation); recorded as a sanitizer candidate in framework_notes, not as a sink.",
+    "The nested label-studio-db/ directory and the pre-existing ssrf_* report files in the source root were never read; no ground-truth information was used at any point of this exploration."
+  ]
+}
