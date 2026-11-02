@@ -1,0 +1,314 @@
+{
+  "triage_id": "zope-iris-pass1-llm-triage-20261024",
+  "task": "Independent LLM path re-review of formal Augur/IRIS Pass 1 Path Traversal alerts (ruleId py/augur/zope/pass1-path-traversal), CWE-22/23/36/73, Zope_vuln",
+  "reviewer_model": "glm-5.3",
+  "generated_at": "2026-10-24",
+  "inputs_read": [
+    "iris/report/iris_report.md",
+    "iris/report/query_generation_notes.md",
+    "iris/labels/labels.json (entries for cited ids only)",
+    "iris/results/pass1.sarif (all 14 results + codeFlows)",
+    "iris/libraries/MySources.qll, MySinks.qll (rule-to-alert attribution)",
+    "src/App/FindHomes.py, src/App/Extensions.py, src/OFS/ObjectManager.py, src/Products/Five/browser/resource.py, src/Zope2/App/startup.py, src/OFS/userfolder.py, src/Zope2/App/zcml.py, src/ZPublisher/BaseRequest.py, src/ZPublisher/WSGIPublisher.py, src/OFS/Traversable.py, src/Products/Five/browser/metaconfigure.py, src/App/config.py"
+  ],
+  "formal_alert_count": 14,
+  "verdict_summary": {
+    "likely_tp": 1,
+    "likely_fp": 13,
+    "uncertain": 0,
+    "notes": "All 14 SARIF results carry the single ruleId py/augur/zope/pass1-path-traversal (one CodeQL run, driver 'CodeQL'); no diagnostics, no CodeQL built-in security queries and no other CWE results are mixed into this batch (instruction item 10: confirmed). 11 of 14 alerts share one systematic FP root cause (see fp_root_cause)."
+  },
+  "fp_root_cause": {
+    "title": "MySources.isRequestSubscriptValue over-matches os.environ subscripts",
+    "mechanism": "MySources.qll isRequestLikeObject (lines 333-337) accepts any receiver that is a Name in [request, REQUEST, environ] OR an Attribute whose getName() is in [request, REQUEST, environ, form]. 'os.environ' is an Attribute named 'environ', so os.environ['INSTANCE_HOME'] (src/App/FindHomes.py:18) and os.environ['CLIENT_HOME'] (src/App/FindHomes.py:30) match isRequestSubscriptValue as if they were WSGI request-environ lookups. These are process/deployment environment variables (operator boundary), exactly the env_config family that labels.json classifies as role 'none' / fp (e.g. p1-src-001: 'Environment-variable read (operator/deployment configuration)') and that query_generation_notes.md section 2 claims is deliberately NOT modeled ('Config/CLI sink sites have no reachable source and cannot alert', section 7). The claim is falsified by the formal run: the accidental source reaches the config-derived sinks through App/config.py:60-61 (clienthome/instancehome properties) into Extensions.py, ObjectManager.py, startup.py, userfolder.py, zcml.py. Affected alerts: #0, #1, #3, #4, #5, #6, #10, #11, #12, #13 (all their codeFlows start at FindHomes.py:18/:30). Finding #2 additionally contains one request-derived path (manage_exportObject id) reviewed on its own merits below.",
+    "fix_direction": "Constrain the subscript/get receiver to the request object itself (e.g. require the receiver Name 'environ' to be a parameter/local bound from the WSGI boundary, or exclude an Attribute whose object is the Name 'os'). Not applied here - this review modifies no query artifacts."
+  },
+  "cross_cutting_protection_analysis": {
+    "publisher_dot_segment_normalization": {
+      "location": "src/ZPublisher/BaseRequest.py:372-384 (BaseRequest.traverse clean loop)",
+      "evidence": "PATH_INFO is split on '/' and each segment is filtered: literal '.' and empty segments are dropped (line 378-379), a literal '..' segment pops the previous clean segment (line 380-381) and never reaches traverseName. The only HTTP publish entry (src/ZPublisher/WSGIPublisher.py:252-255: path = request.get('PATH_INFO'); request.traverse(path, validated_hook=validate_user)) goes through this loop, so no URL segment delivered to publishTraverse/get can be '..' or contain '/'.",
+      "assessment": "This is a real pre-access mitigation that neutralizes the classic ../ token on every in-repo HTTP traversal route, but it is NOT a root-containment check (no canonicalization/containment on the joined result) and it does not filter backslash segments ('..\\x' survives the clean loop) or drive-relative segments."
+    },
+    "restricted_traverse_alternate_route": {
+      "location": "src/OFS/Traversable.py:175 (path.split('/')), :217-221 ('..' -> aq_parent)",
+      "evidence": "restrictedTraverse/unrestrictedTraverse split on '/' and handle '..' as upward acquisition traversal themselves; segments on this route likewise cannot contain '/' or be a literal '..'.",
+      "assessment": "The alternate (request-data driven, e.g. OFS/Cache.py:522) traversal route carries the same segment constraints."
+    },
+    "percent_decoding": {
+      "evidence": "Percent-decoding happens in the WSGI server before PATH_INFO is set (PEP 3333); WSGIPublisher.py:312-338 only re-encodes latin-1->utf-8. A single-decoded '%2e%2e' becomes a literal '..' segment and is removed by the clean loop; a double-encoded '%252e%252e' stays the literal string '%2e%2e' (no second unquote on the resource.py get path - unquote is only used for URL rendering in Resource.__call__, resource.py:50). No double-decode bypass found.",
+      "assessment": "Decoding factors do not change the access target beyond what the clean loop already handles."
+    },
+    "checkvalidid": {
+      "location": "src/OFS/ObjectManager.py:84-135",
+      "evidence": "checkValidId rejects empty/non-str, control/angle chars (bad_id regex line 81), literal '.' and '..' (line 98), leading '_' (line 101), 'aq_' prefix (line 105), trailing '__' (line 108), '@@'/'++' prefixes (line 112), 'REQUEST' (line 131) and ANY id containing '/' (lines 133-135).",
+      "assessment": "The label rationale for p1-snk-343 and query_generation_notes.md section 5 claim checkValidId 'does not reject / or embedded ..' - this is factually wrong for this source revision: '/' IS rejected (line 133). Backslash is NOT rejected, leaving a Windows-only separator-variation residual for ids."
+    },
+    "import_file_name_guard_barrier": {
+      "location": "src/OFS/ObjectManager.py:639-641 (os.path.split dirname rejection, modeled in MySanitizers)",
+      "evidence": "Confirmed effective in the formal run: findings #3/#4 (ObjectManager.py:645/:679) contain only environ-derived codeFlows; no path from the request 'file' parameter of manage_importObject reaches the exists/importFile sinks - the barrier cut it, matching label classifications p1-snk-325/p1-snk-353 (fp). Residual (documented in notes, unchanged): Windows ntpath drive-relative names and the :645->:679 TOCTOU window.",
+      "assessment": "Real barrier, placed before the join (:644) and the open (:679)."
+    },
+    "missing_containment": {
+      "evidence": "grep/inspection of all request-derived bridges: no normpath/abspath/realpath/resolve and no startswith/relative_to containment check exists on resource.py:155 (join result used directly at :156/:157/:170) or ObjectManager.py:621 (join result opened at :622). realpath appears only on fixed module-level prefixes (App/ImageFile.py:32, special_dtml.py:40, FindHomes.py:23-25).",
+      "assessment": "No alert was accepted or rejected on the basis of Path.resolve/normpath/startsWith being 'sufficient' - none of these functions guards any request-derived path (instruction item 7: no such misjudgment exists in this batch)."
+    },
+    "symlinks": "No symlink resolution or symlink-creating request-reachable API exists in src/ (grep-verified); TOCTOU windows at ObjectManager.py:645->:679 and resource.py:156-157->:170 are real but require an out-of-band race agent, which is not request-reachable in this model."
+  },
+  "findings": [
+    {
+      "index": 0,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/App/Extensions.py:61",
+      "sink": {"api": "os.path.exists", "arg": "fqn", "operation": "existence probe only - no read/write/delete/serve (instruction item 3: not a sensitive file operation)"},
+      "sources_in_codeflows": "2 paths, both rooted at src/App/FindHomes.py:18 os.environ['INSTANCE_HOME'] (matched by MySources.isRequestSubscriptValue via isRequestLikeObject on the 'os.environ' Attribute)",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "controllable_path": "None. The tainted value is the process environment variable INSTANCE_HOME, set by the deployment operator at server start; it is not reachable from any URL, form field or header. labels.json itself classifies this family as role 'none'/fp (p1-src-001 et al.).",
+      "taint_path": "FindHomes.py:18 os.environ['INSTANCE_HOME'] -> FindHomes.py:25/27 INSTANCE_HOME -> App/config.py:29-61 cfg.instancehome -> Extensions.py:110/117 cfg.instancehome -> :119-120 home -> _getPath Extensions.py:44-50 (dir/fn, fixed prefix/name) -> :58/:60 fqn -> :61 exists",
+      "allowed_root": "The tainted portion is only the search root (instance home); the joined relative parts ('Extensions', module name, suffixes) are fixed constants",
+      "guards_barriers": ["App/Extensions.py:47-54 join-collapse ValueError guards (config boundary)", "Extensions.py:92-95 split rejection of separator-containing names"],
+      "preconditions": ["Attacker control of the INSTANCE_HOME environment variable of the server process - not a request-reachable precondition"],
+      "reasoning": "Source is not attacker-controlled (review item 1 fails); sink is an existence probe (item 3 fails). The dataflow itself is real but the threat model is invalid - classic over-generalized-source FP (item 9). Startup/registration-time code path, no request involvement."
+    },
+    {
+      "index": 1,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/App/Extensions.py:178",
+      "sink": {"api": "open", "arg": "path", "operation": "file read (content exec'd at Extensions.py:184)"},
+      "sources_in_codeflows": "4 paths, all rooted at src/App/FindHomes.py:18 os.environ['INSTANCE_HOME'] (same isRequestSubscriptValue over-match)",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "controllable_path": "None via the matched source. The matched source is again the operator environment variable. (getObject's 'module'/'name' parameters are request-relevant in the External-Method ZMI workflow, but they are not the alert's source, and getPath's :92-95 split guard rejects any separator-containing name.)",
+      "taint_path": "FindHomes.py:18 -> config.py instancehome -> Extensions.py:110/117/119-120 -> _getPath :44-62 fqn -> :120 found -> :122 -> getPath :170 path -> :178 open(path)",
+      "allowed_root": "Search roots = cfg.instancehome / cfg.extensions / Products.__path__ (operator config); joined relative parts fixed",
+      "guards_barriers": ["Extensions.py:92-95: os.path.split(name) dirname rejection - any name containing a separator raises ValueError", "Extensions.py:47-54: join-collapse guards"],
+      "preconditions": ["Attacker control of INSTANCE_HOME (not request-reachable)"],
+      "reasoning": "Same systematic environ-source FP; the read+exec sink is sensitive, but nothing request-controlled reaches it in the modeled flow. FP per items 1 and 9."
+    },
+    {
+      "index": 2,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/OFS/ObjectManager.py:622",
+      "sink": {"api": "open", "arg": "f (mode 'w+b')", "operation": "file create/write - ZODB object export written into the client home"},
+      "sources_in_codeflows": "3 paths rooted at FindHomes.py:18/:30 (environ FP family) + 1 path rooted at src/OFS/ObjectManager.py:591 - the 'id' parameter of manage_exportObject, matched by MySources.isZmiFormParameter (request form value marshalled by mapply, WSGIPublisher.py:271)",
+      "verdict": "likely_fp",
+      "confidence": 0.75,
+      "controllable_path": "The 'id' form parameter is genuinely request-controlled (HTTP-reachable ZMI form POST). However the flow is permission-gated and structurally constrained before the open.",
+      "taint_path": "ObjectManager.py:591 id (form param) -> :597-604 (empty -> self.id; else ob = self._getOb(id)) -> :621 f = os.path.join(CONFIG.clienthome, f'{id}.zexp') -> :622 open(f, 'w+b')",
+      "allowed_root": "CONFIG.clienthome (the instance var/ directory); written content is the serialized ZODB export of the selected object",
+      "guards_barriers": [
+        "ObjectManager.py:588 @security.protected(import_export_objects) - Manager permission required (default permission set maps to Manager role)",
+        "ObjectManager.py:604 self._getOb(id) must resolve to an existing sub-object before line 621 is reached - the id must be an object id actually present in this folder",
+        "Object ids are validated at creation time by checkValidId (ObjectManager.py:84-135): '/' is rejected at :133-135 and a literal '..' at :98 - this corrects the p1-snk-343 label rationale, which wrongly claims checkValidId does not reject '/'. Consequently on POSIX the join result stays strictly inside CONFIG.clienthome with a forced '.zexp' suffix",
+        "Residual (unblocked, documented): backslash ids are not rejected by checkValidId's bad_id regex (:81), so on a Windows ntpath deployment an object id like '..\\\\..\\\\x' makes join(:621) escape clienthome"
+      ],
+      "preconditions": ["Caller holds import_export_objects permission (Manager by default)", "A sub-object with the crafted id already exists in the folder (its creation also required Manager-level write access and passed checkValidId)", "For any escape outside clienthome: Windows deployment plus an object id containing backslashes"],
+      "reasoning": "The request->write taint flow is real (item 1/2 pass), and the sink is a genuine write (item 3 passes). But every precondition is Manager-gated: creating a traversable object id and invoking the export both require Manager, the exported content is a ZODB serialization (not arbitrary attacker bytes), and on POSIX the write is confined to clienthome. This is the authorized operation of the export feature (review item 8), not an unauthorized file write. The only escape vector (Windows backslash ids) requires Manager twice. Judged likely_fp as a vulnerability; recorded residual risk keeps confidence at 0.75 rather than 0.95. Note the label p1-snk-343 rationale contains a factual error about checkValidId ('/' IS rejected at ObjectManager.py:133) that inflated this alert's candidate rating."
+    },
+    {
+      "index": 3,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/OFS/ObjectManager.py:645",
+      "sink": {"api": "os.path.exists", "arg": "filepath", "operation": "existence probe only"},
+      "sources_in_codeflows": "4 paths, all rooted at FindHomes.py:18/:30 (environ) -> ObjectManager.py:695-701 _getImportPaths -> :643 impath -> :644 filepath",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "controllable_path": "None. The request-derived 'file' parameter of manage_importObject is correctly cut by the :639-641 split barrier (confirmed: no 'file'-rooted codeFlow appears in this alert). Only the fixed import roots (instancehome/clienthome) are tainted-by-mis-source.",
+      "taint_path": "FindHomes environ -> config.py clienthome/instancehome -> ObjectManager.py:697-700 paths -> :643 impath -> :644 join(impath,'import',file) -> :645 exists",
+      "allowed_root": "CONFIG.instancehome/CONFIG.clienthome + 'import' (fixed); the joined filename is the barrier-filtered request value",
+      "guards_barriers": ["ObjectManager.py:639-641 os.path.split dirname rejection (modeled barrier, verified effective in this run)", "@security.protected(import_export_objects) at :635"],
+      "preconditions": ["Attacker control of INSTANCE_HOME/CLIENT_HOME (not request-reachable)"],
+      "reasoning": "Environ-source FP (item 9) + probe-only sink (item 3). The request-derived path that would have made this interesting was correctly blocked by the modeled barrier, matching label p1-snk-325 (fp)."
+    },
+    {
+      "index": 4,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/OFS/ObjectManager.py:679",
+      "sink": {"api": "connection.importFile", "arg": "filepath", "operation": "external ZODB connection opens the zexp/xml file (import)"},
+      "sources_in_codeflows": "4 paths, all environ-rooted (FindHomes.py:18/:30 -> _getImportPaths :695-701 -> :643/:644 -> :654 -> :670 -> :679)",
+      "verdict": "likely_fp",
+      "confidence": 0.9,
+      "controllable_path": "None. The request 'file' flow is barrier-cut (no 'file'-rooted codeFlow); only fixed import roots carry the mis-sourced environ taint.",
+      "taint_path": "FindHomes environ -> config.py homes -> ObjectManager.py:697-700 -> :643-644 filepath -> :653/:654 _importObjectFromFile(filepath) -> :670/:679 connection.importFile(filepath)",
+      "allowed_root": "instancehome/clienthome + 'import' (fixed roots); filename separator-free after the :639-641 barrier",
+      "guards_barriers": ["ObjectManager.py:639-641 split guard (verified cut in this run)", "@security.protected(import_export_objects) :635", "Documented residuals: Windows drive-relative names and the :645->:679 TOCTOU window (both Manager-gated)"],
+      "preconditions": ["Attacker control of the instance/client home env vars (not request-reachable)"],
+      "reasoning": "Environ-source FP; the genuinely request-reachable mechanism this sink was labeled for (p1-snk-353, itself classified fp) is guarded by the barrier and permission. FP per items 1/9."
+    },
+    {
+      "index": 5,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/OFS/ObjectManager.py:707",
+      "sink": {"api": "os.path.isdir", "arg": "directory", "operation": "directory existence probe"},
+      "sources_in_codeflows": "4 paths, all environ-rooted -> _getImportPaths :695-701 -> :705-706 directory",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "controllable_path": "None (operator env vars only; joined 'import' literal is fixed).",
+      "taint_path": "FindHomes environ -> config.py homes -> ObjectManager.py:697-700 paths -> :705-706 join(impath,'import') -> :707 isdir",
+      "allowed_root": "instancehome/clienthome (fixed); relative part fixed ('import')",
+      "guards_barriers": ["No request input participates at all in the reachable paths"],
+      "preconditions": ["Env var control (not request-reachable)"],
+      "reasoning": "Environ-source FP + probe sink. list_imports (:703-712) enumerates only the fixed import directories; it is a ZMI helper for the import form, not a request-parameterized path."
+    },
+    {
+      "index": 6,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/OFS/ObjectManager.py:709",
+      "sink": {"api": "os.listdir", "arg": "directory", "operation": "directory enumeration (listing filtered to *.zexp/*.xml at :709-710)"},
+      "sources_in_codeflows": "4 paths, all environ-rooted (same route as #5)",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "controllable_path": "None (operator env vars; directory fixed)",
+      "taint_path": "FindHomes environ -> config.py homes -> ObjectManager.py:697-701 -> :705-706 directory -> :709 listdir",
+      "allowed_root": "instancehome/clienthome + 'import'",
+      "guards_barriers": ["Directory is the fixed import dir; the listed suffix filter (.zexp/.xml) further constrains output"],
+      "preconditions": ["Env var control (not request-reachable)"],
+      "reasoning": "Environ-source FP; enumeration target is not request-influenced. FP per items 1/9."
+    },
+    {
+      "index": 7,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/Products/Five/browser/resource.py:156",
+      "sink": {"api": "os.path.isfile", "arg": "filename", "operation": "existence/type probe only (gates the factory call at :170; not itself a read/write/delete/serve)"},
+      "sources_in_codeflows": "1 path: src/Products/Five/browser/resource.py:153 'name' (parameter of DirectoryResource.get, MySources.isUrlSegmentParameter, label p1-src-294 tp) -> :155 filename -> :156",
+      "verdict": "likely_fp",
+      "confidence": 0.6,
+      "controllable_path": "YES - genuinely attacker-controlled. The ++resource++ directory resource is registered with permission 'zope.Public' by default (Products/Five/browser/metaconfigure.py:377-378 resourceDirectory), and the URL segment chain is WSGIPublisher.py:252-255 -> BaseRequest.traverse -> traverseName (:322-334 namespaceLookup for ++resource++) -> publishTraverse (:339-340) -> DirectoryResource.get(name). Unauthenticated URL data.",
+      "taint_path": "resource.py:153 name -> :154 path (registered resource directory) -> :155 filename = os.path.join(path, name) -> :156 isfile(filename)",
+      "allowed_root": "The developer-registered ZCML resource directory (self.context.path, fixed at registration time, metaconfigure.py:410-411)",
+      "guards_barriers": [
+        "BaseRequest.traverse clean loop (BaseRequest.py:372-384): a literal '..' segment never reaches get(name) and no segment can contain '/' - the classic ../ traversal token is neutralized before access on every in-repo HTTP traversal route",
+        "NO containment check in get itself: no normpath/realpath/startswith on filename (verified)",
+        "Unblocked residual: backslash segments survive the clean loop; on Windows ntpath a segment like '..\\\\..\\\\x' escapes the registered directory at :155"
+      ],
+      "preconditions": ["A resourceDirectory registration exists (developer ZCML)", "For escape: Windows deployment + backslash-bearing URL segment (POSIX treats backslash as a literal filename character - no escape)"],
+      "reasoning": "The source is real and unauthenticated (item 1 passes), the join at :155 is unguarded (no root containment, item 6 partially fails), but this alert's own sink node is only an isfile probe - per instruction item 3 a probe is not a sensitive file operation, and the traversal-relevant outcome of this exact line is at most an existence oracle, itself platform-conditional. The sensitive operation of this same flow is captured by alert #9 at :170. Judged likely_fp as a standalone alert; it is the TOCTOU-check stage of the #9 flow (see that entry)."
+    },
+    {
+      "index": 8,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/Products/Five/browser/resource.py:157",
+      "sink": {"api": "os.path.isdir", "arg": "filename", "operation": "directory existence probe only (selects DirectoryResourceFactory at :168)"},
+      "sources_in_codeflows": "1 path: resource.py:153 name -> :155 filename -> :157",
+      "verdict": "likely_fp",
+      "confidence": 0.6,
+      "controllable_path": "YES - same unauthenticated URL segment as #7.",
+      "taint_path": "resource.py:153 name -> :155 join -> :157 isdir",
+      "allowed_root": "registered resource directory",
+      "guards_barriers": ["Same as #7: BaseRequest dot-segment normalization blocks '..' and '/'; no containment in get; Windows backslash residual unblocked"],
+      "preconditions": ["resourceDirectory registration exists", "Windows deployment + backslash segment for any escape"],
+      "reasoning": "Same as #7: real unauthenticated taint to a probe-only sink. isdir merely chooses between file/directory resource factories; the file-serving consequence lands on #9. Standalone: FP per item 3 (probe is not a sensitive operation)."
+    },
+    {
+      "index": 9,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/Products/Five/browser/resource.py:170",
+      "sink": {"api": "factory(name, filename) - DirectoryResource resource factory dispatch", "arg": "filename (arg index 1) = os.path.join(path, name)", "operation": "constructs the external zope.browserresource File/Image/PageTemplate resource over filename; the resource object reads filename and streams it as the HTTP response body when served (file-response sink). Evidence within the repo: ResourceFactory.__init__ (resource.py:83-85) forwards (path, name) to self.factory (File / PageTemplate classes); the Five DirectoryResource exists precisely to serve ++resource++ URLs. The final open/read happens inside zope.browserresource, outside the CodeQL DB - the only step not directly verifiable in-repo."},
+      "sources_in_codeflows": "2 paths, both resource.py:153 name -> :155 filename -> :170",
+      "verdict": "likely_tp",
+      "confidence": 0.55,
+      "controllable_path": "YES - unauthenticated attacker-controlled URL path segment following a ++resource++<dirname>/ prefix (permission zope.Public by default, metaconfigure.py:377-378; dispatch verified in-repo: WSGIPublisher.py:252-255 -> BaseRequest.traverse -> traverseName:322-340 -> publishTraverse -> get(name)).",
+      "taint_path": "URL segment -> BaseRequest.traverse (clean loop :372-384) -> traverseName (:322-334) -> DirectoryResource.get(name) resource.py:153 -> filename = os.path.join(path, name) :155 -> isfile/isdir probes :156-157 -> factory(name, filename) :170 -> external zope.browserresource resource -> file read on serve",
+      "allowed_root": "The ZCML-registered resource directory (self.context.path, resource.py:154; registered from the developer-controlled 'directory' directive attribute, metaconfigure.py:377-411)",
+      "guards_barriers": [
+        "BaseRequest.py:372-384: literal '..' and '.' segments are removed before traversal; segments cannot contain '/'. This blocks the classic ../ traversal on the standard publish path (also on the restrictedTraverse route, Traversable.py:175/:217-221) - a real pre-access mitigation, but NOT a root-containment check on the joined result",
+        "No percent-double-decode bypass (single decode happens in the WSGI server; get performs no unquote)",
+        "NOT blocked: backslash-bearing segments (e.g. '..%5C..%5Csecret'); on Windows ntpath os.path.join(path, '..\\\\..\\\\x') escapes the registered directory with no containment check anywhere between :155 and the external read",
+        "NOT blocked: any containment/normalization after the join - none exists in get"
+      ],
+      "preconditions": ["Site registers a browser resourceDirectory (static asset serving - a standard, commonly used ZCML feature, unauthenticated by default)", "Exploitable escape requires a Windows deployment (backslash separator) or a symlink already present inside the resource directory (not request-creatable); on POSIX the '..' token cannot reach get and '/' cannot appear in a segment, so the join stays inside the registered directory"],
+      "reasoning": "This is the only alert in the batch where unauthenticated request data demonstrably reaches a file-content-serving path argument with zero in-repo validation (items 1-3 pass; item 6's containment requirement fails in get itself). The code-level defect (unguarded os.path.join of a URL segment into a static-file serving path) is real. Exploitability is platform-conditional: the publisher's dot-segment normalization provably blocks '..' on all in-repo traversal routes, so the surviving escape vector is the Windows backslash segment (item 5: separator variation genuinely changes the target only on ntpath). Confidence 0.55 reflects: (a) the final file read lives in the external zope.browserresource package (outside the DB; the repo-side evidence for serving is the ResourceFactory design and the ++resource++ serving purpose), and (b) the POSIX deployment case - the dominant one - appears non-exploitable via '..'. Recommended for human review as the single actionable Pass 1 alert: verify zope.browserresource's read path and the site's platform; a one-line root-containment check after the :155 join would close it."
+    },
+    {
+      "index": 10,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/Zope2/App/startup.py:51",
+      "sink": {"api": "os.path.exists", "arg": "target", "operation": "existence probe"},
+      "sources_in_codeflows": "2 paths, both environ-rooted (FindHomes.py:18 -> config.py:61 instancehome -> startup.py:72/80 configuration.instancehome -> :78/:82 location -> :50 target)",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "controllable_path": "None (operator env var; joined 'custom_zodb.py' literal is fixed).",
+      "taint_path": "FindHomes.py:18 os.environ['INSTANCE_HOME'] -> config.py instancehome -> startup.py:72/78-82 custom_locations -> :48 _load_custom_zodb(location) -> :50 join(location,'custom_zodb.py') -> :51 exists",
+      "allowed_root": "instance home (operator config); relative part fixed",
+      "guards_barriers": ["_load_custom_zodb runs only during startup() (startup.py:63), before request serving - no request reaches this frame at all"],
+      "preconditions": ["Env var control (not request-reachable)"],
+      "reasoning": "Environ-source FP + startup-time config probe. FP per items 1/8/9."
+    },
+    {
+      "index": 11,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/Zope2/App/startup.py:52",
+      "sink": {"api": "open", "arg": "target", "operation": "file read (content compile+exec'd at :54/:58)"},
+      "sources_in_codeflows": "2 paths, environ-rooted (same route as #10)",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "controllable_path": "None (operator env var; fixed 'custom_zodb.py' name).",
+      "taint_path": "FindHomes environ -> config.py instancehome -> startup.py:72/78-82 -> :48/:50 target -> :52 open(target)",
+      "allowed_root": "instance home / testing home; fixed filename",
+      "guards_barriers": ["Startup-only execution path", "Fixed relative filename"],
+      "preconditions": ["Env var control (not request-reachable)"],
+      "reasoning": "Environ-source FP; the exec is scary-looking but the path is entirely operator-config. FP per items 1/8/9."
+    },
+    {
+      "index": 12,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/OFS/userfolder.py:309",
+      "sink": {"api": "os.remove", "arg": "os.path.join(cfg.instancehome, 'inituser')", "operation": "file deletion (fixed filename 'inituser')"},
+      "sources_in_codeflows": "2 paths, environ-rooted (FindHomes.py:18 -> config.py:61 -> userfolder.py:307 cfg.instancehome -> :309 join/remove)",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "controllable_path": "None (operator env var; deleted filename is the constant 'inituser').",
+      "taint_path": "FindHomes.py:18 -> config.py instancehome -> userfolder.py:307 App.config.getConfiguration() -> :309 os.remove(join(cfg.instancehome, 'inituser'))",
+      "allowed_root": "instance home; fixed literal filename",
+      "guards_barriers": ["Fixed 'inituser' literal; invoked only from OFS.Application.initialize() at first boot (docstring :298); wrapped in try/except"],
+      "preconditions": ["Env var control (not request-reachable)"],
+      "reasoning": "Environ-source FP; deletion target is a fixed init-time file. FP per items 1/8/9."
+    },
+    {
+      "index": 13,
+      "rule_id": "py/augur/zope/pass1-path-traversal",
+      "location": "src/Zope2/App/zcml.py:38",
+      "sink": {"api": "os.path.exists", "arg": "site_zcml", "operation": "existence probe"},
+      "sources_in_codeflows": "2 paths, environ-rooted (FindHomes.py:18 -> config.py:61 instancehome -> zcml.py:35 instancehome -> :36 site_zcml = join(instancehome,'etc','site.zcml') -> :38 exists)",
+      "verdict": "likely_fp",
+      "confidence": 0.95,
+      "controllable_path": "None (operator env var; relative parts 'etc'/'site.zcml' fixed).",
+      "taint_path": "FindHomes.py:18 -> config.py:61 -> zcml.py:35/:36 -> :38 exists(site_zcml)",
+      "allowed_root": "instance home; fixed relative parts",
+      "guards_barriers": ["Fixed literal path structure; load_site() is a startup/ZCML-load-time function"],
+      "preconditions": ["Env var control (not request-reachable)"],
+      "reasoning": "Environ-source FP + probe sink. FP per items 1/8/9."
+    }
+  ],
+  "real_vulnerability_hit_check": {
+    "question": "Is the known real vulnerability (commit 1f8456bf1f908ea46012537d52bd7e752a532c91, GHSA-5pr9-v234-jw36, CWE-22) hit by any formal Pass 1 alert?",
+    "commit_functions": [
+      "boboAwareZopeTraverse(object, path_items, econtext) - src/Products/PageTemplates/Expressions.py",
+      "traverse(cls, base, request, path_items) - src/Products/PageTemplates/Expressions.py"
+    ],
+    "vulnerability_mechanism_from_provided_diff": "TAL path-expression traversal does not reject path items starting with '_'. The fix adds: name == '_' -> DeprecationWarning; name.startswith('_') -> raise NotFound. Before the fix, a ZPT/TAL path expression (or python-expression path traversal) could traverse to underscore-prefixed names, reaching protected internals/attributes (untrusted-module access), with the precondition that untrusted users can add/edit Zope Page Templates through the web (default: Manager only).",
+    "alert_hit": false,
+    "hit_alerts": [],
+    "analysis": [
+      "None of the 14 formal Pass 1 alerts is located in src/Products/PageTemplates/Expressions.py or touches boboAwareZopeTraverse/traverse/traversePathElement - the fixed functions produce no Pass 1 alert at all.",
+      "Mechanism mismatch with the Pass 1 sink model: the vulnerability's sink is object/module-namespace access (attribute lookup on '_'-prefixed names via traversePathElement / restrictedTraverse, yielding untrusted module objects), not a filesystem path argument. The MySinks set (open / os.path* / shutil / filestream_iterator / importFile / resource factory) contains no sink this flow can reach - indeed no filesystem path is materialized at any point of the vulnerable flow.",
+      "Source-side mismatch: the tainted path items originate from TAL expression text inside Page Templates (authored by whoever can add/edit ZPTs - Manager by default, untrusted only on specific site configurations). The Pass 1 source model has no 'TAL path item' source; ZopePageTemplate ZMI form parameters (id/file, ZopePageTemplate.py:370) are modeled, but the template text->expression compilation path into Expressions.py traversal is outside both the source and sink models and outside stdlib taint steps (mapply/expression compilation are documented unmodeled dispatch gaps in query_generation_notes.md section 6).",
+      "Database coverage is not the blocker: src/Products/PageTemplates/Expressions.py is inside the Zope_vuln source tree, so the miss is a source/sink-scope miss, not a coverage miss.",
+      "Classification note: the advisory is labeled CWE-22, but the abused 'path' is the ZODB/module namespace, not the filesystem; a filesystem-sink pass (this Pass 1 model) is structurally incapable of detecting it. The related in-repo traversal guards (Traversable.py:213-215 already rejects leading-underscore names in restrictedTraverse - the same hardening the 5.2 fix applied to the TAL expression path) show the defense existed on one route but not on the PageTemplates expression route."
+    ],
+    "verdict": "MISSED - the real vulnerability is not hit by any of the 14 formal Pass 1 alerts. This comparison used only the commit data provided in the task prompt; no PyVul ground-truth files, fix diffs or CVE descriptions were read, and this comparison was not used to promote or demote any alert verdict above."
+  },
+  "reviewer_checklist_coverage": {
+    "item1_source_attacker_control": "13 of 14 alerts fail (environ mis-source or Manager-gated ZMI param); resource.py:153 name (alerts #7-#9) passes - unauthenticated URL segment.",
+    "item2_flow_to_file_arg": "All 14 codeFlows were traced to real source lines; propagation verified (join/f-string/list steps are stdlib-backed). The os.environ->config->sink flows are dataflow-real but threat-model-invalid.",
+    "item3_sensitive_sink": "isfile/isdir/exists probes (#0,#3,#5,#7,#8,#10,#13) are not sensitive file operations; #9's factory(filename) is the only request-derived path reaching a read/serve; #2's open('w+b') is a genuine write but Manager-gated.",
+    "item4_allowed_roots": "Documented per finding: clienthome/instancehome/import dirs, registered resource directory, Extensions search roots.",
+    "item5_traversal_factors": "Dot-segment normalization blocks '..' pre-access on all in-repo routes; '/' impossible in segments; percent-decoding single-pass; backslash (Windows) is the only genuinely target-changing factor; no request-reachable symlink creation.",
+    "item6_containment": "No normpath/realpath/startswith containment exists on any request-derived join; the only effective pre-access guards are the import split barrier (works) and the publisher clean loop (blocks '..' only).",
+    "item7_misjudged_sanitizers": "None of the alerts was accepted on Path.resolve/normpath/startsWith/login-basis; none exists on these paths.",
+    "item8_authorized_normal_operations": "#2 (Manager export) and the entire config/CLI family are authorized or non-request paths.",
+    "item9_overgeneralization": "Root cause identified and evidenced: isRequestLikeObject matches os.environ, producing 11 of 13 FPs; query_generation_notes.md section 7's 'cannot alert' prediction is falsified.",
+    "item10_mixing": "All 14 results carry only py/augur/zope/pass1-path-traversal; no diagnostics, built-in queries or foreign CWE results are present in the formal batch."
+  },
+  "independence_statement": "This triage used only: the IRIS artifacts listed in inputs_read, read-only inspection of the Zope_vuln source tree, the installed library/ query files, and the commit information provided verbatim in the task prompt. No PyVul ground truth, no CVE descriptions beyond the task-provided commit message, and no fix diffs were consulted. No SARIF, label, library or query file was modified; the only file written is report/llm_triage.json."
+}

@@ -1,0 +1,341 @@
+{
+  "run": {
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "workspace": "iris_manual/Path_Traversal/Zope/iris",
+    "generated": "2026-10-23",
+    "notes": "Only detection.json, extraction/sources.ql and extraction/sinks.ql are produced in this run. No CodeQL execution, no LLM labeling, no pass queries."
+  },
+  "pass": {
+    "id": 1,
+    "name": "Path Traversal",
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"],
+    "target_query": "iris/queries/Pass1_PathTraversal.ql",
+    "verified_against": "WORKFLOW.md section 2 (Pass 1 -> CWEs 022, 023, 036, 073); Pass1_PathTraversal.ql is the Phase 2 pass-query name and does not exist yet in this workspace"
+  },
+  "language": {
+    "detected": "python",
+    "evidence": [
+      "codeql-database.yml: primaryLanguage: python",
+      "src/ tree is a Python package tree (src/ZPublisher, src/OFS, src/App, src/Products, src/webdav, src/Zope2, ...; 347 .py files, 157 outside tests/Testing)",
+      "build manifests: setup.py (setuptools, version = '5.2.dev0'), setup.cfg, constraints.txt, versions*.cfg, buildout.cfg, tox.ini"
+    ]
+  },
+  "project": {
+    "name": "Zope",
+    "version": "5.2.dev0",
+    "version_evidence": "setup.py: version = '5.2.dev0'",
+    "kind": "web application server / object-publishing framework (the repo IS the Zope framework itself, not an application built on a framework)",
+    "database": {
+      "path": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/Zope_vuln/Zope-db",
+      "cli_version": "2.25.1",
+      "pack": "codeql/python-all (iris/qlpack.yml)",
+      "source_location_prefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\Zope_vuln",
+      "baseline_loc": 41159,
+      "source_files": 347,
+      "scope_notes": [
+        "The nested Zope-db CodeQL database directory sits at the repository root (Zope_vuln/Zope-db), NOT under src/, so the structural src/% scope guard in both extraction queries excludes it from code traversal, search and candidate extraction regardless of DB scope; repo-root files (setup.py, util.py, reports, CSVs) are excluded the same way.",
+        "src/Testing/ (makerequest, ZopeTestCase, sandbox, ZODButil) is Zope's own test scaffolding package and is excluded per the Augur noise policy (tests and fixtures), as are all */tests/ directories and test_*.py files. Files named interfaces.py (zope.interface declaration stubs with no executable logic) are excluded so interface method declarations are not mistaken for entry points.",
+        "Per experiment-independence rules, repository-root artifacts that look like ground truth or prior analysis output (VULNERABILITY_AUDIT_REPORT.md, ZOPE-CVE-REPORT.md, path_traversal_sinks.csv, _verify_checkvalidid.py) were NOT read; all findings below derive only from src/ code.",
+        "Dependencies (ZODB, AccessControl, Acquisition, DocumentTemplate, zope.browserresource, zope.publisher, zope.contenttype, zExceptions, Products.ExternalMethod as a separate distribution, waitress) are NOT in the DB; their APIs are matched syntactically by call-site name with module hints."
+      ]
+    },
+    "layout": {
+      "wsgi_entry": "src/ZPublisher/WSGIPublisher.py (publish_module(environ, start_response) at :302, publish(request, module_info) at :234; PATH_INFO re-decoding per PEP 3333 at :312-338; WebDAV source-port GET rewrite to manage_DAVget at :347-352)",
+      "request_object": "src/ZPublisher/HTTPRequest.py (HTTPRequest.__init__(stdin, environ, response) at :306; processInputs form/cookie/XML-RPC/FileUpload marshalling at :452; get/getHeader lookup API at :1250/:1231; FileUpload wrapper at :1653-1697)",
+      "traversal": "src/ZPublisher/BaseRequest.py (traverse(path) at :353 - URL PATH_INFO drives OBJECT-TREE traversal, not filesystem), src/OFS/Traversable.py (unrestrictedTraverse/restrictedTraverse at :152/:362), src/OFS/Moniker.py",
+      "request_to_fs_bridges": "src/OFS/ObjectManager.py (manage_exportObject writes '{id}.zexp' under CONFIG.clienthome at :621-622; manage_importObject joins the request 'file' name into the instance import directory at :639-645 and hands it to ZODB connection.importFile at :679), src/Products/Five/browser/resource.py (DirectoryResource.get(name) at :153 - ++resource++ URL traversal segment joined onto the registered directory path at :155 and existence-checked at :156-157 before being handed to the external zope.browserresource File at :170), src/App/Extensions.py (external-method module lookup: getPath/_getPath joins at :46/:50/:103/:137, existence checks at :61/:144, open + exec at :178/:184), src/App/ImageFile.py (ZCML-registered disk images: open at :72, os.stat at :84, filestream_iterator serving at :121)",
+      "object_store": "src/OFS/* (File, Image, Folder, DTMLMethod, ZopePageTemplate - upload/PUT data is stored in ZODB, not on the filesystem; object ids may be derived from multipart filenames via cookId, src/OFS/Image.py:1002-1010)",
+      "webdav": "src/webdav/* (NullResource PUT/MKCOL/LOCK at NullResource.py:120/:198/:232 create ZODB objects named by the last URL segment; Resource.py WebDAV verb handlers at :203-:665)",
+      "cli_and_startup": "src/Zope2/utilities/{zconsole,copyzopeskel,mkwsgiinstance}.py, src/Zope2/Startup/{serve,options,datatypes}.py, src/Zope2/App/{startup,zcml}.py, src/App/FindHomes.py (INSTANCE_HOME/CLIENT_HOME)"
+    }
+  },
+  "framework": {
+    "name": "zope2-publisher",
+    "display_name": "Zope (ZPublisher/OFS object-publishing framework)",
+    "confidence": 1.0,
+    "scores": {
+      "import_package_evidence": 0.45,
+      "route_decorator_evidence": 0.30,
+      "runtime_bootstrap_evidence": 0.20,
+      "directory_layout_evidence": 0.05
+    },
+    "evidence": [
+      "package: setup.py name 'Zope' version '5.2.dev0'; src/ZPublisher, src/OFS, src/App, src/webdav, src/Zope2 packages",
+      "publishing machinery: ZPublisher/WSGIPublisher.py publish_module/publish, ZPublisher/BaseRequest.py traverse, ZPublisher/HTTPRequest.py request marshalling + mapply(obj, request.args, request, ...) at WSGIPublisher.py:271",
+      "ZMI security declarations (@security.protected(...) throughout OFS/webdav, e.g. ObjectManager.py:588 import_export_objects) - the published-surface contract that ZPublisher enforces",
+      "bootstrap: Zope2/Startup/run.py make_wsgi_app + App/startup.py app(); OFS/Application.py installs Products; OFS/Traversable.py object-tree traversal via getPhysicalRoot/restrictedTraverse"
+    ],
+    "reference_status": "No references/zope.md (or zope2/zpublisher variant) exists in augur-0.3.0 (only django.md, fastapi.md, flask.md for Python), so no framework reference was loaded; references/python.md and references/patterns.md were used and framework-specific signatures were derived directly from repository code as WORKFLOW.md 4.2.3 instructs for unmatched frameworks.",
+    "secondary_candidates": [
+      {"name": "Zope3/Five component layer (browser pages, ++resource++ namespace, ZCML)", "confidence": 0.60, "evidence": ["src/Products/Five/** (metaconfigure.py, fiveconfigure.py, browser/resource.py, viewlet/)", "src/OFS/metaconfigure.py ZCML directives", "++resource++ URL namespace handled by DirectoryResource (Products/Five/browser/resource.py:149)"], "note": "Zope 3-style component layer integrated into Zope 2 via Five; the ++resource++ directory traversal is the main request->filesystem bridge in this layer"},
+      {"name": "WebDAV", "confidence": 0.55, "evidence": ["src/webdav/* (Resource, NullResource, Collection, davcmds, Lock/Unlock command objects)", "maybe_webdav_client detection in HTTPRequest and ObjectManager.__getitem__:739"], "note": "request-method-driven dispatch (PUT/MKCOL/COPY/MOVE/PROPFIND) creating/renaming ZODB objects named by URL segments"},
+      {"name": "WSGI", "confidence": 0.55, "evidence": ["ZPublisher/WSGIPublisher.publish_module(environ, start_response)", "WSGIRequest/WSGIResponse in ZPublisher"], "note": "the outermost untrusted boundary (raw environ incl. PATH_INFO, headers, body)"}
+    ]
+  },
+  "references_loaded": [
+    "iris_tools/augur-0.3.0/WORKFLOW.md",
+    "iris_tools/augur-0.3.0/references/patterns.md",
+    "iris_tools/augur-0.3.0/references/python.md",
+    "iris_tools/augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/python_sinks.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "iris_tools/augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl"
+  ],
+  "template_notes": "All language starter templates are stubs; placeholder bodies were generated from repository evidence per WORKFLOW.md 4.3.1. No {{...}} placeholders remain. Column order matches prior projects (pyramid/pretalx-style): nodeRepr, role, callableName, flowKind, receiver, moduleHint, argIndex, filePath, line, context. Both queries carry @name/@description/@id but deliberately NO @kind annotation: a @kind problem select shape cannot carry the multi-column extraction contract needed for codeql query run + codeql bqrs decode, and no @kind table is assumed. moduleHint is used instead of a 'module' variable name; locations use the n.getLocation().getFile()/getStartLine() API pair proven on this Windows-created database family; literal argument values are read via StringLiteral.getText() with an anchored quote-stripping regex.",
+  "source_families": [
+    {
+      "family": "wsgi_environ_param",
+      "description": "The raw WSGI environ dictionary parameter of the WSGI application entry point, and the stdin/environ parameters of the HTTPRequest constructor. This is the outermost untrusted boundary; every request-derived value (PATH_INFO, HTTP_* headers, query string, body) originates here.",
+      "evidence": [
+        "src/ZPublisher/WSGIPublisher.py:302 def publish_module(environ, start_response, ...) - the WSGI application",
+        "src/ZPublisher/HTTPRequest.py:306 def __init__(self, stdin, environ, response, clean=0) - the request object is built directly from the raw environ + body stream (stdin)"
+      ]
+    },
+    {
+      "family": "http_request_param",
+      "description": "The request-object parameter of the publisher entry and of WebDAV verb handlers (PUT/MKCOL/LOCK/UNLOCK/PROPFIND/PROPPATCH/COPY/MOVE/DELETE/TRACE/OPTIONS/HEAD with a REQUEST parameter) and dav__init(self, request, response). The request object carries all HTTP-controlled data (path, form, cookies, headers, environ, BODY).",
+      "evidence": [
+        "src/ZPublisher/WSGIPublisher.py:234 def publish(request, module_info) - drives processInputs, traverse, mapply",
+        "src/webdav/Resource.py:203-665 HEAD/PUT/OPTIONS/TRACE/DELETE/PROPFIND/PROPPATCH/MKCOL/COPY/MOVE/LOCK/UNLOCK(self, REQUEST, RESPONSE); :88 dav__init(self, request, response)",
+        "src/webdav/NullResource.py:90/:120/:198/:232/:333/:338/:376/:401/:473 verb handlers; src/webdav/Collection.py:63/:76/:85",
+        "src/OFS/Image.py:641 File.PUT(self, REQUEST, RESPONSE); src/OFS/DTMLMethod.py:371 DTMLMethod.PUT(self, REQUEST, RESPONSE)"
+      ]
+    },
+    {
+      "family": "http_path",
+      "description": "PATH_INFO reads: environ.get('PATH_INFO') on the raw WSGI environ and request.get('PATH_INFO') lookups. PATH_INFO is the raw attacker-controlled URL path (re-encoded latin-1->utf-8 per PEP 3333 at WSGIPublisher.py:312-338).",
+      "evidence": [
+        "src/ZPublisher/WSGIPublisher.py:312 path_info = environ.get('PATH_INFO') - raw URL path at the WSGI boundary",
+        "src/ZPublisher/WSGIPublisher.py:252 path = request.get('PATH_INFO') - fed into request.traverse(path) at :255",
+        "src/ZPublisher/utils.py:52 path = request.get('PATH_INFO') - transaction metadata fallback",
+        "src/ZPublisher/WSGIPublisher.py:352 environ['PATH_INFO'] = '%s/manage_DAVget' % environ['PATH_INFO'] - WebDAV source-port GET rewrite (request-derived value assigned back into environ)"
+      ]
+    },
+    {
+      "family": "route_path_param",
+      "description": "Path parameters of the traversal entry points: the URL path is split into segments and consumed for OBJECT-TREE traversal (ZODB), and resolve_url/physicalPathFromURL convert URLs into traversal paths.",
+      "evidence": [
+        "src/ZPublisher/BaseRequest.py:353 def traverse(self, path, response=None, validated_hook=None) - called with request.get('PATH_INFO') at WSGIPublisher.py:255; pops segments (path.pop() loop at :451/:488) and builds request['URL']/steps",
+        "src/ZPublisher/HTTPRequest.py:1161 def resolve_url(self, url) - url -> req.traverse(path) at :1189",
+        "src/OFS/Traversable.py:152 def unrestrictedTraverse(self, path, ...); :362 restrictedTraverse(self, path, ...) - path is a '/'-separated string or sequence of names; observed request-driven call: src/OFS/Cache.py:518-522 props = REQUEST.form -> parent.restrictedTraverse(path) with path taken from an 'associate_<path>' form key",
+        "src/ZPublisher/HTTPRequest.py:253 physicalPathFromURL(self, URL) - URL.split('/') + unquote mapping"
+      ],
+      "caveats": [
+        "These traverse the ZODB object tree, not the filesystem; they are extracted because traversal names reach the request->filesystem bridges (NullResource names, ++resource++ segments) and are the framework's route-variable equivalent."
+      ]
+    },
+    {
+      "family": "request_lookup",
+      "description": ".get() lookups on the request object (REQUEST/request chains) and on local 'environ' (incl. the get_env = environ.get alias at HTTPRequest.py:323), get_header/getHeader header reads, request.form / REQUEST.form.get reads, and request/environ subscript access. HTTPRequest.get's documented lookup order is: other, URL/BASE, environment variables, common, lazy, form data, cookies - so these reads return attacker-controlled form/cookie/header/env values.",
+      "evidence": [
+        "src/ZPublisher/HTTPRequest.py:1250 def get(self, key, ...) - the merged lookup implementation; :1231 getHeader (get_header alias at :1248) reads environ['HTTP_*']",
+        "src/webdav/NullResource.py:128 REQUEST.get_header('If', '') / :159 REQUEST.get('CONTENT_LENGTH') / :160 REQUEST['BODYFILE'] / :166 REQUEST.get('BODY')",
+        "src/OFS/DTMLMethod.py:376 body = safe_file_data(REQUEST.get('BODY', '')) - WebDAV PUT body",
+        "src/OFS/PropertyManager.py:303 REQUEST.form.get(name, []) / src/OFS/PropertySheets.py:346 REQUEST.get(name, '') - ZMI form values",
+        "src/OFS/Cache.py:518 props = REQUEST.form - form keys drive restrictedTraverse paths",
+        "src/OFS/Image.py:152/:184/:190 REQUEST.get_header('If-Modified-Since'/'Range'/'Request-Range'/'If-Range')",
+        "src/ZPublisher/HTTPRequest.py:376-405 environ.get('HTTPS')/environ.get('SERVER_PORT')/environ['HTTP_HOST'] etc. - raw server env"
+      ]
+    },
+    {
+      "family": "multipart_filename",
+      "description": "Multipart upload filenames: FileUpload.filename (set from the cgi FieldStorage filename) and the cookId basename extraction that derives Zope object ids from upload filenames.",
+      "evidence": [
+        "src/ZPublisher/HTTPRequest.py:1664 self.filename = aFieldStorage.filename (FileUpload.__init__ :1661); :536-537 processInputs wraps items that have file+filename+headers into FileUpload",
+        "src/OFS/Image.py:1002-1010 cookId(id, title, file): id = filename[max(rfind('/'), rfind('\\\\'), rfind(':')) + 1:] - multipart filename basename-derived object id (guards against /, \\\\ and : separators)"
+      ],
+      "caveats": [
+        "The derived id feeds ZODB object ids (_setObject, guarded by ObjectManager.checkValidId), not direct filesystem paths - second-order, but the same ids later appear in manage_exportObject's clienthome path join."
+      ]
+    },
+    {
+      "family": "xmlrpc_args",
+      "description": "XML-RPC request arguments parsed from the POST body and marshalled into published-method parameters by mapply.",
+      "evidence": [
+        "src/ZPublisher/HTTPRequest.py:513 meth, self.args = xmlrpc.parse_input(fs.value) (text/xml POST); consumed by WSGIPublisher.py:271 mapply(obj, request.args, request, ...)"
+      ]
+    },
+    {
+      "family": "zmi_form_param",
+      "description": "Path/file-relevant parameters (id, file, filename, name, path, filepath) of ZMI manage_* published methods. ZPublisher marshals request form/query values directly into published-method parameters (HTTPRequest 'name=value' form processing + mapply), so these parameters are request-controlled; they are additionally gated by Zope permissions (e.g. import_export_objects).",
+      "evidence": [
+        "src/OFS/ObjectManager.py:636 def manage_importObject(self, file, REQUEST=None, ...) - the request 'file' name is joined into the instance import directory (:644) and imported (:679)",
+        "src/OFS/ObjectManager.py:589 def manage_exportObject(self, id='', ...) - the request 'id' is joined into the clienthome export path (:621)",
+        "src/OFS/Image.py:58 manage_addFile[self](id, file=...); :734 manage_addImage; :533 File.manage_upload(self, file='', ...)",
+        "src/OFS/DTMLMethod.py:297 DTMLMethod.manage_upload(self, file='', REQUEST=None)",
+        "src/OFS/ObjectManager.py:715 manage_hasId(self, REQUEST) - REQUEST['id'] lookup"
+      ],
+      "caveats": [
+        "Standard deployments restrict the ZMI to authenticated managers; these rows are still HTTP-reachable request inputs and are extracted with the permission caveat for labeling to weigh."
+      ]
+    },
+    {
+      "family": "url_traversal_segment",
+      "description": "URL path segments that become object/resource names: the NullResource name (last URL segment of a PUT/MKCOL target) and the DirectoryResource.get name parameter (the ++resource++ namespace traversal segment that is joined onto a registered filesystem directory).",
+      "evidence": [
+        "src/OFS/ObjectManager.py:739 NullResource(self, key, request).__of__(self) - key is the not-found URL segment; src/webdav/NullResource.py:72 __init__(self, parent, name, request=None) stores it as self.__name__ used by PUT/MKCOL",
+        "src/Products/Five/browser/resource.py:153 def get(self, name, default=_marker) - name is the next URL segment under ++resource++<dirname>/; joined at :155 (os.path.join(path, name)) and existence-checked at :156-157"
+      ]
+    },
+    {
+      "family": "cli_argv",
+      "description": "CLI argv reads and path parameters of the console utilities (zconsole runscript, copyzopeskel copyskel/copydir/copyin, mkwsgiinstance write_inituser, serve Command/main). CLI operators, not HTTP attackers: extracted with an explicit operator-boundary caveat.",
+      "evidence": [
+        "src/Zope2/utilities/zconsole.py:12 runscript(zopeconf, script_name, *extra_args) - script_name is opened and exec'd at :20-22; :37 main(args=sys.argv)",
+        "src/Zope2/utilities/copyzopeskel.py:72 sys.argv[1:]; :167 copyskel(sourcedir, targetdir, ...); :220 copyin(src, dst, ...) - open(src)/open(dst,'w') at :221/:226, shutil.copyfile/copymode at :214/:229",
+        "src/Zope2/utilities/mkwsgiinstance.py:42 sys.argv[1:]; :187 write_inituser(fn, user, password) - open(fn, 'wb') at :191",
+        "src/Zope2/Startup/serve.py:140 Command.__init__(self, argv, ...); :249 main(argv=sys.argv) - options.pid_filename opened at :236"
+      ]
+    },
+    {
+      "family": "env_config",
+      "description": "Environment variable reads (os.environ.get / os.environ[...] subscripts). Deployment/operator boundary, not attacker input.",
+      "evidence": [
+        "src/ZPublisher/HTTPRequest.py:78 ZOPE_DTML_REQUEST_AUTOQUOTE; :323-325 get_env = environ.get on the raw request environ",
+        "src/ZPublisher/HTTPResponse.py:92 DONT_GZIP_MAJOR_MIME_TYPES",
+        "src/App/FindHomes.py:18/:30 INSTANCE_HOME / CLIENT_HOME - bootstrap instance paths"
+      ]
+    },
+    {
+      "family": "config_path_param",
+      "description": "Parameters of configuration-facing constructors/lookups whose values flow into filesystem operations inside this repo (ZCML-registered disk resources, DTML/page-template file names, external-method module lookups). Developer/operator boundary: set at registration/config time, not per request.",
+      "evidence": [
+        "src/App/ImageFile.py:49 ImageFile.__init__(self, path, _prefix=None) - path joined at :57, opened at :72, stat'd at :84, served via filestream_iterator at :121",
+        "src/App/special_dtml.py:64 ClassicHTMLFile.__init__(self, name, _prefix) - os.path.join(_prefix, name + '.dtml') at :69; :131 DTMLFile.__init__",
+        "src/Products/PageTemplates/PageTemplateFile.py:80 __init__(self, filename, _prefix=None) - filename joined at :95/:97, getmtime/open at :160/:194",
+        "src/Products/Five/browser/resource.py:83 ResourceFactory.__init__(self, name, path, ...) - registered resource directory path; Directory(path, name) at :127",
+        "src/App/Extensions.py:65 getPath(prefix, name, ...) / :44 _getPath(home, prefix, name, suffixes) / :153 getObject(module, name) - the External Method module lookup chain reaching open+exec at :178/:184"
+      ],
+      "caveats": [
+        "Not attacker sources in standard deployments; extracted as config-boundary candidates so the labeling stage can mark them none/sanitizer-context as appropriate.",
+        "App.Extensions.getObject's historical ZMI caller (Products.ExternalMethod manage_edit) is a separate distribution in Zope 5 and is NOT in this repo; the getObject chain is kept with a no-in-repo-request-caller caveat."
+      ]
+    }
+  ],
+  "sink_families": [
+    {
+      "family": "fs_open",
+      "description": "Builtins open(path, ...) calls - real file read/write. argIndex 0.",
+      "evidence": [
+        "src/OFS/ObjectManager.py:622 open(f, 'w+b') - manage_exportObject writes the exported object to CONFIG.clienthome joined with the request-derived '{id}.zexp' (write/create; _getOb(id) at :604 must resolve first)",
+        "src/App/Extensions.py:178 open(path) - external-method module source, subsequently exec'd at :184 (exec is a Pass 4 concern; only the open is Pass 1 scope)",
+        "src/App/ImageFile.py:72 open(path, 'rb') - content-type sniffing read of a ZCML-registered image path",
+        "src/Products/PageTemplates/PageTemplateFile.py:194 open(self.filename, 'rb') - template file read on _cook_check (request-time in debug mode)",
+        "src/Products/PageTemplates/ZopePageTemplate.py:115 open(self._default_content_fn) - fixed default content read",
+        "src/Zope2/utilities/zconsole.py:20 open(script_name) - CLI script read (+exec at :22)",
+        "src/Zope2/utilities/copyzopeskel.py:221 open(src) / :226 open(dst, 'w') - CLI skeleton copy (operator boundary)",
+        "src/Zope2/Startup/serve.py:236 open(options.pid_filename, 'w') - CLI pid file (operator boundary)",
+        "src/Zope2/utilities/mkwsgiinstance.py:191 open(fn, 'wb') - CLI inituser write (operator boundary)",
+        "src/Zope2/App/startup.py:52 open(target) - custom_zodb.py read from instancehome at startup (operator boundary)"
+      ]
+    },
+    {
+      "family": "fs_open_fileio",
+      "description": "filestream_iterator(name, mode) - ZPublisher.Iterators.filestream_iterator is an io.FileIO subclass: constructing it opens the file; it is the HTTP file-serving read path for App.ImageFile.index_html. Also the super().__init__(name, mode) call inside filestream_iterator.__init__ itself. argIndex 0 (mode at 1).",
+      "evidence": [
+        "src/App/ImageFile.py:121 filestream_iterator(self.path, mode='rb') - serves the registered image file as the HTTP response body at request time (path fixed at ZCML registration)",
+        "src/ZPublisher/Iterators.py:48-49 filestream_iterator.__init__(self, name, mode='rb', ...) -> super().__init__(name, mode) - the actual io.FileIO open"
+      ]
+    },
+    {
+      "family": "fs_listdir",
+      "description": "os.listdir(path) directory enumeration. argIndex 0.",
+      "evidence": [
+        "src/OFS/ObjectManager.py:709 os.listdir(directory) - list_imports enumerates the instance import directories (fixed paths, filtered to .zexp/.xml)",
+        "src/OFS/Application.py:370 os.listdir(product_dir) - product discovery over Products.__path__ at startup"
+      ]
+    },
+    {
+      "family": "fs_metadata",
+      "description": "Filesystem existence/metadata checks: os.path.exists/isdir/isfile/getmtime and os.stat. argIndex 0. These touch the filesystem (TOCTOU-relevant) while content read/write sinks remain the open family.",
+      "evidence": [
+        "src/OFS/ObjectManager.py:645 os.path.exists(filepath) - the request-derived import path existence check immediately before connection.importFile",
+        "src/Products/Five/browser/resource.py:156 os.path.isfile(filename) / :157 os.path.isdir(filename) - filename = os.path.join(path, name) with the URL-derived ++resource++ segment name",
+        "src/OFS/ObjectManager.py:707 os.path.isdir(directory) - import directory check",
+        "src/App/Extensions.py:61/:144 os.path.exists(fqn)/os.path.exists(fn) - external-method path resolution",
+        "src/OFS/Application.py:352/:356-358 os.path.isdir(package_dir)/os.path.exists(init_py...) - product package checks at startup",
+        "src/Products/PageTemplates/PageTemplateFile.py:160 os.path.getmtime(self.filename) - template re-read check (request-time in debug mode)",
+        "src/App/special_dtml.py:78 os.stat(self.raw) - DTML file mtime check in debug-mode _cook_check (self.raw is the .dtml path, request-time read)",
+        "src/App/ImageFile.py:84 os.stat(path) - registered image file metadata"
+      ]
+    },
+    {
+      "family": "fs_delete",
+      "description": "os.remove(path) file deletion. argIndex 0.",
+      "evidence": [
+        "src/OFS/userfolder.py:309 os.remove(os.path.join(cfg.instancehome, 'inituser')) - removes the inituser file after user creation (fixed instancehome path)"
+      ]
+    },
+    {
+      "family": "fs_create_copy",
+      "description": "os.makedirs / shutil.copyfile / shutil.copymode in the CLI skeleton copier. argIndex 0 (and 1 for the copy destination, emitted as a second row).",
+      "evidence": [
+        "src/Zope2/utilities/copyzopeskel.py:172 os.makedirs(targetdir); :214 shutil.copyfile(src, dst); :215/:229 shutil.copymode - CLI (operator boundary)"
+      ]
+    },
+    {
+      "family": "external_import_file",
+      "description": "ZODB Connection.importFile(filepath) - imports an object export; the ZODB connection performs the actual file open of the zexp/xml file (external dependency). argIndex 0.",
+      "evidence": [
+        "src/OFS/ObjectManager.py:679 ob = connection.importFile(filepath) - filepath = os.path.join(impath, 'import', file) where 'file' is the request parameter (guarded by the os.path.split dirname rejection at :639-641)"
+      ]
+    },
+    {
+      "family": "external_resource_factory",
+      "description": "DirectoryResource's factory(name, filename) dynamic call - constructs zope.browserresource File/PageTemplate resources over the joined request-derived path; the external resource object performs the actual file read when the resource is served. argIndex 1 (filename).",
+      "evidence": [
+        "src/Products/Five/browser/resource.py:170 resource = factory(name, filename)(self.request) - factory comes from resource_factories[ext] (File/Image/PageTemplate factories); filename is the os.path.join(path, name) result with the URL-derived name"
+      ]
+    }
+  ],
+  "propagation_and_validation_nodes": {
+    "description": "Path construction / normalization / validation nodes observed in the code. These are deliberately NOT extracted as sinks (no direct filesystem operation); they are the intermediate propagation and validation layer for Phase 2 summary/sanitizer labeling.",
+    "nodes": [
+      "OFS/ObjectManager.py:621 os.path.join(CONFIG.clienthome, f'{id}.{suffix}') - export path join with the request-derived id",
+      "OFS/ObjectManager.py:644 os.path.join(impath, 'import', file) - import path join with the request-derived file name (after the split guard)",
+      "App/Extensions.py:46/:50/:103/:137 os.path.join(...) - external-method path construction (home/prefix/name, module.__path__[0]/prefix/realName)",
+      "Products/Five/browser/resource.py:155 filename = os.path.join(path, name) - registered directory path joined with the URL-derived resource segment; NO '..'/separator filtering in this in-repo override",
+      "App/ImageFile.py:57 os.path.join(_prefix, path) (plus :52 os.path.isabs branch and :32-33 realpath PREFIX); App/special_dtml.py:69 os.path.join(_prefix, name + '.dtml')",
+      "Products/PageTemplates/PageTemplateFile.py:85/:95/:97/:100 os.path.splitext/join and the '.zpt' suffix append",
+      "OFS/Image.py:1006-1009 cookId basename slice after rfind('/'), rfind('\\\\'), rfind(':') - multipart filename -> object id",
+      "ZPublisher/HTTPRequest.py:253-271 physicalPathFromURL - URL.split('/') segmentization + unquote mapping (virtual hosting path conversion)",
+      "ZPublisher/BaseRequest.py:429-512 traverse - path.pop() segment loop, quote() of steps, request['URL'] construction; :322 traverseName",
+      "ZPublisher/WSGIPublisher.py:312-338 - PATH_INFO latin-1 -> utf-8 re-decoding per PEP 3333 (percent-decoding canonicalization happens in the WSGI server, outside this repo)",
+      "webdav/NullResource.py:102 os.path.splitext(name) - URL-segment extension sniffing for the PUT factory",
+      "OFS/Moniker.py:35 app.unrestrictedTraverse(self.idpath) - clipboard moniker traversal (object tree)"
+    ]
+  },
+  "sanitizer_evidence": [
+    "OFS/ObjectManager.py:639-641 manage_importObject: dirname, file = os.path.split(file); if dirname: raise BadRequest('Invalid file name') - rejects any 'file' that contains a path component (os-dependent separator handling; on POSIX a backslash-containing name would not be split)",
+    "OFS/ObjectManager.py:604 ob = self._getOb(id) (manage_exportObject) - the id must resolve to an existing object before the clienthome join at :621; additionally :680-681 _verifyObjectPaste on import",
+    "OFS/ObjectManager.py:81-113 checkValidId/bad_id - rejects control chars, <>&, '.', '..', leading '_'/'aq_'/'@@'/'++' and trailing '__' in object ids; NOTE: '/' itself is not rejected by this regex",
+    "App/Extensions.py:47-54 _getPath paranoia: raises ValueError when os.path.join collapses (dir == prefix or fn == name, i.e. absolute/empty components); :92-95 getPath rejects names with a directory component via os.path.split",
+    "OFS/Image.py:1002-1010 cookId - basename-only extraction from multipart filenames (handles '/', '\\\\', ':' separators)",
+    "webdav/NullResource.py:129-138/:181-185 - PUT goes through parent lock checks (wl_isLocked/dav__simpleifhandler) and _verifyObjectPaste before object creation",
+    "OFS/ObjectManager.py:645-651 - import fails with BadRequest unless the joined path exists in one of the fixed import directories"
+  ],
+  "security_evidence": {
+    "base_directory": "OFS/ObjectManager.py:621 CONFIG.clienthome (export base); :643-644 _getImportPaths() instancehome/clienthome + 'import' (import base); Products/Five/browser/resource.py:154-155 self.context.path (registered ++resource++ directory base); App/ImageFile.py:57 PREFIX/package_home base; App/Extensions.py:46/:113/:117 instancehome / cfg.extensions / Products.__path__ bases",
+    "dotdot_handling": "explicit '..' rejection only via os.path.split dirname guards (ObjectManager.py:639-641, Extensions.py:92-95) and checkValidId's id-in-('.','..') test (ObjectManager.py:98-100); no '..' filtering in DirectoryResource.get (resource.py:153-157) or in the manage_exportObject id join",
+    "absolute_path_handling": "App/ImageFile.py:52 os.path.isabs(path) skips the prefix join; App/Extensions.py:47-54 join-collapse ValueError checks; OFS/ObjectManager.py:639 os.path.split rejects absolute names via their non-empty dirname (os-dependent)",
+    "mixed_separators": "cookId handles '/', '\\\\' and ':' (Image.py:1006-1009); checkValidId does not reject '/' (ObjectManager.py:81); the import/export split guards rely on os.path.split, whose separator set is platform-dependent (posixpath splits only '/', ntpath splits both) - a 'C:\\\\x' or backslash name passes the guard on POSIX",
+    "percent_decoding": "WSGIPublisher.py:312-338 re-encodes PATH_INFO latin-1->utf-8 per PEP 3333 (percent-decoding itself happens in the WSGI server, not in this repo); HTTPRequest.py:271 unquote in physicalPathFromURL; :1721-1745 cookie unquote; BaseRequest.py:47-49 quote of traversal steps",
+    "symlinks": "no symlink resolution/checks on request-derived paths (only module-level realpath of fixed prefixes: App/ImageFile.py:32, App/special_dtml.py:40, App/FindHomes.py:23-25)",
+    "prefix_validation": "App/Extensions.py:47-54 ValueError when the join collapses below the home (prefix must be relative, name must be simple); OFS/ObjectManager.py:643-651 existence must match within one of the fixed import roots; no prefix/containment check on the joined result in manage_exportObject or DirectoryResource.get",
+    "toctou": "OFS/ObjectManager.py:645 os.path.exists(filepath) then :679 connection.importFile(filepath) - existence check and open are separate calls (TOCTOU window); Products/PageTemplates/PageTemplateFile.py:160 getmtime then :194 open; Products/Five/browser/resource.py:156-157 isfile/isdir then the external resource object opens the file later in the request"
+  },
+  "coverage_gaps": [
+    "Dynamic dispatch / receiver typing: ZODB Connection.importFile (ObjectManager.py:679), zope.browserresource File/FileResource (resource.py:170 factory call resolved through the resource_factories dict), DocumentTemplate.HTMLFile file reading (special_dtml.py:72 delegates via ClassicHTMLFile.inheritedAttribute('__init__')), and zope.contenttype.guess_content_type are external dependencies not present in the DB; they are matched syntactically by call-site name with module hints.",
+    "Products.ExternalMethod (the ZMI manage_edit caller of App.Extensions.getObject) is a separate distribution in Zope 5 and not in this repo: getObject's open+exec chain has no in-repo request boundary; kept as candidates with that caveat.",
+    "DirectoryResource.get (resource.py:153) is an in-repo override, but the traversal dispatcher that calls get(name) for ++resource++ URLs and any upstream name checks live in the external zope.browserresource/zope.traversing packages; the in-repo override itself performs no '..' or separator filtering before os.path.join/isfile/isdir.",
+    "mapply (WSGIPublisher.py:271) marshals request form/query/XML-RPC values into the parameters of EVERY published method; to bound row volume only path/file-relevant parameter names (id, file, filename, name, path, filepath) of manage_* methods are extracted. Other published-method parameters (e.g. manage_renameObject's new_id, OFS.CopySupport ids) are request-controlled too and are a documented gap; CopySupport/Moniker operate on the ZODB object tree rather than the filesystem.",
+    "Object-tree traversal (BaseRequest.traverse, OFS.Traversable.unrestrictedTraverse, HTTPRequest.resolve_url) consumes URL segments but resolves ZODB objects, not filesystem paths; only the bridges extracted as sinks convert request data into filesystem paths (ObjectManager import/export, ++resource++ directory lookup, external-method lookup, upload-filename-derived object ids).",
+    "get_header/getHeader alias (HTTPRequest.py:1248) and the get_env = environ.get local alias (HTTPRequest.py:323) are matched by name; other rebinding/aliasing of request APIs would be missed.",
+    "REQUEST.get(...) returns values from a merged namespace (other/URL/env/common/lazy/form/cookies): some keys are server-provided env only (REMOTE_ADDR, SERVER_PORT) and are not attacker-path-controlled; the family is extracted as one boundary row set and per-key trust is left to labeling.",
+    "No archive APIs (zipfile/tarfile/extract/extractall), no pathlib, no io.open, no tempfile and no shutil.rmtree in non-test src code; uploads (OFS.Image/File.manage_upload, webdav PUT) store data in ZODB, never on the filesystem (grep-verified).",
+    "App.ApplicationManager/App.DavLockManager/OFS.SimpleItem/OFS.CopySupport contain only ZODB-connection .open() calls, not filesystem opens; Testing/ package excluded as test scaffolding.",
+    "Zope2/Startup config loading (zope.conf schema, serve.py plaster-style config, Zope2/App/zcml.py site.zcml) happens at startup from operator-controlled files; only the zconsole/copyzopeskel/mkwsgiinstance/serve CLI open sites are extracted (operator boundary).",
+    "The nested Zope-db database directory and repo-root report/CSV artifacts are excluded structurally by the src/% scope guard and were never read during exploration."
+  ]
+}
