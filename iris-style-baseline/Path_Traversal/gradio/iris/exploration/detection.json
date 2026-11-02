@@ -1,0 +1,192 @@
+{
+  "run": {
+    "timestamp": "2026-10-22",
+    "project": "gradio",
+    "project_version": "2.5.0",
+    "source_root": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\gradio_vuln",
+    "database": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\gradio_vuln\\gradio-db",
+    "codeql_cli_version": "2.25.1",
+    "python_pack": "codeql/python-all 7.1.1 / 7.1.2 (local package cache)",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\gradio\\iris",
+    "qlpack": "iris/gradio-cwe22"
+  },
+  "pass_scope": {
+    "pass_id": 1,
+    "focus": "Path Traversal",
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"]
+  },
+  "language": {
+    "detected": "python",
+    "evidence": [
+      "codeql-database.yml primaryLanguage: python",
+      "setup.py with packages=['gradio']",
+      "gradio/ package with 16 .py modules (~4737 lines)"
+    ]
+  },
+  "frameworks": [
+    {
+      "name": "Flask",
+      "role": "primary",
+      "confidence": 1.0,
+      "score_breakdown": {
+        "import_evidence": 0.45,
+        "route_decorator_evidence": 0.30,
+        "runtime_bootstrap_evidence": 0.20,
+        "layout_evidence": 0.05
+      },
+      "evidence": [
+        "import: 'from flask import Flask, request, session, jsonify, abort, send_file, render_template, redirect' (gradio/networking.py:8)",
+        "setup.py install_requires: 'Flask>=1.1.1', 'Flask-Cors>=3.0.8', 'flask-cachebuster', 'Flask-Login'",
+        "routes: 12 '@app.route(...)' decorators in gradio/networking.py (lines 131, 138, 147, 163, 171, 180, 189, 240, 354, 364, 377, 391, 400)",
+        "bootstrap: 'app = Flask(__name__, template_folder=..., static_folder=\"\", static_url_path=\"/none/\")' (gradio/networking.py:48-51)",
+        "bootstrap: 'CORS(app)' (networking.py:54), 'login_manager.init_app(app)' (networking.py:61)",
+        "runtime: 'threading.Thread(target=app.run, ...)' in start_server (networking.py:459)"
+      ],
+      "extensions": [
+        "flask-cors (CORS)",
+        "flask-login (LoginManager, current_user, login_required)",
+        "flask-cachebuster (CacheBuster)"
+      ]
+    }
+  ],
+  "reference_files_loaded": [
+    "references/patterns.md",
+    "references/python.md",
+    "references/flask.md"
+  ],
+  "route_inventory": [
+    {"route": "/", "handler": "main", "file": "gradio/networking.py", "line": 131, "methods": ["GET"]},
+    {"route": "/static/<path:path>", "handler": "static_resource", "file": "gradio/networking.py", "line": 138, "methods": ["GET"], "path_converter": true},
+    {"route": "/login", "handler": "login", "file": "gradio/networking.py", "line": 147, "methods": ["GET", "POST"]},
+    {"route": "/config/", "handler": "get_config", "file": "gradio/networking.py", "line": 163, "methods": ["GET"]},
+    {"route": "/enable_sharing/<path:path>", "handler": "enable_sharing", "file": "gradio/networking.py", "line": 171, "methods": ["GET"], "path_converter": true},
+    {"route": "/shutdown", "handler": "shutdown", "file": "gradio/networking.py", "line": 180, "methods": ["GET"]},
+    {"route": "/api/predict/", "handler": "predict", "file": "gradio/networking.py", "line": 189, "methods": ["POST"], "request_body": "request.json[\"data\"]"},
+    {"route": "/api/", "handler": "api_docs", "file": "gradio/networking.py", "line": 240, "methods": ["GET"]},
+    {"route": "/api/flag/", "handler": "flag", "file": "gradio/networking.py", "line": 354, "methods": ["POST"], "request_body": "request.json['data']"},
+    {"route": "/api/interpret/", "handler": "interpret", "file": "gradio/networking.py", "line": 364, "methods": ["POST"], "request_body": "request.json[\"data\"]"},
+    {"route": "/file/<path:path>", "handler": "file", "file": "gradio/networking.py", "line": 377, "methods": ["GET"], "path_converter": true},
+    {"route": "/api/queue/push/", "handler": "queue_push", "file": "gradio/networking.py", "line": 391, "methods": ["POST"], "request_body": "request.json['data'], request.json['action']"},
+    {"route": "/api/queue/status/", "handler": "queue_status", "file": "gradio/networking.py", "line": 400, "methods": ["POST"], "request_body": "request.json['hash']"}
+  ],
+  "source_evidence": {
+    "flask_route_path_variables": [
+      "static_resource(path): '/static/<path:path>' route variable, passed to safe_join then send_file (networking.py:138-143)",
+      "file(path): '/file/<path:path>' route variable, passed through secure_filename (undefined name in this module) then os.path.join(app.cwd, path) into open/send_file (networking.py:377-388)",
+      "enable_sharing(path): '/enable_sharing/<path:path>' route variable, stored into interface config share_url (networking.py:171-177); not used to access the filesystem"
+    ],
+    "flask_request_accessors_observed": [
+      "request.json[\"data\"] in predict (networking.py:192)",
+      "request.json['data'] in flag (networking.py:358) with nested fields input_data/output_data/flag_option/flag_index",
+      "request.json[\"data\"] in interpret (networking.py:368)",
+      "request.json[\"data\"], request.json[\"action\"] in queue_push (networking.py:394-395)",
+      "request.json['hash'] in queue_status (networking.py:403)",
+      "request.form.get(\"username\"), request.form.get(\"password\") in login (networking.py:153-154)"
+    ],
+    "internal_boundary_receivers": [
+      "Interface.process(raw_input): receives raw predict JSON 'data' list and dispatches to component preprocess (gradio/interface.py:363)",
+      "Interface.interpret(raw_input): receives raw interpret JSON 'data' list (gradio/interface.py:377)",
+      "flag_data(input_data, output_data, flag_option, flag_index, ...): writes request-derived data into flagging CSV log (gradio/networking.py:276-352)",
+      "InputComponent.preprocess(x) overrides in gradio/inputs.py (Textbox/Number/Slider/Checkbox/CheckboxGroup/Radio/Dropdown/Image/Video/Audio/File/Dataframe/Timeseries): x is the raw request JSON payload per component",
+      "File.preprocess nested helper process_single_file(f): receives per-file dict with 'name' (client-supplied filename) and 'data' (base64) plus client-settable 'is_example' flag (gradio/inputs.py:1171-1192)",
+      "Component.save_flagged / save_flagged_file(dir, label, data, encryption_key): data is flagged request data persisted under the flagging dir (gradio/component.py:36-66, inputs.py, outputs.py overrides)",
+      "Component.restore_flagged(data): consumes flag log.csv content (second-order, file-derived data) during example loading (gradio/inputs.py, outputs.py)",
+      "queue.push(input_data, action): request JSON data entering the sqlite job queue; consumed again by queue_thread and re-posted to /api/<task_type>/ (gradio/queue.py:68, networking.py:408-427)"
+    ],
+    "excluded_as_not_attacker_controlled": [
+      "os.getenv('GRADIO_SERVER_PORT'), os.getenv('GRADIO_NUM_PORTS'), os.getenv('GRADIO_SERVER_NAME') (networking.py:32-37): deployment configuration, operator-controlled, does not cross an untrusted boundary",
+      "os.getenv('GRADIO_KEY') (networking.py:58): server-side secret configuration",
+      "os.getenv('GRADIO_THEME') (interface.py:151-152): operator display configuration",
+      "sys.argv / CLI: no argparse or sys.argv reads in the gradio package (only demo scripts outside package scope)",
+      "launches.json counter reads (interface.py:717-725): local analytics file with fixed JSON_PATH, not request-derived"
+    ]
+  },
+  "sink_evidence": {
+    "actual_filesystem_operations": [
+      "open(): networking.py:44,321,334,339,345,348,350 (flag log read/write with request-derived content), networking.py:382 (route path joined under app.cwd), processing_utils.py:28 (get_url_or_file_as_bytes fallback open(path)), processing_utils.py:41 (encode_file_to_base64 open(f)), interface.py:160 (css param), interface.py:309 (examples log.csv), interface.py:717,720,725 (fixed launches.json), inputs.py:1180 (open(file_name, 'rb') with client-supplied name when is_example is set)",
+      "send_file(): networking.py:143 (safe_join result), networking.py:386 (BytesIO), networking.py:388 (os.path.join(app.cwd, path) from route variable)",
+      "shutil.move(): component.py:65 (moves decoded upload temp file into flagging dir; move source path is the temp file name whose prefix/extension derive from client-supplied filename)",
+      "shutil.copy2(): processing_utils.py:168 (create_tmp_copy_of_file copies file_path; file_path can be the client-supplied 'name' from Video/Audio/File preprocess when is_example is set: inputs.py:917, 1001, 1175)",
+      "os.remove(): queue.py:24,46 (fixed DB_FILE literal)",
+      "os.makedirs(): interface.py:217 (flagging_dir config), component.py:58 (flagging output dir joined from label)",
+      "os.listdir(): component.py:56 (flagging output dir)",
+      "os.path.getsize(): outputs.py:540 (File.postprocess on model-returned path)",
+      "tempfile.NamedTemporaryFile(): processing_utils.py:149,151,165,167 with prefix/suffix derived from os.path.basename of client-supplied filename; inputs.py:741,767,1031,1066,1075,1100 and outputs.py:429 with fixed suffixes",
+      "ffmpy.FFmpeg(inputs={...}, outputs={...}) + .run(): inputs.py:926-930, outputs.py:283-287 (reads and writes files at caller-controlled paths via subprocess)",
+      "pydub AudioSegment.from_file(): processing_utils.py:101 (audio file read); AudioSegment.export(): processing_utils.py:118 (audio file write)",
+      "PIL Image.save(): inputs.py:743,769 (temp file writes); processing_utils.py:71 and matplotlib savefig at processing_utils.py:63 target BytesIO, not filesystem paths"
+    ],
+    "static_file_response_paths": [
+      "/static/<path:path> -> send_file(safe_join(STATIC_PATH_LIB, path)) or redirect to CDN when sharing (networking.py:138-143)",
+      "/file/<path:path> -> send_file(os.path.join(app.cwd, path)) after an intended secure_filename call, or decrypt-then-send when encryption is enabled (networking.py:377-388)"
+    ],
+    "archive_extraction": "not present: no zipfile/tarfile/extract/extractall usage anywhere in the gradio package; no archive-entry-name sinks were extracted"
+  },
+  "sanitizer_and_validation_evidence": [
+    "safe_join(STATIC_PATH_LIB, path) at networking.py:143: werkzeug containment check against the static template directory (imported from werkzeug.security at networking.py:30)",
+    "secure_filename(path) at networking.py:380: INTENDED sanitizer for the /file route, but 'secure_filename' is never imported in this module (only safe_join is imported from werkzeug.security); the name is unresolved in this codebase, so the sanitization call does not resolve as written - recorded as a key observation for labeling, not as a working barrier",
+    "os.path.basename: processing_utils.py:141,159 (temp filename prefix/extension derivation), outputs.py:290,540 (response name), networking.py:386 (attachment_filename)",
+    "path.startswith(app.interface.examples) at networking.py:381: prefix check gating the encrypted-file branch of the /file route",
+    "component.py:52: character filter on label (''.join over alnum and '._- ') before building the flagging output dir",
+    "os.path.exists checks at networking.py:281, interface.py:159,297,301, component.py:55, queue.py:23,45: existence validation nodes, TOCTOU-adjacent (check-then-use) but not barriers by themselves",
+    "os.path.join: networking.py:278,382,388, component.py:54,65, interface.py:300,303 - treated as propagation nodes, not sinks",
+    "requests.get(path) vs open(path) fallback in get_url_or_file_as_bytes/encode_url_or_file_to_base64 (processing_utils.py:24-37): URL-or-file dispatch wrapper, not a sanitizer"
+  ],
+  "wrapper_functions_needing_summary_steps": [
+    "processing_utils.get_url_or_file_as_bytes(path) -> open(path, 'rb')",
+    "processing_utils.encode_url_or_file_to_base64(path) -> encode_file_to_base64 -> open(f, 'rb')",
+    "processing_utils.encode_file_to_base64(f) -> open(f, 'rb')",
+    "processing_utils.decode_base64_to_file(encoding, encryption_key, file_path) -> os.path.basename + tempfile.NamedTemporaryFile(prefix/suffix) + write",
+    "processing_utils.create_tmp_copy_of_file(file_path) -> shutil.copy2(file_path, temp name)",
+    "processing_utils.audio_from_file(filename) -> AudioSegment.from_file(filename)",
+    "processing_utils.audio_to_file(sample_rate, data, filename) -> AudioSegment.export(filename)",
+    "component.Component.save_flagged_file(dir, label, data, encryption_key) -> decode_base64_to_file + os.makedirs + shutil.move",
+    "networking.flag_data(...) -> open(log_fp) read/append/write"
+  ],
+  "coverage_gaps_and_dynamic_dispatch_notes": [
+    "audio.export / im.save / x.save: method calls on locally-typed variables; receiver module cannot be resolved syntactically, so module_hint is inferred (pydub/PIL) and marked as such",
+    "secure_filename at networking.py:380 is an unresolved name in this module (not imported); the /file route as written would fail at runtime rather than sanitize - taint modeling must not treat it as an effective barrier",
+    "alias imports: 'from shutil import copyfile' (networking.py:18) is unused; send_file and friends are imported directly from flask without aliases",
+    "pathlib.Path is imported in inputs.py:17 but never used in the package (dead import); no pathlib sink candidates exist",
+    "PIL Image.open is only called with BytesIO in this codebase (processing_utils.py:21), never with a path, so it was not extracted as a path sink",
+    "client-settable 'is_example' flag inside request JSON (Video/Audio/File preprocess) selects the create_tmp_copy_of_file/open(file_name) code path where the client-supplied 'name' is used directly as a source path",
+    "queue round-trip: request JSON -> sqlite queue -> queue_thread re-posts to local /api/<task_type>/ endpoint; second-order boundary is partially covered via queue.push input_data",
+    "gradio-db is a CodeQL database directory nested inside the source root; extraction queries restrict candidates to files whose relative path starts with 'gradio/', which structurally excludes gradio-db, test/ and demo/ files"
+  ],
+  "extraction_policy": {
+    "scope": "gradio/ package only (relative path 'gradio/%')",
+    "excluded": "test/ and test fixtures, demo/ scripts, website/ scripts, setup.py, render_readme.py, generated frontend assets, gradio-db database directory",
+    "noise_controls": "pure logging helpers and fixed-literal analytics paths included only where they are actual filesystem operations; request accessors restricted to the standard Flask request object families"
+  },
+  "database_content_and_path_format": {
+    "extracted_python_files": {
+      "total": 78,
+      "gradio_package": 17,
+      "demo": 42,
+      "test": 12,
+      "website": 5,
+      "other": ["setup.py", "render_readme.py"]
+    },
+    "gradio_db_files_extracted": false,
+    "path_format_note": "Database file paths are stored forward-slash normalized (e.g. 'C:/Users/.../gradio_vuln/gradio/networking.py'), while a backslash-style source location prefix string ('C:\\\\Users\\\\...\\\\gradio_vuln') is also present in the string pool. File.getRelativePath() may therefore be unable to resolve on this Windows-created database (prefix/suffix separator mismatch in its implementation). The extraction queries use a fallback that captures the 'gradio/...' suffix from getAbsolutePath(), which was verified against the database string pool, so the 'gradio/%' scope filter holds regardless of which form resolves."
+  },
+  "extraction_query_contract": {
+    "usage": "codeql query run + codeql bqrs decode --format=csv (multi-column candidate table)",
+    "not_used_for": "database analyze / SARIF",
+    "metadata_note": "queries deliberately omit @kind (a @kind problem select shape would not support multi-column extraction, and no @kind table is assumed)",
+    "csv_columns": [
+      "node",
+      "role",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "module_hint",
+      "arg_index",
+      "file",
+      "line",
+      "context"
+    ],
+    "flow_kind_vocabulary": ["param", "arg", "return", "receiver", "field"],
+    "arg_index_convention": "0-based positional parameter/argument index; -1 when not applicable (keyword-controlled or field-read candidates)"
+  }
+}

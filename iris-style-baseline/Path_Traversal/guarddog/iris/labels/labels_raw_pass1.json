@@ -1,0 +1,1823 @@
+{
+  "pass_id": 1,
+  "focus": "Path Traversal",
+  "cwes": [
+    "CWE-22",
+    "CWE-23",
+    "CWE-36",
+    "CWE-73"
+  ],
+  "run_id": "guarddog-iris-pass1-step3-20261022",
+  "generated_at": "2026-10-22T07:49:37Z",
+  "model": "glm-5.3",
+  "execution": {
+    "mode": "in-session LLM labeling (Claude Code CLI, model glm-5.3); no external LLM API calls; no fabricated results",
+    "input_files": [
+      "iris/extraction/sources.csv (31 rows)",
+      "iris/extraction/sinks.csv (16 rows)"
+    ],
+    "source_files_read_in_full": [
+      "guarddog/cli.py",
+      "guarddog/scanners/package_scanner.py",
+      "guarddog/scanners/project_scanner.py",
+      "guarddog/analyzer/analyzer.py",
+      "guarddog/analyzer/metadata/typosquatting.py",
+      "guarddog/utils/package_info.py"
+    ],
+    "batches": [
+      {
+        "batch_id": "batch-s1",
+        "description": "source call-return boundaries (env reads, JSON deserialization, content reads, requests.get responses)",
+        "size": 12
+      },
+      {
+        "batch_id": "batch-s2",
+        "description": "source parameter / internal wrapper candidates (taint summary review)",
+        "size": 19
+      },
+      {
+        "batch_id": "batch-k1",
+        "description": "sink candidates: open / os.listdir / invoke_semgrep",
+        "size": 9
+      },
+      {
+        "batch_id": "batch-k2",
+        "description": "sink candidates: extractall / os.remove / os.path checks / shutil.unpack_archive",
+        "size": 7
+      }
+    ],
+    "total_candidates": 47,
+    "dedup_removed": 0,
+    "excluded_rows": 0,
+    "re_ask_below_threshold": 0,
+    "confidence_threshold": 0.55
+  },
+  "sources": [
+    {
+      "candidate_csv_row": {
+        "node": "Call:os.getenv",
+        "role": "source_candidate",
+        "callableName": "getenv",
+        "flowKind": "return",
+        "receiver": "os",
+        "moduleHint": "os.getenv",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/project_scanner.py:35",
+        "context": "environment variable read: GIT_USERNAME (local operator credential/config; judge trust boundary before treating as source)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-01",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.95,
+        "signature": {
+          "package": null,
+          "module": "os",
+          "type": null,
+          "callable": "getenv",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/scanners/project_scanner.py",
+          "line": 35
+        },
+        "rationale": "GIT_USERNAME is a local operator credential used only as the HTTP auth tuple for requests.get (project_scanner.py:44,267); the value never reaches any filesystem path, so it is not a pass-1 source.",
+        "evidence": [
+          "project_scanner.py:35-36 user/personal_access_token read from env",
+          "project_scanner.py:267 resp = requests.get(url=req_url, auth=token)",
+          "no path use of user or personal_access_token anywhere in project_scanner.py"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:os.getenv",
+        "role": "source_candidate",
+        "callableName": "getenv",
+        "flowKind": "return",
+        "receiver": "os",
+        "moduleHint": "os.getenv",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/project_scanner.py:36",
+        "context": "environment variable read: GH_TOKEN (local operator credential/config; judge trust boundary before treating as source)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-02",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.95,
+        "signature": {
+          "package": null,
+          "module": "os",
+          "type": null,
+          "callable": "getenv",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/scanners/project_scanner.py",
+          "line": 36
+        },
+        "rationale": "GH_TOKEN is a local operator credential used only as the HTTP auth tuple for requests.get; it never influences a filesystem path, so it is not a pass-1 source.",
+        "evidence": [
+          "project_scanner.py:36 personal_access_token = os.getenv('GH_TOKEN')",
+          "project_scanner.py:44 return (user, personal_access_token) used only as auth=token at line 267"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:.json",
+        "role": "source_candidate",
+        "callableName": "json",
+        "flowKind": "return",
+        "receiver": "response",
+        "moduleHint": "<dynamic>.json",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/utils/package_info.py:25",
+        "context": "JSON deserialization of 'response' (remote PyPI/GitHub response or file content feeding path/name construction)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-03",
+        "role": "source",
+        "classification": "tp",
+        "confidence": 0.75,
+        "signature": {
+          "package": "requests",
+          "module": null,
+          "type": "requests.Response",
+          "callable": "json",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/utils/package_info.py",
+          "line": 25
+        },
+        "rationale": "PyPI JSON API response for the package being scanned. When scanning an untrusted/malicious package, data['info']['version'] and data['releases'][version][i]['url'/'filename'] are attacker-influenced: the selected url feeds the archive download whose entry names drive the unsanitized shutil.unpack_archive (zip-slip), and version reaches the package_info write filename via the _scan_remote suffix. Genuine untrusted input boundary for pass 1.",
+        "evidence": [
+          "package_info.py:25 data = response.json()",
+          "package_scanner.py:118-119 version = data['info']['version'] when version is None",
+          "package_scanner.py:127-136 url = file['url'] / file_extension selected from releases metadata",
+          "package_scanner.py:158-163 requests.get(url) then shutil.unpack_archive(zippath, unzippedpath) with no entry-name validation"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:.json",
+        "role": "source_candidate",
+        "callableName": "json",
+        "flowKind": "return",
+        "receiver": "Attribute()",
+        "moduleHint": "<dynamic>.json",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/project_scanner.py:92",
+        "context": "JSON deserialization of 'Attribute()' (remote PyPI/GitHub response or file content feeding path/name construction)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-04",
+        "role": "source",
+        "classification": "candidate",
+        "confidence": 0.6,
+        "signature": {
+          "package": "requests",
+          "module": null,
+          "type": "requests.Response",
+          "callable": "json",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/scanners/project_scanner.py",
+          "line": 92
+        },
+        "rationale": "PyPI versions API response; data['releases'] keys become candidate versions that flow into scan_remote(dependency, version) -> _scan_remote version -> package_info write filename suffix. The path-relevant use is gated behind write_package_info=True (default False, not CLI-exposed), so retained as candidate rather than tp.",
+        "evidence": [
+          "project_scanner.py:92-93 data = requests.get(url).json(); versions = sorted(data['releases'].keys(), reverse=True)",
+          "project_scanner.py:190-203 scan_remote(dependency, version) per (dependency, version) pair",
+          "package_scanner.py:63-65 suffix = f\"{name}-{version}\" -> open(os.path.join(results['path'], f'package_info-{suffix}.json'), 'w') only when write_package_info"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:.json",
+        "role": "source_candidate",
+        "callableName": "json",
+        "flowKind": "return",
+        "receiver": "Attribute()",
+        "moduleHint": "<dynamic>.json",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/metadata/typosquatting.py:68",
+        "context": "JSON deserialization of 'Attribute()' (remote PyPI/GitHub response or file content feeding path/name construction)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-05",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.9,
+        "signature": {
+          "package": "requests",
+          "module": null,
+          "type": "requests.Response",
+          "callable": "json",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/analyzer/metadata/typosquatting.py",
+          "line": 68
+        },
+        "rationale": "Response from the fixed, trusted endpoint hugovk.github.io/top-pypi-packages; rows are used only as package-name strings for typosquat comparison and are cached to an internal constant path. No path is derived from response content.",
+        "evidence": [
+          "typosquatting.py:52 hardcoded popular_packages_url",
+          "typosquatting.py:29-32 rows used only as comparison names (normalized)",
+          "typosquatting.py:55-56 top_packages_path built from constant filename inside internal resources dir"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:.read",
+        "role": "source_candidate",
+        "callableName": "read",
+        "flowKind": "return",
+        "receiver": "Attribute",
+        "moduleHint": "<dynamic>.read",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:161",
+        "context": "content read from 'Attribute' (downloaded archive bytes or file content)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-06",
+        "role": "source",
+        "classification": "candidate",
+        "confidence": 0.65,
+        "signature": {
+          "package": "requests",
+          "module": null,
+          "type": "requests.Response.raw",
+          "callable": "read",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 161
+        },
+        "rationale": "Downloaded archive bytes. The archive's internal entry names (controlled by the malicious package author) are what shutil.unpack_archive turns into extracted paths (zip-slip). Plain intra-program dataflow cannot observe entry-name propagation, so this content source plus the unpack_archive sink is the recall-oriented modeling of zip-slip; kept as candidate for that reason.",
+        "evidence": [
+          "package_scanner.py:160-161 with open(zippath, 'wb') as f: f.write(response.raw.read())",
+          "package_scanner.py:163 shutil.unpack_archive(zippath, unzippedpath) with no entry-name validation",
+          "for .tar.gz archives shutil.unpack_archive reaches tarfile.extractall, which applies no extraction filter in this code version (Python 3.10+ baseline, pyproject.toml)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:.readlines",
+        "role": "source_candidate",
+        "callableName": "readlines",
+        "flowKind": "return",
+        "receiver": "f",
+        "moduleHint": "<dynamic>.readlines",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/project_scanner.py:232",
+        "context": "line-wise read from 'f' (requirements.txt content feeding dependency names)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-07",
+        "role": "source",
+        "classification": "tp",
+        "confidence": 0.8,
+        "signature": {
+          "package": null,
+          "module": null,
+          "type": "io.TextIOWrapper",
+          "callable": "readlines",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/scanners/project_scanner.py",
+          "line": 232
+        },
+        "rationale": "requirements.txt lines are the primary untrusted input of 'guarddog verify': parsed into dependency names and versions that flow into scan_remote -> _scan_remote -> os.path.join(directory, name) and package_name-derived archive paths. Genuine untrusted input boundary (file content), even though pkg_resources grammar limits separators in parsed names (see src-20 evidence).",
+        "evidence": [
+          "project_scanner.py:231-232 with open(path, 'r') as f: return self.scan_requirements(f.readlines())",
+          "project_scanner.py:194-203 dependencies parsed then scan_remote(dependency, version)",
+          "package_scanner.py:56,140 file_path = os.path.join(directory, name); zippath = os.path.join(directory, package_name + file_extension)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:path",
+        "role": "source_candidate",
+        "callableName": "analyze",
+        "flowKind": "param",
+        "receiver": "Analyzer",
+        "moduleHint": "guarddog.analyzer.analyzer",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/analyzer.py:65",
+        "context": "internal wrapper 'analyze' parameter 'path' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-08",
+        "role": "summary",
+        "classification": "tp",
+        "confidence": 0.7,
+        "signature": {
+          "package": null,
+          "module": "guarddog.analyzer.analyzer",
+          "type": "Analyzer",
+          "callable": "analyze",
+          "arg_index": 1,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/analyzer/analyzer.py",
+          "line": 65
+        },
+        "rationale": "Internal wrapper: analyze(path) forwards path unchanged to analyze_sourcecode(path) (analyzer.py:101), which reaches Path(path)/invoke_semgrep. Taint summary needed so CLI/requirements-controlled package paths propagate through the wrapper to the semgrep target list.",
+        "evidence": [
+          "analyzer.py:100-101 sourcecode_results = self.analyze_sourcecode(path, sourcecode_rules)",
+          "analyzer.py:108 return value includes results['path'] = path (reused by package_scanner.py:65 write)",
+          "package_scanner.py:62 results = self.analyzer.analyze(file_path, package_info, rules)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:path",
+        "role": "source_candidate",
+        "callableName": "analyze_sourcecode",
+        "flowKind": "param",
+        "receiver": "Analyzer",
+        "moduleHint": "guarddog.analyzer.analyzer",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/analyzer.py:138",
+        "context": "internal wrapper 'analyze_sourcecode' parameter 'path' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-09",
+        "role": "summary",
+        "classification": "tp",
+        "confidence": 0.7,
+        "signature": {
+          "package": null,
+          "module": "guarddog.analyzer.analyzer",
+          "type": "Analyzer",
+          "callable": "analyze_sourcecode",
+          "arg_index": 1,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/analyzer/analyzer.py",
+          "line": 138
+        },
+        "rationale": "Forwards path to Path(path) and invoke_semgrep([targetpath]); summary step for wrapper propagation into the semgrep target path list.",
+        "evidence": [
+          "analyzer.py:149 targetpath = Path(path)",
+          "analyzer.py:159,170-172 invoke_semgrep(..., [targetpath], exclude=self.exclude, no_git_ignore=True)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:path",
+        "role": "source_candidate",
+        "callableName": "scan_local",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:25",
+        "context": "internal wrapper 'scan_local' parameter 'path' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-10",
+        "role": "summary",
+        "classification": "tp",
+        "confidence": 0.75,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "scan_local",
+          "arg_index": 1,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 25
+        },
+        "rationale": "CLI 'scan' identifier / programmatic path enters here and is used directly in os.path.exists, tarsafe.open(path).extractall(tmpdirname) and analyze_sourcecode(path) with no normalization; summary step connecting the CLI boundary to local file access.",
+        "evidence": [
+          "cli.py:80-84 results = scanner.scan_local(identifier, rule_param) when is_local_package(identifier)",
+          "package_scanner.py:43-52 exists/endswith('.tar.gz')/isdir dispatch on the raw path",
+          "package_scanner.py:46-49 tarsafe.open(path).extractall(tmpdirname); self.analyzer.analyze_sourcecode(path, rules=rules)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:path",
+        "role": "source_candidate",
+        "callableName": "scan_local",
+        "flowKind": "param",
+        "receiver": "RequirementsScanner",
+        "moduleHint": "guarddog.scanners.project_scanner",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/project_scanner.py:207",
+        "context": "internal wrapper 'scan_local' parameter 'path' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-11",
+        "role": "summary",
+        "classification": "tp",
+        "confidence": 0.8,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.project_scanner",
+          "type": "RequirementsScanner",
+          "callable": "scan_local",
+          "arg_index": 1,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/project_scanner.py",
+          "line": 207
+        },
+        "rationale": "CLI 'verify' path argument is opened directly (open(path, 'r')); summary step connecting the CLI boundary to the requirements read sink and onward to dependency-name flows.",
+        "evidence": [
+          "cli.py:40 results = scanner.scan_local(path)",
+          "project_scanner.py:231 with open(path, 'r') as f:"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:name",
+        "role": "source_candidate",
+        "callableName": "scan_remote",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:70",
+        "context": "internal wrapper 'scan_remote' parameter 'name' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-12",
+        "role": "summary",
+        "classification": "tp",
+        "confidence": 0.8,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "scan_remote",
+          "arg_index": 1,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 70
+        },
+        "rationale": "Package name (CLI 'scan' identifier, or dependency name from requirements.txt scanning) is forwarded to _scan_remote where it is joined into file_path and passed to download_package; central propagation step of the package-name path chain.",
+        "evidence": [
+          "cli.py:84 results = scanner.scan_remote(identifier, version, rule_param)",
+          "project_scanner.py:190-203 scan_remote(dependency, version) per requirements.txt dependency",
+          "package_scanner.py:91-96 scan_remote dispatches to self._scan_remote(name, tmpdirname|base_dir, version, ...)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:name",
+        "role": "source_candidate",
+        "callableName": "get_package_info",
+        "flowKind": "param",
+        "receiver": "",
+        "moduleHint": "guarddog.utils.package_info",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/utils/package_info.py:4",
+        "context": "internal wrapper 'get_package_info' parameter 'name' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-13",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.75,
+        "signature": {
+          "package": null,
+          "module": "guarddog.utils.package_info",
+          "type": null,
+          "callable": "get_package_info",
+          "arg_index": 0,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/utils/package_info.py",
+          "line": 4
+        },
+        "rationale": "name is interpolated only into the PyPI API URL (https://pypi.org/pypi/%s/json); it never reaches a filesystem path. Taint of the returned metadata originates from the network response (labeled separately at package_info.py:19/25), not from this parameter. Not a pass-1 source or summary.",
+        "evidence": [
+          "package_info.py:18-19 url = 'https://pypi.org/pypi/%s/json' % (name,); response = requests.get(url)",
+          "package_info.py:25-31 only data = response.json() is returned"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:name",
+        "role": "source_candidate",
+        "callableName": "_scan_remote",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:54",
+        "context": "internal wrapper '_scan_remote' parameter 'name' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-14",
+        "role": "summary",
+        "classification": "tp",
+        "confidence": 0.8,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "_scan_remote",
+          "arg_index": 1,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 54
+        },
+        "rationale": "name is joined into file_path = os.path.join(directory, name) (which becomes results['path'] and the analyze target) and forwarded to download_package(name, ...) whose zippath/unzippedpath derive from it. No containment or normalization exists anywhere on this chain; a name containing path separators or '..' escapes the intended scan directory.",
+        "evidence": [
+          "package_scanner.py:56 file_path = os.path.join(directory, name)",
+          "package_scanner.py:58 self.download_package(name, directory, version)",
+          "package_scanner.py:62,65-66 results = self.analyzer.analyze(file_path, ...); open(os.path.join(results['path'], f'package_info-{suffix}.json'), 'w')",
+          "no normpath/realpath/basename/startswith containment check anywhere between the join and the file accesses (verified by reading package_scanner.py in full)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:base_dir",
+        "role": "source_candidate",
+        "callableName": "scan_remote",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 4,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:70",
+        "context": "internal wrapper 'scan_remote' parameter 'base_dir' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-15",
+        "role": "summary",
+        "classification": "candidate",
+        "confidence": 0.6,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "scan_remote",
+          "arg_index": 4,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 70
+        },
+        "rationale": "base_dir is an API-only argument (not CLI-exposed; defaults to None -> fresh TemporaryDirectory) joined as the scan base directory, which becomes the download/extraction destination. Operator-controlled rather than attacker-controlled; kept as candidate summary for propagation completeness.",
+        "evidence": [
+          "package_scanner.py:91-96 if base_dir is not None: return self._scan_remote(name, base_dir, ...) else tempdir",
+          "package_scanner.py:55 directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), base_dir)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:base_dir",
+        "role": "source_candidate",
+        "callableName": "_scan_remote",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 2,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:54",
+        "context": "internal wrapper '_scan_remote' parameter 'base_dir' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-16",
+        "role": "summary",
+        "classification": "candidate",
+        "confidence": 0.6,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "_scan_remote",
+          "arg_index": 2,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 54
+        },
+        "rationale": "base_dir becomes the download/extraction base directory via os.path.join; operator-controlled (CLI never sets it), retained as candidate summary step.",
+        "evidence": [
+          "package_scanner.py:55 directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), base_dir)",
+          "package_scanner.py:140 zippath = os.path.join(directory, package_name + file_extension)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:version",
+        "role": "source_candidate",
+        "callableName": "scan_remote",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 2,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:70",
+        "context": "internal wrapper 'scan_remote' parameter 'version' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-17",
+        "role": "summary",
+        "classification": "candidate",
+        "confidence": 0.6,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "scan_remote",
+          "arg_index": 2,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 70
+        },
+        "rationale": "version (CLI --version option, or a PyPI release key when scanning requirements) is forwarded to _scan_remote where it is concatenated into the package_info write filename suffix; the write only happens when write_package_info=True, so the path-relevant flow is gated and non-default.",
+        "evidence": [
+          "package_scanner.py:92,96 version forwarded into self._scan_remote(name, ..., version, ...)",
+          "package_scanner.py:63-65 suffix = f\"{name}-{version}\" -> open(os.path.join(results['path'], f'package_info-{suffix}.json'), 'w')",
+          "package_scanner.py:70 write_package_info defaults to False and is not exposed by guarddog/cli.py"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:version",
+        "role": "source_candidate",
+        "callableName": "download_package",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 3,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:98",
+        "context": "internal wrapper 'download_package' parameter 'version' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-18",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.85,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "download_package",
+          "arg_index": 3,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 98
+        },
+        "rationale": "version is used only as a lookup key into data['releases'] and in an exception message; it never becomes part of a filesystem path inside download_package.",
+        "evidence": [
+          "package_scanner.py:121 if version in releases:",
+          "package_scanner.py:147 raise Exception('Version ' + version + ' for package ' + package_name + \" doesn't exist.\")"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:version",
+        "role": "source_candidate",
+        "callableName": "_scan_remote",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 3,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:54",
+        "context": "internal wrapper '_scan_remote' parameter 'version' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-19",
+        "role": "summary",
+        "classification": "candidate",
+        "confidence": 0.6,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "_scan_remote",
+          "arg_index": 3,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 54
+        },
+        "rationale": "version is concatenated into the package_info filename suffix (write path) when write_package_info=True; values can originate from attacker-influenced PyPI release keys or the CLI --version option, so the propagation is real but the dangerous use is gated behind a non-default flag.",
+        "evidence": [
+          "package_scanner.py:64 suffix = f\"{name}-{version}\" if version is not None else name",
+          "package_scanner.py:65 open(os.path.join(results['path'], f'package_info-{suffix}.json'), 'w')",
+          "project_scanner.py:93,122 PyPI releases keys flow into scan_remote(dependency, version)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:package_name",
+        "role": "source_candidate",
+        "callableName": "download_package",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:98",
+        "context": "internal wrapper 'download_package' parameter 'package_name' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-20",
+        "role": "summary",
+        "classification": "tp",
+        "confidence": 0.8,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "download_package",
+          "arg_index": 1,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 98
+        },
+        "rationale": "package_name is concatenated into zippath = os.path.join(directory, package_name + file_extension) and unzippedpath = zippath.removesuffix(file_extension); these feed open(zippath,'wb'), shutil.unpack_archive (both arguments) and os.remove(zippath). Nothing normalizes or validates package_name. Exploit nuance: dependency names parsed from requirements.txt are constrained by the pkg_resources name grammar (no '/'), but the direct CLI path 'guarddog scan <identifier>' bypasses that parsing, and on Windows backslash separators pass is_local_package (its regex only matches '/') and reach os.path.join unchanged.",
+        "evidence": [
+          "package_scanner.py:140-141 zippath = os.path.join(directory, package_name + file_extension); unzippedpath = zippath.removesuffix(file_extension)",
+          "package_scanner.py:143 self.download_compressed(url, zippath, unzippedpath)",
+          "package_scanner.py:160,163,164 open(zippath, 'wb') / shutil.unpack_archive(zippath, unzippedpath) / os.remove(zippath)",
+          "cli.py:84,101-103 scan_remote(identifier, ...) reached when is_local_package regex (only matches '/') does not match, e.g. backslash-separated identifiers on Windows",
+          "project_scanner.py:100-110 safe_parse_requirements drops entries that fail pkg_resources parsing (separator traversal via requirements.txt names largely blocked by the name grammar)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:directory",
+        "role": "source_candidate",
+        "callableName": "download_package",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 2,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:98",
+        "context": "internal wrapper 'download_package' parameter 'directory' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-21",
+        "role": "summary",
+        "classification": "candidate",
+        "confidence": 0.7,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "download_package",
+          "arg_index": 2,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 98
+        },
+        "rationale": "directory is the base of zippath/unzippedpath construction; operator/API-controlled (TemporaryDirectory by default), retained as candidate summary for propagation completeness.",
+        "evidence": [
+          "package_scanner.py:140 zippath = os.path.join(directory, package_name + file_extension)",
+          "package_scanner.py:55,94-96 directory is _scan_remote base_dir (tempdir by default)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:url",
+        "role": "source_candidate",
+        "callableName": "scan_remote",
+        "flowKind": "param",
+        "receiver": "RequirementsScanner",
+        "moduleHint": "guarddog.scanners.project_scanner",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/project_scanner.py:237",
+        "context": "internal wrapper 'scan_remote' parameter 'url' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-22",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.85,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.project_scanner",
+          "type": "RequirementsScanner",
+          "callable": "scan_remote",
+          "arg_index": 1,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/project_scanner.py",
+          "line": 237
+        },
+        "rationale": "url only feeds the raw.githubusercontent request URL after a string replace and f-string interpolation; it never reaches a filesystem path. Relevant to SSRF (pass 3), not to path traversal.",
+        "evidence": [
+          "project_scanner.py:264-267 githubusercontent_url = url.replace(...); req_url = f\"{githubusercontent_url}/{branch}/{requirements_name}\"; requests.get(url=req_url, auth=token)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:url",
+        "role": "source_candidate",
+        "callableName": "download_compressed",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:149",
+        "context": "internal wrapper 'download_compressed' parameter 'url' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-23",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.85,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "download_compressed",
+          "arg_index": 1,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 149
+        },
+        "rationale": "url is passed only to requests.get(url, stream=True); it never becomes a filesystem path. (The url value itself is attacker-influenced PyPI metadata, which matters for SSRF pass 3; the downloaded content is captured as a source at package_scanner.py:158/161.)",
+        "evidence": [
+          "package_scanner.py:158 response = requests.get(url, stream=True)",
+          "package_scanner.py:160-163 only zippath/unzippedpath (parameters 2 and 3) reach file operations"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:zippath",
+        "role": "source_candidate",
+        "callableName": "download_compressed",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 2,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:149",
+        "context": "internal wrapper 'download_compressed' parameter 'zippath' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-24",
+        "role": "summary",
+        "classification": "tp",
+        "confidence": 0.8,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "download_compressed",
+          "arg_index": 2,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 149
+        },
+        "rationale": "zippath is used directly as the open(zippath, 'wb') write target, as unpack_archive argument 0, and as the os.remove target; it is constructed from package_name by the caller with no validation, so taint must propagate through this wrapper to reach the sinks.",
+        "evidence": [
+          "package_scanner.py:160 with open(zippath, 'wb') as f:",
+          "package_scanner.py:163 shutil.unpack_archive(zippath, unzippedpath)",
+          "package_scanner.py:164 os.remove(zippath)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:unzippedpath",
+        "role": "source_candidate",
+        "callableName": "download_compressed",
+        "flowKind": "param",
+        "receiver": "PackageScanner",
+        "moduleHint": "guarddog.scanners.package_scanner",
+        "argIndex": 3,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:149",
+        "context": "internal wrapper 'download_compressed' parameter 'unzippedpath' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-25",
+        "role": "summary",
+        "classification": "tp",
+        "confidence": 0.8,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.package_scanner",
+          "type": "PackageScanner",
+          "callable": "download_compressed",
+          "arg_index": 3,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 149
+        },
+        "rationale": "unzippedpath is passed as the shutil.unpack_archive extraction destination; derived by the caller from package_name via string removesuffix (not path normalization), so taint must propagate through this wrapper to reach the extraction sink.",
+        "evidence": [
+          "package_scanner.py:163 shutil.unpack_archive(zippath, unzippedpath)",
+          "package_scanner.py:141 unzippedpath = zippath.removesuffix(file_extension) at the caller (string operation, no canonicalization)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Parameter:requirements",
+        "role": "source_candidate",
+        "callableName": "scan_requirements",
+        "flowKind": "param",
+        "receiver": "RequirementsScanner",
+        "moduleHint": "guarddog.scanners.project_scanner",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/project_scanner.py:166",
+        "context": "internal wrapper 'scan_requirements' parameter 'requirements' (propagates caller-controlled path/name/url values; taint summary candidate)"
+      },
+      "batch": "batch-s2",
+      "label": {
+        "id": "src-26",
+        "role": "summary",
+        "classification": "tp",
+        "confidence": 0.8,
+        "signature": {
+          "package": null,
+          "module": "guarddog.scanners.project_scanner",
+          "type": "RequirementsScanner",
+          "callable": "scan_requirements",
+          "arg_index": 1,
+          "flow_kind": "param"
+        },
+        "location": {
+          "file": "guarddog/scanners/project_scanner.py",
+          "line": 166
+        },
+        "rationale": "requirements text is parsed into dependency names and versions which flow into scan_remote(dependency, version) and onward into path construction; summary step connecting the requirements input boundary to the remote-scan path chain.",
+        "evidence": [
+          "project_scanner.py:194-194 dependencies = self.parse_requirements(requirements)",
+          "project_scanner.py:196-203 params built per (dependency, version) then pool.starmap(get_package_results, params)",
+          "project_scanner.py:190 result = self.package_scanner.scan_remote(dependency, version)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:requests.get",
+        "role": "source_candidate",
+        "callableName": "get",
+        "flowKind": "return",
+        "receiver": "requests",
+        "moduleHint": "requests.get",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/utils/package_info.py:19",
+        "context": "remote HTTP response from 'requests.get' (PyPI JSON API / GitHub raw; metadata and archive bytes are attacker-influenced when scanning untrusted packages)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-27",
+        "role": "source",
+        "classification": "tp",
+        "confidence": 0.75,
+        "signature": {
+          "package": "requests",
+          "module": null,
+          "type": null,
+          "callable": "get",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/utils/package_info.py",
+          "line": 19
+        },
+        "rationale": "PyPI JSON API response for the untrusted package being scanned: releases filenames/urls select the archive download (zip-slip origin) and info.version can reach the package_info write filename. Attacker-influenced network boundary, unconditional in every remote scan.",
+        "evidence": [
+          "package_info.py:18-19 url = 'https://pypi.org/pypi/%s/json' % (name,); response = requests.get(url)",
+          "package_scanner.py:115 data = get_package_info(package_name) then releases/urls consumed at 116-136"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:requests.get",
+        "role": "source_candidate",
+        "callableName": "get",
+        "flowKind": "return",
+        "receiver": "requests",
+        "moduleHint": "requests.get",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:158",
+        "context": "remote HTTP response from 'requests.get' (PyPI JSON API / GitHub raw; metadata and archive bytes are attacker-influenced when scanning untrusted packages)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-28",
+        "role": "source",
+        "classification": "tp",
+        "confidence": 0.7,
+        "signature": {
+          "package": "requests",
+          "module": null,
+          "type": null,
+          "callable": "get",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 158
+        },
+        "rationale": "Archive download response: the body bytes carry the archive whose entry names (attacker = malicious package author) become extracted paths via the unsanitized shutil.unpack_archive. Modeled as content source for the zip-slip sink (see also src-06).",
+        "evidence": [
+          "package_scanner.py:158-161 response = requests.get(url, stream=True); f.write(response.raw.read())",
+          "package_scanner.py:163 shutil.unpack_archive(zippath, unzippedpath)",
+          "url comes from PyPI release metadata file['url'] (package_scanner.py:130,135)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:requests.get",
+        "role": "source_candidate",
+        "callableName": "get",
+        "flowKind": "return",
+        "receiver": "requests",
+        "moduleHint": "requests.get",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/project_scanner.py:92",
+        "context": "remote HTTP response from 'requests.get' (PyPI JSON API / GitHub raw; metadata and archive bytes are attacker-influenced when scanning untrusted packages)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-29",
+        "role": "source",
+        "classification": "candidate",
+        "confidence": 0.6,
+        "signature": {
+          "package": "requests",
+          "module": null,
+          "type": null,
+          "callable": "get",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/scanners/project_scanner.py",
+          "line": 92
+        },
+        "rationale": "PyPI versions API response: releases keys become versions flowing into scan_remote(version) -> _scan_remote suffix -> package_info write path, but only under write_package_info=True; retained as candidate source for the gated flow.",
+        "evidence": [
+          "project_scanner.py:91-93 url = 'https://pypi.org/pypi/%s/json' % (package_name,); data = requests.get(url).json()",
+          "project_scanner.py:122,160 available_versions -> dependencies[requirement.project_name] = valid_versions",
+          "package_scanner.py:63-65 version -> suffix -> open(..., 'w') gated by write_package_info"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:requests.get",
+        "role": "source_candidate",
+        "callableName": "get",
+        "flowKind": "return",
+        "receiver": "requests",
+        "moduleHint": "requests.get",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/project_scanner.py:267",
+        "context": "remote HTTP response from 'requests.get' (PyPI JSON API / GitHub raw; metadata and archive bytes are attacker-influenced when scanning untrusted packages)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-30",
+        "role": "source",
+        "classification": "tp",
+        "confidence": 0.7,
+        "signature": {
+          "package": "requests",
+          "module": null,
+          "type": null,
+          "callable": "get",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/scanners/project_scanner.py",
+          "line": 267
+        },
+        "rationale": "Remote requirements.txt fetched from raw.githubusercontent and decoded into lines that feed scan_requirements; same untrusted-content boundary as the local requirements.txt read (src-07), reached via 'RequirementsScanner.scan_remote'.",
+        "evidence": [
+          "project_scanner.py:267 resp = requests.get(url=req_url, auth=token)",
+          "project_scanner.py:270 return self.scan_requirements(resp.content.decode().splitlines())"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:requests.get",
+        "role": "source_candidate",
+        "callableName": "get",
+        "flowKind": "return",
+        "receiver": "requests",
+        "moduleHint": "requests.get",
+        "argIndex": -1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/metadata/typosquatting.py:68",
+        "context": "remote HTTP response from 'requests.get' (PyPI JSON API / GitHub raw; metadata and archive bytes are attacker-influenced when scanning untrusted packages)"
+      },
+      "batch": "batch-s1",
+      "label": {
+        "id": "src-31",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.9,
+        "signature": {
+          "package": "requests",
+          "module": null,
+          "type": null,
+          "callable": "get",
+          "arg_index": null,
+          "flow_kind": "return"
+        },
+        "location": {
+          "file": "guarddog/analyzer/metadata/typosquatting.py",
+          "line": 68
+        },
+        "rationale": "Fixed trusted endpoint (hugovk.github.io top-pypi-packages); response rows are used only as package-name strings and cached to an internal constant path; no path is derived from the response.",
+        "evidence": [
+          "typosquatting.py:52 hardcoded popular_packages_url",
+          "typosquatting.py:69-72 cached via open(top_packages_path, 'w+') with constant internal path"
+        ]
+      }
+    }
+  ],
+  "sinks": [
+    {
+      "candidate_csv_row": {
+        "node": "Call:open",
+        "role": "sink_candidate",
+        "callableName": "open",
+        "flowKind": "arg",
+        "receiver": "",
+        "moduleHint": "open",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:65",
+        "context": "built-in file open; argument 0 is the file path; mode: w"
+      },
+      "batch": "batch-k1",
+      "label": {
+        "id": "sink-01",
+        "role": "sink",
+        "classification": "candidate",
+        "confidence": 0.65,
+        "signature": {
+          "package": "builtins",
+          "module": null,
+          "type": null,
+          "callable": "open",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 65
+        },
+        "rationale": "File write whose path is os.path.join(results['path'], f'package_info-{name}-{version}.json'); results['path'] is the join(directory, name) file_path and the suffix embeds the package name and version (both can be attacker-influenced, e.g. via PyPI release keys). No normalization or containment exists, so '..' or separator segments escape the base directory. Gated behind write_package_info=True (default False, not CLI-exposed), hence candidate rather than tp.",
+        "evidence": [
+          "package_scanner.py:63-65 suffix = f\"{name}-{version}\" if version is not None else name; with open(os.path.join(results['path'], f'package_info-{suffix}.json'), 'w') as file:",
+          "package_scanner.py:56,62 results['path'] = file_path = os.path.join(directory, name)",
+          "package_scanner.py:70 write_package_info defaults to False; guarddog/cli.py never sets it"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:open",
+        "role": "sink_candidate",
+        "callableName": "open",
+        "flowKind": "arg",
+        "receiver": "",
+        "moduleHint": "open",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:160",
+        "context": "built-in file open; argument 0 is the file path; mode: wb"
+      },
+      "batch": "batch-k1",
+      "label": {
+        "id": "sink-02",
+        "role": "sink",
+        "classification": "tp",
+        "confidence": 0.75,
+        "signature": {
+          "package": "builtins",
+          "module": null,
+          "type": null,
+          "callable": "open",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 160
+        },
+        "rationale": "Unconditional archive write in every remote scan: zippath = os.path.join(directory, package_name + file_extension) with no validation of package_name. A CLI 'scan' identifier containing path separators (notably backslashes on Windows, which is_local_package does not detect) writes the downloaded archive outside the intended directory.",
+        "evidence": [
+          "package_scanner.py:140 zippath = os.path.join(directory, package_name + file_extension)",
+          "package_scanner.py:160 with open(zippath, 'wb') as f:",
+          "cli.py:101-103 is_local_package only matches '/' separators; cli.py:84 scan_remote(identifier, ...) receives the raw identifier"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:open",
+        "role": "sink_candidate",
+        "callableName": "open",
+        "flowKind": "arg",
+        "receiver": "",
+        "moduleHint": "open",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/project_scanner.py:231",
+        "context": "built-in file open; argument 0 is the file path; mode: r"
+      },
+      "batch": "batch-k1",
+      "label": {
+        "id": "sink-03",
+        "role": "sink",
+        "classification": "candidate",
+        "confidence": 0.55,
+        "signature": {
+          "package": "builtins",
+          "module": null,
+          "type": null,
+          "callable": "open",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/scanners/project_scanner.py",
+          "line": 231
+        },
+        "rationale": "open(path, 'r') where path is the CLI 'verify' argument. The path is operator-supplied argv, and a local CLI reading the file the operator names is conventional authorized use (analogous to cat), but under the PyVul threat model where the CLI is invoked over untrusted input it is an arbitrary-read primitive. Deliberately kept as candidate for human review.",
+        "evidence": [
+          "cli.py:29-33 @click.argument('path') -> verify(path, ...)",
+          "cli.py:40 scanner.scan_local(path)",
+          "project_scanner.py:231 with open(path, 'r') as f:"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:open",
+        "role": "sink_candidate",
+        "callableName": "open",
+        "flowKind": "arg",
+        "receiver": "",
+        "moduleHint": "open",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/metadata/typosquatting.py:64",
+        "context": "built-in file open; argument 0 is the file path; mode: r"
+      },
+      "batch": "batch-k1",
+      "label": {
+        "id": "sink-04",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.95,
+        "signature": {
+          "package": "builtins",
+          "module": null,
+          "type": null,
+          "callable": "open",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/analyzer/metadata/typosquatting.py",
+          "line": 64
+        },
+        "rationale": "Internal resource cache read with a fully fixed path (resources dir of the module + constant filename 'top_pypi_packages.json'); no external input influences the path.",
+        "evidence": [
+          "typosquatting.py:54-56 top_packages_filename = 'top_pypi_packages.json'; resourcesdir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'resources')); top_packages_path = os.path.join(resourcesdir, top_packages_filename)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:open",
+        "role": "sink_candidate",
+        "callableName": "open",
+        "flowKind": "arg",
+        "receiver": "",
+        "moduleHint": "open",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/metadata/typosquatting.py:69",
+        "context": "built-in file open; argument 0 is the file path; mode: w+"
+      },
+      "batch": "batch-k1",
+      "label": {
+        "id": "sink-05",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.95,
+        "signature": {
+          "package": "builtins",
+          "module": null,
+          "type": null,
+          "callable": "open",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/analyzer/metadata/typosquatting.py",
+          "line": 69
+        },
+        "rationale": "Internal resource cache write to the same fixed path (module resources dir + constant filename); response content is written, but the path itself is a constant.",
+        "evidence": [
+          "typosquatting.py:56 top_packages_path = os.path.join(resourcesdir, top_packages_filename)",
+          "typosquatting.py:69 with open(top_packages_path, 'w+') as f:"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:os.listdir",
+        "role": "sink_candidate",
+        "callableName": "listdir",
+        "flowKind": "arg",
+        "receiver": "os",
+        "moduleHint": "os.listdir",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/analyzer.py:34",
+        "context": "directory enumeration (read access); argument 0 is the directory path"
+      },
+      "batch": "batch-k1",
+      "label": {
+        "id": "sink-06",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.95,
+        "signature": {
+          "package": null,
+          "module": "os",
+          "type": null,
+          "callable": "listdir",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/analyzer/analyzer.py",
+          "line": 34
+        },
+        "rationale": "Directory enumeration of the internal rules directory (os.path.join(os.path.dirname(__file__), 'metadata')); path is entirely code-controlled.",
+        "evidence": [
+          "analyzer.py:29 self.metadata_path = os.path.join(os.path.dirname(__file__), 'metadata')",
+          "analyzer.py:34 get_rules reads os.listdir(path) for rule names"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:os.listdir",
+        "role": "sink_candidate",
+        "callableName": "listdir",
+        "flowKind": "arg",
+        "receiver": "os",
+        "moduleHint": "os.listdir",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/metadata/typosquatting.py:60",
+        "context": "directory enumeration (read access); argument 0 is the directory path"
+      },
+      "batch": "batch-k1",
+      "label": {
+        "id": "sink-07",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.95,
+        "signature": {
+          "package": null,
+          "module": "os",
+          "type": null,
+          "callable": "listdir",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/analyzer/metadata/typosquatting.py",
+          "line": 60
+        },
+        "rationale": "Directory enumeration of the internal resources directory; used only as a cache-freshness filename check on a constant path.",
+        "evidence": [
+          "typosquatting.py:55 resourcesdir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'resources'))",
+          "typosquatting.py:60 if top_packages_filename in os.listdir(resourcesdir):"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:invoke_semgrep",
+        "role": "sink_candidate",
+        "callableName": "invoke_semgrep",
+        "flowKind": "arg",
+        "receiver": "",
+        "moduleHint": "invoke_semgrep",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/analyzer.py:159",
+        "context": "external resource loader (semgrep); argument 1 is the list of target paths scanned, derived from the analyzed package path"
+      },
+      "batch": "batch-k1",
+      "label": {
+        "id": "sink-08",
+        "role": "sink",
+        "classification": "candidate",
+        "confidence": 0.6,
+        "signature": {
+          "package": null,
+          "module": "semgrep.semgrep_main",
+          "type": null,
+          "callable": "invoke_semgrep",
+          "arg_index": 1,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/analyzer/analyzer.py",
+          "line": 159
+        },
+        "rationale": "semgrep target path list [targetpath] where targetpath = Path(path) and path is either the CLI 'scan' local identifier or file_path = os.path.join(directory, name) with the attacker-influenced package name. semgrep reads and reports code under the target directory, so this is an indirect read sink (directory scan / content disclosure in findings), not a direct file write; kept as candidate. invoke_semgrep is a semgrep-internal API; argument semantics inferred from call sites.",
+        "evidence": [
+          "analyzer.py:149 targetpath = Path(path)",
+          "analyzer.py:159 response = invoke_semgrep(Path(self.sourcecode_path), [targetpath], exclude=self.exclude, no_git_ignore=True)",
+          "package_scanner.py:56,62 path = file_path = os.path.join(directory, name)",
+          "analyzer.py:215-217 semgrep result paths feed only reporting (abspath/relpath), no further file access"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:invoke_semgrep",
+        "role": "sink_candidate",
+        "callableName": "invoke_semgrep",
+        "flowKind": "arg",
+        "receiver": "",
+        "moduleHint": "invoke_semgrep",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/analyzer.py:170",
+        "context": "external resource loader (semgrep); argument 1 is the list of target paths scanned, derived from the analyzed package path"
+      },
+      "batch": "batch-k1",
+      "label": {
+        "id": "sink-09",
+        "role": "sink",
+        "classification": "candidate",
+        "confidence": 0.6,
+        "signature": {
+          "package": null,
+          "module": "semgrep.semgrep_main",
+          "type": null,
+          "callable": "invoke_semgrep",
+          "arg_index": 1,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/analyzer/analyzer.py",
+          "line": 170
+        },
+        "rationale": "Same semgrep target-list sink in the per-rule branch: [targetpath] with targetpath = Path(path) derived from the attacker-influenced package path; indirect read sink, kept as candidate.",
+        "evidence": [
+          "analyzer.py:170-174 response = invoke_semgrep(Path(os.path.join(self.sourcecode_path, rule + '.yml')), [targetpath], exclude=self.exclude, no_git_ignore=True)",
+          "analyzer.py:149 targetpath = Path(path)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:os.remove",
+        "role": "sink_candidate",
+        "callableName": "remove",
+        "flowKind": "arg",
+        "receiver": "os",
+        "moduleHint": "os.remove",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:164",
+        "context": "file/directory deletion; argument 0 is the target path"
+      },
+      "batch": "batch-k2",
+      "label": {
+        "id": "sink-10",
+        "role": "sink",
+        "classification": "tp",
+        "confidence": 0.65,
+        "signature": {
+          "package": null,
+          "module": "os",
+          "type": null,
+          "callable": "remove",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 164
+        },
+        "rationale": "os.remove(zippath) deletes the archive at the package_name-derived path: the same unvalidated os.path.join(directory, package_name + file_extension) path written by open(zippath, 'wb'); with a separator-bearing identifier (Windows backslash case) the deletion lands outside the base directory. Exploitability is bounded by the same name constraints as sink-02.",
+        "evidence": [
+          "package_scanner.py:163-164 shutil.unpack_archive(zippath, unzippedpath); os.remove(zippath)",
+          "package_scanner.py:140 zippath = os.path.join(directory, package_name + file_extension)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:.extractall",
+        "role": "sink_candidate",
+        "callableName": "extractall",
+        "flowKind": "arg",
+        "receiver": "Attribute()",
+        "moduleHint": "<dynamic>.extractall",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:46",
+        "context": "archive extraction; argument 0 is the destination directory; receiver 'Attribute()' is a dynamic/wrapper call (e.g. tarsafe.open, a path-sanitizing extraction wrapper - sanitizer candidate)"
+      },
+      "batch": "batch-k2",
+      "label": {
+        "id": "sink-11",
+        "role": "sanitizer",
+        "classification": "candidate",
+        "confidence": 0.7,
+        "signature": {
+          "package": "tarsafe",
+          "module": null,
+          "type": "tarsafe.TarSafe",
+          "callable": "extractall",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 46
+        },
+        "rationale": "tarsafe.open(path).extractall(tmpdirname): tarsafe (pinned tarsafe==0.0.4) is a path-sanitizing tar extraction wrapper that rejects traversal/absolute/symlink member names, and the destination is a fresh tempfile.TemporaryDirectory, so entry-name traversal is mitigated here in contrast to the unsanitized shutil.unpack_archive at line 163. The tarsafe library source is not part of the CodeQL DB (only guarddog code is indexed), so the sanitization verdict rests on the pinned version's documented purpose; flagged for human verification.",
+        "evidence": [
+          "package_scanner.py:46 tarsafe.open(path).extractall(tmpdirname)",
+          "package_scanner.py:45 with tempfile.TemporaryDirectory() as tmpdirname:",
+          "requirements.txt / pyproject.toml pin tarsafe==0.0.4",
+          "contrast: package_scanner.py:163 shutil.unpack_archive(zippath, unzippedpath) performs no entry-name validation"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:os.path.exists",
+        "role": "sink_candidate",
+        "callableName": "exists",
+        "flowKind": "arg",
+        "receiver": "os.path",
+        "moduleHint": "os.path.exists",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:43",
+        "context": "filesystem existence/metadata check on argument 0 (TOCTOU-relevant check-then-use validation node; candidate sanitizer/check evidence)"
+      },
+      "batch": "batch-k2",
+      "label": {
+        "id": "sink-12",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.9,
+        "signature": {
+          "package": null,
+          "module": "os.path",
+          "type": null,
+          "callable": "exists",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 43
+        },
+        "rationale": "os.path.exists(path) is a type-dispatch check (exists / endswith('.tar.gz') / isdir) that routes local vs archive handling; it constrains neither the path content nor traversal, so it is not a sanitizer, and a pure existence check is not a dangerous file access. TOCTOU check-then-use window on the CLI-supplied path noted as evidence only.",
+        "evidence": [
+          "package_scanner.py:43-52 exists/endswith/isdir dispatch; path re-used unchanged at lines 46-49"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:os.path.isdir",
+        "role": "sink_candidate",
+        "callableName": "isdir",
+        "flowKind": "arg",
+        "receiver": "os.path",
+        "moduleHint": "os.path.isdir",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:48",
+        "context": "filesystem existence/metadata check on argument 0 (TOCTOU-relevant check-then-use validation node; candidate sanitizer/check evidence)"
+      },
+      "batch": "batch-k2",
+      "label": {
+        "id": "sink-13",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.9,
+        "signature": {
+          "package": null,
+          "module": "os.path",
+          "type": null,
+          "callable": "isdir",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 48
+        },
+        "rationale": "os.path.isdir(path) is part of the same local/archive type dispatch; it performs no path validation and no dangerous access.",
+        "evidence": [
+          "package_scanner.py:48-49 elif os.path.isdir(path): return self.analyzer.analyze_sourcecode(path, rules=rules)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:os.path.getmtime",
+        "role": "sink_candidate",
+        "callableName": "getmtime",
+        "flowKind": "arg",
+        "receiver": "os.path",
+        "moduleHint": "os.path.getmtime",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/analyzer/metadata/typosquatting.py:61",
+        "context": "filesystem existence/metadata check on argument 0 (TOCTOU-relevant check-then-use validation node; candidate sanitizer/check evidence)"
+      },
+      "batch": "batch-k2",
+      "label": {
+        "id": "sink-14",
+        "role": "none",
+        "classification": "fp",
+        "confidence": 0.95,
+        "signature": {
+          "package": null,
+          "module": "os.path",
+          "type": null,
+          "callable": "getmtime",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/analyzer/metadata/typosquatting.py",
+          "line": 61
+        },
+        "rationale": "Cache-freshness timestamp check on the fixed internal top-packages path; metadata read on a constant path, no traversal relevance.",
+        "evidence": [
+          "typosquatting.py:60-63 update_time = datetime.fromtimestamp(os.path.getmtime(top_packages_path))"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:shutil.unpack_archive",
+        "role": "sink_candidate",
+        "callableName": "unpack_archive",
+        "flowKind": "arg",
+        "receiver": "shutil",
+        "moduleHint": "shutil.unpack_archive",
+        "argIndex": 0,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:163",
+        "context": "generic archive extraction; entry names inside the archive control extracted paths (path traversal / zip-slip); argument 0 is the archive path or the extraction destination"
+      },
+      "batch": "batch-k2",
+      "label": {
+        "id": "sink-15",
+        "role": "sink",
+        "classification": "tp",
+        "confidence": 0.7,
+        "signature": {
+          "package": null,
+          "module": "shutil",
+          "type": null,
+          "callable": "unpack_archive",
+          "arg_index": 0,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 163
+        },
+        "rationale": "Archive source path argument: zippath is the unvalidated package_name-derived path just written by open(zippath, 'wb'); reading/extracting the archive at an escaped location is part of the same traversal chain (the write at sink-02 is the primary escape primitive).",
+        "evidence": [
+          "package_scanner.py:163 shutil.unpack_archive(zippath, unzippedpath)",
+          "package_scanner.py:140 zippath = os.path.join(directory, package_name + file_extension)"
+        ]
+      }
+    },
+    {
+      "candidate_csv_row": {
+        "node": "Call:shutil.unpack_archive",
+        "role": "sink_candidate",
+        "callableName": "unpack_archive",
+        "flowKind": "arg",
+        "receiver": "shutil",
+        "moduleHint": "shutil.unpack_archive",
+        "argIndex": 1,
+        "location": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/guarddog_vuln/guarddog/scanners/package_scanner.py:163",
+        "context": "generic archive extraction; entry names inside the archive control extracted paths (path traversal / zip-slip); argument 1 is the archive path or the extraction destination"
+      },
+      "batch": "batch-k2",
+      "label": {
+        "id": "sink-16",
+        "role": "sink",
+        "classification": "tp",
+        "confidence": 0.8,
+        "signature": {
+          "package": null,
+          "module": "shutil",
+          "type": null,
+          "callable": "unpack_archive",
+          "arg_index": 1,
+          "flow_kind": "argument"
+        },
+        "location": {
+          "file": "guarddog/scanners/package_scanner.py",
+          "line": 163
+        },
+        "rationale": "Primary CWE-22 sink of this codebase: extraction destination unzippedpath is derived from package_name by string removesuffix (no path canonicalization, no base-dir containment), and the archive entry names from the downloaded PyPI artifact are not validated in this code version - for .tar.gz archives shutil.unpack_archive reaches tarfile.extractall without an extraction filter (Python 3.10+ baseline), so malicious entry names ('../...') escape the destination directory (zip-slip). For .zip/.egg/.whl downloads (labeled '.zip'), zipfile.extract normalizes unsafe member names, which limits the entry-name variant to tar archives.",
+        "evidence": [
+          "package_scanner.py:141,163 unzippedpath = zippath.removesuffix(file_extension); shutil.unpack_archive(zippath, unzippedpath)",
+          "package_scanner.py:129-136 archive url/extension selected from PyPI releases metadata of the scanned (untrusted) package",
+          "no entry-name validation, no normpath/realpath/containment check anywhere before extraction (verified by reading package_scanner.py in full)",
+          "pyproject.toml requires python>=3.10; shutil.unpack_archive passes no extraction filter"
+        ]
+      }
+    }
+  ]
+}

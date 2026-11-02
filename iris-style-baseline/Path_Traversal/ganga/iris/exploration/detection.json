@@ -1,0 +1,301 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-22",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\ganga\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL query execution, no LLM labeling in this round) against the ganga_vuln source tree (Ganga 8.4.2). WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database ganga-db sits INSIDE the source tree root as a SIBLING of the ganga/ package directory, so the positive scope %/ganga/% of both generated queries excludes it by construction; a defensive path filter for ganga-db is documented in the exclusions. All exploration, file traversal and grep evidence collection stayed inside ganga/ and never descended into ganga-db. Source-location ground truth present in the source root (GANGA-VULNERABILITY-REPORT.md, GANGA-CVE-REPORT-STORAGE.md, path_traversal_sinks.csv) was deliberately NOT opened, per the experimental-independence constraint."
+  },
+  "target": {
+    "project": "ganga (Ganga 8.4.2, CERN LHC workload management framework)",
+    "projectDescription": "Ganga 8.4.2 (setup.py _gangaVersion '8.4.2', packaged with find_packages('./') -> the whole ganga/ tree: GangaCore + GangaGUI + GangaService + ~15 experiment plugins GangaAtlas/GangaLHCb/GangaDirac/...). It is a CLI/interactive job-orchestration tool (python bin/ganga, optparse bootstrap in GangaCore/Runtime/bootstrap.py) with two additional service surfaces: (1) GangaGUI - a Flask web GUI (gui/routes.py, ~90 @gui.route registrations on the `gui` Flask app served by gunicorn) plus a companion 'internal' Flask app (api/routes.py, ~40 @internal.route registrations) that exposes the full Ganga GPI namespace (jobs, config, export, load, runfile) over HTTP and is started on a GangaThread bound to localhost (GangaGUI/start.py:32/:106, free port); the GUI server communicates with it via query_internal_api (gui/routes.py:1804). (2) GangaService - a legacy py2-era socket service (GangaService/Lib/ServiceAPI/ServiceAPI.py, pickle over sockets; fixed ~/gangadir-server paths). Path-traversal-relevant architecture: THE untrusted file-access channels are the two GUI route-path file browsers and the internal-API path parameters: (a) /job/<int:job_id>/browse/<path:path> (gui/routes.py:636-:637, handler job_browse :639) joins the request path onto the job base directory with abs_path = os.path.join(job_base_dir, path) at :659 (os.path.join keeps '..' lexically; an ABSOLUTE path value REPLACES the base), then os.path.exists :665, os.path.isfile :670 and send_file(abs_path) :671 / os.listdir(abs_path) :676 - no resolve/realpath, no '..' rejection, no base-dir containment check anywhere in the flow (job_base_dir itself derives from job_info['outputdir'] returned by the internal API at :651). (b) /storage/<path:path> (gui/routes.py:922-:923, handler storage_page :925) joins the request path onto gui.config['STORAGE_FOLDER'] at :934 with the same unchecked os.path.join and serves send_file :975 / os.listdir :980; its POST upload branch takes request.files['storagefile'] :941, sanitizes ONLY the uploaded FILENAME with werkzeug secure_filename at :953, then saves to os.path.join(abs_path, filename) :954 with storagefile.save(save_path) :955 - the DIRECTORY part (abs_path, from the route path) is NOT sanitized, so the upload write destination escapes gangadir/storage via '..' or absolute paths (CWE-22 write channel; secure_filename is a partial sanitizer that does not cover the path component). (c) the internal API (NO authentication on any route, localhost-bound): /internal/jobs/<job_id>/export (api/routes.py:212-:227) takes save_path = request.args.get('path') at :223 and calls the GPI export(jobs(job_id), save_path) which writes the object dump via stripped_export -> fullpath (os.path.abspath(expandvars(expanduser(...))) at GangaCore/GPIDev/Persistency/__init__.py:149-:150 - abspath normalizes '..' AFTER the join but does not confine to any base) -> open(filepath, mode) at :85 - arbitrary file WRITE from an unauthenticated local HTTP request; /internal/load (api/routes.py:966-:984) takes path = request.args.get('path') :977 -> GPI load(path) -> getScriptPath search -> open(filepath) Persistency/__init__.py:190 - arbitrary file READ; /internal/runfile (api/routes.py:989-:1005) takes path :1001 -> runfile(path) -> runpy.run_path (GangaCore/Runtime/GPIFunctions.py:115 - Pass 4 code execution, recorded as adjacent). (d) fixed-path GUI file writes that carry attacker CONTENT: runfile_page open(UPLOAD_FOLDER/runfile.py, 'w+') gui/routes.py:375 with request.form.get('runfile-data') :374 (content then executed via /internal/runfile), job_edit open(loadfile_path, 'w+') :606 with request.form.get('edited-job-info') :604, config_edit open(gui_rc, 'w') :273 with request.form['config-data'] :272 (gangarc config rewrite - content injection, Pass 4/5 adjacent). (e) CLI/env channels (operator trust): optparse --config/--config-path (bootstrap.py:269-:273) -> expandfilename -> open (bootstrap.py:341-:345); GANGA_CONFIG_FILE os.environ.get bootstrap.py:336 / Utility/Config/__init__.py:52; GANGA_CONFIG_PATH os.environ['...'] bootstrap.py:673; the positional script argument self.args[0] -> getScriptPath -> open(script).read() + exec at bootstrap.py:1080-:1097; os.getenv reads (scratch dirs, X509 proxy paths) across GangaCore/GangaDirac. (f) archive extraction (backend-supplied tarballs): GangaCore/Core/Sandbox/Sandbox.py:154 tf.extractall(dest_dir, [tarinfo]) (job output sandbox unpacked at job completion) and WNSandbox.py:71 tf.extractall(dest_dir) (input sandbox unpack at runtime), plus plugin extractall sites (GangaLHCb GaudiExecMerger.py:226, GangaSAGA SAGAWrapperScript.py:87 bare extractall() to cwd, GangaSNOplus job_tools.py:310/:322). Flask, werkzeug, flask_socketio and runpy are external libraries not present in this CodeQL database (the 119442-LOC baseline covers the ganga repo only).",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\ganga_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (ganga-db/codeql-database.yml)",
+      "source layout: the audit target is the python package tree ganga/ (GangaCore, GangaGUI, GangaService + 15 experiment plugins; 824 .py files, 543 after test exclusions) - GangaGUI alone registers ~130 Flask routes",
+      "build manifests: setup.py (find_packages('./'), _gangaVersion '8.4.2') + setup.cfg (pytest/nosetests config) + requirements.txt (pytest, pymongo, docker); the toolchain is a mixture of maintained py3 code (GangaGUI, GangaCore Core) and legacy py2-era plugin code (GangaService imports `from commands import getstatusoutput`)"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\ganga_vuln\\ganga-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\ganga_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "0c0f9e33b36ee7ead0855f1464f8d4efad26bdbc",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:45:32.890398900Z"
+    },
+    "baselineLinesOfCode": 119442,
+    "finalised": true,
+    "locationNote": "ganga-db is nested in the source tree root as a SIBLING of the ganga/ package (not inside it); the positive scope %/ganga/% of both queries therefore excludes it by construction, and all exploration greps pruned it. Both queries scope positively to %/ganga/% (the shipped python packages: GangaCore + GangaGUI + GangaService + the experiment plugins). Out of scope by that positive filter: repo-root build/test tooling (setup.py, conftest.py, postBuild, start, bin/ganga, bin/ganga-gui, doc/). Within ganga/ the queries additionally exclude %/GangaTest/% (test-runner plugin package), %/test/%, %/old_test/%, %/testlib/% (test fixtures/harnesses of every package), and the two stray test modules GangaCore/Utility/Config/tests.py and GangaCore/Utility/logging/test.py."
+  },
+  "toolchain": {
+    "qlpack": "iris/ganga-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace from Step 0",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1; local CLI verified on disk in prior projects of this series on this machine; no query was executed in this round)",
+    "compatibilityBasis": "API facts used by the generated queries reuse only structural shapes already proven by the queries of this series that RAN on this same CLI + pack family (aiohttp, airflow ran both sources and sinks; ansible ran sources; coderedcms/copyparty/dfetch/django/fides generated with the same contract): AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), AstNode.getScope() and Scope.getEnclosingModule() (semmle/python/AstExtended.qll), Module.getName() and Module.getFile().getShortName() (semmle/python/Module.qll), Call.getFunc()/getArg(int)/getAnArg() (semmle/python/Exprs.qll, getArg(int) verified present at Exprs.qll:156 of the local python-all 7.1.2 pack), Attribute.getName()/getObject(), Subscript.getObject(), Function.getName()/getAnArg()/getEnclosingScope() (semmle/python/Function.qll - getAnArg() covers positional parameters including self), Parameter.isSelf()/getPosition()/getName() (semmle/python/Function.qll, Parameter.getPosition at Function.qll:280), Class.getName() (semmle/python/Class.qll). The two queries define no QL classes (only predicates), never assign API::Node values to DataFlow::Node variables, keep every variable bound through a positive body, keep resolved-API matching out entirely (all families are AST syntax matches; the match_kind column is kept 'ast' for cross-project contract consistency), name the module-path variable moduleHint (never `module`), and leave no {{...}} template placeholders. Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no unbound `this`. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "Flask",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package: `from flask import Flask, request, jsonify, render_template, flash, redirect, url_for, session, send_file, make_response` (gui/routes.py:17), `from flask import jsonify, request, make_response` (api/routes.py:5); flask_login/flask_sqlalchemy/flask_socketio imports in gui/routes.py:18-:23",
+            "route/decorator: ~90 @gui.route registrations (gui/routes.py:146-:1949, incl. the path-converter routes /job/<int:job_id>/browse/<path:path> :636-:637 and /storage/<path:path> :922-:923) and ~40 @internal.route registrations (api/routes.py:12-:990, incl. /internal/jobs/<job_id>/export :212, /internal/load :966, /internal/runfile :990)",
+            "runtime/bootstrap: two Flask apps - `gui = Flask(__name__)` gui/routes.py:30 (served via gunicorn in start_gui_server) and `internal = Flask(__name__)` api/__init__.py:15 (served via internal.run() on an APIServerThread GangaThread, start.py:28-:34, host 'localhost'); @login_required (flask_login) on all /gui routes, NO auth on any /internal route",
+            "directory/layout: GangaGUI/gui/ (view routes), GangaGUI/api/ (internal API routes), GangaGUI/wsgi.py, GangaGUI/start.py"
+          ]
+        },
+        {
+          "name": "Flask-SocketIO / Flask-Login / Flask-SQLAlchemy (GUI sub-frameworks)",
+          "confidence": 0.8,
+          "evidence": [
+            "import/package: from flask_socketio import SocketIO (gui/routes.py:23), from flask_login import login_user, login_required, ... (:19-:20), from flask_sqlalchemy import SQLAlchemy (:21)",
+            "route/decorator: @socketio.on('connect'/'pty-input'/'resize', namespace='/pty') websocket handlers (gui/routes.py:1003/:1016/:1027 - pty terminal input reaches os.write on the pty FD :1023, Pass 2-adjacent); @login_required on every gui view route",
+            "runtime/bootstrap: socketio = SocketIO(gui) :26, login = LoginManager(gui) :40, db = SQLAlchemy(gui) :35 (sqlite at gangadir/gui/gui.sqlite)",
+            "directory/layout: gui.sqlite ORM models (User) in gui/routes.py:48-:70"
+          ],
+          "referenceNote": "No references/flask-socketio.md, flask-login.md or sqlalchemy.md exist in the Augur installation; the websocket pty channel is documented in inputBoundaryInventory/uncoveredCases (not a filesystem path channel; os.write target is a file descriptor, not a path)."
+        },
+        {
+          "name": "optparse (Ganga CLI)",
+          "confidence": 0.75,
+          "evidence": [
+            "import/package: `from optparse import OptionParser` (GangaCore/Runtime/bootstrap.py:258)",
+            "route/decorator: ~14 parser.add_option registrations incl. --config (dest config_file :269) and --config-path (dest config_path :272) - the CLI config-file path boundary",
+            "runtime/bootstrap: parser.parse_args(args=self.argv[1:]) :317; positional script argument self.args[0] -> getScriptPath -> open(script).read() + exec at :1080-:1097",
+            "directory/layout: GangaCore/Runtime/bootstrap.py + bin/ganga entry point"
+          ],
+          "referenceNote": "No references/optparse.md exists; the CLI is an OPERATOR-trust boundary (the person invoking ganga owns the tree it reads/writes). The optparse dest names are keyword-string literals in add_option calls, NOT function parameters, so they are not emitted as cli_param source rows - the CLI channel is documented here and in uncoveredCases instead."
+        },
+        {
+          "name": "Django / FastAPI / other web frameworks",
+          "confidence": 0.0,
+          "evidence": ["no `from django import` / `from fastapi import` anywhere in ganga/; GangaService is a raw-socket pickle service, not a web framework"]
+        }
+      ],
+      "nonPythonCandidates": ["Gin/Echo (go), Spring (java), Express (javascript), ASP.NET Core (csharp): not applicable, database language is python"],
+      "result": "Flask detected as primary framework (confidence 1.0) for the GangaGUI web surface (the only HTTP attack surface of the codebase), with flask_login/flask_sqlalchemy/flask_socketio as GUI sub-frameworks (0.8) and optparse as the operator-trust CLI parser (0.75). references/flask.md was loaded per WORKFLOW.md 4.2.3 and cross-checked against the actual code: its source signatures (request.args/form/json, path variables in route handlers, headers) all match observed shapes (the two <path:path> browsers, request.args.get('path') of the internal API, request.form.get writes, request.headers['X-Access-Token']); its high-value sink list (filesystem APIs with request-derived path, open + path join) maps exactly to the send_file/os.path.join/open families below; its sanitizer guidance (normalize path + enforce base-dir checks) is ABSENT in the two browser flows (only secure_filename on the uploaded filename, never on the directory component); its Pass-1 reminder (file upload/download endpoints dominate risk) matches the storage upload/download route. The internal Flask app is NOT blueprint-based (flask.md section 7) - it is a second Flask instance, and its lack of auth is recorded as contextual evidence, not as a source property."
+    }
+  },
+  "inputBoundaryInventory": {
+    "summary": "ganga is an interactive/CLI tool with a Flask web GUI; the untrusted-input boundaries are: (1) the GUI route-path variables - /job/<int:job_id>/browse/<path:path> injects the entire request path (Flask path converter, post-URL-decode, '/' allowed) into job_browse as the `path` parameter (gui/routes.py:637/:639), which is joined onto the job base dir at :659 and reaches exists/isfile/send_file/listdir; /storage/<path:path> injects it into storage_page (:923/:925) joined onto the storage folder at :934, reaching isdir/exists/isfile/send_file/listdir and (via the POST upload branch) the save destination join at :954; (2) the internal-API query parameters - request.args.get('path') of /internal/jobs/<job_id>/export (api/routes.py:223, flows into the GPI export WRITE), of /internal/load (:977, GPI load READ) and of /internal/runfile (:1001, runpy EXECUTION - Pass 4); plus ~50 further request.args.get filter parameters (status/application/backend/length/offset/ids) that do not reach filesystem paths; (3) GUI form fields - request.form.get('runfile-data') :374 / ('edited-job-info') :604 / ['config-data'] :272 (content written into fixed server paths then executed/loaded); (4) GUI multipart uploads - request.files['storagefile']/:941, ['loadfile']/:294, ['runfile']/:320 with .filename reads (extension-checked by allowed_file :1799-:1800, name-sanitized by secure_filename :953 - but the save DIRECTORY from the route path is unsanitized); (5) request.json body reads of the two create endpoints (api/routes.py:86/:139, gui/routes.py:1048/:1188); (6) request.headers['X-Access-Token'] (gui/routes.py:1084 - token auth material); (7) environment variables (GANGA_CONFIG_FILE, GANGA_CONFIG_PATH, X509_USER_PROXY, EDG_WL_SCRATCH, TMPDIR, KRB5CCNAME, ...) - operator trust level; (8) the optparse CLI (--config/--config-path, positional script argument) - operator trust level; (9) backend-supplied job sandbox tarballs (extractall at job completion / at runtime). The sink side funnels through: send_file (the actual GUI file serve), the os.path.join of the two browsers, werkzeug FileStorage.save, builtin open() (~430 sites across the tree), os.open (repository session locks), os.makedirs/mkdir, os.remove/unlink/rmdir, os.rename, shutil copy/move/rmtree/copytree, os.listdir/os.walk, os.symlink, os.chmod, tarfile.open + .extractall (6 sites), glob.glob, secure_filename (partial sanitizer), and the internal path-taking wrapper definitions (export/stripped_export/fullpath/load, runfile, getScriptPath, expandfilename, fullpath, getPackedOutputSandbox/getPackedInputSandbox/recursive_copy/createOutputSandbox/createPackedOutputSandbox, FileWorkspace.getPath, allowed_file).",
+    "sourceFamilies": [
+      {
+        "family": "http_path_param",
+        "shape": "the `path` parameter of the Flask path-converter routes job_browse and storage_page",
+        "trustChain": "gui/routes.py:637 @gui.route('/job/<int:job_id>/browse/<path:path>') -> job_browse(job_id, path) :639 -> :659 abs_path = os.path.join(job_base_dir, path) -> :665 exists -> :670 isfile -> :671 send_file(abs_path) / :676 listdir. gui/routes.py:923 @gui.route('/storage/<path:path>') -> storage_page(path) :925 -> :934 abs_path = os.path.join(storage_folder, path) -> :949 isdir / :969 exists / :974 isfile / :975 send_file / :980 listdir / :954 save destination. Flask/Werkzeug decodes the URL before routing and the path converter allows '/' and '..' segments (no percent-encoding left); there is NO containment guard in either flow",
+        "evidenceSites": ["ganga/GangaGUI/gui/routes.py:636-:637 (route registrations), :639 (handler), :659, :922-:923 (route registrations), :925 (handler), :934"]
+      },
+      {
+        "family": "http_query_param",
+        "shape": "request.args.get(...) calls and request.args[...] subscripts",
+        "trustChain": "flask request query string. The FILE-TARGETING ones: api/routes.py:223 save_path = request.args.get('path') -> export(jobs(job_id), save_path) :227 (GPI export -> open(filepath, mode) write, Persistency/__init__.py:85); :977 path = request.args.get('path') -> load(path) :984 (-> open read :190); :1001 path = request.args.get('path') -> runfile(path) :1005 (-> runpy.run_path, Pass 4). The remaining ~50 sites are job/template filter parameters (status/application/backend/length/offset/ids/json) with no observed path use - recorded for labeling completeness",
+        "evidenceSites": ["ganga/GangaGUI/api/routes.py:223, :977, :1001 (file-targeting); ~50 further filter sites across api/routes.py and gui/routes.py:408/:710"]
+      },
+      {
+        "family": "http_form_param",
+        "shape": "request.form.get(...) calls and request.form[...] subscripts",
+        "trustChain": "flask form body. runfile-data (:374 -> open(runfile_path, 'w+') :375 then /internal/runfile execution), edited-job-info (:604 -> open(loadfile_path, 'w+') :606 then /internal/load), config-data (:272 -> open(gui_rc, 'w') :273 gangarc rewrite); the rest are login/pagination/filter fields (no path use)",
+        "evidenceSites": ["ganga/GangaGUI/gui/routes.py:374, :604, :272 (file-content channels); :160-:161, :246, :403-:404, :461-:462, :704-:705 (non-path fields)"]
+      },
+      {
+        "family": "http_json",
+        "shape": "request.json attribute reads and request.json.get(...) calls",
+        "trustChain": "flask JSON body of the job-create endpoints (api/routes.py:86 template_id/job_name, :139; gui/routes.py:1048, :1188-:1189) - job creation parameters, no observed path use; recorded for labeling completeness",
+        "evidenceSites": ["ganga/GangaGUI/api/routes.py:86, :139", "ganga/GangaGUI/gui/routes.py:1048, :1188, :1189, :1258"]
+      },
+      {
+        "family": "http_file_upload",
+        "shape": "request.files[...] subscripts (werkzeug FileStorage objects) and their .filename reads",
+        "trustChain": "gui/routes.py:941 storagefile = request.files['storagefile'] -> filename=='' check :942 -> secure_filename(storagefile.filename) :953 -> save_path = os.path.join(abs_path, filename) :954 (abs_path carries the unsanitized ROUTE path from :934) -> storagefile.save(save_path) :955; :294 loadfile (filename extension-checked by allowed_file :300, saved to the FIXED path UPLOAD_FOLDER/loadfile.txt :301-:302); :320 runfile (same, fixed UPLOAD_FOLDER/runfile.py :327-:328, then executed via /internal/runfile)",
+        "evidenceSites": ["ganga/GangaGUI/gui/routes.py:941-:942, :953-:955 (storage upload - traversal-relevant), :294-:302 (loadfile), :320-:328 (runfile)"]
+      },
+      {
+        "family": "http_header",
+        "shape": "request.headers[...] subscripts",
+        "trustChain": "gui/routes.py:1083-:1084 token = request.headers['X-Access-Token'] - the JWT auth token of the GUI token endpoint (auth material, not a path channel; recorded for completeness)",
+        "evidenceSites": ["ganga/GangaGUI/gui/routes.py:1084"]
+      },
+      {
+        "family": "env",
+        "shape": "os.environ.get(...) and os.getenv(...) calls",
+        "trustChain": "operator-configured environment: GANGA_CONFIG_FILE (bootstrap.py:336 os.environ.get; Utility/Config/__init__.py:52 selects the user config file), scratch-dir selection EDG_WL_SCRATCH/TMPDIR (GangaCore/Lib/LCG/ARC.py:534-:537, CREAM.py:563-:566, LCG.py:1127-:1130), X509_USER_PROXY (VomsProxy.py:159, GangaDirac DiracProxy.py:161, DiracUtilities.py:72/:284 KRB5CCNAME), HOME/USER (feedback_report.py:227/:475/:579), AfsToken.py:135 KRB5CCNAME. OPERATOR trust level - emitted for labeling to classify, not assumed attacker sources. The subscript-read forms (os.environ['GANGA_CONFIG_PATH'] bootstrap.py:673, os.environ['GANGA_SITE_CONFIG_AREA'] :723) are NOT emitted (read/write shape ambiguity at AST level) and are documented in uncoveredCases",
+        "evidenceSites": ["ganga/GangaCore/Runtime/bootstrap.py:336", "ganga/GangaCore/Utility/Config/__init__.py:52", "ganga/GangaCore/GPIDev/Credentials/VomsProxy.py:159", "ganga/GangaDirac/Lib/Utilities/DiracUtilities.py:72", "ganga/GangaCore/Lib/LCG/ARC.py:534-:537 and ~20 further os.getenv sites"]
+      }
+    ],
+    "sinkChannels": [
+      {
+        "channel": "send_file (the actual GUI file serve)",
+        "argIndex": 0,
+        "evidenceSites": ["ganga/GangaGUI/gui/routes.py:671 send_file(abs_path) - job_browse, abs_path = os.path.join(job_base_dir, path) with the raw request path (:659), NO containment check", "gui/routes.py:975 send_file(abs_path) - storage_page, abs_path = os.path.join(storage_folder, path) (:934), NO containment check", "gui/routes.py:578 send_file(export_path, as_attachment=True, ...) - the fixed UPLOAD_FOLDER/export.txt of the job-export view (path server-side; the internal-API export handler that PRODUCED it takes the request path, see file_api_def rows)"]
+      },
+      {
+        "channel": "werkzeug FileStorage.save (GUI upload write)",
+        "argIndex": 0,
+        "evidenceSites": ["ganga/GangaGUI/gui/routes.py:955 storagefile.save(save_path) - save_path = os.path.join(abs_path, secure_filename(filename)) :954 where abs_path is the ROUTE-path-derived directory (traversal-relevant write); :302 loadfile.save and :328 runfile.save write FIXED server paths (UPLOAD_FOLDER/loadfile.txt, runfile.py)"]
+      },
+      {
+        "channel": "os.path.join / exists / isfile / isdir / dirname in the two browser flows (propagation + guard reads)",
+        "argIndex": "0 for os.path.<member>(...) argument 0",
+        "evidenceSites": ["ganga/GangaGUI/gui/routes.py:659 os.path.join(job_base_dir, path) - THE unchecked join of the browse route; :651 os.path.dirname(os.path.dirname(job_info['outputdir'])) - base derivation from repository content; :662 dirname(abs_path).replace(...) back-path; :665 exists, :670 isfile, :676 listdir, :682 isdir(join(abs_path, file))", "gui/routes.py:934 os.path.join(storage_folder, path) - THE unchecked join of the storage route; :949 isdir, :954 join(abs_path, filename), :966 dirname, :969 exists, :974 isfile, :980 listdir, :986 isdir(join(abs_path, file))", "the os.path families are scoped to GangaGUI in the extraction query: across the rest of the tree os.path.join/exists/dirname are ubiquitous (~800/~80/~150 sites) job-workspace plumbing of operator-level flows, and per the task contract the sink core is the file path parameter of actual filesystem operations, not every path string construction node - those propagation nodes are anchored by their consuming open/copy/remove sink rows and by the file_api_def rows"]
+      },
+      {
+        "channel": "builtin open()",
+        "argIndex": 0,
+        "evidenceSites": ["~430 sites across the tree (169 GangaCore, 111 GangaAtlas, 44 GangaLHCb, 26 GangaDirac, 13 GangaService, 13 GangaGUI, ...). HTTP-reachable ones: GangaCore/GPIDev/Persistency/__init__.py:85 open(filepath, mode) inside stripped_export (the internal-API export write target, filepath = fullpath(filename) = abspath(expandvars(expanduser(...))) :149-:150) and :190 open(filepath) inside load (the internal-API load read); GangaCore/Runtime/bootstrap.py:345 open(self.options.config_file) (CLI/env config read) and :1097 open(script).read() (CLI script argument, exec'd). GUI fixed-path writes: gui/routes.py:375 (runfile content), :606 (edited job info), :273 (gangarc rewrite), reads :270/:275/:612/:905/:908/:911 (gangarc/logs/exports). The rest are job-workspace/config/credential reads and writes of the operator-level machinery"]
+      },
+      {
+        "channel": "os.open (low-level)",
+        "argIndex": 0,
+        "evidenceSites": ["ganga/GangaCore/Core/GangaRepository/SessionLock.py:53/:430/:544/:577/:778/:811 - O_EXCL|O_CREAT lock-file creation in the job repository (paths derived from gangadir + job ids)"]
+      },
+      {
+        "channel": "directory creation / removal / rename / move / copy (os + shutil)",
+        "argIndex": "0 (source path for copy/move; the destination is argument 1 - noted per family)",
+        "evidenceSites": ["os.makedirs/os.mkdir ~93 sites (GangaGUI/gui/config.py:11/:17 module init creates gangadir/gui/{upload,logs,storage}; gui/routes.py none; GangaCore bootstrap.py:1179, FileWorkspace.py create, ...)", "os.remove/unlink/rmdir ~64, os.rename 20, shutil.move 10, shutil.copy/copy2/copyfile/copytree 56, shutil.rmtree 34 (job workspace teardown FileWorkspace.py:159/:165, sandbox cleanup, plugin code-move helpers e.g. GangaAtlas/Lib/Tasks/AtlasTransform.py:389 shutil.move(old_path, new_path))"]
+      },
+      {
+        "channel": "directory listing / walk / glob",
+        "argIndex": 0,
+        "evidenceSites": ["gui/routes.py:676 os.listdir(abs_path) and :980 os.listdir(abs_path) - the two browser flows (request-path-derived)", "os.listdir ~75 sites total, os.walk 6, glob.glob 28 (GangaCore/Core/GangaRepository/GangaRepositoryImmutableTransient.py:44, IChecker.py:85, IMerger.py:139, LocalFile.py:122/...: outputdir pattern discovery)"]
+      },
+      {
+        "channel": "symlink / chmod",
+        "argIndex": 0,
+        "evidenceSites": ["os.symlink 9 sites (GangaCore/GPIDev/Lib/File/LocalFile.py:281 os.symlink(f, os.path.basename(f)) - output symlink creation with basename only; GangaAtlas Athena legacy scripts)", "os.chmod 11 sites (GoogleFile.py:132 cred_path, Condor wrapper strings, AtlasLCGRequirements.py:147)"]
+      },
+      {
+        "channel": "tarfile open/extract (backend-supplied sandboxes)",
+        "argIndex": "0 for tarfile.open (the tarball path); 0 for .extractall (the destination directory)",
+        "evidenceSites": ["ganga/GangaCore/Core/Sandbox/Sandbox.py:149 tarfile.open(tgzfile, 'r:*') + :154 [tf.extractall(dest_dir, [tarinfo]) for tarinfo in tf] - output sandbox unpacked at job completion (tarball downloaded from the backend into the job outputdir; entry names are backend-controlled - Python 3.12+ tarfile filters are not set, pre-filter semantics keep '..'-bearing names dangerous on older runtimes)", "ganga/GangaCore/Core/Sandbox/WNSandbox.py:70-:71 tarfile.open(tarpath, 'r:*') + tf.extractall(dest_dir) - input sandbox unpack in the runtime wrapper", "plugin sites: GangaLHCb/Lib/Mergers/GaudiExecMerger.py:226 tar.extractall(tmp_dir), GangaSAGA/Lib/SAGA/SAGAWrapperScript.py:87 tar.extractall() (bare - extracts to CWD), GangaSNOplus/Lib/Applications/job_tools.py:310/:322 tarred_file.extractall(target_path/temp_dir)", "archive CREATION: Sandbox.py:68 tarfile.open(tgzfile, 'w:%s') + TarInfo adds; WNSandbox.py:116; feedback_report.py:622 tarfile.TarFile.open(resultArchive, 'w:gz'); GangaCore/Lib/Remote/Remote.py:704/:716 tarfile.open on inputdir sandboxes"]
+      },
+      {
+        "channel": "path sanitization material (guard candidates)",
+        "argIndex": 0,
+        "evidenceSites": ["ganga/GangaGUI/gui/routes.py:953 secure_filename(storagefile.filename) - werkzeug name sanitizer on the uploaded FILENAME ONLY (the directory component abs_path stays raw); gui/routes.py:1799-:1800 allowed_file(filename) - extension allowlist ('.' in filename and rsplit extension in ALLOWED_EXTENSIONS) - partial sanitizers for the upload channel, emitted as sink-side guard rows for labeling", "NO canonicalize-and-contain check, NO startswith(base) check, NO '..' rejection, NO resolve()/realpath anywhere in the two browser flows or the export/load flows"]
+      },
+      {
+        "channel": "internal path-taking wrapper definitions (file_api_def rows)",
+        "evidenceSites": ["GangaCore/GPIDev/Persistency/__init__.py: export(item, filename, mode) :35 filename pos 1; stripped_export :41 filename pos 1; fullpath(filename) :140 pos 0 (abspath/expandvars/expanduser - normalization WITHOUT containment); load(filename, returnList) :154 pos 0", "GangaCore/Runtime/GPIFunctions.py: runfile(path_to_file) :101 pos 0 (-> runpy.run_path)", "GangaCore/Utility/Runtime.py: getScriptPath(name, searchPath) :28 pos 0 (search-path script resolution: exists/basename/listdir joins)", "GangaCore/Utility/files.py: expandfilename(filename, force) :19 pos 0 (expandvars/expanduser - THE 107-site path expansion wrapper, no normalization, no containment); fullpath(path, force) :32 pos 0 (adds realpath)", "GangaCore/Core/Sandbox/Sandbox.py: getPackedOutputSandbox(src_dir, dest_dir) :133 dest_dir pos 1 (extractall destination); createPackedOutputSandbox(output_patterns, _filter, dest_dir) :95 dest_dir pos 2", "GangaCore/Core/Sandbox/WNSandbox.py: getPackedInputSandbox(tarpath, dest_dir) :61 dest_dir pos 1; createOutputSandbox(output_patterns, filter, dest_dir) :76 dest_dir pos 2; recursive_copy(src, dest) :33 dest pos 1 (copytree/copy/makedirs destination)", "GangaCore/Core/FileWorkspace.py: FileWorkspace.getPath(self, filename) :77 filename pos 1 (self at 0) - the job-workspace path constructor (join of workspace base with filename)", "GangaGUI/gui/routes.py: allowed_file(filename) :1799 pos 0 - the upload extension allowlist (sanitizer candidate)"]
+      }
+    ],
+    "guardsAndEvidence": [
+      {
+        "guard": "job_browse: NO containment guard at all (CWE-022 primary)",
+        "evidence": "gui/routes.py:639-:689: abs_path = os.path.join(job_base_dir, path) (:659) - os.path.join keeps '..' segments lexically (resolves on the OS level at the exists/isfile/send_file syscalls) and an ABSOLUTE path value REPLACES the base entirely; the only checks are existence (:665) and file-ness (:670). job_base_dir itself is os.path.dirname(os.path.dirname(job_info['outputdir'])) (:651) - repository content from the internal API. No resolve/realpath, no basename extraction, no '..' rejection, no prefix check. TOCTOU shape: exists :665 / isfile :670 and the send_file file open :671 are separate syscalls. @login_required (:638) limits the attacker population to authenticated GUI users but does not constrain the path value.",
+        "cwe": "CWE-022 / CWE-023 / CWE-036 / CWE-073"
+      },
+      {
+        "guard": "storage_page download branch: NO containment guard (CWE-022 primary); upload branch: secure_filename covers ONLY the filename",
+        "evidence": "gui/routes.py:925-:992: abs_path = os.path.join(storage_folder, path) (:934) with the same unchecked-join semantics; exists :969 / isfile :974 / send_file :975 / listdir :980. Upload branch: filename = secure_filename(storagefile.filename) (:953) strips traversal from the FILENAME, but save_path = os.path.join(abs_path, filename) (:954) joins it onto the ROUTE-PATH-derived directory abs_path - the directory component is never sanitized, so /storage/../../ upload writes outside gangadir/gui/storage. allowed_file extension check applies only to loadfile/runfile uploads (:300/:326) which save to FIXED paths.",
+        "cwe": "CWE-022 (write channel + read channel)"
+      },
+      {
+        "guard": "internal API: NO authentication, localhost bind (contextual)",
+        "evidence": "GangaGUI/api/__init__.py:15 internal = Flask(__name__) with no before_request auth on any @internal.route; start.py:106 APIServerThread('GangaGUIAPI', 'localhost', internal_port) binds the internal app to localhost. The export/load/runfile path parameters (api/routes.py:223/:977/:1001) are therefore reachable by ANY local process / SSRF-from-browser scenario, without credentials - while the GUI routes need a login. The docstring claims the API server 'is not accessible from outside the machine' - bind-level mitigation only, not an input validation guard. stripped_export's fullpath() (Persistency/__init__.py:149-:150) applies abspath (which normalizes '..') but performs NO base-directory confinement.",
+        "cwe": "CWE-022 / CWE-023 (contextual)"
+      },
+      {
+        "guard": "GUI fixed-path writes carry attacker CONTENT (adjacent channels)",
+        "evidence": "runfile_page: open(UPLOAD_FOLDER/runfile.py, 'w+') :375 writes request.form.get('runfile-data') :374, then /internal/runfile executes it (runpy) - arbitrary CODE execution by an authenticated GUI user (Pass 4 primary, recorded as adjacent); job_edit :604/:606 and config_edit :272/:273 write attacker content into loadfile.txt / the gangarc config file (config content injection - the gangarc is re-read as configuration). The PATHS are server-fixed, so these are not path-traversal sinks, but the content channels feed the load/runfile file-API flows.",
+        "cwe": "CWE-022 (adjacent, content channel)"
+      },
+      {
+        "guard": "sandbox extractall: no filter argument (CWE-022 archive extraction channel)",
+        "evidence": "Sandbox.py:154 tf.extractall(dest_dir, [tarinfo]) and WNSandbox.py:71 tf.extractall(dest_dir) unpack backend-produced job sandboxes without member-name filtering (no filter= parameter, so pre-Python-3.12 semantics apply on older runtimes; the codebase still supports py2-era idioms in sibling files). The tarballs are produced by ganga's own createPacked* code on the worker node, so the entry-name trust level is 'backend/grid compromise' rather than direct request data - recorded for labeling to weigh.",
+        "cwe": "CWE-022 / CWE-023 (backend-supplied archive)"
+      },
+      {
+        "guard": "secure_filename / allowed_file (partial sanitizers, upload channel only)",
+        "evidence": "gui/routes.py:953 secure_filename(storagefile.filename) - werkzeug's name sanitizer (neutralizes '..'/absolute names in the FILENAME); :1799-:1800 allowed_file - ALLOWED_EXTENSIONS allowlist on loadfile/runfile uploads. Neither covers the route-path DIRECTORY component; both emitted as guard rows for the labeling step.",
+        "cwe": "CWE-022 (partial mitigation)"
+      },
+      {
+        "guard": "external-library boundaries (cannot be verified from this DB)",
+        "evidence": "Flask/werkzeug's URL decoding and path-converter splitting, send_file's actual file open (http serving + FileStorage.save internals), flask's request.args/form/json parsing, runpy.run_path internals and the Python tarfile filter defaults are all outside the ganga repo and thus outside this CodeQL database; their behavior is recorded as an evidence gap rather than assumed either way.",
+        "cwe": "CWE-022 (evidence gap)"
+      }
+    ],
+    "notObserved": [
+      "no FastAPI/Django/aiohttp; the only HTTP surface is the two GangaGUI Flask apps; no StaticFiles mounts, no flask send_from_directory (the file serving is hand-rolled send_file on an os.path.join result)",
+      "no zipfile-based extraction anywhere (the only zipfile mention is a string in GangaCore/Lib/LCG/Utility.py:56); archive extraction is tarfile-only (6 extractall sites)",
+      "no pathlib usage of consequence in the traversal flows (one `from pathlib import Path` import in GangaCore/Lib/Localhost/Localhost.py:13; no Path(...)/.resolve()/.read_text() member chains anywhere in the GUI flows) - the whole GUI path handling is string-based os.path",
+      "no explicit '..' string rejection, no startswith(base_dir) checks, no resolve()/realpath-based containment in the GUI or internal-API flows; realpath appears only in GangaCore/Utility/files.py:32 fullpath() (a wrapper not used by the GUI) and 23 other core sites",
+      "no URL percent-decoding of file paths in ganga's own code (Flask decodes the request path before the route converter injects it)",
+      "no multipart filename reaching a filesystem path un-sanitized in the loadfile/runfile channels (fixed names); the storage upload filename is secure_filename'd but its directory component is not",
+      "no os.chdir, no tempfile-based traversal (118 tempfile mentions are scratch-file creation with system-generated names), no os.open in the GUI, no message-queue consumers, no DB-content-to-GUI-file-path flow other than job_info['outputdir'] (repository content) feeding job_base_dir at gui/routes.py:651",
+      "the websocket pty channel (socketio 'pty-input' -> os.write(FD, data) gui/routes.py:1023) writes to a file DESCRIPTOR, not a path - Pass 2-adjacent terminal injection, not a pass-1 path sink",
+      "GangaService (raw sockets + pickle over ~/gangadir-server with fixed paths) contains no request-derived path construction; its pickle.loads boundary is Pass 6 material, and the file `from commands import ...` import makes it py2-dead code in this tree"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql (this run, generated)",
+      "iris/extraction/sinks.ql (this run, generated)"
+    ],
+    "executionPlan": [
+      "cd iris && codeql pack install (qlpack.yml already present: iris/ganga-cwe22, codeql/python-all: \"*\")",
+      "codeql query run extraction/sources.ql --database C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/ganga_vuln/ganga-db --output extraction/sources.bqrs",
+      "codeql bqrs decode extraction/sources.bqrs --format=csv --output=extraction/sources.csv",
+      "codeql query run extraction/sinks.ql --database <same db> --output extraction/sinks.bqrs",
+      "codeql bqrs decode extraction/sinks.bqrs --format=csv --output=extraction/sinks.csv",
+      "sequential execution only (WORKFLOW.md 3.2-3.3); no database analyze, no SARIF in this round"
+    ],
+    "metadataForm": "plain multi-column select queries (10 columns) for codeql query run + bqrs decode; @kind problem is intentionally NOT set (wrong shape for candidate tables - it requires exactly element+string) and @kind table is not assumed to exist",
+    "columnContract": ["node", "role (source_candidate|sink_candidate)", "callableName", "flowKind", "receiver", "moduleHint", "argIndex", "file", "line", "matchKind (api|ast)"],
+    "matchKindSemantics": "every family in both queries is an AST syntax-level shape match (match_kind 'ast'): flask/werkzeug are external libraries not part of this database, the request-object reads flow through the flask request proxy accessed by local name, and open/os/shutil/tarfile/glob are stdlib names - so no API-graph rows are expected; the match_kind column is kept for cross-project contract consistency with the prior projects of this series (aiohttp/airflow/ansible/coderedcms/copyparty/dfetch/django/fides).",
+    "flowKinds": {
+      "sources": ["http_path_param", "http_query_param", "http_form_param", "http_json", "http_file_upload", "upload_filename", "http_header", "env"],
+      "sinks": ["file_open", "file_open_lowlevel", "file_response", "file_save_member", "dir_create", "file_remove", "file_rename", "file_move", "file_copy", "dir_remove", "dir_list", "dir_walk", "symlink_create", "file_perm", "archive_open", "archive_extract", "path_glob", "path_join", "path_stat", "path_part", "path_sanitize", "file_api_def"]
+    },
+    "exclusions": [
+      "positive scope %/ganga/% in both queries; ganga-db (nested in the source ROOT as a sibling of ganga/) is outside that scope by construction and additionally never matched - the repo-root build/test tooling (setup.py, conftest.py, postBuild, bin/) and doc/ are never candidates",
+      "%/ganga/GangaTest/% (test-runner plugin package), %/test/%, %/old_test/%, %/testlib/% excluded from every row as test fixtures/harnesses",
+      "the two stray test modules ganga/GangaCore/Utility/Config/tests.py and ganga/GangaCore/Utility/logging/test.py are excluded explicitly"
+    ],
+    "expectedVolume": {
+      "sources": "roughly 115 rows: http_path_param 2 (job_browse.path, storage_page.path), http_query_param ~54 (request.args.get ~52 + request.args['ids'] 2, of which 3 file-targeting: api/routes.py:223/:977/:1001), http_form_param ~12, http_json ~9 (attribute reads + request.json.get calls), http_file_upload 3, upload_filename 3, http_header 1, env ~30 (os.environ.get 6 + os.getenv ~24, operator trust level)",
+      "sinks": "roughly 900 rows: file_open ~430, file_open_lowlevel 8, file_response 3, file_save_member 3, dir_create ~93, file_remove ~64, file_rename 20, file_move 10, file_copy 56, dir_remove 34, dir_list ~75, dir_walk 6, symlink_create 9, file_perm 11, archive_open 18, archive_extract 6, path_glob 28, path_join 23 + path_stat 21 + path_part ~4 (GangaGUI-scoped propagation/guard families), path_sanitize 1 (secure_filename), file_api_def 14",
+      "note": "volumes estimated from grep counts over the explored tree (543 in-scope .py files); the CSV decode of the next round yields the exact numbers. The GangaCore/GangaAtlas/... open/copy/remove rows are operator-level job-workspace plumbing - they enter the candidate table because the task requires real filesystem operations with controllable path parameters, and the labeling step classifies their trust level"
+    }
+  },
+  "uncoveredCases": [
+    "os.path.join/dirname/basename/abspath/exists outside GangaGUI are NOT emitted as sink rows (~800 join sites across the tree): per the task contract the sink core is the path parameter of actual filesystem operations, not every path string construction node. The GangaGUI scope keeps the propagation nodes of the two browser flows (join :659/:934, dirname :651/:662/:966, exists/isfile/isdir guard reads); core-tree propagation is anchored by the consuming open/copy/remove rows and by the file_api_def rows (expandfilename, fullpath, getScriptPath, FileWorkspace.getPath). If Phase 2 needs os.path.join taint steps for the core flows, MySummaries must add them.",
+    "the optparse CLI boundary (--config dest config_file, --config-path dest config_path, positional script argument) is NOT emitted as source rows: the dest names are keyword-string literals inside parser.add_option(...) calls (bootstrap.py:269-:273), not Parameter nodes, and keyword-argument string matching would be fragile; the flows are documented in inputBoundaryInventory (bootstrap.py:341 expandfilename + open, :1080 getScriptPath, :1097 open+exec) and are operator-trust level.",
+    "os.environ[...] subscript reads (bootstrap.py:673 GANGA_CONFIG_PATH, :723 GANGA_SITE_CONFIG_AREA, ~217 os.environ[...] occurrences tree-wide) are NOT emitted: the AST Subscript node is identical for read and write targets, so a positive read-only match is not reliably expressible; the read forms that matter are covered by the os.environ.get/os.getenv families and documented here.",
+    "flask request.cookies and request.get_data/request.data: not used anywhere in GangaGUI (grep evidence); request.environ.get('werkzeug.server.shutdown') at api/routes.py:1095 is a framework control channel, not input data.",
+    "the f-string/percent-format path constructions (e.g. gui/routes.py f-string none in the browser flows; core-tree patterns like Remote.py:704 j.inputdir + '/__master_input_sbx__') are BinaryExpr/f-string nodes indistinguishable from ordinary formatting at AST level - anchored by their consuming tarfile.open/open rows.",
+    "the socketio pty websocket channel (gui/routes.py:1016-:1023) writes attacker keystrokes to a file DESCRIPTOR via os.write - not a path-shaped sink; Pass 2 material.",
+    "GangaService pickle-over-socket service (ServiceAPI.py) and the RestrictedPython-free plugin code paths: no path construction from network input observed; the pickle boundary is Pass 6 material.",
+    "dynamic dispatch: the GPI `jobs(job_id)` registry lookups, job_info dict returned by query_internal_api, and the Ganga schema-driven File objects (namePattern wildcards) propagate through dynamic registry objects that syntax-level extraction cannot follow; job_info['outputdir'] (repository content) feeding job_base_dir at gui/routes.py:651 is documented in guardsAndEvidence as an internal data channel, and needs MySummaries in Phase 2 if the flow must be traced end-to-end.",
+    "receiver-name scoping: the http families match attribute chains whose base local name is exactly 'request' (the flask proxy import style used throughout GangaGUI); a handler renaming the local would be missed. The .save member family is scoped to GangaGUI (werkzeug FileStorage.save is the only save(path) shape there; core-tree .save calls on other receivers would need separate families).",
+    "tarfile member-name filtering cannot be verified at AST level (no filter= argument present at any of the 6 extractall sites - that absence IS the evidence, recorded in guardsAndEvidence); the Python-version-dependent filter defaults are a runtime property outside the database.",
+    "module-level code (GangaGUI/gui/config.py:8-:20 makedirs of gangadir/gui subfolders; GangaGUI/api/__init__.py) yields rows but no enclosing-function file_api_def; the enclosing module is reported in moduleHint.",
+    "the source tree contains pre-existing ground-truth artifacts (GANGA-VULNERABILITY-REPORT.md, GANGA-CVE-REPORT-STORAGE.md, path_traversal_sinks.csv at the repo root); they were neither opened nor used - all evidence above comes from first-hand source reading of ganga/ only."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction contract in 4.3; Python pitfalls in section 9 - no Decorator class, no StrConst; migration/test FP heuristics in 5.3.2)",
+    "augur-0.3.0/references/patterns.md (always loaded per 4.2.3; cross-language candidate-row contract and pass-1 sink families)",
+    "augur-0.3.0/references/python.md (always loaded per 4.2.3; pass-1 sink families: open/Path/filesystem operations - matched and extended with the os/shutil/tarfile families this codebase actually uses; archive extraction destination handling - MATCHED, 6 tarfile extractall sites exist)",
+    "augur-0.3.0/references/flask.md (framework reference loaded for the detected primary framework: detection heuristics matched - from flask import Flask/request, ~130 route decorators; source signatures matched - request.args/form/json, path variables (the two <path:path> browsers), headers (X-Access-Token); sink guidance filesystem-APIs-with-request-path matched to send_file/os.path.join/open/FileStorage.save; sanitizer guidance (base-dir checks) confirmed ABSENT in the flows; section 8 pass-1 reminder (upload/download endpoints dominate risk) matches the storage route)",
+    "augur-0.3.0/assets/extraction/README.md, python_sources.ql.tmpl, python_sinks.ql.tmpl, extract_sources.ql.tmpl, extract_sinks.ql.tmpl (starter template contract and minimum output columns; the @kind problem metadata of the stubs is intentionally dropped because the multi-column select is the wrong shape for problem queries)",
+    "no references/flask-socketio.md, references/optparse.md or references/gangaservice.md exist in the Augur installation; the socketio pty channel and the CLI boundary are documented in inputBoundaryInventory/uncoveredCases"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": "The source root contains audit/ground-truth artifacts (GANGA-VULNERABILITY-REPORT.md, GANGA-CVE-REPORT-STORAGE.md, path_traversal_sinks.csv) and test trees. None of them was opened or read; all evidence above comes from first-hand source reading of ganga/ only. The ganga_vuln tree, ganga-db, the Augur installation and the sibling project workspaces (aiohttp, airflow, ansible, coderedcms, copyparty, dfetch, django, fides) were read where needed for cross-project column-contract consistency (the 10-column CSV contract and the proven QL shapes) but never modified; only the three files of this run were written into this project's iris workspace.",
+    "notes": "No CodeQL query execution, no BQRS decode, and no LLM labeling were performed in this round (Step 1-2 only); the queries are compile-ready for the local toolchain (CLI 2.25.1 + codeql/python-all 7.1.x) but their execution is deferred to the next round per the task contract."
+  }
+}

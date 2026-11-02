@@ -1,0 +1,95 @@
+{
+  "review": "llm_triage",
+  "reviewer_model": "glm-5.3 (independent LLM path re-review)",
+  "reviewed_at": "2026-10-22",
+  "project": "flask-cors (flask_cors 3.0.8 pre-67c4b2c snapshot)",
+  "rule_id": "py/augur/flask-cors/pass1-path-traversal",
+  "inputs_reviewed": [
+    "results/pass1.sarif",
+    "report/iris_report.md",
+    "labels/labels.json",
+    "report/query_generation_notes.md",
+    "flask_cors/core.py",
+    "flask_cors/extension.py",
+    "flask_cors/decorator.py",
+    "setup.py",
+    "examples/app_based_example.py",
+    "examples/view_based_example.py",
+    "examples/blueprints_based_example.py",
+    "docs/conf.py"
+  ],
+  "execution_status": {
+    "codeql_execution_successful": true,
+    "sarif_results_count": 0,
+    "conclusion": "CodeQL 分析成功，但本轮没有命中正式路径穿越污点路径。"
+  },
+  "alerts_reviewed": [],
+  "checklist": {
+    "1_source_attacker_controlled": {
+      "verdict": "not_applicable_no_alert",
+      "note": "无正式告警。候选 Source 独立复核属实：request.path (extension.py:178)、request.headers (core.py:245)、request.method (core.py:245, decorator.py:125)、request_headers.get('Origin'/'ACRM'/'ACRH') (core.py:177/194/203) 均为 Flask request 代理上的真实 HTTP 客户端可控值；config 类候选 (DEFAULT_OPTIONS、app.config CORS_*、kwargs) 确为 operator-trust，标签判 fp 正确。"
+    },
+    "2_source_reaches_file_path_argument": {
+      "verdict": "no_flow_exists",
+      "note": "独立验证：flask_cors 包内 grep 零命中 open(/os.path/pathlib/shutil/io/send_file/send_from_directory。request.path 只作为 try_match -> re.match 的匹配主体 (extension.py:178 -> core.py:278/280)，header 值只进 regex 匹配与响应头写入 (core.py:133->250)。无任何函数包装或中间层能把污点传递到文件路径参数。"
+    },
+    "3_sink_is_real_file_operation": {
+      "verdict": "not_applicable_no_alert",
+      "note": "模型内唯一 Sink 是 builtin open() 参数 0，实例仅 setup.py:15 open(join(dirname(__file__),'flask_cors/version.py'))、setup.py:18 open(join(dirname(__file__),'requirements.txt'))、setup.py:29 open('README.rst')——真实文件读取，但路径全是 __file__ 派生/字面常量，且仅在打包时执行，永不处于 HTTP 请求路径中。纯拼接 (examples/docs 的 dirname/abspath/sys.path.insert) 被正确判为非 Sink。"
+    },
+    "4_declared_allowed_roots": {
+      "verdict": "no_file_serving_in_library",
+      "note": "flask_cors 不声明任何允许根目录、文件集合或访问权限：它是 CORS 响应头策略库，自身零文件服务。不存在可越出的根。"
+    },
+    "5_traversal_vectors": {
+      "verdict": "no_file_target",
+      "note": "..、绝对路径、百分号解码等因素在本包内只影响资源正则的匹配结果，不影响任何文件访问目标（无文件访问存在）。注意：这正是真实 CVE 的机制（非规范化 request.path 匹配资源规则），但它导致的是 CORS 策略/授权绕过，不是库内的文件越权读取（详见 real_vulnerability_analysis）。"
+    },
+    "6_real_guards_before_access": {
+      "verdict": "not_applicable_no_alert",
+      "note": "无文件访问即无需 containment/barrier；标签 0 条 sanitizer 与源码事实一致。try_match (core.py:275-285) 是 CORS 选项选择，不防护文件路径。"
+    },
+    "7_misjudged_guards": {
+      "verdict": "no_misjudgment",
+      "note": "标签与查询均未把 Path.resolve/normpath/abspath/startsWith 或鉴权当作防护：query_generation_notes.md 第 4 节明确论证 abspath 无 base-dir containment 不算 barrier、try_match 不算 barrier。无此类误判。"
+    },
+    "8_static_service_test_unreachable_cases": {
+      "verdict": "confirmed_all_constant",
+      "note": "setup.py 三处 open() 是打包脚本常量路径；examples/*/sys.path.insert 与 docs/conf.py:21 是 import 路径 hack（常量输入）；tests/ 无 open() 且无 request.* 污点模式。这些均不是越权文件访问。"
+    },
+    "9_overgeneralization_or_coverage_fp": {
+      "verdict": "none",
+      "note": "SARIF results 为空，与 query_generation_notes.md 第 6 节的预期（期望告警数 0）一致。Source/Sink 为名字锚定的 AST 结构匹配，scope grep 验证恰好命中审计节点（request.* 10 处、open 3 处），无过度泛化导致的假阳性。"
+    },
+    "10_mixed_cwe_or_baseline_or_diagnostics": {
+      "verdict": "none",
+      "note": "SARIF 中唯一 rule 是 py/augur/flask-cors/pass1-path-traversal；notifications 仅含 expected-extracted-files / file-coverage-baseline / cli/platform 遥测（level none），非诊断查询结果、非 CodeQL 内置基线安全查询、非其他 CWE。本轮未把任何诊断输出当 TP。"
+    }
+  },
+  "labels_cross_check": {
+    "summary": "对 labels.json 抽查与全量核对源码后无异议：8 条 source 标签（src-011/014/016/023/024/037/045/046）的定位与可控性判断正确；3 条 open() sink 实例判 fp 正确；examples/docs 的 dirname/abspath/sys.path.insert 判 none/fp 正确（import 路径操纵非文件访问）；0 条 sanitizer 与源码事实一致。query_generation_notes.md 的预期零告警被 SARIF 结果证实。",
+    "confidence": 0.95
+  },
+  "real_vulnerability_analysis": {
+    "question": "真实漏洞 commit 67c4b2cc98ae87cf1fa7df4f97fd81b40c79b895 (CWE-22, 'Fix request path normalization', flask-cors < 3.0.9) 是否被本轮 Pass 1 正式结果命中？",
+    "vulnerable_function": "make_after_request_function / cors_after_request",
+    "vulnerable_location": {
+      "file": "flask_cors/extension.py",
+      "lines": "170-186 (核心脆弱行 177-178)"
+    },
+    "vulnerable_code_in_snapshot": "for res_regex, res_options in resources:\\n    if try_match(request.path, res_regex):  # extension.py:178 - 使用未规范化的原始 request.path",
+    "snapshot_is_pre_fix": true,
+    "snapshot_evidence": "快照 (flask_cors 3.0.8) 的 make_after_request_function 与 commit 的 code_before 完全一致：直接以 request.path 作为匹配主体，无 normalized_path = unquote_plus(request.path)。修复后的 code_after 在该快照中不存在。",
+    "hit_verdict": "未命中 (missed)",
+    "hit_evidence": "SARIF results 数组为空，ruleId py/augur/flask-cors/pass1-path-traversal 无任何正式告警，因此该真实漏洞未被命中。",
+    "miss_reasoning": [
+      "Source 端已正确覆盖：src-045 精确定位 extension.py:178 的 request.path（唯一路径形攻击者可控边界，正是该 CVE 的入口）。Source 标注无遗漏。",
+      "Sink 端结构性缺失：该漏洞的污点终点不是文件访问。request.path 在 flask_cors 内只流入 try_match -> re.match（资源规则匹配）和 LOG.debug，随后触发 set_cors_headers(resp, res_options)——即把某个资源的 CORS 选项（如 origins '*'/credentials）应用到本不该匹配的响应上。flask_cors 包内零文件 API（grep 独立验证），而 Pass 1 的 Sink 模型仅为 builtin open() 参数 0（setup.py 三处常量路径）。源到汇之间不存在任何可达路径，查询按定义返回空。这是忠实的空结果，不是查询执行错误。",
+      "漏洞机制与 Sink 模型错位：该 CVE 被归为 CWE-22，但其机制是资源匹配的路径规范化绕过——攻击者用非规范化路径（如含 ../ 或未二次解码的 %2e 等形式）使 request.path 命中某个 CORS 资源正则，而实际路由/上游代理解析后的目标却是另一（私有）资源，从而让私有资源获得宽松 CORS 头。文件/资源的实际访问发生在宿主 Flask 应用与代理层，不发生在 flask-cors 代码内。以 open() 为 Sink 的经典路径穿越污点查询在库代码层面无法检测此类'授权策略绕过型'漏洞。",
+      "Barrier 缺失方向相反：修复 (unquote_plus 规范化) 属于对匹配输入的前置规范化，Pass 1 空结果的原因不是存在误判的防护，而是污点流在库内没有文件型终点。"
+    ],
+    "classification": "真实漏洞存在于快照源码中（pre-fix 3.0.8，extension.py:177-182），但属于 CORS 资源匹配规范化绕过，其可达终点是响应头策略而非文件 API，超出本轮 Pass 1 的文件访问 Sink 模型范围，故未命中。该未命中不构成对本轮正式结果正确性的否定——正式结果'零告警'对'库内 source->open() 污点路径'这一查询定义而言是准确的。",
+    "confidence": 0.9
+  },
+  "independence_statement": "本轮独立复核未修改 SARIF、labels.json 或任何正式查询；未读取 PyVul 真值、修复提交差异（仅使用任务提示中给出的 commit 元数据与 code_before/after 片段做命中性比对）、CVE 描述或 ANALYSIS_REPORT 等事后分析产物。所有结论基于对 12 个文件（4 份实验产物 + 8 个源码文件）的直接读取与两次独立 grep 验证。"
+}

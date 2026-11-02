@@ -1,0 +1,326 @@
+{
+  "project": "guarddog",
+  "project_kind": "PyPI malicious-package scanner CLI (DataDog GuardDog, vulnerable snapshot, pyproject version 0.0.0)",
+  "workspace": "iris_manual/Path_Traversal/guarddog/iris",
+  "db_path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\guarddog_vuln\\guarddog-db",
+  "source_root": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\guarddog_vuln",
+  "db_metadata": {
+    "primaryLanguage": "python",
+    "cliVersion": "2.25.1",
+    "baselineLinesOfCode": 1562,
+    "sha": "8e814deb3ae6457ea1a4f7b0d3a0e64db0734f13",
+    "creationTime": "2026-05-28T03:43:43Z",
+    "indexed_source_roots": [
+      "guarddog/ (shipped tool, primary analysis scope)",
+      "tests/ (excluded from candidates)",
+      "scripts/evaluator/ (offline evaluation harness, excluded from candidates)",
+      ".github/workflows/ (yaml, not Python)"
+    ]
+  },
+  "toolchain": {
+    "local_codeql_cli": "2.25.1",
+    "qlpack_dependency": "codeql/python-all: *",
+    "resolved_pack_locally": "codeql/python-all 7.1.1 / 7.1.2 (installed under ~/.codeql/packages)",
+    "workflow_baseline": "codeql/python-all 6.1.x",
+    "compatibility_note": "Local pack is newer than the WORKFLOW 6.1.x baseline. All AST/Location APIs used in the extraction queries were verified directly against the installed 7.1.2 library sources (AstGenerated.qll, Exprs.qll, Function.qll, Files.qll): Call.getFunc/getArg, Name.getId, Attribute.getName/getObject, Function.getArg/getADecorator/getEnclosingModule/isMethod, Parameter.getName/getPosition, Location.getFile/getStartLine, File.getAbsolutePath, StringLiteral.getText."
+  },
+  "language": "python",
+  "language_evidence": [
+    "codeql-database.yml: primaryLanguage: python",
+    "all first-party source under guarddog/ is *.py",
+    "pyproject.toml [tool.poetry]: name=guarddog, python>=3.10, deps click/requests/semgrep/tarsafe/docker",
+    "requirements.txt pins click==8.1.3, requests==2.28.1, semgrep==0.112.1, tarsafe==0.0.4"
+  ],
+  "frameworks": [
+    {
+      "name": "click",
+      "kind": "CLI framework (non-HTTP)",
+      "confidence": 0.95,
+      "evidence": [
+        "import click (guarddog/cli.py:10) [+0.45 import evidence]",
+        "@click.argument/@click.option/@cli.command decorators on verify and scan commands (guarddog/cli.py:22-61) [+0.30 route/decorator evidence]",
+        "pyproject.toml [tool.poetry.scripts] guarddog = \"guarddog.cli:cli\" and @click.group bootstrap (guarddog/cli.py:22) [+0.20 runtime/bootstrap evidence]",
+        "CLI command layout in guarddog/cli.py [+0.05 layout evidence]"
+      ],
+      "reference_loaded": false,
+      "reference_note": "No references/click.md exists in the Augur distribution; only language references were applicable. click is a CLI boundary, not an HTTP request boundary."
+    },
+    {
+      "name": "fastapi",
+      "confidence": 0.0,
+      "evidence": ["no fastapi imports anywhere in indexed Python source"]
+    },
+    {
+      "name": "flask",
+      "confidence": 0.0,
+      "evidence": ["no flask imports anywhere in indexed Python source"]
+    },
+    {
+      "name": "django",
+      "confidence": 0.0,
+      "evidence": ["no django imports anywhere in indexed Python source"]
+    }
+  ],
+  "framework_conclusion": "No HTTP web framework is present: there are no routes, request handlers, uploads, or file-serving responses in this project. The only external boundary is the click CLI plus outbound HTTP to PyPI/GitHub. Framework reference loading was therefore skipped (no matching reference file for click exists); source/sink shapes were derived from repository evidence per WORKFLOW 4.2.3 fallback.",
+  "references_loaded": [
+    "references/patterns.md",
+    "references/python.md"
+  ],
+  "references_not_loaded": [
+    "references/fastapi.md, flask.md, django.md (no HTTP framework detected)",
+    "references/go.md, java.md, javascript.md, csharp.md, aspnet.md, echo.md, express.md, gin.md, spring.md (language mismatch)"
+  ],
+  "pass_scope": {
+    "pass": 1,
+    "cwes": ["CWE-22", "CWE-23", "CWE-36", "CWE-73"],
+    "focus": "Path Traversal",
+    "pass_query": "iris/queries/Pass1_PathTraversal.ql (Phase 2, not generated in this step)"
+  },
+  "entry_points": [
+    {
+      "site": "guarddog/cli.py:28-33",
+      "symbol": "cli command 'verify'",
+      "signature": "verify(path, json, exit_non_zero_on_finding)",
+      "input": "path: CLI argument, path to a local requirements.txt file; flows into RequirementsScanner.scan_local(path) -> open(path,'r')"
+    },
+    {
+      "site": "guarddog/cli.py:55-63",
+      "symbol": "cli command 'scan'",
+      "signature": "scan(identifier, version, rules, exclude_rules, json, exit_non_zero_on_finding)",
+      "input": "identifier: CLI argument, package name OR path to local package (.tar.gz / directory); version: CLI option. identifier flows into PackageScanner.scan_local(path) / scan_remote(name, version)"
+    },
+    {
+      "site": "pyproject.toml [tool.poetry.scripts] + guarddog/__main__.py",
+      "symbol": "guarddog console script / python -m guarddog",
+      "input": "delegates to guarddog.cli.cli click group"
+    }
+  ],
+  "trust_boundary_judgments": [
+    {
+      "boundary": "click CLI arguments (path, identifier, version)",
+      "verdict": "source candidate",
+      "rationale": "Operator-supplied command-line input that directly becomes filesystem paths (requirements.txt path, package path) or package names/versions that are joined into download/extract paths. In the PyVul threat model the CLI invocation is driven over untrusted input during scanning."
+    },
+    {
+      "boundary": "PyPI JSON API responses via requests.get(...).json() (guarddog/utils/package_info.py:19-25, guarddog/scanners/project_scanner.py:92, guarddog/scanners/package_scanner.py:115-119, guarddog/analyzer/metadata/typosquatting.py:68)",
+      "verdict": "source candidate",
+      "rationale": "When scanning untrusted/malicious PyPI packages, the registry metadata (releases, filenames, URLs, package names) is attacker-influenced and feeds filename/extension selection and download URLs."
+    },
+    {
+      "boundary": "requirements.txt content read via open(path).readlines() (guarddog/scanners/project_scanner.py:231-232) and remote requirements via resp.content.decode().splitlines() (project_scanner.py:270)",
+      "verdict": "source candidate",
+      "rationale": "Dependency names parsed from these lines become package_name values that are joined into archive download and extraction paths (os.path.join(directory, package_name + extension))."
+    },
+    {
+      "boundary": "environment variables os.getenv('GIT_USERNAME') / os.getenv('GH_TOKEN') (project_scanner.py:35-36)",
+      "verdict": "recorded but not a path source",
+      "rationale": "Local operator credentials used only as HTTP auth tuple; they never influence file paths. Kept in the candidate CSV with an explicit context note so the labeling step can classify them 'none' for pass 1."
+    },
+    {
+      "boundary": "semgrep response dict entries result['path'] (guarddog/analyzer/analyzer.py:210-217)",
+      "verdict": "propagation only, not a source",
+      "rationale": "Paths of files inside the scanned (untrusted) package, produced by semgrep; they only feed os.path.abspath/os.path.relpath string formatting for reporting, no direct file access uses them in this code."
+    }
+  ],
+  "source_candidate_families": [
+    {
+      "family": "click CLI handler parameters",
+      "detection": "parameters of functions decorated with cli.command / click.command / click.group / click.argument / click.option (via getADecorator(), no Decorator AST type exists)",
+      "expected_sites": [
+        "guarddog/cli.py:33 verify(path, json, exit_non_zero_on_finding) - arg 0 'path' is path-relevant",
+        "guarddog/cli.py:63 scan(identifier, version, rules, exclude_rules, json, exit_non_zero_on_finding) - args 0-1 'identifier'/'version' are path-relevant"
+      ]
+    },
+    {
+      "family": "internal scanner wrapper parameters (taint summary candidates)",
+      "detection": "parameters named path/identifier/name/package_name/version/base_dir/directory/url/zippath/unzippedpath/requirements of the repo-observed wrapper functions scan_local, scan_remote, _scan_remote, download_package, download_compressed, analyze, analyze_sourcecode, scan_requirements, get_package_info",
+      "expected_sites": [
+        "guarddog/scanners/package_scanner.py:25 scan_local(path)",
+        "guarddog/scanners/package_scanner.py:54 _scan_remote(name, base_dir, version, rules, write_package_info)",
+        "guarddog/scanners/package_scanner.py:70 scan_remote(name, version, rules, base_dir, write_package_info)",
+        "guarddog/scanners/package_scanner.py:98 download_package(package_name, directory, version)",
+        "guarddog/scanners/package_scanner.py:149 download_compressed(url, zippath, unzippedpath)",
+        "guarddog/scanners/project_scanner.py:207 scan_local(path)",
+        "guarddog/scanners/project_scanner.py:237 scan_remote(url, branch, requirements_name) - 'url' only",
+        "guarddog/scanners/project_scanner.py:166 scan_requirements(requirements)",
+        "guarddog/analyzer/analyzer.py:65 analyze(path, info, rules)",
+        "guarddog/analyzer/analyzer.py:138 analyze_sourcecode(path, rules)",
+        "guarddog/utils/package_info.py:4 get_package_info(name)"
+      ]
+    },
+    {
+      "family": "os.getenv environment reads",
+      "expected_sites": [
+        "guarddog/scanners/project_scanner.py:35 os.getenv('GIT_USERNAME')",
+        "guarddog/scanners/project_scanner.py:36 os.getenv('GH_TOKEN')"
+      ]
+    },
+    {
+      "family": "requests.get remote HTTP responses",
+      "expected_sites": [
+        "guarddog/utils/package_info.py:19 requests.get(url) - PyPI JSON API",
+        "guarddog/scanners/project_scanner.py:92 requests.get(url) - PyPI versions API",
+        "guarddog/scanners/project_scanner.py:267 requests.get(url=req_url, auth=token) - GitHub raw requirements",
+        "guarddog/scanners/package_scanner.py:158 requests.get(url, stream=True) - package archive download",
+        "guarddog/analyzer/metadata/typosquatting.py:68 requests.get(popular_packages_url) - top-packages list"
+      ]
+    },
+    {
+      "family": "content reads / JSON deserialization (.json(), .read(), .readlines())",
+      "expected_sites": [
+        "guarddog/utils/package_info.py:25 response.json()",
+        "guarddog/scanners/project_scanner.py:92 requests.get(url).json()",
+        "guarddog/analyzer/metadata/typosquatting.py:68 requests.get(...).json()",
+        "guarddog/scanners/package_scanner.py:161 response.raw.read() - downloaded archive bytes",
+        "guarddog/scanners/project_scanner.py:232 f.readlines() - requirements.txt lines"
+      ]
+    }
+  ],
+  "sink_candidate_families": [
+    {
+      "family": "built-in open()",
+      "arg_index": 0,
+      "access_types": "read 'r' / write 'w' / 'wb' / 'w+' (mode captured from literal arg 1 when present)",
+      "expected_sites": [
+        "guarddog/scanners/package_scanner.py:160 open(zippath, 'wb') - writes downloaded archive; path built from package name",
+        "guarddog/scanners/package_scanner.py:65 open(os.path.join(results['path'], f'package_info-{suffix}.json'), 'w') - write; suffix built from name/version",
+        "guarddog/scanners/project_scanner.py:231 open(path, 'r') - reads CLI-provided requirements path",
+        "guarddog/analyzer/metadata/typosquatting.py:64 open(top_packages_path, 'r') - internal resource cache read",
+        "guarddog/analyzer/metadata/typosquatting.py:69 open(top_packages_path, 'w+') - internal resource cache write"
+      ]
+    },
+    {
+      "family": "shutil.unpack_archive",
+      "arg_index": [0, 1],
+      "access_types": "archive extraction (zip/tar); entry names inside the archive control extracted paths (zip-slip / CWE-22 class behavior in this code version)",
+      "expected_sites": [
+        "guarddog/scanners/package_scanner.py:163 shutil.unpack_archive(zippath, unzippedpath) - both args built from package_name; archive contents come from a PyPI download URL selected from untrusted metadata"
+      ]
+    },
+    {
+      "family": ".extractall (method call, dynamic receiver)",
+      "arg_index": 0,
+      "access_types": "tar extraction destination",
+      "expected_sites": [
+        "guarddog/scanners/package_scanner.py:46 tarsafe.open(path).extractall(tmpdirname) - receiver is the tarsafe.open(...) call; tarsafe 0.0.4 is a path-sanitizing extraction wrapper (sanitizer evidence), destination is a tempfile dir, archive path is CLI-provided"
+      ]
+    },
+    {
+      "family": "os.remove",
+      "arg_index": 0,
+      "access_types": "file deletion",
+      "expected_sites": [
+        "guarddog/scanners/package_scanner.py:164 os.remove(zippath)"
+      ]
+    },
+    {
+      "family": "os.listdir",
+      "arg_index": 0,
+      "access_types": "directory enumeration (read)",
+      "expected_sites": [
+        "guarddog/analyzer/analyzer.py:34 os.listdir(path) - internal rules directory",
+        "guarddog/analyzer/metadata/typosquatting.py:60 os.listdir(resourcesdir) - internal resources directory"
+      ]
+    },
+    {
+      "family": "os.path.exists / os.path.isdir / os.path.isfile / os.path.getmtime",
+      "arg_index": 0,
+      "access_types": "filesystem existence/metadata check (TOCTOU-relevant validation nodes)",
+      "expected_sites": [
+        "guarddog/scanners/package_scanner.py:43 os.path.exists(path)",
+        "guarddog/analyzer/metadata/typosquatting.py:61 os.path.getmtime(top_packages_path)"
+      ]
+    },
+    {
+      "family": "invoke_semgrep (external resource loader)",
+      "arg_index": 1,
+      "access_types": "semgrep scans the target path list; argument 1 is [targetpath]",
+      "expected_sites": [
+        "guarddog/analyzer/analyzer.py:159 invoke_semgrep(Path(self.sourcecode_path), [targetpath], ...)",
+        "guarddog/analyzer/analyzer.py:171 invoke_semgrep(Path(os.path.join(...)), [targetpath], ...)"
+      ]
+    }
+  ],
+  "sink_families_checked_but_absent": [
+    "pathlib.Path.open / read_text / read_bytes / write_text / write_bytes - no such calls in shipped code (Path() is only used as a path wrapper object)",
+    "io.open / os.open - not used",
+    "direct zipfile.ZipFile.extractall / tarfile.extract / tarfile.extractall - not used in shipped code (extraction goes through tarsafe.open(...).extractall and shutil.unpack_archive)",
+    "FileResponse / sendfile / static file handlers - no HTTP layer exists in this project"
+  ],
+  "propagation_and_validation_nodes": {
+    "note": "Recorded as evidence only; deliberately NOT emitted as sink candidates because they perform no filesystem access. They are candidates for MySummaries.taint steps and for FP-heuristic filtering in later steps.",
+    "os.path.join": [
+      "guarddog/scanners/package_scanner.py:55 os.path.join(dirname(abspath(__file__)), base_dir) - remote-scan base directory",
+      "guarddog/scanners/package_scanner.py:56 os.path.join(directory, name) - file_path analyzed; name is the package name",
+      "guarddog/scanners/package_scanner.py:65 os.path.join(results['path'], 'package_info-...json') - feeds open('w')",
+      "guarddog/scanners/package_scanner.py:140 os.path.join(directory, package_name + file_extension) - zippath; feeds open('wb') and shutil.unpack_archive",
+      "guarddog/analyzer/analyzer.py:29,30,171 internal rule path construction",
+      "guarddog/analyzer/metadata/typosquatting.py:55,56 internal resource path construction"
+    ],
+    "path_transformation": [
+      "guarddog/scanners/package_scanner.py:141 zippath.removesuffix(file_extension) - unzippedpath; feeds shutil.unpack_archive arg 1",
+      "guarddog/analyzer/analyzer.py:215 os.path.abspath(result['path']) - reporting only",
+      "guarddog/analyzer/analyzer.py:217 os.path.relpath(file_path, targetpath) - reporting only",
+      "guarddog/analyzer/analyzer.py:149,159,171 pathlib.Path(path) / Path(...) - path wrapper passed to invoke_semgrep"
+    ],
+    "validation": [
+      "guarddog/cli.py:101-103 is_local_package: re.search(r'(.{0,2}\\/)+.+') and endswith('.tar.gz') - loose separator-based heuristic to decide local vs remote scan",
+      "guarddog/scanners/package_scanner.py:43-51 os.path.exists + endswith('.tar.gz') + os.path.isdir checks before extraction - type dispatch, not traversal sanitization"
+    ]
+  },
+  "sanitizer_evidence": [
+    "guarddog/scanners/package_scanner.py:46 tarsafe.open(path).extractall(tmpdirname) - tarsafe 0.0.4 is a wrapper that rejects/cleans traversal entry names during tar extraction (contrasting with the unsanitized shutil.unpack_archive at line 163)",
+    "tempfile.TemporaryDirectory() (package_scanner.py:45,94; used as extraction destination for scan_local tarball path) - destination is a fresh OS-created directory, though entry-name traversal inside the archive is what tarsafe mitigates"
+  ],
+  "toctou_evidence": [
+    "package_scanner.py:43 os.path.exists(path) is checked, then path is re-used at lines 46/49 for extraction/analysis - classic check-then-use window on a CLI-supplied path",
+    "typosquatting.py:60-69 os.listdir + os.path.getmtime freshness check before open(top_packages_path) on an internal cache file"
+  ],
+  "path_traversal_relevant_observations": [
+    "No base-directory containment check, no '..' rejection, no canonicalization (realpath/normpath) anywhere on the package-name-derived paths before open/shutil.unpack_archive",
+    "package_name flows from CLI 'identifier' or requirements.txt content into os.path.join(directory, package_name + file_extension); mixed separators or '..' segments are not stripped (is_local_package only routes local vs remote)",
+    "download URL is taken from PyPI release metadata (file['url']) and the archive bytes are then extracted with shutil.unpack_archive without entry-name validation in this code version",
+    "unzippedpath is derived by string removesuffix, not by path normalization"
+  ],
+  "coverage_gaps": [
+    "Dynamic receiver: .extractall is invoked on the result of the call tarsafe.open(path); moduleHint cannot be resolved to a dotted import path and is emitted as <dynamic>.extractall with the receiver call text",
+    "Dictionary-key flows (data['releases'], file['filename'], file['url'], data['info']['version']) are not modeled at call granularity by the extraction queries; the source rows stop at requests.get / .json() returns",
+    "resp.content.decode().splitlines() (project_scanner.py:270) - requirements lines from the remote response are captured indirectly via the scan_requirements(requirements) parameter row, not as a call-level source row",
+    "invoke_semgrep is a third-party semgrep-internal API; argument semantics (arg 1 = target path list) were inferred from call sites in analyzer.py",
+    "Dotted moduleHint values are syntactic (textual) resolutions of the callee expression, not resolved API models; alias imports would not be distinguished (current imports are direct: import os, shutil, tarsafe, tempfile, requests, click)",
+    "Keyword-only/defaulted parameters of click handlers (rules, exclude_rules, json flags) are included as candidate rows for completeness; they are not path inputs and are expected to be labeled 'none'"
+  ],
+  "exclusions_applied": [
+    "guarddog-db/ (CodeQL database nested inside the source tree) excluded from all code exploration and evidence collection",
+    "tests/ excluded from candidate extraction (WORKFLOW 4.3.2 noise rule)",
+    "scripts/evaluator/ excluded from candidate extraction (offline evaluation harness operating on fixed local paths; not shipped tool code)",
+    "repo-root ground-truth artifacts (CVE-Report-GuardDog-Evaluator-PathTraversal.md, VULNERABILITY_AUDIT_REPORT.md, VULNERABILITY_AUDIT_REPORT_CORRECTED.md, path_traversal_sinks.csv) were deliberately NOT read to preserve experiment independence"
+  ],
+  "artifacts_generated": [
+    "iris/exploration/detection.json (this file)",
+    "iris/extraction/sources.ql",
+    "iris/extraction/sinks.ql"
+  ],
+  "extraction_query_contract": {
+    "execution": "codeql query run <query> --database <DB> --output <bqrs>, then codeql bqrs decode <bqrs> --format=csv --output <csv> (NOT database analyze / SARIF)",
+    "kind": "plain multi-column select queries; intentionally no @kind problem annotation and no @kind table assumption",
+    "columns": [
+      "node - candidate AST node descriptor (Call:<callee> / Parameter:<name>)",
+      "role - literal 'source_candidate' or 'sink_candidate'",
+      "callableName - final callable name",
+      "flowKind - param | return | arg",
+      "receiver - receiver/enclosing-class description ('' for builtins/globals)",
+      "moduleHint - syntactic dotted callee path (e.g. os.path.join) or '<dynamic>.<name>'",
+      "argIndex - argument index; parameter rows use the declared positional index (methods include 'self' at index 0); -1 when not applicable",
+      "location - absolute file path : 1-based line",
+      "context - family/context explanation for the labeling step"
+    ],
+    "ql_safety_rules_applied": [
+      "no QL variable named 'module' (moduleHint used)",
+      "no AstNode.getFile(); locationStr uses getLocation().getFile()/getStartLine() verified against python-all 7.1.2",
+      "no QL classes with unbound this or invalid supertypes; only predicates and string functions",
+      "no {{...}} template placeholders remain; queries are rendered concrete",
+      "API::Node / DataFlow::Node conversions not needed (pure AST extraction, no dataflow in these queries)"
+    ]
+  }
+}

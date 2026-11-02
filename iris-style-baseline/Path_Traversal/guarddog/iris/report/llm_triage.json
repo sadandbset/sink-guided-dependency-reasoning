@@ -1,0 +1,136 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "guarddog-iris-pass1-llm-triage-20261022",
+    "generated_at": "2026-10-22",
+    "reviewer": "glm-5.3 (Claude Code CLI session, independent LLM path re-review)",
+    "project": "guarddog",
+    "pass": 1,
+    "focus": "Path Traversal (CWE-22 / CWE-23 / CWE-36 / CWE-73)",
+    "rule_id": "py/augur/guarddog/pass1-path-traversal",
+    "inputs_reviewed": [
+      "results/pass1.sarif",
+      "report/iris_report.md",
+      "labels/labels.json",
+      "report/query_generation_notes.md",
+      "guarddog/scanners/package_scanner.py (full read: lines 25-164)",
+      "guarddog/cli.py:75-109",
+      "pyproject.toml / requirements.txt (python>=3.10, tarsafe==0.0.4 pins)"
+    ],
+    "sarif_execution_successful": true,
+    "formal_result_count": 0,
+    "codeflows_reviewed": 0,
+    "conclusion": "CodeQL 分析成功，但本轮没有命中正式路径穿越污点路径"
+  },
+  "formal_alerts": [],
+  "alert_triage": {
+    "verdict": "n/a",
+    "statement": "pass1.sarif 的 runs[0].results 为空数组：本次 CodeQL database analyze 执行成功（invocations[0].executionSuccessful = true，驱动规则 py/augur/guarddog/pass1-path-traversal 已注册且 defaultConfiguration.enabled = true），但未产生任何 ruleId = py/augur/guarddog/pass1-path-traversal 的正式结果，也没有任何 codeFlows 可供逐条复核。因此不存在 likely_tp / likely_fp / uncertain 的告警级裁决；按指令明确声明：本轮没有命中正式路径穿越污点路径。 iris_report.md 的 'Finding Counts' 全空与之一致。"
+  },
+  "pipeline_review_ten_points": [
+    {
+      "point": 1,
+      "question": "Source 是否来自实际可由攻击者控制的输入？",
+      "verdict": "n/a（无正式告警）；标签层评估正确",
+      "evidence": "labels.json 的 8 个 source 均锚定真实攻击者控制边界：PyPI JSON 元数据（package_info.py:19/25，被扫描的可能是恶意包）、归档下载响应体（package_scanner.py:158/161，恶意包作者控制条目名）、requirements.txt 内容（project_scanner.py:232 本地、:267 远程 raw.githubusercontent）。env 凭据（src-01/02）、固定可信端点 typosquatting（src-05/31）、URL 形参（src-13/22/23）均被正确判为 none/fp。但本轮没有告警产生，source 判定未在结果层得到检验。"
+    },
+    {
+      "point": 2,
+      "question": "Source 是否真的能到达文件访问路径参数（异步/包装/变换有真实源码证据）？",
+      "verdict": "n/a（无正式告警）；已知数据流缺口是零结果的主因",
+      "evidence": "真实源码链存在且被标签正确记录：requirements.txt → pkg_resources 解析 → scan_remote(dependency, version) → _scan_remote name → os.path.join(directory, name)（package_scanner.py:56,140）→ zippath/unzippedpath → open/unpack_archive/os.remove（:160,:163,:164）。但生成的 taint 查询未在任何一条链上连通 source→sink：(a) zip-slip 的污点（归档条目名→解压路径）发生在归档语义内部，程序内数据流不可见（query_generation_notes §8 L1/L5）；(b) CLI identifier 形参未入 source 标签（§7 G1），`guarddog scan <含分隔符的identifier>` 直达 join 链的流无法观测；(c) requirements 依赖名链依赖 14 条合成边（S1–S14，含 pool.starmap/functools.partial 进程边界、pkg_resources 解析、容器字面量变异），实际执行未产生告警，说明链路在合成边处未连通（§8 L2/L4 亦预警 version 链断于集合推导）。零结果与这些已知缺口一致，不是查询失效的意外产物。"
+    },
+    {
+      "point": 3,
+      "question": "Sink 是否真正执行敏感文件操作？",
+      "verdict": "n/a（无正式告警）；标签层 sink 均为真实文件操作",
+      "evidence": "8 个 sink 均对应真实文件系统操作：open(...,'wb') 归档写入（package_scanner.py:160）、shutil.unpack_archive 读取+解压落盘（:163，arg0 读取/arg1 目的地）、os.remove 删除（:164）、open(...,'w') 元数据写入（:65，默认不可达）、open(...,'r') requirements 读取（project_scanner.py:231）、invoke_semgrep 目标路径列表（analyzer.py:159/170，外部扫描器读取）。纯拼接/检查类节点（os.path.exists :43、os.path.isdir :48、os.path.getmtime typosquatting.py:61、listdir、固定常量路径 open）均被判 none/fp，未当作 sink——符合'纯路径构造不是 Sink'的要求。"
+    },
+    {
+      "point": 4,
+      "question": "项目声明/隐含的允许根目录、文件集合和访问权限是什么？受控输入能否指向其外部？",
+      "verdict": "允许根目录实际为扫描临时目录/基目录，且无任何包含性校验；受控输入可逃逸",
+      "evidence": "隐含允许范围 = _scan_remote 的 directory（os.path.join(dirname(abspath(__file__)), base_dir) 或 TemporaryDirectory，package_scanner.py:55,94-96）。name/package_name 直接 join 进 directory（:56,140）且 version 拼入写入文件名后缀（:64-65），全程无包含性校验；CLI 直传 identifier（cli.py:84）不经 pkg_resources 名字文法约束。因此含分隔符/.. 的输入可指向允许根之外。该判定来自源码通读，本轮无告警对其做结果级检验。"
+    },
+    {
+      "point": 5,
+      "question": "..、绝对路径、URL/百分号解码、分隔符变化、重复解码与符号链接是否真实影响访问目标？",
+      "verdict": "是（针对真实漏洞链）；本轮无告警检验",
+      "evidence": "真实漏洞 download_compressed 的穿越机制是归档成员名（'../' 序列、绝对路径成员、符号链接成员）在 shutil.unpack_archive → tarfile.extractall（无 extraction filter，Python>=3.10 基线，pyproject.toml:14）中不经任何规范化直接落盘——这正是 commit 37c7d076 修复的 zip-slip。辅助因素：Windows 下反斜杠分隔的 CLI identifier 可绕过 is_local_package 的仅含 '/' 正则（cli.py:102）进入 scan_remote join 链；requirements.txt 侧的依赖名受 pkg_resources 名字文法限制（不含 '/'），该入口的穿越受抑制。无 URL 百分号解码入路径的代码；resp.content.decode() 是字节→文本解码。全代码库无 symlink 专项处理。"
+    },
+    {
+      "point": 6,
+      "question": "是否存在规范化后严格的根目录包含判断、固定映射、真实文件名白名单等防护，且发生于实际访问之前？",
+      "verdict": "不存在（针对真实漏洞链）",
+      "evidence": "全代码库（package_scanner.py / project_scanner.py / analyzer.py / cli.py / package_info.py / typosquatting.py）无 normpath、realpath、resolve+包含判断、basename、startswith 根目录检查。唯一路径防护是 scan_local 分支的 tarsafe.open(path).extractall(tmpdirname)（package_scanner.py:46，tarsafe==0.0.4 拒绝穿越/绝对/符号链接成员名，目的地为全新 TemporaryDirectory）——但该调用在本地扫描分支，与真实漏洞所在的 download_compressed（:163，shutil.unpack_archive 无任何防护）是不同代码路径，对后者无防护作用。"
+    },
+    {
+      "point": 7,
+      "question": "是否将 Path.resolve、normpath、startsWith 字符串前缀或单纯登录鉴权误判为足够防护？",
+      "verdict": "未发生",
+      "evidence": "标签与查询生成均未把 os.path.exists/isdir（类型分派，package_scanner.py:43,48）、removesuffix（字符串截断，:141）、is_local_package（路由正则，cli.py:102）、GH_TOKEN/GIT_USERNAME 鉴权（project_scanner.py:35-36,267）当作 sanitizer；MySanitizers.qll 仅对 tarsafe extractall（:46）建模 barrier，且标为 candidate 待人工复核。analyzer.py:215/217 的 abspath/relpath 在文件访问之后仅用于报告。无误判为防护的情况。"
+    },
+    {
+      "point": 8,
+      "question": "是否只是正常授权的静态文件服务、测试代码、不可达路径或固定常量，而非越权文件访问？",
+      "verdict": "n/a（无正式告警，无此类误报产生）",
+      "evidence": "零告警意味着不存在'正常授权使用被误报'的情况。标签层已预判：sink-03（CLI verify 读取操作者指定文件，project_scanner.py:231）被保留为 candidate 并注明是常规授权使用（类似 cat）；typosquatting 固定常量路径读写（:54-56,64,69）判 fp；tests/、scripts/evaluator/ 与嵌套 guarddog-db/ 在抽取阶段已排除。真实漏洞链（download_compressed）不属于授权使用/测试/不可达路径：它在每次远程扫描中无条件执行。"
+    },
+    {
+      "point": 9,
+      "question": "是否因过度泛化的 Source/Sink/summary、数据库覆盖问题或错误诊断路径导致假阳性？",
+      "verdict": "n/a（无告警，无假阳性产生）",
+      "evidence": "所有 source/sink 谓词均以 (file, line) 位置 + API 形状双重锚定，不存在过度泛化匹配；SARIF 结果为零，假阳性为零（也零真阳性）。反向问题成立：泛化不足/数据流盲区导致假阴性（见 point 2）。数据库覆盖方面，tarsafe 库代码不在 DB 内（仅影响 sanitizer 判定的证据强度，不影响本轮零结果）；告警涉及的 guarddog 自身代码均在 artifacts 覆盖列表内。"
+    },
+    {
+      "point": 10,
+      "question": "是否把其他 CWE、CodeQL 自带基线或 SARIF 解析诊断混入 Pass 1 正式结果？",
+      "verdict": "未混入（复核确认）",
+      "evidence": "pass1.sarif 仅含一个 run、一条规则 py/augur/guarddog/pass1-path-traversal（tags 仅 cwe-022/023/036/073）；invocations 的 toolExecutionNotifications 只包含基线遥测（py/baseline/expected-extracted-files 的 33 个文件列表、cli/file-coverage-baseline、cli/platform），level 均为 'none'，是预期提取文件/覆盖遥测，不是告警也不是诊断查询结果。results 数组为空——没有 CodeQL 内置安全查询、其他 CWE 规则或诊断查询的结果被计入。本复核亦未将任何通知/遥测当作 Pass 1 正式 TP。"
+    }
+  ],
+  "real_vulnerability_match": {
+    "question": "本轮告警是否命中该项目真实存在的漏洞（CWE-22，commit 37c7d076，Securely extract PyPI .tar.gz archives #102）？",
+    "ground_truth_source": "用户在本次复核指令中直接提供的漏洞条目（commit 37c7d0767ba28f4df46117d478f97652594c491c，CWE-22，函数 download_compressed，修复 = 以 tarsafe.open(zippath).extractall(unzippedpath) 替换 shutil.unpack_archive 并限制扩展名）；未读取 PyVul 真值文件、修复提交仓库或 CVE 描述。",
+    "vulnerable_code_verified_in_snapshot": {
+      "file": "guarddog/scanners/package_scanner.py",
+      "lines": "158-164",
+      "function": "download_compressed",
+      "matches_commit_code_before": "逐行一致（快照第 158-164 行与提交 code_before 的 requests.get→open(zippath,'wb')→shutil.unpack_archive(zippath, unzippedpath)→os.remove(zippath) 完全相同，仅行号偏移约 5 行）",
+      "caller_chain": "download_package(package_name...) → zippath = os.path.join(directory, package_name + file_extension)（:140）→ unzippedpath = zippath.removesuffix(file_extension)（:141）→ download_compressed(url, zippath, unzippedpath)（:143）；url/file_extension 取自被扫描包的 PyPI releases 元数据 file['url']/file['filename']（:127-136），.tar.gz 直接命中无过滤分支"
+    },
+    "attack_path_analysis": {
+      "attacker": "恶意 PyPI 包作者（guarddog 的设计对象即不可信包）",
+      "steps": [
+        "攻击者发布含恶意 .tar.gz 的 PyPI 包（releases 元数据的 filename/url 指向该归档）",
+        "受害者执行 guarddog scan <该包名> → scan_remote → _scan_remote → download_package",
+        "package_scanner.py:158-161 归档字节被原样写入 zippath",
+        "package_scanner.py:163 shutil.unpack_archive(zippath, unzippedpath)：.tar.gz 分支走 tarfile.extractall 且未传 extraction filter（Python>=3.10 基线）",
+        "归档成员名含 '../'（或绝对路径/符号链接成员）→ 解压落点逃出 unzippedpath → 任意文件写入/覆盖（zip-slip）",
+        "os.remove(zippath)（:164）删除的是 zippath 本身，不影响逃逸写入的文件"
+      ],
+      "cwe_assessment": "CWE-22（路径穿越，zip-slip 变体）成立；符号链接成员另涉 CWE-59，与本 Pass 1 的 CWE 族相邻",
+      "allow_root": "隐含允许根 = unzippedpath（源自 TemporaryDirectory 或 base_dir），成员名无任何包含性校验，逃逸无障碍",
+      "preconditions": "受害者用 guarddog 扫描攻击者控制的包名（guarddog 威胁模型内的核心场景，无需额外前置条件）；归档须为 .tar.gz（.zip/.egg/.whl 走 zipfile，成员名被规范化，穿越受限）"
+    },
+    "formal_alert_hit": {
+      "hit": false,
+      "detail": "正式 Pass 1 告警数为 0，因此本轮正式结果未命中该真实漏洞（告警层面为漏报/false negative）。标签层面则命中：labels.json 的 sink-16（shutil.unpack_archive arg1 @ package_scanner.py:163，tp，置信 0.8）、sink-15（arg0，tp 0.7）、sink-02（open 'wb'，tp 0.75）、sink-10（os.remove，tp 0.65）精确定位在真实漏洞链的行号上，且 src-27/03/28/06 对 zip-slip 源头（PyPI 元数据/归档内容）的定性正确。"
+    },
+    "miss_root_cause": [
+      "L1/L5（query_generation_notes §8）：zip-slip 的污点传播（归档成员名 → 解压路径）发生在归档库语义内部，程序内 source→sink 数据流不存在，生成的 taint 查询原理上无法以污点路径告警形式表达该漏洞——这是本次漏报的结构性原因，而非查询实现错误。",
+      "G1（§7）：CLI identifier 形参未入 source 标签，'guarddog scan <含分隔符/.. 的 identifier> → join 链 → open/unpack/remove' 这条可被数据流追踪的替代链未被建模。",
+      "L2/L4：requirements.txt 依赖名链依赖 pool.starmap/functools.partial 进程边界与集合推导等合成边，实际执行未连通。"
+    ],
+    "verdict": "真实漏洞存在于快照中（package_scanner.py:158-164，与 commit 37c7d076 修复目标逐行吻合，独立源码复核确认其为无条件执行的 zip-slip 任意文件写入原语）；但本轮 Pass 1 正式 SARIF 告警为零，未产生任何命中该漏洞的正式 TP。判定：vulnerability_exists = true，formal_alert_hit = false（miss，非 TP 也非 FP——无告警可评）。"
+  },
+  "final_summary": {
+    "formal_pass1_alerts": 0,
+    "likely_tp": 0,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "statement": "CodeQL 分析成功，但本轮没有命中正式路径穿越污点路径。",
+    "vulnerability_match": "快照存在真实 CWE-22 漏洞（download_compressed 的 shutil.unpack_archive zip-slip，package_scanner.py:158-164），标签层已精确定位（sink-16 tp），但未转化为正式告警：漏报主因为 zip-slip 数据流对程序内污点追踪不可见 + CLI identifier source 未入标签。",
+    "no_fabrication": "未读取 PyVul 真值文件/修复提交/CVE 描述（漏洞匹配分析仅依据用户在指令中提供的 commit 条目与本地源码独立复核）；未修改 SARIF、labels、正式查询与源码。"
+  }
+}

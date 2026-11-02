@@ -1,0 +1,1565 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "flask-cors-path-traversal-pass1-20261022",
+    "generated_at": "2026-10-22T03:30:00Z",
+    "language": "python",
+    "framework": "flask",
+    "model": "glm-5.3",
+    "project": "Flask-Cors (flask-cors_vuln snapshot, flask_cors 3.0.8)",
+    "notes": [
+      "LLM labeling performed by glm-5.3 (via the Claude Code agent harness) in a single deterministic pass; 5 batches over all 67 candidates (sources.csv 46 data rows, sinks.csv 21 data rows), batch sizes 16/16/14 (sources, CSV row order) and 10/11 (sinks, CSV row order).",
+      "All 67 candidate rows were labeled; 0 removed as duplicates and 0 excluded: the two os.path.dirname rows per examples file are the two nested calls on the same source line (distinct AST nodes), and rows sharing a line in core.py (245: request.headers vs request.method; 176: request_headers vs request_method) are distinct nodes.",
+      "No sanitizer entries: flask_cors contains no path-validation code (no base-dir containment, no '..' rejection, no realpath/normpath/basename guard) because it performs zero filesystem access; os.path.abspath in examples/docs is canonicalization without base-dir containment on constant inputs - not a proven Pass 1 sanitizer (marked none instead).",
+      "Pass 1 sink coverage: 3 builtin open() rows (setup.py:15/:18/:29) carry role=sink with classification=fp - real file-read API calls whose path arguments (index 0) are literal/__file__-derived constants in the packaging script, unreachable from any untrusted source. No sink exists inside the flask_cors package itself (grep-verified zero filesystem calls).",
+      "Source labels reflect the real untrusted boundary of this Flask extension: the Flask request proxy (request.path, request.headers, request.method, and the Origin / Access-Control-Request-Method / Access-Control-Request-Headers reads). request.path is the only path-shaped source; header/method sources are non-path-shaped and retained for conservative recall. No source-to-sink path completes anywhere in this codebase.",
+      "No PyVul ground truth, patch diffs, CVE notices or post-snapshot analysis artifacts (ANALYSIS_REPORT.md etc.) were consulted; labels derive solely from full reads of the 28-file database snapshot sources and the Phase 1 Step 1-2 artifacts.",
+      "Schema mapping: CSV argIndex -1 (not applicable) mapped to arg_index null; CSV flowKinds mapped to the schema enum - request_attr->field, request_header/response_header/config_field->return, request_value_param/wrapper_param/config_param->param, file_open/path_join/path_part/path_canon/import_path_insert->argument (arg_index preserved from CSV).",
+      "Known extraction under-coverage carried over from detection.json: serialize_option options_dict[key] subscript reads (core.py:334-336, config-only channel) and Flask URL-rule variable binding (inside the external flask package) - neither is a path traversal flow in this codebase.",
+      "Low-confidence re-ask threshold 0.55: no entry fell below it (minimum confidence 0.65); 0 re-asks; 0 entries left candidate/unknown requiring human review for role assignment."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "022",
+        "023",
+        "036",
+        "073"
+      ],
+      "entries": [
+        {
+          "id": "src-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "parse_resources",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 66
+          },
+          "rationale": "Operator-trust configuration parameter: parse_resources(resources) receives the CORS resource patterns supplied by the embedding developer (CORS constructor kwargs, app.config CORS_RESOURCES, or cross_origin kwargs) - not HTTP-client input. The value is normalized into (regex, options) pairs (core.py:70-92) used only to match request.path for CORS option selection. Input controllability: developer/operator only. flask_cors performs zero filesystem calls, so no path traversal flow can originate here.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "get_cors_origins",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 113
+          },
+          "rationale": "Internal helper parameter carrying the Origin header value (passed from request_headers.get('Origin') at core.py:177). An internal function parameter is not itself an input boundary. The value is only logged (core.py:120), matched via try_match_any (core.py:128) and echoed into the Access-Control-Allow-Origin response header (core.py:133 -> :184 -> :250) - header-echo material (Pass 10), never a filesystem path. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:128 try_match_any(request_origin, origins)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 114
+          },
+          "rationale": "options.get('origins') reads the merged CORS options dictionary (DEFAULT_OPTIONS + app.config CORS_* keys + decorator kwargs) - operator-trust values, not attacker input (input controllability: developer only). Consumed for origin/wildcard/always-send/credentials decisions in get_cors_origins; never used to build a file path (zero filesystem calls in flask_cors). Not a CWE-22/23/36/73 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 123
+          },
+          "rationale": "options.get('send_wildcard') reads the merged CORS options dictionary (DEFAULT_OPTIONS + app.config CORS_* keys + decorator kwargs) - operator-trust values, not attacker input (input controllability: developer only). Consumed for origin/wildcard/always-send/credentials decisions in get_cors_origins; never used to build a file path (zero filesystem calls in flask_cors). Not a CWE-22/23/36/73 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-005",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 139
+          },
+          "rationale": "options.get('always_send') reads the merged CORS options dictionary (DEFAULT_OPTIONS + app.config CORS_* keys + decorator kwargs) - operator-trust values, not attacker input (input controllability: developer only). Consumed for origin/wildcard/always-send/credentials decisions in get_cors_origins; never used to build a file path (zero filesystem calls in flask_cors). Not a CWE-22/23/36/73 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 147
+          },
+          "rationale": "options.get('supports_credentials') reads the merged CORS options dictionary (DEFAULT_OPTIONS + app.config CORS_* keys + decorator kwargs) - operator-trust values, not attacker input (input controllability: developer only). Consumed for origin/wildcard/always-send/credentials decisions in get_cors_origins; never used to build a file path (zero filesystem calls in flask_cors). Not a CWE-22/23/36/73 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "get_allow_headers",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 161
+          },
+          "rationale": "Internal helper parameter carrying the Access-Control-Request-Headers preflight header string (from request_headers.get(ACL_REQUEST_HEADERS), core.py:203). Split on ',' and each name matched against options.get('allow_headers') (core.py:163-169), then joined into the Access-Control-Allow-Headers response header (:171). Internal param, header-shaped value, no filesystem involvement - not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:161-173 get_allow_headers splits/matches/echoes header names",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 167
+          },
+          "rationale": "options.get('allow_headers') inside the get_allow_headers filter lambda (core.py:167) - reads the developer-configured allowed-header patterns (operator-trust). Used as regex/string match patterns only; no filesystem use. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-009",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "get_cors_headers",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 176
+          },
+          "rationale": "Internal helper parameter: the request Headers object (passed from request.headers at set_cors_headers core.py:245). The untrusted boundary is upstream at request.headers (labeled separately); this parameter adds no new boundary. Values read from it (Origin/ACRM/ACRH at core.py:177/:194/:203) terminate in regex matching and response headers - never a filesystem path.",
+          "evidence": [
+            "flask_cors/core.py:245 get_cors_headers(options, request.headers, request.method)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "get_cors_headers",
+            "arg_index": 2,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 176
+          },
+          "rationale": "Internal helper parameter carrying request.method; only compared to 'OPTIONS' for preflight detection (core.py:193). Not a boundary itself, not path-shaped, no filesystem use - not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:193 if request_method == 'OPTIONS':",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-011",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "request_headers",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 177
+          },
+          "rationale": "Reads the Origin request header - a genuinely attacker-controlled string. request_headers is request.headers (core.py:245), i.e. the Flask request proxy, the library's only untrusted input boundary. Input controllability: full HTTP-client control of the header value. Labeled source for conservative recall; note the value is not path-shaped and in this codebase flows only into origin matching (try_match_any core.py:128) and the Access-Control-Allow-Origin echo (core.py:133 -> :184 -> resp.headers.add :250) - no filesystem API exists in flask_cors, so no CWE-22 flow completes from it.",
+          "evidence": [
+            "flask_cors/core.py:177 origins_to_set = get_cors_origins(options, request_headers.get('Origin'))",
+            "flask_cors/core.py:250 resp.headers.add(k, v) - response-header output, not file output",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-012",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 186
+          },
+          "rationale": "options.get('expose_headers') in get_cors_headers - merged developer CORS options (operator-trust); output goes into Access-Control-Expose-Headers / Access-Control-Allow-Credentials response header values (core.py:186-189). No attacker input, no filesystem use. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-013",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 188
+          },
+          "rationale": "options.get('supports_credentials') in get_cors_headers - merged developer CORS options (operator-trust); output goes into Access-Control-Expose-Headers / Access-Control-Allow-Credentials response header values (core.py:186-189). No attacker input, no filesystem use. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-014",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "request_headers",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 194
+          },
+          "rationale": "Reads the Access-Control-Request-Method preflight header - attacker-controlled. Input controllability: full HTTP-client control. Value is .upper()ed and membership-checked against options.get('methods') (core.py:198) to decide preflight header emission. Not path-shaped and never used in any filesystem operation; weak Pass 1 source kept for conservative recall (the echo path into response headers is Pass 10 material).",
+          "evidence": [
+            "flask_cors/core.py:194 acl_request_method = request_headers.get(ACL_REQUEST_METHOD, '').upper()",
+            "flask_cors/core.py:20 / decorator.py:13 / extension.py:11 'from flask import request' - the Flask request proxy is the library's only untrusted boundary",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-015",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 198
+          },
+          "rationale": "options.get('methods') - developer-configured allowed methods list (operator-trust); used as an allow-check for the preflight method header. No filesystem use. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-016",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "request_headers",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 203
+          },
+          "rationale": "Reads the Access-Control-Request-Headers preflight header - attacker-controlled comma-separated header-name list. Passed to get_allow_headers (core.py:161) which splits and matches names against the configured allow_headers and echoes matches into Access-Control-Allow-Headers (:171). Not path-shaped, never file-used; weak Pass 1 source kept for conservative recall (echo path is Pass 10 material).",
+          "evidence": [
+            "flask_cors/core.py:203 headers[ACL_ALLOW_HEADERS] = get_allow_headers(options, request_headers.get(ACL_REQUEST_HEADERS))",
+            "flask_cors/core.py:20 / decorator.py:13 / extension.py:11 'from flask import request' - the Flask request proxy is the library's only untrusted boundary",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-017",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 204
+          },
+          "rationale": "options.get('max_age') in get_cors_headers - merged developer CORS options (operator-trust); feeds response-header values and Vary/Origin logic (core.py:204-219). No attacker input, no filesystem use. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 205
+          },
+          "rationale": "options.get('methods') in get_cors_headers - merged developer CORS options (operator-trust); feeds response-header values and Vary/Origin logic (core.py:204-219). No attacker input, no filesystem use. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 210
+          },
+          "rationale": "options.get('vary_header') in get_cors_headers - merged developer CORS options (operator-trust); feeds response-header values and Vary/Origin logic (core.py:204-219). No attacker input, no filesystem use. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-020",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 216
+          },
+          "rationale": "options.get('origins') in get_cors_headers - merged developer CORS options (operator-trust); feeds response-header values and Vary/Origin logic (core.py:204-219). No attacker input, no filesystem use. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 218
+          },
+          "rationale": "options.get('origins') in get_cors_headers - merged developer CORS options (operator-trust); feeds response-header values and Vary/Origin logic (core.py:204-219). No attacker input, no filesystem use. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-022",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "set_cors_headers",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 224
+          },
+          "rationale": "Wrapper parameter receiving the Flask response object (built from the view return value via make_response, decorator.py:128, or the after_request callback). set_cors_headers only reads and writes resp.headers (core.py:241-250); a response object is not a path-shaped input and no filesystem access occurs. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:241-250 set_cors_headers mutates resp.headers only",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-023",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "headers",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 245
+          },
+          "rationale": "request.headers - the attacker-controlled request header mapping on the Flask request proxy: a genuine untrusted input boundary and the carrier for the Origin / Access-Control-Request-Method / Access-Control-Request-Headers reads at core.py:177/:194/:203. Input controllability: full HTTP-client control of header names/values. Labeled source for recall; in this library the derived values terminate in regex matching and CORS response-header writes, never in a filesystem path.",
+          "evidence": [
+            "flask_cors/core.py:20 / decorator.py:13 / extension.py:11 'from flask import request' - the Flask request proxy is the library's only untrusted boundary",
+            "flask_cors/core.py:245 headers_to_set = get_cors_headers(options, request.headers, request.method)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-024",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "method",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 245
+          },
+          "rationale": "request.method - client-controlled HTTP verb from the request line; forwarded to get_cors_headers and compared against 'OPTIONS' for preflight detection (core.py:193). Attacker-controlled but not path-shaped and never used in a filesystem operation; weak Pass 1 source retained for conservative recall.",
+          "evidence": [
+            "flask_cors/core.py:20 / decorator.py:13 / extension.py:11 'from flask import request' - the Flask request proxy is the library's only untrusted boundary",
+            "flask_cors/core.py:193 preflight branch on request_method == 'OPTIONS'",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-025",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "try_match_any",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 271
+          },
+          "rationale": "Internal helper parameter: inst receives the Origin value (core.py:128) and each stripped preflight header name (core.py:167); consumed by try_match string/regex comparison (core.py:272). Internal params are not boundaries, and the values never reach a filesystem API - not a Pass 1 source, and no summary edge is needed (no pass-1 sink flow traverses it).",
+          "evidence": [
+            "flask_cors/core.py:271-272 any(try_match(inst, pattern) for pattern in patterns)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "try_match",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 275
+          },
+          "rationale": "Internal helper parameter: receives the Origin header value (core.py:128) and request.path (extension.py:178). It is used strictly as the regex-match subject of try_match -> re.match (core.py:278/:280); taint entering here terminates inside the match. No propagation out of try_match is needed for any Pass 1 sink (none exists in flask_cors), so this is neither a source nor a required summary step.",
+          "evidence": [
+            "flask_cors/core.py:275-285 try_match: re.match(maybe_regex, request_origin)",
+            "flask_cors/extension.py:178 if try_match(request.path, res_regex):",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-027",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "get_cors_options",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 288
+          },
+          "rationale": "Operator-trust configuration hub: get_cors_options(appInstance, *dicts) merges DEFAULT_OPTIONS, app.config CORS_* keys and developer dicts (core.py:294-298). The app object and options are developer-supplied (input controllability: operator only); output feeds regex matching and response-header construction. No attacker input, no filesystem use.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "flask_cors/core.py:294-300 options merge order: defaults < app config < dicts"
+          ]
+        },
+        {
+          "id": "src-028",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "get_app_kwarg_dict",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 303
+          },
+          "rationale": "Operator-trust: get_app_kwarg_dict(appInstance) reads app.config CORS_* keys (core.py:308-314). Developer configuration only; output feeds option merging. No attacker input, no filesystem use.",
+          "evidence": [
+            "flask_cors/core.py:303-314 get_app_kwarg_dict reads app.config CORS_* keys",
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-029",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "app_config",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 313
+          },
+          "rationale": "app_config.get(k) - the value clause of the CORS_* dict comprehension (core.py:310-314): reads developer app.config keys (operator-trust). Config-only channel, no filesystem use. Not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-030",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "app_config",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 311
+          },
+          "rationale": "app_config.get(k) - the filter clause (is not None) of the same dict comprehension (core.py:310-314): developer app.config keys (operator-trust). Config-only, no filesystem use.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-031",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": null,
+            "callable": "serialize_options",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 354
+          },
+          "rationale": "Operator-trust: serialize_options(opts) processes the merged developer options dict (re_fix regex sanitization, flexible_str serialization, core.py:354-383). No attacker input; no filesystem use.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)",
+            "flask_cors/core.py:354-383 serialize_options normalizes option values only"
+          ]
+        },
+        {
+          "id": "src-032",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 365
+          },
+          "rationale": "options.get('origins') inside serialize_options -> sanitize_regex_param (core.py:365/:366) - developer-supplied origin/header patterns (operator-trust) normalized to regex lists. No attacker input, no filesystem use.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-033",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 366
+          },
+          "rationale": "options.get('allow_headers') inside serialize_options -> sanitize_regex_param (core.py:365/:366) - developer-supplied origin/header patterns (operator-trust) normalized to regex lists. No attacker input, no filesystem use.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-034",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.core",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/core.py",
+            "line": 380
+          },
+          "rationale": "options.get('max_age') timedelta check in serialize_options (core.py:380-381) - developer configuration serialized to a string for the Access-Control-Max-Age header. No attacker input, no filesystem use.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-035",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.decorator",
+            "type": "_options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/decorator.py",
+            "line": 116
+          },
+          "rationale": "_options.get('automatic_options', True) in cross_origin's decorator closure - reads the decorator kwargs (decorator.py:104 _options = kwargs), i.e. developer-supplied options applied at import time (operator-trust). Controls OPTIONS interception flagging on the wrapped view (decorator.py:116-119); no attacker input, no filesystem use.",
+          "evidence": [
+            "flask_cors/decorator.py:104 _options = kwargs (cross_origin decorator arguments)",
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-036",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.decorator",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/decorator.py",
+            "line": 125
+          },
+          "rationale": "options.get('automatic_options') in wrapped_function - merged developer options (get_cors_options(current_app, _options), decorator.py:123). Gates the preflight branch only; no attacker input, no filesystem use.",
+          "evidence": [
+            "flask_cors/decorator.py:121-128 wrapped_function options/preflight logic",
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-037",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "method",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/decorator.py",
+            "line": 125
+          },
+          "rationale": "request.method in the cross_origin wrapper - client-controlled HTTP verb used for the preflight branch (decorator.py:125-126: request.method == 'OPTIONS' -> default options response). Attacker-controlled but not path-shaped and never file-used; weak Pass 1 source retained for conservative recall.",
+          "evidence": [
+            "flask_cors/core.py:20 / decorator.py:13 / extension.py:11 'from flask import request' - the Flask request proxy is the library's only untrusted boundary",
+            "flask_cors/decorator.py:125-126 preflight branch",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-038",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.extension",
+            "type": "CORS",
+            "callable": "__init__",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/extension.py",
+            "line": 126
+          },
+          "rationale": "CORS.__init__(self, app=None, **kwargs): the Flask app object and constructor kwargs are supplied by the embedding developer (extension.py:126-129) - operator-trust, not an HTTP-client boundary. Values configure CORS options only; no filesystem use.",
+          "evidence": [
+            "flask_cors/extension.py:126-129 CORS.__init__ stores kwargs and calls init_app",
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-039",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.extension",
+            "type": "CORS",
+            "callable": "init_app",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/extension.py",
+            "line": 131
+          },
+          "rationale": "CORS.init_app(self, app, **kwargs): developer-supplied app object and option kwargs (extension.py:131-154) - operator-trust. The method merges options, parses resource regexes and registers the after_request hook; no attacker input, no filesystem use.",
+          "evidence": [
+            "flask_cors/extension.py:131-154 init_app: option merge + after_request registration",
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-040",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.extension",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/extension.py",
+            "line": 138
+          },
+          "rationale": "options.get('resources') in init_app - merged developer CORS options (operator-trust): the resource regex spec parsed by parse_resources (:138) and the exception-interception flag (:158). No attacker input, no filesystem use.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-041",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.extension",
+            "type": "options",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/extension.py",
+            "line": 158
+          },
+          "rationale": "options.get('intercept_exceptions') in init_app - merged developer CORS options (operator-trust): the resource regex spec parsed by parse_resources (:138) and the exception-interception flag (:158). No attacker input, no filesystem use.",
+          "evidence": [
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-042",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.extension",
+            "type": null,
+            "callable": "make_after_request_function",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/extension.py",
+            "line": 170
+          },
+          "rationale": "make_after_request_function(resources) receives the parsed (regex, options) resource list built from developer configuration (extension.py:143-146) - operator-trust. The closure only matches request.path against the regexes and applies response headers; no filesystem use.",
+          "evidence": [
+            "flask_cors/extension.py:143-153 resources built from developer options",
+            "flask_cors/core.py:52-63 DEFAULT_OPTIONS; core.py:288-300 get_cors_options merges DEFAULT_OPTIONS + app.config CORS_* keys + decorator/constructor kwargs (operator-trust domain)"
+          ]
+        },
+        {
+          "id": "src-043",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.extension",
+            "type": null,
+            "callable": "cors_after_request",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/extension.py",
+            "line": 171
+          },
+          "rationale": "after_request callback parameter: the Flask response object produced by the view. The closure only reads resp.headers.get(ACL_ORIGIN) as a skip-check (:173) and calls set_cors_headers (:181). A response object is not path-shaped input and no filesystem access occurs - not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/extension.py:171-185 cors_after_request touches resp.headers only",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-044",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "flask_cors.extension",
+            "type": "resp",
+            "callable": "get",
+            "arg_index": 0,
+            "flow_kind": "return"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/extension.py",
+            "line": 173
+          },
+          "rationale": "resp.headers.get(ACL_ORIGIN) reads a response header previously set by the view's own flask-cors decorator; used only as a truthiness skip-check ('CORS already evaluated', extension.py:173-175). Response headers can embed request-derived values (a view echoing Origin), but the value never becomes a filesystem path - weak secondary boundary, not a Pass 1 source.",
+          "evidence": [
+            "flask_cors/extension.py:173-175 skip-check on resp.headers.get(ACL_ORIGIN)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-045",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/extension.py",
+            "line": 178
+          },
+          "rationale": "request.path - the URL-decoded, attacker-controlled request path on the Flask request proxy: the canonical path-shaped untrusted input for CWE-22/23/36/73. Input controllability: full HTTP-client control of the URL path (decoded by Werkzeug before it is visible here). In this library it is used strictly as a regex match subject (try_match(request.path, res_regex) -> re.match, core.py:278/:280) to select which CORS resource options apply - it never constructs, joins, opens or locates a filesystem path, and flask_cors contains zero filesystem APIs, so no source-to-sink traversal path exists in this codebase. Labeled source to preserve recall for the pass query and cross-project signature reuse.",
+          "evidence": [
+            "flask_cors/core.py:20 / decorator.py:13 / extension.py:11 'from flask import request' - the Flask request proxy is the library's only untrusted boundary",
+            "flask_cors/extension.py:178 if try_match(request.path, res_regex):",
+            "flask_cors/core.py:278/:280 re.match(maybe_regex, request_origin) - regex consumption only",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "src-046",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "path",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/flask_cors/extension.py",
+            "line": 180
+          },
+          "rationale": "The same request.path boundary value passed to LOG.debug (extension.py:179-180) - log-injection-shaped usage (Pass 11 material). Labeled source because it is the same attacker-controlled path-shaped boundary (input controllability: full HTTP-client control); no filesystem use anywhere downstream.",
+          "evidence": [
+            "flask_cors/core.py:20 / decorator.py:13 / extension.py:11 'from flask import request' - the Flask request proxy is the library's only untrusted boundary",
+            "flask_cors/extension.py:179-180 LOG.debug(\"Request to '%s' matches ...\", request.path, ...)",
+            "grep over flask_cors/*.py in this session: zero matches for open/os.path/pathlib/shutil/io filesystem calls - the package performs no file access"
+          ]
+        },
+        {
+          "id": "sink-001",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "dirname",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/app_based_example.py",
+            "line": 17
+          },
+          "rationale": "os.path.dirname (inner call of the nested chain) on the constant __file__-derived path in the app_based_example.py import-path fallback (only executed when flask_cors is not installed). dirname is path-component extraction, not file access; the input is a compile-time constant with no attacker influence, and the result feeds only sys.path.insert. The demo app's routes return jsonify responses and never touch the filesystem. Not a Pass 1 sink (and not a sanitizer - nothing to neutralize).",
+          "evidence": [
+            "app_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)",
+            "grep over examples/app_based_example.py: routes return jsonify only; no file API, no request-derived path"
+          ]
+        },
+        {
+          "id": "sink-002",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "dirname",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/app_based_example.py",
+            "line": 17
+          },
+          "rationale": "os.path.dirname (outer call of the nested chain) in the same app_based_example.py import-path hack: its argument is the inner dirname result - still a constant __file__-derived value with no attacker influence; output feeds only sys.path.insert. Not a file access, not a Pass 1 sink.",
+          "evidence": [
+            "app_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)"
+          ]
+        },
+        {
+          "id": "sink-003",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "abspath",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/app_based_example.py",
+            "line": 17
+          },
+          "rationale": "os.path.abspath(__file__) - canonicalization of a constant script path inside the app_based_example.py import-path hack. abspath without a base-dir containment check is not a Pass 1 sanitizer, and on a constant input it is not a sink either; the result feeds only dirname/sys.path.insert. No untrusted value ever reaches it.",
+          "evidence": [
+            "app_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)"
+          ]
+        },
+        {
+          "id": "sink-004",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": "path",
+            "callable": "insert",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/app_based_example.py",
+            "line": 18
+          },
+          "rationale": "os.sys.path.insert(0, parentdir) in app_based_example.py - import-resolution path manipulation, not a file read/write/delete. The inserted value (argument index 1) is the constant __file__-derived parentdir with no attacker influence; the demo app exposes no input that could reach it. Per the Pass 1 sink rubric, import-path manipulation is not a filesystem sink: none/fp.",
+          "evidence": [
+            "app_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)"
+          ]
+        },
+        {
+          "id": "sink-005",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "dirname",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/blueprints_based_example.py",
+            "line": 17
+          },
+          "rationale": "os.path.dirname (inner call of the nested chain) on the constant __file__-derived path in the blueprints_based_example.py import-path fallback (only executed when flask_cors is not installed). dirname is path-component extraction, not file access; the input is a compile-time constant with no attacker influence, and the result feeds only sys.path.insert. The demo app's routes return jsonify responses and never touch the filesystem. Not a Pass 1 sink (and not a sanitizer - nothing to neutralize).",
+          "evidence": [
+            "blueprints_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)",
+            "grep over examples/blueprints_based_example.py: routes return jsonify only; no file API, no request-derived path"
+          ]
+        },
+        {
+          "id": "sink-006",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "dirname",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/blueprints_based_example.py",
+            "line": 17
+          },
+          "rationale": "os.path.dirname (outer call of the nested chain) in the same blueprints_based_example.py import-path hack: its argument is the inner dirname result - still a constant __file__-derived value with no attacker influence; output feeds only sys.path.insert. Not a file access, not a Pass 1 sink.",
+          "evidence": [
+            "blueprints_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)"
+          ]
+        },
+        {
+          "id": "sink-007",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "abspath",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/blueprints_based_example.py",
+            "line": 17
+          },
+          "rationale": "os.path.abspath(__file__) - canonicalization of a constant script path inside the blueprints_based_example.py import-path hack. abspath without a base-dir containment check is not a Pass 1 sanitizer, and on a constant input it is not a sink either; the result feeds only dirname/sys.path.insert. No untrusted value ever reaches it.",
+          "evidence": [
+            "blueprints_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)"
+          ]
+        },
+        {
+          "id": "sink-008",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": "path",
+            "callable": "insert",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/blueprints_based_example.py",
+            "line": 18
+          },
+          "rationale": "os.sys.path.insert(0, parentdir) in blueprints_based_example.py - import-resolution path manipulation, not a file read/write/delete. The inserted value (argument index 1) is the constant __file__-derived parentdir with no attacker influence; the demo app exposes no input that could reach it. Per the Pass 1 sink rubric, import-path manipulation is not a filesystem sink: none/fp.",
+          "evidence": [
+            "blueprints_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)"
+          ]
+        },
+        {
+          "id": "sink-009",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": "path",
+            "callable": "insert",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/docs/conf.py",
+            "line": 21
+          },
+          "rationale": "sys.path.insert(0, os.path.abspath('..')) in the Sphinx documentation config (docs/conf.py:21) - import-resolution path manipulation for autodoc, not a file access. The inserted value (argument index 1) is a literal relative parent dir resolved at docs build time; no untrusted input exists in a docs build script. Not a Pass 1 sink.",
+          "evidence": [
+            "docs/conf.py:21 sys.path.insert(0, os.path.abspath('..')) (Sphinx autodoc setup)"
+          ]
+        },
+        {
+          "id": "sink-010",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "abspath",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/docs/conf.py",
+            "line": 21
+          },
+          "rationale": "os.path.abspath('..') in docs/conf.py:21 - canonicalization of a literal relative path feeding sys.path.insert only. Constant input, no file access, no attacker influence; not a Pass 1 sink and not a sanitizer.",
+          "evidence": [
+            "docs/conf.py:21 sys.path.insert(0, os.path.abspath('..'))"
+          ]
+        },
+        {
+          "id": "sink-011",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/setup.py",
+            "line": 15
+          },
+          "rationale": "builtin open() - the canonical Pass 1 file-read sink API (dangerous path argument: index 0). This instance is in the setuptools packaging script: open(join(dirname(__file__), 'flask_cors/version.py'), 'r'), whose content is exec'd at setup.py:16 (Pass 4 material). The path argument is a literal/__file__-derived constant with zero attacker influence, and setup.py executes only at packaging time, never in the HTTP request path. Role=sink (correct API modeling for query generation - any future taint into argument 0 would be caught); this instance is an fp (no untrusted source can reach it).",
+          "evidence": [
+            "setup.py:13 from os.path import join, dirname",
+            "setup.py:15-16 with open(join(dirname(__file__), 'flask_cors/version.py'), 'r') as f: exec(f.read())",
+            "setup.py is a packaging script - no request handling, no untrusted input"
+          ]
+        },
+        {
+          "id": "sink-012",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": null,
+            "callable": "join",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/setup.py",
+            "line": 15
+          },
+          "rationale": "os.path.join (bare name via the from-import at setup.py:13) - path construction, not itself a file access. Modeled as a summary/propagation step because its result is the direct path argument of the open() sink at setup.py:15: taint entering any join argument must propagate to the call result for a realistic Pass 1 flow. This instance joins constant arguments (dirname(__file__), 'flask_cors/version.py') - no tainted flow; classification candidate (modeling element, not a finding).",
+          "evidence": [
+            "setup.py:13 from os.path import join, dirname",
+            "setup.py:15 open(join(dirname(__file__), 'flask_cors/version.py'), 'r')"
+          ]
+        },
+        {
+          "id": "sink-013",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": null,
+            "callable": "dirname",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/setup.py",
+            "line": 15
+          },
+          "rationale": "os.path.dirname (bare name via the from-import at setup.py:13) - component extraction on the constant __file__ path; propagation step feeding join()/open() in the same expression (setup.py:15). Kept as a summary so path taint reaching dirname propagates to its result toward the open() sink. Constant input here; candidate modeling element.",
+          "evidence": [
+            "setup.py:15 open(join(dirname(__file__), 'flask_cors/version.py'), 'r')"
+          ]
+        },
+        {
+          "id": "sink-014",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/setup.py",
+            "line": 18
+          },
+          "rationale": "builtin open() - Pass 1 file-read sink API (dangerous path argument: index 0). Instance: open(join(dirname(__file__), 'requirements.txt'), 'r') in the packaging script, read into install_requires (setup.py:18-19). Literal/__file__-derived constant path, packaging-time execution only, zero attacker influence - instance fp; role kept as sink for query generation.",
+          "evidence": [
+            "setup.py:18-19 install_requires = f.read().split('\\n')",
+            "setup.py:13 from os.path import join, dirname"
+          ]
+        },
+        {
+          "id": "sink-015",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": null,
+            "callable": "join",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/setup.py",
+            "line": 18
+          },
+          "rationale": "os.path.join at setup.py:18 - same propagation-summary modeling as setup.py:15: the result is the path argument of the open() sink at :18. Constant arguments (dirname(__file__), 'requirements.txt'); candidate modeling element, no tainted instance.",
+          "evidence": [
+            "setup.py:18 open(join(dirname(__file__), 'requirements.txt'), 'r')"
+          ]
+        },
+        {
+          "id": "sink-016",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": null,
+            "callable": "dirname",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/setup.py",
+            "line": 18
+          },
+          "rationale": "os.path.dirname at setup.py:18 - component extraction on the constant __file__ path feeding join()/open(); propagation summary toward the open() sink. Constant input; candidate modeling element.",
+          "evidence": [
+            "setup.py:18 open(join(dirname(__file__), 'requirements.txt'), 'r')"
+          ]
+        },
+        {
+          "id": "sink-017",
+          "role": "sink",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/setup.py",
+            "line": 29
+          },
+          "rationale": "builtin open() - Pass 1 file-read sink API (dangerous path argument: index 0). Instance: open('README.rst') as the setup() long_description argument (setup.py:29) - a literal CWD-relative filename in the packaging script, packaging-time execution only, zero attacker influence. Role=sink (API modeling); instance fp.",
+          "evidence": [
+            "setup.py:29 long_description=open('README.rst').read()"
+          ]
+        },
+        {
+          "id": "sink-018",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "dirname",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/view_based_example.py",
+            "line": 18
+          },
+          "rationale": "os.path.dirname (inner call of the nested chain) on the constant __file__-derived path in the view_based_example.py import-path fallback (only executed when flask_cors is not installed). dirname is path-component extraction, not file access; the input is a compile-time constant with no attacker influence, and the result feeds only sys.path.insert. The demo app's routes return jsonify responses and never touch the filesystem. Not a Pass 1 sink (and not a sanitizer - nothing to neutralize).",
+          "evidence": [
+            "view_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)",
+            "grep over examples/view_based_example.py: routes return jsonify only; no file API, no request-derived path"
+          ]
+        },
+        {
+          "id": "sink-019",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "dirname",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/view_based_example.py",
+            "line": 18
+          },
+          "rationale": "os.path.dirname (outer call of the nested chain) in the same view_based_example.py import-path hack: its argument is the inner dirname result - still a constant __file__-derived value with no attacker influence; output feeds only sys.path.insert. Not a file access, not a Pass 1 sink.",
+          "evidence": [
+            "view_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)"
+          ]
+        },
+        {
+          "id": "sink-020",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.88,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "abspath",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/view_based_example.py",
+            "line": 18
+          },
+          "rationale": "os.path.abspath(__file__) - canonicalization of a constant script path inside the view_based_example.py import-path hack. abspath without a base-dir containment check is not a Pass 1 sanitizer, and on a constant input it is not a sink either; the result feeds only dirname/sys.path.insert. No untrusted value ever reaches it.",
+          "evidence": [
+            "view_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)"
+          ]
+        },
+        {
+          "id": "sink-021",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "sys",
+            "type": "path",
+            "callable": "insert",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/flask-cors_vuln/examples/view_based_example.py",
+            "line": 19
+          },
+          "rationale": "os.sys.path.insert(0, parentdir) in view_based_example.py - import-resolution path manipulation, not a file read/write/delete. The inserted value (argument index 1) is the constant __file__-derived parentdir with no attacker influence; the demo app exposes no input that could reach it. Per the Pass 1 sink rubric, import-path manipulation is not a filesystem sink: none/fp.",
+          "evidence": [
+            "view_based_example.py import-path hack: parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); os.sys.path.insert(0, parentdir)"
+          ]
+        }
+      ]
+    }
+  ]
+}

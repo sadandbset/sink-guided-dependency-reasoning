@@ -1,0 +1,220 @@
+{
+  "triage_metadata": {
+    "run_id": "gradio-pathtraversal-pass1-llmtriage-20261022",
+    "date": "2026-10-22",
+    "reviewer": "glm-5.3 (independent LLM path re-review, Claude Code CLI)",
+    "input_sarif": "results/pass1.sarif",
+    "rule_under_review": "py/augur/gradio/pass1-path-traversal",
+    "source_tree": "dataset/codeql_databases/path_traversal_dbs/gradio_vuln (gradio 2.5.0 snapshot)",
+    "independence_note": "Per-alert verdicts below were derived only from the SARIF codeFlows, the real gradio sources in gradio_vuln, labels.json and query_generation_notes.md. No PyVul ground truth, fix commits or CVE descriptions were consulted for the per-alert verdicts. The ground-truth comparison requested as a separate task is isolated in the 'real_vulnerability_match' section at the end and did not influence any per-alert verdict.",
+    "official_alerts_present": true,
+    "alert_count": 8,
+    "sarif_purity_check": "PASS - the run contains exactly one rule (py/augur/gradio/pass1-path-traversal) and 8 results, all with that ruleId; no CodeQL built-in security query results, no diagnostics-as-results, and the toolExecutionNotifications are baseline/telemetry only (expected-extracted-files, file-coverage, platform). No other CWE families are mixed into the formal Pass 1 output."
+  },
+  "request_entry_evidence": {
+    "note": "CodeFlows of all 8 alerts start at preprocess parameters (inputs.py:906/989/1161/1171, component.py:48) rather than at the HTTP entry, consistent with limitation L5 (dynamic dispatch is not resolved). The HTTP reachability of those parameters is independently verified in the real sources:",
+    "chain": [
+      "gradio/networking.py:189-192: POST /api/predict (decorated @login_check) -> raw_input = request.json['data']",
+      "gradio/networking.py:84-95: login_check is a no-op unless the operator configured app.auth (default: no authentication)",
+      "gradio/interface.py:363-370: Interface.process -> input_component.preprocess(raw_input[i])",
+      "gradio/inputs.py:1161-1192: File.preprocess(x) -> process_single_file(f); f['name'], f['data'], f.get('is_example') are read directly from the request JSON with no server-side validation (the is_example flag and the name string are both fully client-settable)",
+      "same dispatch surface also reachable via POST /api/interpret (networking.py:364-370 -> interface.py:377-386) and the /api/queue/push local round-trip (networking.py:391-396, 408-416)"
+    ]
+  },
+  "alerts": [
+    {
+      "alert_id": "A1",
+      "sarif_result_index": 0,
+      "location": "gradio/inputs.py:1180:31-40",
+      "sink_code": "with open(file_name, \"rb\") as file_data:  (File.preprocess / process_single_file, type=='bytes' is_example branch)",
+      "verdict": "likely_tp",
+      "confidence": 0.9,
+      "source_analysis": {
+        "attacker_controlled": true,
+        "evidence": "f = x[0] / x element of the /api/predict request JSON (networking.py:192 -> interface.py:369 -> inputs.py:1161/1187-1192). inputs.py:1172: file_name, data, is_example = f['name'], f['data'], f.get('is_example', False). 'name' and 'is_example' are raw request fields; the server never verifies that name belongs to the configured examples."
+      },
+      "taint_flow": "request.json['data'] (networking.py:192) -> raw_input (interface.py:363) -> File.preprocess x (inputs.py:1161) -> process_single_file f (inputs.py:1171) -> file_name = f['name'] (inputs.py:1172) -> open(file_name, 'rb') (inputs.py:1180). SARIF codeFlows 0-3 match this path exactly.",
+      "allowed_root": "Intended: the developer-configured example file set (interface.examples). Actual: none - file_name is passed to open() verbatim, so absolute paths and any relative path are accepted.",
+      "actual_operation": "Arbitrary local file READ. The bytes are returned (inputs.py:1181) into the prediction pipeline; a pass-through predict function returns them in the /api/predict response, and even without echo the read itself occurs.",
+      "traversal_feasibility": "Real: absolute path (e.g. '/etc/passwd' or 'C:\\\\...'), '..'-relative paths, and repeated separators all reach open() unmodified. No URL decoding is needed (the value arrives via JSON body).",
+      "barrier_check": "None. No normpath/realpath/resolve, no root containment, no whitelist of example names, no basename reduction; is_example is trusted from the client. login_check is a no-op by default. This is not a case of misreading a Path.resolve/startsWith/auth check as protection (question 7): there simply is no check.",
+      "preconditions": "Interface has a File input component with type='bytes' (non-default; default type is 'file'); crafted POST /api/predict JSON with is_example=true. Public sharing link makes this network-reachable.",
+      "rationale": "真实的请求可控路径直达 open() 的任意文件读取。Source（请求 JSON 的 name/is_example 字段）、传播链（Flask -> Interface.process -> File.preprocess -> process_single_file）与 Sink（open 'rb' 并把内容送回预测管道）均有真实源码证据，全程无校验/Barrier。属于越权文件读取（CWE-22/36），非正常静态文件服务或测试代码。"
+    },
+    {
+      "alert_id": "A2",
+      "sarif_result_index": 1,
+      "location": "gradio/processing_utils.py:149:69-75",
+      "sink_code": "file_obj = tempfile.NamedTemporaryFile(delete=False, prefix=prefix)  (decode_base64_to_file, extension is None branch)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source_analysis": {
+        "attacker_controlled": true,
+        "evidence": "inputs.py:915/998/1172: file_name = x['name']/f['name'] (request JSON) -> decode_base64_to_file(file_data, file_path=file_name) (inputs.py:920/1004/1177)."
+      },
+      "taint_flow": "Video.preprocess x (inputs.py:906) / Audio.preprocess x (inputs.py:989) / File.process_single_file f (inputs.py:1171) -> file_name -> decode_base64_to_file file_path (processing_utils.py:137) -> filename = os.path.basename(file_path) (processing_utils.py:141) -> prefix (142/144) -> NamedTemporaryFile(prefix=...) (processing_utils.py:149).",
+      "allowed_root": "System temp dir (tempfile default dir).",
+      "actual_operation": "File CREATE inside the system temp dir; the created name is <client-controlled basename stem><8 random chars>. The subsequent file_obj.write(data) writes client-provided content at a server-chosen temp path.",
+      "traversal_feasibility": "Not achievable: prefix derives from os.path.basename(file_path) (processing_utils.py:141), which strips all '/' (posixpath) and, on Windows, also '\\\\' (ntpath). A separator-free prefix cannot move the created file out of the temp dir; '..' as a prefix only yields a literal odd filename (random body always appended).",
+      "barrier_check": "os.path.basename is not a taint barrier (taint propagates, as CodeQL correctly models), but it is an effective traversal barrier here because the tainted value is used only as a filename component after separator stripping. tempfile's random 8-char body and O_EXCL further constrain the final name.",
+      "preconditions": "Interface with Video/Audio/File input; POST /api/predict with a non-example file entry (or any entry, since the value only feeds the temp-file name).",
+      "rationale": "污点流真实（请求 name 字段确实到达 tempfile prefix），但该值在 processing_utils.py:141 已经过 os.path.basename，分隔符被剥离，prefix 只能影响 /tmp 内文件名的字面前缀，无法越出临时目录。按问题 3/5 的标准，这里不存在可达的越权访问目标；Sink 本质是文件名拼接而非可穿越的路径参数。判定为假阳性（过度泛化 Sink：把文件名构造当作路径穿越 Sink）。"
+    },
+    {
+      "alert_id": "A3",
+      "sarif_result_index": 2,
+      "location": "gradio/processing_utils.py:151:69-75",
+      "sink_code": "file_obj = tempfile.NamedTemporaryFile(delete=False, prefix=prefix, suffix=\".\"+extension)  (decode_base64_to_file, prefix argument)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source_analysis": {
+        "attacker_controlled": true,
+        "evidence": "identical to A2: request JSON 'name' via Video/Audio/File preprocess (inputs.py:906/989/1171 -> 920/1004/1177)."
+      },
+      "taint_flow": "Same chain as A2, ending at the prefix= keyword of processing_utils.py:151.",
+      "allowed_root": "System temp dir.",
+      "actual_operation": "File CREATE in temp dir, name stem from client basename.",
+      "traversal_feasibility": "Not achievable - same basename analysis as A2.",
+      "barrier_check": "os.path.basename (processing_utils.py:141) strips separators before the prefix/extension split (143-145).",
+      "preconditions": "Same as A2.",
+      "rationale": "与 A2 同一污点链的第二个实例化（extension 非 None 分支的 prefix 参数）。basename 已剥离分隔符，无法穿越。假阳性。"
+    },
+    {
+      "alert_id": "A4",
+      "sarif_result_index": 3,
+      "location": "gradio/processing_utils.py:151:84-97",
+      "sink_code": "suffix=\".\"+extension  in tempfile.NamedTemporaryFile (decode_base64_to_file)",
+      "verdict": "likely_fp",
+      "confidence": 0.7,
+      "source_analysis": {
+        "attacker_controlled": true,
+        "evidence": "Two families: (a) flagging flow - component.py:48-51 save_flagged_file(data) -> decode_base64_to_file(data, encryption_key) with file_path=None, so extension falls back to mime_extension (processing_utils.py:147) which is parsed from the client-controlled data-URI header (processing_utils.py:124-135, header[header.index('/')+1:]) with NO separator filtering; (b) preprocess flow - extension from os.path.basename(file_path) (processing_utils.py:141-145), separator-free."
+      },
+      "taint_flow": "(a) flag_data (networking.py:276, fed by /api/predict auto-flag 212-214 and /api/flag 354-360) / Image.save_flagged (inputs.py:863-867) / Video.save_flagged (inputs.py:941-945) -> Component.save_flagged_file data (component.py:48) -> decode_base64_to_file encoding (processing_utils.py:137) -> decode_base64_to_binary -> mime_extension (124-135, 138) -> extension (147) -> suffix (151). (b) as in A2/A3 through 141-145.",
+      "allowed_root": "System temp dir.",
+      "actual_operation": "File CREATE via tempfile.NamedTemporaryFile with client-influenced suffix; content is the client's decoded base64 payload (file_obj.write at processing_utils.py:154).",
+      "traversal_feasibility": "Not achievable in practice. Family (b) is basename-filtered. Family (a) does carry an unfiltered, separator-capable string into suffix, but CPython tempfile constructs the candidate name as dir + prefix + 8 RANDOM CHARS + suffix and opens with O_CREAT|O_EXCL, retrying only on FileExistsError. A suffix containing '/' or '\\\\' (e.g. './../../../etc/x') yields a path whose intermediate component is the nonexistent random body, so the open fails with ENOENT/FileNotFoundError and the request errors out - no file is created outside the temp dir. A separator-free suffix cannot traverse; O_EXCL additionally prevents clobbering. Null bytes raise ValueError. Windows path resolution fails identically on the missing intermediate component.",
+      "barrier_check": "No explicit barrier for family (a) - the containment is emergent from tempfile's random-mid-body name construction plus O_EXCL. This is a genuine code-hygiene gap (unfiltered client header reaching a filename component) but not a traversable path.",
+      "preconditions": "Flagging enabled (default) and a crafted /api/predict or /api/flag payload with a malicious data-URI header; or a Video/Audio/File preprocess payload for family (b).",
+      "rationale": "唯一真正未过滤的污点（flagging 流中来自 data-URI 头的 mime_extension，可含分隔符）确实进入 tempfile suffix，但 tempfile 的随机中段命名 + O_EXCL 使含分隔符的 suffix 在路径解析时因中段随机目录不存在而失败（仅捕获 FileExistsError），实际无法在临时目录外创建/覆盖文件；basename 流则完全不可穿越。按问题 5 的标准，'..' 与分隔符不真实影响访问目标。判为假阳性，但记录为低危加固项（应对 extension 做字符过滤）。若后续 Python tempfile 语义变化或平台路径解析异常，此判定需复查。"
+    },
+    {
+      "alert_id": "A5",
+      "sarif_result_index": 4,
+      "location": "gradio/processing_utils.py:165:69-75",
+      "sink_code": "file_obj = tempfile.NamedTemporaryFile(delete=False, prefix=prefix)  (create_tmp_copy_of_file, extension is None branch)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source_analysis": {
+        "attacker_controlled": true,
+        "evidence": "inputs.py:917/1001/1175: is_example branch passes the raw client 'name' to create_tmp_copy_of_file(file_name) -> processing_utils.py:158 file_path -> 159 file_name = os.path.basename(file_path)."
+      },
+      "taint_flow": "Video/Audio/File preprocess x/f (inputs.py:906/989/1171) -> file_name (915/998/1172) -> create_tmp_copy_of_file (917/1001/1175) -> file_path (processing_utils.py:158) -> os.path.basename (159) -> prefix (160/162) -> NamedTemporaryFile prefix (165).",
+      "allowed_root": "System temp dir.",
+      "actual_operation": "File CREATE in temp dir (the companion copy read is alert A8).",
+      "traversal_feasibility": "Not achievable - prefix is post-basename, separator-free.",
+      "barrier_check": "os.path.basename (processing_utils.py:159) before the prefix/extension split; tempfile random body + O_EXCL.",
+      "preconditions": "Interface with Video/Audio/File input; request JSON with is_example=true.",
+      "rationale": "prefix 经 basename 剥离分隔符，仅影响 /tmp 内文件名前缀，无越权访问目标。注意本函数中真正敏感的是第 168 行的 shutil.copy2(file_path, ...)（见 A8，判 TP），本告警锚定的 prefix 参数本身不可穿越。假阳性（Sink 过度泛化）。"
+    },
+    {
+      "alert_id": "A6",
+      "sarif_result_index": 5,
+      "location": "gradio/processing_utils.py:167:69-75",
+      "sink_code": "tempfile.NamedTemporaryFile(delete=False, prefix=prefix, ...)  (create_tmp_copy_of_file, prefix argument)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source_analysis": {
+        "attacker_controlled": true,
+        "evidence": "same as A5."
+      },
+      "taint_flow": "Same chain as A5, prefix keyword of processing_utils.py:167.",
+      "allowed_root": "System temp dir.",
+      "actual_operation": "File CREATE in temp dir.",
+      "traversal_feasibility": "Not achievable - basename-filtered prefix.",
+      "barrier_check": "os.path.basename (processing_utils.py:159).",
+      "preconditions": "Same as A5.",
+      "rationale": "与 A5 同链（extension 非 None 分支的 prefix）。假阳性。"
+    },
+    {
+      "alert_id": "A7",
+      "sarif_result_index": 6,
+      "location": "gradio/processing_utils.py:167:84-97",
+      "sink_code": "suffix=\".\"+extension  in tempfile.NamedTemporaryFile (create_tmp_copy_of_file)",
+      "verdict": "likely_fp",
+      "confidence": 0.85,
+      "source_analysis": {
+        "attacker_controlled": true,
+        "evidence": "same as A5; extension = file_name[file_name.index('.')+1:] (processing_utils.py:163) where file_name is post-basename."
+      },
+      "taint_flow": "Same chain as A5, ending at the suffix expression of processing_utils.py:167.",
+      "allowed_root": "System temp dir.",
+      "actual_operation": "File CREATE in temp dir.",
+      "traversal_feasibility": "Not achievable - basename strips separators before the extension split; unlike A4 there is no unfiltered header path into this suffix.",
+      "barrier_check": "os.path.basename (processing_utils.py:159).",
+      "preconditions": "Same as A5.",
+      "rationale": "create_tmp_copy_of_file 的 suffix 完全来自 basename 后的文件名（159-163），与 A4 的 flagging 未过滤路径不同，这里不存在未过滤入口。假阳性。"
+    },
+    {
+      "alert_id": "A8",
+      "sarif_result_index": 7,
+      "location": "gradio/processing_utils.py:168:18-27",
+      "sink_code": "shutil.copy2(file_path, file_obj.name)  (create_tmp_copy_of_file, source argument)",
+      "verdict": "likely_tp",
+      "confidence": 0.85,
+      "source_analysis": {
+        "attacker_controlled": true,
+        "evidence": "inputs.py:917/1001/1175: is_example branch passes the RAW client 'name' (no basename, no validation) as file_path to create_tmp_copy_of_file. is_example is client-settable (inputs.py:915/998/1172)."
+      },
+      "taint_flow": "request.json['data'] -> Video/Audio/File preprocess x/f (inputs.py:906/989/1171) -> file_name = name field (915/998/1172) -> create_tmp_copy_of_file(file_name) (917/1001/1175) -> file_path (processing_utils.py:158) -> shutil.copy2(file_path, ...) (168). Note the SARIF threadFlows stop at processing_utils.py:158 and jump to 168 without showing the 158->168 local step, but the source is unambiguous in the real code (file_path is the function parameter used verbatim at line 168).",
+      "allowed_root": "Intended: developer-configured example files (the is_example flag is meant for example selection). Actual: none - file_path is used verbatim as the copy source.",
+      "actual_operation": "Arbitrary local file READ + COPY: copy2 reads the client-specified file (absolute path or traversal) and copies its contents into a server temp file, which is then returned to the prediction pipeline (File type='file' returns the file object; Audio 'filepath' returns file_obj.name; Video returns the name after possible FFmpeg conversion - inputs.py:1008-1015, 921-933).",
+      "traversal_feasibility": "Real: absolute paths, '..' chains and separators all pass through verbatim; JSON body transport means no decoding subtleties apply.",
+      "barrier_check": "None on the copy source. The basename at processing_utils.py:159 affects only the temp-file naming, not the copy source. login_check is a no-op by default.",
+      "preconditions": "Interface with a File (type='file', the default), Video or Audio input component; crafted POST /api/predict JSON with is_example=true and an arbitrary name. Same exposure surface as A1 (gradio public share links).",
+      "rationale": "与 A1 同一根因的第二个真实实例：客户端可设 is_example 使原始 name 字段未经任何归一化/白名单校验直接作为 shutil.copy2 的读取源。任意本地文件读取（读入临时副本并进入预测管道）。真实污点流、真实敏感操作、无有效 Barrier，判 TP。"
+    }
+  ],
+  "global_checklist_answers": {
+    "q1_source_attacker_controlled": "All 8 alerts trace to genuine request-controlled values: the /api/predict, /api/interpret and /api/flag JSON bodies (component 'name'/'data'/'is_example' fields) reaching preprocess/save_flagged parameters (networking.py:192/358/368 -> interface.py:363-370 -> inputs.py). None originate from route URL paths in this result set (the /file and /static route sources produced no alerts).",
+    "q2_flow_real": "Yes for all 8 - the codeFlows match real call edges (preprocess -> process_single_file -> decode_base64_to_file / create_tmp_copy_of_file; save_flagged -> save_flagged_file -> decode_base64_to_file). Async/wrapping hops are all statically present in the sources.",
+    "q3_sink_sensitive": "A1 (open 'rb') and A8 (shutil.copy2 source) are genuine sensitive reads. A2-A7 are tempfile prefix/suffix keyword arguments - filename construction rather than a traversable path argument; the actual file creation stays inside the system temp dir.",
+    "q4_allowed_roots": "Declared/implicit roots: system temp dir (tempfile), flagging dir (developer config, charset-filtered label), STATIC_PATH_LIB (safe_join contained), app.cwd (/file route, not represented in this alert set). For A1/A8 there is effectively NO enforced root - the example-set intent is unenforced, so controlled input points outside it trivially.",
+    "q5_traversal_factors": "For A1/A8: absolute paths, '..' and separator variants all work verbatim (JSON transport, single decode, no symlinks involved). For A2/A3/A5/A6/A7: basename strips separators before use. For A4: the unfiltered data-URI header extension can carry separators into tempfile suffix, but the random mid-path component makes such paths unresolvable (ENOENT), so traversal does not materialize; percent-decoding is irrelevant (no URL decode of these values server-side).",
+    "q6_real_barriers": "safe_join (networking.py:143, /static route) is a genuine pre-access containment barrier, but no alert in this set passes through it. The component.py:52 label charset filter guards the flagging subdir name (developer label, not request data). No strict post-normalization root containment exists on the A1/A8 paths.",
+    "q7_misread_protections": "None of the 8 alerts relies on misreading Path.resolve/normpath/startsWith/login as protection. (Noted for completeness: the /file route's secure_filename at networking.py:380 is an unimported name - not a barrier - and path.startswith(examples) at :381 is a non-normalized prefix check on the encrypted branch only; neither appears in the alert set.)",
+    "q8_benign_cases": "A1/A8 are live request-handling paths, not authorized static serving, tests, unreachable code or constants. A2-A7 touch live code but the values cannot redirect the access target outside the temp dir.",
+    "q9_overgeneralization": "The 6 tempfile findings (A2-A7) are the classic over-generalized-sink pattern: the label set (K03-K06) treats tempfile name components as traversal sinks; with basename-derived values (and tempfile's random mid-body for the one unfiltered path) they cannot escape. This, not a database coverage gap or wrong diagnostic path, is the FP cause.",
+    "q10_purity": "Confirmed: single rule, single run, 8 results, all py/augur/gradio/pass1-path-traversal; no baseline, diagnostics or built-in query results are counted."
+  },
+  "summary": {
+    "total_official_alerts": 8,
+    "likely_tp": 2,
+    "likely_fp": 6,
+    "uncertain": 0,
+    "likely_tp_alerts": ["A1 gradio/inputs.py:1180 (open on client 'name', is_example arbitrary read)", "A8 gradio/processing_utils.py:168 (shutil.copy2 source on client 'name', is_example arbitrary read)"],
+    "likely_fp_alerts": ["A2 processing_utils.py:149 prefix (basename-filtered)", "A3 processing_utils.py:151 prefix (basename-filtered)", "A4 processing_utils.py:151 suffix (unfiltered header reaches tempfile suffix, but random mid-body + O_EXCL make traversal unresolvable)", "A5 processing_utils.py:165 prefix (basename-filtered)", "A6 processing_utils.py:167 prefix (basename-filtered)", "A7 processing_utils.py:167 suffix (basename-filtered)"],
+    "common_root_cause_of_tps": "Client-settable is_example flag + unvalidated 'name' field in File/Video/Audio component request JSON reaching open()/shutil.copy2 verbatim (gradio 2.5.0 snapshot, File/Video/Audio preprocess).",
+    "overall_conclusion": "CodeQL 分析成功，本轮命中 8 条正式路径穿越污点路径；其中 2 条（inputs.py:1180、processing_utils.py:168）为高置信任意文件读取真阳性，6 条 tempfile 文件名组件告警为不可达穿越的假阳性。"
+  },
+  "real_vulnerability_match": {
+    "task": "Compare the official Pass 1 alerts against the real project vulnerability (PyVul ground truth, provided by the operator for this separate task only).",
+    "ground_truth": {
+      "commit": "https://github.com/gradio-app/gradio/commit/41bd3645bdb616e1248b2167ca83636a2653f781",
+      "cwe": "CWE-22",
+      "function_name": "file",
+      "vulnerable_code_location_in_snapshot": "gradio/networking.py:377-388 (/file/<path:path> route)",
+      "snapshot_matches_code_before": true,
+      "note": "The DB snapshot's networking.py:379-388 matches the commit's code_before verbatim (secure_filename(path) + open/send_file(os.path.join(app.cwd, path))). Additionally, in this snapshot secure_filename is not imported anywhere in gradio/networking.py (imports at lines 5-30 include only safe_join from werkzeug.security), so as written the route would raise NameError; with the import present (as in the released gradio<2.4.8), the route serves any file under app.cwd."
+    },
+    "official_alerts_hit_the_ground_truth_function": false,
+    "evidence": "None of the 8 official Pass 1 results is located in gradio/networking.py or in the file()/static_resource() routes. All 8 results are in gradio/inputs.py and gradio/processing_utils.py, on the component preprocess/flagging flows.",
+    "reason_for_miss": "The S64 (file route path parameter) -> K35/K44 (open/send_file on os.path.join(app.cwd, path)) taint flow was suppressed by the dead reassignment 'path = secure_filename(path)' at networking.py:380: secure_filename is an unresolved name in the database, Python taint tracking has no argument->result step for unresolved calls, so the tainted parameter never reaches the later uses of the rebound 'path'. This was documented in advance as limitation L1 in report/query_generation_notes.md. The flow is suppressed by the dead reassignment, not by any real sanitization.",
+    "alerts_hit_other_real_vulnerabilities": true,
+    "other_real_vulnerabilities": [
+      "A1 gradio/inputs.py:1180: arbitrary file read via File.preprocess type='bytes' is_example branch (client-set is_example + unvalidated name -> open 'rb').",
+      "A8 gradio/processing_utils.py:168: arbitrary file read/copy via create_tmp_copy_of_file (client-set is_example + unvalidated name -> shutil.copy2 source), reachable with the default File type='file' and with Video/Audio components."
+    ],
+    "verdict": "本轮正式 Pass 1 告警未命中 ground-truth 修复提交 41bd3645 所针对的 file() 路由漏洞（/file/<path:path>，networking.py:377-388）——该污点路径因 secure_filename 死赋值被抑制（L1）。但告警命中了同一漏洞快照中另外两处真实存在的同 CWE 类任意文件读取（inputs.py:1180 与 processing_utils.py:168，根因均为 is_example + 未校验 name 字段）。若以'命中项目真实存在的漏洞'为标准：命中了真实存在的其他漏洞，未命中该修复提交指定的漏洞函数；若以'命中修复提交对应漏洞'为标准：未命中（miss）。"
+  }
+}

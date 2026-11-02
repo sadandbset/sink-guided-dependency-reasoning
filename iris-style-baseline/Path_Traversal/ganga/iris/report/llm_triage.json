@@ -1,0 +1,400 @@
+{
+  "metadata": {
+    "run": "iris-ganga-pathtraversal-pass1-20261022",
+    "task": "Independent LLM path re-review of official Pass 1 Path Traversal SARIF alerts (ruleId py/augur/ganga/pass1-path-traversal)",
+    "triaged_at": "2026-10-22",
+    "reviewer": "independent LLM re-review (glm-5.3, Claude Code CLI harness)",
+    "sarif": "results/pass1.sarif",
+    "sarif_stats": {
+      "runs": 1,
+      "tool": "CodeQL",
+      "rules": ["py/augur/ganga/pass1-path-traversal"],
+      "results_total": 11,
+      "results_with_ruleId_filter": 11
+    },
+    "source_root": "C:/Users/lzh/Desktop/github/PyVul-main/dataset/codeql_databases/path_traversal_dbs/ganga_vuln",
+    "db_commit": "0c0f9e33 (pre-fix parent of ganga-devs/ganga 730e7ab per run notes)",
+    "verdict_scale": ["likely_tp", "likely_fp", "uncertain"]
+  },
+
+  "summary": {
+    "alerts_reviewed": 11,
+    "likely_tp": 11,
+    "likely_fp": 0,
+    "uncertain": 0,
+    "likely_tp_breakdown": {
+      "primary_sinks": 6,
+      "secondary_stat_oracle_sinks": 5
+    },
+    "chains_confirmed": [
+      "job_browse read chain: route /job/<int:job_id>/browse/<path:path> -> join :659 -> exists/isfile/send_file/listdir :665/:670/:671/:676 (arbitrary read + listing)",
+      "storage_page read chain: route /storage/<path:path> GET -> join :934 -> exists/isfile/send_file/listdir :969/:974/:975/:980 (arbitrary read + listing)",
+      "storage_page write chain: route /storage/<path:path> POST -> join :934 -> isdir :949 -> join :954 arg0 -> storagefile.save :955 (arbitrary write; secure_filename sanitizes only the filename component)",
+      "internal-API export write chain: /internal/jobs/<int:job_id>/export?path= -> request.args :223 -> export :227 -> GPI export/stripped_export/fullpath -> open :85 mode w/a (arbitrary write, unauthenticated localhost-bound app)"
+    ],
+    "ground_truth_hit": true,
+    "notes_on_misses": [
+      "The reviewed internal-API load chain (src-045 api/routes.py:977 request.args.get('path') -> load :981 -> GPI load -> getScriptPath -> open Persistency:190, sink-495 tp 0.90) produced NO Pass 1 alert. The label set predicted it; the analysis did not emit it. Likely cause: the dual-anchored getScriptPath/load bridge edges (sink-494/sink-396) did not connect the interprocedural flow at analysis time. Recorded as a chain-level coverage gap, not a false positive in the emitted set.",
+      "src-070 (FileStorage object, gui:941) and src-072 (filename attribute, gui:953) produced no standalone alerts, exactly as predicted (no object->path taint by default; src-072 cut by the secure_filename barrier)."
+    ]
+  },
+
+  "shared_analysis": {
+    "allowed_roots": {
+      "job_browse": "Implied root: the job base directory job_base_dir = os.path.dirname(os.path.dirname(job_info['outputdir'])) (gui/routes.py:651), derived from repository content of an integer-selected job. NOT enforced anywhere.",
+      "storage_page": "Declared root: STORAGE_FOLDER = gangadir/gui/storage (gui/config.py:35, GangaGUI/gui/routes.py:931). NOT enforced anywhere.",
+      "internal_export": "No root at all: fullpath() (Persistency:140-151) = abspath(expandvars(expanduser(filename))) - normalization without confinement; the operator CLI usage of the same GPI function is by design 'write anywhere', but the web boundary exposes it unauthenticated."
+    },
+    "containment_and_barriers": {
+      "real_barriers_found": 1,
+      "barrier": "secure_filename(storagefile.filename) at gui/routes.py:953 (werkzeug): strips path separators, '..' and absolute-name components from the uploaded FILENAME only. Partial by design - the DIRECTORY component (abs_path from the tainted route path via join :934/:954 arg 0) never passes through it, so the storage write traversal is unblocked.",
+      "no_containment_anywhere": "On all four confirmed chains there is no resolve/realpath + containment check, no startswith(base) prefix test, no relative_to, no '..' segment rejection, no basename extraction, no chroot, before any file access. Verified by reading gui/routes.py:639-689 and :925-992 and Persistency/__init__.py:35-90 in full.",
+      "rejected_as_barriers": "os.path.join (value-preserving concatenation, '..' survives lexically, absolute arg replaces base), fullpath/abspath (collapses '..' but confines to nothing - correctly modeled as propagation), getScriptPath exists-branch (returns the expanded attacker name verbatim, Runtime.py:47-49), @login_required (authenticates the user, never constrains the path value), allowed_file extension allowlist (gui/routes.py:1799, applies only to the fixed-path loadfile/runfile channels)."
+    },
+    "decode_and_canonicalization": {
+      "decoding": "Flask/Werkzeug percent-decodes the request path exactly once in the router (external to the DB); request.args values form-decoded once. No application-level re-decoding exists anywhere on the chains, so double-decode concerns do not apply.",
+      "canonicalization_order": "On the GUI chains, normalization happens only at OS syscall time (exists/isfile/isdir/send_file/listdir/save) - i.e. never before access, which is the defect. On the export chain abspath runs before open but performs no confinement.",
+      "traversal_vectors": "Both lexical '..' segments (survive os.path.join, resolve at syscall) and absolute-path replacement (os.path.join discards the base when an argument is absolute, matching the reported PoC curl --path-as-is '/job/<id>/browse///../../../../etc/passwd') are live. Windows drive/UNC forms are not applicable to the deployed POSIX server but the absolute-path form is the equivalent."
+    },
+    "mix_in_check": {
+      "other_cwe_or_baseline_mixed_in": false,
+      "evidence": "The SARIF contains a single run, a single rule (py/augur/ganga/pass1-path-traversal), and 11 results all carrying that ruleId. iris/diagnostics/ is empty (no diagnostic queries created). The 11 result locations all coincide with the reviewed tp sink labels (sink-780/781/782/783/798/801/803/804/805/806/492). No CodeQL built-in security query results are present."
+    }
+  },
+
+  "alerts": [
+    {
+      "index": 0,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaCore/GPIDev/Persistency/__init__.py", "line": 85, "code": "outFile = open(filepath, mode)  # mode 'w' or 'a'" },
+      "verdict": "likely_tp",
+      "classification": "primary",
+      "confidence": 0.85,
+      "source": {
+        "file": "ganga/GangaGUI/api/routes.py",
+        "line": 223,
+        "code": "save_path = request.args.get(\"path\")",
+        "attacker_controlled": true,
+        "reason": "Query-string parameter of GET /internal/jobs/<int:job_id>/export (route registered at api/routes.py:212). The internal Flask app has NO authentication on any route (no @login_required, no before_request/token hook anywhere in api/routes.py - verified by grep) and is bound to 'localhost' via APIServerThread(\"GangaGUIAPI\", \"localhost\", port) (GangaGUI/start.py:99/:109). The whole value is attacker-supplied."
+      },
+      "sink": {
+        "file": "ganga/GangaCore/GPIDev/Persistency/__init__.py",
+        "line": 85,
+        "operation": "builtin open(filepath, mode) with mode 'w'/'a' followed by writelines/write of ganga object dumps",
+        "access_type": "arbitrary file WRITE (content partly attacker-influenced: object dump of an integer-selected job, plus fixed '#Ganga#' headers)"
+      },
+      "taint_flow": [
+        "api/routes.py:223 save_path = request.args.get('path')",
+        "api/routes.py:227 export(jobs(job_id), save_path)  [arg 1]",
+        "GPI bridge summary edge (sink-490): call arg -> Persistency export param filename (:35); required because GangaCore.GPI is runtime-populated via exportToInterface (bootstrap.py:147-163), so static import resolution fails",
+        "Persistency/__init__.py:35-36 export -> stripped_export(stripProxy(item), filename, mode) arg 1",
+        "Persistency/__init__.py:41 stripped_export param filename",
+        "Persistency/__init__.py:83 filepath = fullpath(filename)",
+        "Persistency/__init__.py:140-151 fullpath = os.path.abspath(os.path.expandvars(os.path.expanduser(filename))) - normalization WITHOUT containment",
+        "Persistency/__init__.py:85 open(filepath, mode)"
+      ],
+      "allowed_root": "None. fullpath() turns any relative/absolute/'..'-laden or ~-bearing value into an absolute path but never confines it to a base directory.",
+      "validation_evidence": "None between source and sink: no path validation, no root containment, no auth. The only early-outs are empty-filename and invalid-mode checks (:66, :76) which do not constrain the path value.",
+      "preconditions": [
+        "Reachability of the internal API port: the app binds 'localhost' (start.py:99/:109). Remote exploitation requires (a) a local process, (b) a cross-origin GET from a victim browser (the GET executes server-side and the write occurs even though SOP blocks reading the response), or (c) SSRF/forwarding from a co-located component. The GUI's own job-export view only ever passes a fixed UPLOAD_FOLDER/export.txt path (gui/routes.py:617-621); arbitrary paths require direct internal-port access.",
+        "A valid job_id must exist so jobs(job_id) resolves and export() is actually entered."
+      ],
+      "reasoning": "Source is a genuine unauthenticated request field; the codeFlow reproduces every hop with real source evidence (the two GPI bridge edges are anchored to the exact reviewed call sites and are justified by the runtime-populated GPI namespace, not fabricated); the sink is a real builtin open in write/append mode, not a mere path construction. expandvars/expanduser additionally let '~' and '$VAR' forms resolve server-side. This is a real arbitrary-file-write path traversal (CWE-22/36) whose severity is bounded by the localhost binding and the fixed-ish write content - hence primary TP with slightly reduced confidence. Not a normal-authorization case: the web boundary adds zero checks over the operator CLI usage of the same function."
+    },
+    {
+      "index": 1,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaGUI/gui/routes.py", "line": 665, "code": "if not os.path.exists(abs_path):" },
+      "verdict": "likely_tp",
+      "classification": "secondary (stat oracle / gate on the job_browse read chain)",
+      "confidence": 0.75,
+      "source": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 639,
+        "code": "def job_browse(job_id: int, path):  # route /job/<int:job_id>/browse/<path:path> (:636-637)",
+        "attacker_controlled": true,
+        "reason": "Flask path-converter value: URL-decoded remainder of the request path, slashes and '..' accepted, fully attacker-controlled. @login_required (:638) constrains the attacker population to authenticated GUI users, not the value."
+      },
+      "sink": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 665,
+        "operation": "os.path.exists(abs_path) - stat on the joined path (kernel resolves '..' / absolute replacement)",
+        "access_type": "file metadata read (existence oracle outside the implied job root); gate for the send_file/listdir disclosure"
+      },
+      "taint_flow": [
+        "gui/routes.py:639 route param path",
+        "gui/routes.py:659 abs_path = os.path.join(job_base_dir, path)  ['..' survives lexically; absolute path replaces base]",
+        "gui/routes.py:665 os.path.exists(abs_path)"
+      ],
+      "allowed_root": "Implied root job_base_dir (:651) - not enforced; '..' segments and absolute route values escape it at syscall time.",
+      "validation_evidence": "None before the stat (no canonicalization, no prefix/containment check).",
+      "preconditions": ["Authenticated GUI session.", "query_internal_api for the job must succeed so job_base_dir is computed."],
+      "reasoning": "Real stat syscall on a fully attacker-controlled, uncontained path - a genuine out-of-root existence oracle on the same confirmed chain as the :671 send_file. Low standalone impact and it also fires on ordinary (non-traversal) browse requests, so it is a secondary/low-severity TP rather than an FP: the tainted value and missing containment are real, and the alert is superseded by the primary :671/:676 alerts on the same defect."
+    },
+    {
+      "index": 2,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaGUI/gui/routes.py", "line": 670, "code": "if os.path.isfile(abs_path):" },
+      "verdict": "likely_tp",
+      "classification": "secondary (file-type oracle / branch selector on the job_browse read chain)",
+      "confidence": 0.75,
+      "source": { "same_as_index": 1 },
+      "sink": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 670,
+        "operation": "os.path.isfile(abs_path) - stat",
+        "access_type": "file metadata read (file-type oracle outside the implied job root); selects send_file vs listdir"
+      },
+      "taint_flow": [":639 param -> :659 join -> :670 isfile"],
+      "allowed_root": "job_base_dir (:651), not enforced.",
+      "validation_evidence": "None between join and probe.",
+      "preconditions": ["Authenticated GUI session.", "os.path.exists(abs_path) must be True (:665 gate)."],
+      "reasoning": "Same rationale as index 1: genuine stat on the uncontained tainted path, branch selector that routes the attacker to the arbitrary read (:671) or listing (:676). Secondary TP; not an independent defect."
+    },
+    {
+      "index": 3,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaGUI/gui/routes.py", "line": 671, "code": "return send_file(abs_path)" },
+      "verdict": "likely_tp",
+      "classification": "primary (arbitrary file read)",
+      "confidence": 0.95,
+      "source": { "same_as_index": 1 },
+      "sink": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 671,
+        "operation": "flask.send_file(abs_path) - flask/werkzeug opens the path and streams the bytes as the HTTP response body",
+        "access_type": "arbitrary file READ disclosed to the authenticated GUI client"
+      },
+      "taint_flow": [
+        "gui/routes.py:639 route param path (path converter, one percent-decode in router)",
+        "gui/routes.py:659 abs_path = os.path.join(job_base_dir, path)",
+        "gui/routes.py:665 exists gate, :670 isfile gate",
+        "gui/routes.py:671 send_file(abs_path)"
+      ],
+      "allowed_root": "Implied root: the job base directory. Not enforced - an absolute route value (os.path.join discards the base) or a '../..' chain escapes it.",
+      "validation_evidence": "No canonicalization, no containment, no '..' rejection, no whitelist anywhere between :639 and :671. send_file is imported from flask (gui/routes.py:15). The only gates are existence/type stats on the same tainted path.",
+      "preconditions": ["Authenticated GUI session (default admin account GangaGUIAdmin with random 7-char password, start.py:162 - weak-entropy credential on a long-running server).", "Target path must exist and be a file, readable by the GUI process."],
+      "reasoning": "This is the textbook absolute/relative path traversal: uncontained route path -> os.path.join -> send_file. The DB source at 0c0f9e33 contains the pre-fix code (os.path.join at :659, send_file at :671), exactly the code changed by the reference fix (os.path.join -> werkzeug safe_join). The PoC 'curl --path-as-is /job/<id>/browse///../../../../etc/passwd' is reproduced by the modeled join semantics. Login is not a path barrier. HIGH confidence TP; this is also the ground-truth vulnerability for this dataset instance (see ground_truth section)."
+    },
+    {
+      "index": 4,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaGUI/gui/routes.py", "line": 676, "code": "files = os.listdir(abs_path)" },
+      "verdict": "likely_tp",
+      "classification": "primary (arbitrary directory listing disclosure)",
+      "confidence": 0.9,
+      "source": { "same_as_index": 1 },
+      "sink": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 676,
+        "operation": "os.listdir(abs_path); entries rendered into job_dir.html (:679-689) including isdir probes per entry",
+        "access_type": "directory metadata read (names) outside the implied job root, disclosed to the authenticated GUI client"
+      },
+      "taint_flow": [":639 param -> :659 join -> :665 exists gate -> :670 isfile gate (false) -> :676 listdir"],
+      "allowed_root": "job_base_dir, not enforced.",
+      "validation_evidence": "None.",
+      "preconditions": ["Authenticated GUI session.", "abs_path must exist and be a directory."],
+      "reasoning": "Real directory enumeration on the uncontained tainted path, rendered to the attacker - genuine information disclosure on the same confirmed chain as :671. Primary-family TP."
+    },
+    {
+      "index": 5,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaGUI/gui/routes.py", "line": 949, "code": "if not os.path.isdir(abs_path):" },
+      "verdict": "likely_tp",
+      "classification": "secondary (upload-branch directory gate / stat oracle on the storage write chain)",
+      "confidence": 0.7,
+      "source": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 925,
+        "code": "def storage_page(path):  # routes /storage and /storage/<path:path>, GET+POST (:922-923)",
+        "attacker_controlled": true,
+        "reason": "Flask path-converter value of the storage browser (GET and POST); @login_required (:924) limits population, not value."
+      },
+      "sink": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 949,
+        "operation": "os.path.isdir(abs_path) - stat on the joined storage path",
+        "access_type": "file metadata read (directory-existence oracle outside the declared storage root); gate of the upload write (:955)"
+      },
+      "taint_flow": [":925 param -> :934 abs_path = os.path.join(storage_folder, path) -> :949 isdir"],
+      "allowed_root": "Declared root STORAGE_FOLDER = gangadir/gui/storage (config.py:35). Not enforced - '..' and absolute route values escape it.",
+      "validation_evidence": "None before the stat.",
+      "preconditions": ["Authenticated GUI session.", "POST with a 'storagefile' multipart part (upload branch)."],
+      "reasoning": "Stat oracle on the uncontained tainted path, on the same chain as the arbitrary write at :955. Secondary TP; superseded by the :955 primary alert."
+    },
+    {
+      "index": 6,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaGUI/gui/routes.py", "line": 955, "code": "storagefile.save(save_path)" },
+      "verdict": "likely_tp",
+      "classification": "primary (arbitrary file write)",
+      "confidence": 0.9,
+      "source": {
+        "combined": "route param path (:925, directory component) + multipart upload request.files['storagefile'] (:941, content and filename)",
+        "attacker_controlled": true
+      },
+      "sink": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 955,
+        "operation": "werkzeug FileStorage.save(save_path) - writes the uploaded content at save_path = os.path.join(abs_path, secure_filename(storagefile.filename)) (:953-954)",
+        "access_type": "arbitrary file WRITE (fully attacker-controlled content) to any process-writable directory"
+      },
+      "taint_flow": [
+        "gui/routes.py:925 route param path",
+        "gui/routes.py:934 abs_path = os.path.join(storage_folder, path)  [directory component tainted]",
+        "gui/routes.py:949 isdir gate",
+        "gui/routes.py:953 filename = secure_filename(storagefile.filename)  [filename component sanitized - barrier]",
+        "gui/routes.py:954 save_path = os.path.join(abs_path, filename)  [arg 0 carries the taint; barrier does not apply to it]",
+        "gui/routes.py:955 storagefile.save(save_path)"
+      ],
+      "allowed_root": "Declared root gangadir/gui/storage. Not enforced for the directory component.",
+      "validation_evidence": "The one real barrier in the tree - secure_filename (:953, werkzeug, imported gui/routes.py:14) - strips separators/'..'/absolute components from the FILENAME only. The DIRECTORY component abs_path never passes through it, so POST /storage/<traversal>/ with any multipart file writes outside the storage root. The rejected allowed_file extension allowlist (:1799) is not applied on this channel.",
+      "preconditions": ["Authenticated GUI session.", "Target directory must exist (isdir gate :949).", "Write constrained by: filename component must survive secure_filename (leading dots and separators stripped, so dotfile/extension-forming is limited) and by process write permissions."],
+      "reasoning": "Directory-component traversal to a write sink with fully attacker-controlled content: a real CWE-22 arbitrary file write, distinct from and complementary to the read chains. The barrier analysis is correct in the run notes: secure_filename is partial by design and cannot suppress this flow. HIGH-confidence TP."
+    },
+    {
+      "index": 7,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaGUI/gui/routes.py", "line": 969, "code": "if not os.path.exists(abs_path):" },
+      "verdict": "likely_tp",
+      "classification": "secondary (stat oracle / gate on the storage read chain)",
+      "confidence": 0.75,
+      "source": { "same_as_index": 5 },
+      "sink": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 969,
+        "operation": "os.path.exists(abs_path) - stat",
+        "access_type": "file metadata read (existence oracle outside the declared storage root)"
+      },
+      "taint_flow": [":925 param -> :934 join -> :969 exists"],
+      "allowed_root": "STORAGE_FOLDER, not enforced.",
+      "validation_evidence": "None.",
+      "preconditions": ["Authenticated GUI session.", "GET branch (or POST without file)."],
+      "reasoning": "Same as indexes 1/2: genuine out-of-root stat oracle on the confirmed storage read chain. Secondary TP."
+    },
+    {
+      "index": 8,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaGUI/gui/routes.py", "line": 974, "code": "if os.path.isfile(abs_path):" },
+      "verdict": "likely_tp",
+      "classification": "secondary (file-type oracle / branch selector on the storage read chain)",
+      "confidence": 0.75,
+      "source": { "same_as_index": 5 },
+      "sink": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 974,
+        "operation": "os.path.isfile(abs_path) - stat",
+        "access_type": "file metadata read; selects send_file (:975) vs listdir (:980)"
+      },
+      "taint_flow": [":925 param -> :934 join -> :969 gate -> :974 isfile"],
+      "allowed_root": "STORAGE_FOLDER, not enforced.",
+      "validation_evidence": "None.",
+      "preconditions": ["Authenticated GUI session.", "path must exist (:969)."],
+      "reasoning": "Secondary TP, branch selector of the storage read chain; same defect as :975/:980."
+    },
+    {
+      "index": 9,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaGUI/gui/routes.py", "line": 975, "code": "return send_file(abs_path)" },
+      "verdict": "likely_tp",
+      "classification": "primary (arbitrary file read)",
+      "confidence": 0.95,
+      "source": { "same_as_index": 5 },
+      "sink": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 975,
+        "operation": "flask.send_file(abs_path) - opens and streams the file to the client",
+        "access_type": "arbitrary file READ disclosed to the authenticated GUI client"
+      },
+      "taint_flow": [":925 param -> :934 join -> :969 exists gate -> :974 isfile gate -> :975 send_file"],
+      "allowed_root": "STORAGE_FOLDER = gangadir/gui/storage (declared convenience-storage root), not enforced.",
+      "validation_evidence": "No canonicalization or containment between :925 and :975. send_file imported from flask (:15).",
+      "preconditions": ["Authenticated GUI session.", "Target exists, is a file, readable by the process."],
+      "reasoning": "Identical defect pattern to job_browse:671 (unchecked join of a path-converter route value into a fixed root, then send_file). Absolute route value or '..' chain yields arbitrary read. HIGH-confidence TP."
+    },
+    {
+      "index": 10,
+      "rule_id": "py/augur/ganga/pass1-path-traversal",
+      "location": { "file": "ganga/GangaGUI/gui/routes.py", "line": 980, "code": "files = os.listdir(abs_path)" },
+      "verdict": "likely_tp",
+      "classification": "primary (arbitrary directory listing disclosure)",
+      "confidence": 0.9,
+      "source": { "same_as_index": 5 },
+      "sink": {
+        "file": "ganga/GangaGUI/gui/routes.py",
+        "line": 980,
+        "operation": "os.listdir(abs_path); entries rendered into storage.html (:983-992)",
+        "access_type": "directory metadata read (names) outside the declared storage root"
+      },
+      "taint_flow": [":925 param -> :934 join -> :969/:974 gates (false) -> :980 listdir"],
+      "allowed_root": "STORAGE_FOLDER, not enforced.",
+      "validation_evidence": "None.",
+      "preconditions": ["Authenticated GUI session.", "abs_path exists and is a directory."],
+      "reasoning": "Real out-of-root directory enumeration rendered to the attacker, same chain as :975. Primary-family TP."
+    }
+  ],
+
+  "ground_truth_hit_analysis": {
+    "provided_vulnerability": {
+      "commit": "https://github.com/ganga-devs/ganga/commit/730e7aba192407d35eb37dd7938d49071124be8c",
+      "cwe": "CWE-22 (commit body also cites CWE-36)",
+      "function": "job_browse",
+      "file": "ganga/GangaGUI/gui/routes.py",
+      "fix": "abs_path = os.path.join(job_base_dir, path)  ->  abs_path = safe_join(job_base_dir, path)  (line 659 in the DB snapshot; the send_file consumer is line 671)"
+    },
+    "db_source_matches_pre_fix_code": true,
+    "evidence": {
+      "db_snapshot": "ganga_vuln @ 0c0f9e33 (pre-fix parent per the run's detection.json/notes; the fix commit 730e7ab's code_before matches the DB source verbatim: os.path.join at :659, exists :665, isfile :670, send_file :671, listdir :676)",
+      "code_before_match": "join/send_file/listdir and all surrounding lines (gui/routes.py:639-689) are identical to the commit's code_before",
+      "code_after_differs": "the DB source still uses os.path.join (no safe_join import or call anywhere in the file) - the vulnerable revision"
+    },
+    "hit": true,
+    "hit_by": [
+      {
+        "alert_index": 3,
+        "location": "ganga/GangaGUI/gui/routes.py:671",
+        "sink": "send_file(abs_path)",
+        "note": "PRIMARY hit - the exact sink named in the vulnerability report. Source = route path param (:639), propagation = the unchecked os.path.join (:659) whose absolute-argument replacement semantics are precisely the root cause described in the commit. Both PoC variants ('..' chain and absolute path) are covered by the modeled join semantics."
+      },
+      {
+        "alert_index": 4,
+        "location": "ganga/GangaGUI/gui/routes.py:676",
+        "sink": "os.listdir(abs_path)",
+        "note": "same function/chain - directory-listing variant of the same defect"
+      },
+      {
+        "alert_index": 1,
+        "location": "ganga/GangaGUI/gui/routes.py:665",
+        "sink": "os.path.exists(abs_path)",
+        "note": "same chain - existence oracle"
+      },
+      {
+        "alert_index": 2,
+        "location": "ganga/GangaGUI/gui/routes.py:670",
+        "sink": "os.path.isfile(abs_path)",
+        "note": "same chain - branch selector feeding the send_file read"
+      }
+    ],
+    "conclusion": "The real vulnerability (absolute/relative path traversal in job_browse via os.path.join -> send_file) IS hit by the official Pass 1 result set: alert index 3 is a line-exact, sink-exact match to the fixed sink, on the pre-fix source revision, with a complete source->join->sink codeFlow. Three further alerts (indexes 1, 2, 4) are co-located variants of the same defect. The Pass 1 run additionally surfaced three independent true-positive chains not named in that commit (storage read :975/:980, storage write :955, internal-API export write Persistency:85)."
+  },
+
+  "independence_statement": {
+    "sarif_modified": false,
+    "labels_modified": false,
+    "queries_modified": false,
+    "ground_truth_consulted": "Only the vulnerability record supplied verbatim in this task's prompt (commit 730e7ab text) was used for the hit-analysis section. No PyVul ground-truth files, fix-commit diffs fetched from the network, CVE descriptions, or the in-tree vulnerability reports (GANGA-VULNERABILITY-REPORT.md etc.) were opened; the fix's code_before/code_after quoted in the prompt were compared against the already-read DB source only.",
+    "files_read": [
+      "results/pass1.sarif (structure + all 11 codeFlows)",
+      "report/iris_report.md",
+      "report/query_generation_notes.md",
+      "labels/labels.json (tp entries)",
+      "queries/Pass1_PathTraversal.ql",
+      "ganga/GangaGUI/gui/routes.py (620-700, 918-992, imports, auth decorators)",
+      "ganga/GangaGUI/api/routes.py (205-244, 960-1000, auth grep)",
+      "ganga/GangaCore/GPIDev/Persistency/__init__.py (full)",
+      "ganga/GangaCore/Utility/Runtime.py (28-61)",
+      "ganga/GangaGUI/gui/config.py",
+      "ganga/GangaGUI/start.py (full)"
+    ]
+  }
+}

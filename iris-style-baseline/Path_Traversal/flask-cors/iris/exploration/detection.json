@@ -1,0 +1,190 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-22",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\Path_Traversal\\flask-cors\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no compile, no LLM labeling in this round) against the flask-cors_vuln source tree. WORKFLOW.md confirms Pass 1 = CWE-022/023/036/073 Path Traversal with pass query name Pass1_PathTraversal.ql. The CodeQL database flask-cors-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded flask-cors-db (only codeql-database.yml and read-only git inventory of the snapshot commit were used for metadata/scope). The database sourceLocationPrefix matches the explored tree (creation sha 5c6e05e), so file/line evidence below refers to the same snapshot the database was built from; the git ls-tree inventory of sha 5c6e05e confirms the database snapshot contains exactly the 28 .py files observed on disk. The audit target is the Flask-Cors library itself (version 3.0.8), a pure CORS response-header filtering Flask extension/middleware: it reads a small set of HTTP request values (Origin / Access-Control-Request-Method / Access-Control-Request-Headers headers, request.path, request.method), matches them against developer-supplied CORS options (decorator kwargs / app.config CORS_* keys), and writes CORS response headers. The library performs NO filesystem access of any kind: all 5 package modules (core.py, decorator.py, extension.py, __init__.py, version.py - 731 lines) were read in full and contain zero open/os/pathlib/shutil/io calls. The ONLY filesystem operations in the entire database snapshot are three literal-path builtin open() reads in setup.py (packaging script) plus constant-derived os.path.dirname/abspath and sys.path.insert import-path hacks in the 3 examples and docs/conf.py. The untrusted-input boundary is therefore exclusively the HTTP request surface (Flask 'request' proxy), which flows into string/regex matching and response-header construction - never into a file path."
+  },
+  "target": {
+    "project": "Flask-Cors",
+    "projectDescription": "Flask-Cors 3.0.8 (flask_cors/version.py:1 __version__ = '3.0.8') - a Flask extension adding CORS (Cross Origin Resource Sharing) support. Two entry points: (1) the cross_origin decorator (flask_cors/decorator.py:18) wrapping a Flask view function - wrapped_function (decorator.py:121) computes merged options via get_cors_options(current_app, _options), calls the view f(*args, **kwargs) (Flask URL rule variables pass through these wrapper args), wraps the result with make_response and applies set_cors_headers; (2) the CORS extension class (flask_cors/extension.py:16) - init_app (extension.py:131) merges app.config CORS_* keys (get_app_kwarg_dict core.py:303) with constructor/kwargs options, parses resource regexes (parse_resources core.py:66) and registers cors_after_request via app.after_request (extension.py:154), which matches request.path against each resource regex (extension.py:178, try_match core.py:275) and calls set_cors_headers. set_cors_headers (core.py:224) reads request.headers/request.method (core.py:245) and delegates to get_cors_headers (core.py:176), which reads the Origin header (request_headers.get('Origin') core.py:177), the preflight Access-Control-Request-Method/Access-Control-Request-Headers headers (core.py:194/:203) and writes the CORS response headers (resp.headers.add core.py:250). All path-like values (request.path, resource regexes) are used ONLY as regex match subjects - never to locate, open, read or write files.",
+    "pass": 1,
+    "cwes": ["CWE-022", "CWE-023", "CWE-036", "CWE-073"],
+    "focus": "Path Traversal",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\flask-cors_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (flask-cors-db/codeql-database.yml)",
+      "the database snapshot (git ls-tree of creation sha 5c6e05e) covers 28 .py files: 5 under flask_cors/ (core.py 383 lines, extension.py 186, decorator.py 135, __init__.py 26, version.py 1), setup.py, 3 under examples/, docs/conf.py, 18 under tests/",
+      "setup.py setuptools packaging of the flask_cors package; flask_cors/version.py __version__ = '3.0.8'; flask_cors/__init__.py exports CORS and cross_origin"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\flask-cors_vuln\\flask-cors-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\path_traversal_dbs\\flask-cors_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "5c6e05e996f10be1df1f2ad178560e54a2f82f1b",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:48:46.688655100Z"
+    },
+    "baselineLinesOfCode": 1834,
+    "finalised": true,
+    "locationNote": "flask-cors-db is nested inside the source tree; it was excluded from all exploration and will be excluded from extraction result rows via the path filter in both queries. The source root also contains a .git directory (used ONLY for a read-only ls-tree file inventory of the snapshot commit - no log/diff/patch content was consulted) and several post-snapshot analysis artifacts (ANALYSIS_REPORT.md, MISSED_VULN_ANALYSIS.md, PATH_TRAVERSAL_AUDIT_REPORT.md, enhanced_path_sinks.csv, path_traversal_sinks.csv) that are NOT part of the database snapshot (absent from the git tree of sha 5c6e05e, non-.py so never extracted) and were deliberately NOT opened during this run (see constraintsHonored). The database snapshot covers tests/ (18 files); both queries filter /tests/ and /flask-cors-db/ paths. setup.py, examples/ (3 demo Flask apps) and docs/conf.py (Sphinx config) are kept in scope - they are build/demo/doc files with only literal or __file__-derived paths; their rows are expected to be labeled none/FP, and they are the ONLY locations in the entire snapshot that touch the filesystem at all."
+  },
+  "toolchain": {
+    "qlpack": "iris/flask-cors-cwe22 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions present under C:\\Users\\lzh\\codeql\\packages\\ and C:\\Users\\lzh\\.codeql\\packages\\ from prior runs in this series)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1)",
+    "compatibilityBasis": "The two queries reuse the structural shapes already compiled and executed successfully on this same CLI + pack family in this series (dfetch Path_Traversal and the other Path_Traversal runs): moduleHintOf/receiverHint helpers, bindingset[path] excludedPath, AST-cast matching (Attribute/Subscript/Call/Name/Function/Parameter) with no QL classes, no API::Node-to-DataFlow::Node assignment, variable named moduleHint instead of `module`, Location API only (AstNode.getLocation().getFile().getAbsolutePath() / getStartLine(); AstNode.getFile() does not exist), Function.getAnArg()/Parameter.getPosition(), AstNode.getScope().getEnclosingModule(), Module.getName(). Deprecations avoided: no StrConst, no Decorator class (decorator functions are matched as plain Function definitions, and the route decorator usage in examples is not needed for any row), no AstNode.getFile(), no `module` variable name, no unbound `this`, no {{...}} template placeholders. CodeQL execution AND compile validation are both deferred to the next round per the task contract (this round is generation-only)."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory/layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "flask",
+          "kind": "web micro-framework (host framework of the audited extension)",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package +0.45: `from flask import request, current_app` flask_cors/core.py:20; `from flask import make_response, request, current_app` flask_cors/decorator.py:13; `from flask import request` flask_cors/extension.py:11; examples import Flask and flask_cors (examples/*.py:10-20)",
+            "route/decorator +0.30: cross_origin is a route-view decorator factory (decorator.py:18-135 - sets f.required_methods/f.provide_automatic_options and wraps the view); the extension registers an after_request callback (app.after_request(cors_after_request) extension.py:154) and wraps app.handle_exception/handle_user_exception (extension.py:165-168); the demo apps use @app.route (all 3 examples)",
+            "runtime/bootstrap +0.20: examples call app.run (app_based_example.py:150); the library bootstraps per-app state in CORS.__init__/init_app (extension.py:126-154)",
+            "directory/layout +0.05: single flask_cors package named after the flask extension convention"
+          ]
+        },
+        { "name": "django", "confidence": 0.0, "evidence": ["no django import anywhere - references/django.md was not loaded"] },
+        { "name": "fastapi", "confidence": 0.0, "evidence": ["no fastapi import - references/fastapi.md was not loaded"] },
+        { "name": "aiohttp / tornado / bottle / other web server", "confidence": 0.0, "evidence": ["no other web-server import; the library itself never serves HTTP - it hooks into the host Flask app's request/response cycle"] },
+        { "name": "argparse / click / celery (CLI or task boundaries)", "confidence": 0.0, "evidence": ["no CLI surface at all: no argparse/sys.argv/click; the package is an import-only library; setup.py is a setuptools packaging script, not a runtime entry point"] }
+      ],
+      "supportLibraries": [
+        { "name": "werkzeug", "role": "HTTP data structures: Headers, MultiDict (flask_cors/core.py:21) used for response header assembly; not part of this database" },
+        { "name": "six", "role": "py2/3 string_types isinstance checks (core.py:19, decorator/extension via `from .core import *`)" },
+        { "name": "re (stdlib)", "role": "resource-pattern and origin matching: re.match in try_match (core.py:278/:280), RegexObject type probe (core.py:51)" },
+        { "name": "logging (stdlib)", "role": "debug/info logging of request values (LOG.debug with request_origin core.py:120, request.path extension.py:180) - log-injection-adjacent (Pass 11), recorded as evidence only" },
+        { "name": "setuptools", "role": "setup.py packaging; the only file-reading code in the snapshot (open of version.py/requirements.txt/README.rst at setup.py:15/:18/:29, all literal __file__-/CWD-relative paths)" }
+      ]
+    },
+    "selected": "flask (primary, confidence 1.0 - the audit target is a Flask extension: the library's entire untrusted-input surface is the Flask request proxy object, and its entire output surface is response headers; the library performs no filesystem access, so the flask.md source cues request.args/form/json do not even apply - only request headers/path/method are read)",
+    "notes": "references/flask.md WAS loaded (flask import evidence matches). Its source cues (request.args.get / request.form.get / request.get_json / request.headers.get / request.cookies.get, path variables in route handlers) map onto the OBSERVED subset only: this library reads request.headers (core.py:245), request.method (core.py:245, decorator.py:125) and request.path (extension.py:178/:180) - request.args/form/json/cookies are never read anywhere in the package (verified by full read of all 5 modules). Its path-variable cue maps onto the wrapper-param shape (decorator.py:121 / extension.py:160 wrapped_function(*args, **kwargs) forwarding Flask URL rule variables to the wrapped view). Its sink cues (filesystem operations with request-derived path, subprocess, outbound HTTP, eval/exec, raw SQL) are NOT observed in the package - the flask.md filesystem/process/SQL sink families produce zero rows; the only open() sites in the whole snapshot are the literal-path reads in setup.py (out of flask.md's threat model: developer build script). python.md Pass 1 sink cues (open, Path, os.path, shutil, archive extraction) likewise produce rows only in setup.py/examples/docs. patterns.md Pass 1 families (file open/read/write APIs with user-controlled path, resource loader methods taking path strings) have NO user-controlled instance in this codebase - the honest candidate set is correspondingly small (see extraction.expectedVolume)."
+  },
+  "inputBoundaryInventory": {
+    "summary": "The audit target is a Flask extension library, so the untrusted-input boundary is exclusively the HTTP request, accessed through the Flask 'request' proxy: (1) the Origin request header - request_headers.get('Origin') at core.py:177 inside get_cors_headers (request_headers = request.headers passed from set_cors_headers core.py:245) - the dominant attacker-controlled string, matched against the configured origins via try_match/try_match_any (core.py:128/:271-285) and echoed back into the Access-Control-Allow-Origin response header (core.py:133/:184, resp.headers.add core.py:250); (2) the preflight headers Access-Control-Request-Method (request_headers.get(ACL_REQUEST_METHOD) core.py:194) and Access-Control-Request-Headers (request_headers.get(ACL_REQUEST_HEADERS) core.py:203, split on ',' and matched per-header in get_allow_headers core.py:161-173) - echoed into response headers; (3) request.path (extension.py:178/:180) - the URL path matched against resource regexes with try_match/re.match - a path-shaped attacker string, but used purely as a regex match subject, never as a filesystem path; (4) request.method (core.py:245, decorator.py:125) - 'OPTIONS' preflight detection; (5) the wrapper boundaries where Flask route variables (URL rule captures) pass through library code: wrapped_function(*args, **kwargs) decorator.py:121 and extension.py:160 forwarding them to the user's view f (and cors_after_request(resp) extension.py:171 / set_cors_headers(resp) extension.py:224 receiving the response object whose headers may embed request-derived values set by the view); (6) developer/operator-level configuration - cross_origin(*args, **kwargs) decorator.py:18, CORS.__init__(app, **kwargs) extension.py:126, init_app(app, **kwargs) extension.py:131, get_cors_options(appInstance, *dicts) core.py:288 and the app.config CORS_* reads app_config.get(k) core.py:311/:313 in get_app_kwarg_dict - the person embedding flask-cors in an app is the same trust domain as the options they configure: OPERATOR-trust, emitted for the labeling step to classify, NOT automatically attacker sources. NO other boundary exists: no uploads/multipart, no JSON/form/args/cookies reads, no archive entries, no subprocess output, no environment variables, no CLI, no DB, no message queue (verified by full read of the 5 package modules plus greps over the whole non-excluded tree). The filesystem-operation side is correspondingly minimal: the package contains ZERO filesystem calls; the entire snapshot contains only setup.py open(join(dirname(__file__), 'flask_cors/version.py'), 'r') :15, open(join(dirname(__file__), 'requirements.txt'), 'r') :18 and open('README.rst') :29 (all literal, plus exec(f.read()) :16 - code-execution of the just-read local file, Pass 4 material), the constant-derived os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sys.path.insert(0, parentdir) import-path hack in the 3 examples (:17-18) and sys.path.insert(0, os.path.abspath('..')) in docs/conf.py:21. No path-validation guards exist anywhere because no configurable path exists - there is nothing to traverse from inside the library.",
+    "sourceFamilies": [
+      { "family": "request_header_get", "flow_kind": "request_header", "evidence": "request_headers.get(...) reads in flask_cors/core.py: core.py:177 .get('Origin') (the Origin header value - the dominant attacker-controlled string), core.py:194 .get(ACL_REQUEST_METHOD, '') (preflight method header), core.py:203 .get(ACL_REQUEST_HEADERS) (preflight requested-headers list); request_headers is the get_cors_headers parameter fed from request.headers (core.py:245); argument 0 carries the key" },
+      { "family": "request_attribute_reads", "flow_kind": "request_attr", "evidence": "attribute reads on the Flask 'request' proxy: request.headers and request.method (core.py:245 in set_cors_headers), request.method (decorator.py:125, OPTIONS preflight detection), request.path (extension.py:178 matched against resource regexes via try_match, and :180 passed to LOG.debug) - the URL path is attacker-controlled and path-shaped, but consumed only as a regex match subject" },
+      { "family": "response_header_read", "flow_kind": "response_header", "evidence": "resp.headers.get(ACL_ORIGIN) extension.py:173 in cors_after_request - reads a response header previously set by the view's own flask-cors decorator; response headers can embed request-derived values (a view echoing Origin), so this is a weak secondary boundary feeding a boolean skip-check only; emitted for labeling to classify (expected none for pass 1)" },
+      { "family": "request_value_parameters", "flow_kind": "request_value_param", "evidence": "parameters of the core helpers that carry request-derived values: get_cors_origins(options, request_origin) core.py:113 (the Origin header value), get_allow_headers(options, acl_request_headers) core.py:161 (the ACRH header value), get_cors_headers(options, request_headers, request_method) core.py:176 (the whole request Headers object and the request method), try_match(request_origin, maybe_regex) core.py:275 (receives both the Origin header value from try_match_any core.py:128 AND request.path from extension.py:178), try_match_any(inst, patterns) core.py:271 (inst receives the Origin value core.py:128 and each stripped preflight header name core.py:167)" },
+      { "family": "wrapper_parameters", "flow_kind": "wrapper_param", "evidence": "framework wrapper boundaries: wrapped_function(*args, **kwargs) decorator.py:121 (the cross_origin wrapper - Flask URL rule variables for the decorated view arrive here and are forwarded to f(*args, **kwargs) at decorator.py:128), wrapped_function(*args, **kwargs) extension.py:160 (the exception-handler wrapper forwarding to f at extension.py:161), cors_after_request(resp) extension.py:171 (the after_request callback receiving the response object built from the view's output) and set_cors_headers(resp, options) core.py:224 (both library entry points converge here with the response object)" },
+      { "family": "config_entry_parameters", "flow_kind": "config_param", "evidence": "operator-trust configuration entry points: cross_origin(*args, **kwargs) decorator.py:18 (the decorator's options), CORS.__init__(app, **kwargs) extension.py:126 and CORS.init_app(app, **kwargs) extension.py:131 (extension options + the app object), get_cors_options(appInstance, *dicts) core.py:288 (the option-merging hub) and get_app_kwarg_dict(appInstance) core.py:303 (app.config reader), plus the internal config-propagation helpers parse_resources(resources) core.py:66, serialize_options(opts) core.py:354 and make_after_request_function(resources) extension.py:170" },
+      { "family": "config_field_reads", "flow_kind": "config_field", "evidence": "options.get(...) / _options.get(...) / app_config.get(...) dict reads inside flask_cors/ carrying merged CORS options (DEFAULT_OPTIONS + app.config CORS_* + kwargs): core.py:114/:123/:139/:147/:188/:198/:204/:205/:210/:216/:218/:365/:366/:380, extension.py:138/:158, decorator.py:116/:125, and the app.config CORS_* reads app_config.get(k) core.py:311/:313; operator-trust level - emitted for labeling to classify, not automatically attacker sources" }
+    ],
+    "sinkChannels": [
+      { "channel": "builtin open (read)", "evidence": "the ONLY filesystem operations in the entire snapshot, all in the packaging script with literal/constant paths: setup.py:15 open(join(dirname(__file__), 'flask_cors/version.py'), 'r') (read, whose content is then exec'd at :16 - Pass 4 material), setup.py:18 open(join(dirname(__file__), 'requirements.txt'), 'r') (read, split into install_requires), setup.py:29 open('README.rst') (read, CWD-relative literal, feeding long_description); argument 0 carries the path in every case; zero open/io.open/os.open/pathlib calls exist in the flask_cors package itself" },
+      { "channel": "os.path.join (via from-import alias)", "evidence": "setup.py:13 `from os.path import join, dirname` makes the calls bare names: join(dirname(__file__), 'flask_cors/version.py') setup.py:15 and join(dirname(__file__), 'requirements.txt') setup.py:18 - argument 0 is the __file__-derived base, argument 1 the literal filename; propagation nodes feeding the open() rows" },
+      { "channel": "os.path.dirname (component extraction)", "evidence": "bare-name dirname(__file__) setup.py:15/:18 (from-import form) and the attribute form os.path.dirname(os.path.dirname(os.path.abspath(__file__))) in all 3 examples (:17 - two nested dirname calls per file = 6 rows) building the constant parent directory for the sys.path hack" },
+      { "channel": "os.path.abspath (normalization)", "evidence": "os.path.abspath(__file__) examples/:17 (3 rows, innermost of the parentdir chain) and os.path.abspath('..') docs/conf.py:21 - normalization nodes on constant inputs" },
+      { "channel": "sys.path.insert (import-resolution path manipulation)", "evidence": "os.sys.path.insert(0, parentdir) examples/:18 (3 rows) and sys.path.insert(0, os.path.abspath('..')) docs/conf.py:21 - not a direct file access, but changes where subsequent imports resolve files from (the import machinery then reads files from the inserted directory); the inserted values are constant __file__-derived paths; positional argument 1 carries the path; emitted so labeling can classify (expected none/FP)" }
+    ],
+    "guardsAndEvidence": [
+      { "guard": "path validation: NOT APPLICABLE / NOT PRESENT", "evidence": "the flask_cors package performs no filesystem access, so there is no path to validate: no startswith/base-dir containment, no '..' rejection, no realpath/normpath canonicalization, no basename extraction, no absolute-path check exists anywhere in the package (only os.path.dirname/abspath in examples/docs, on __file__ constants). The request.path value (extension.py:178) is consumed by re.match only - it is never used to construct or locate a filesystem path, so no traversal can arise from it inside this library" },
+      { "guard": "origin matching is an allow-check, not a path check", "evidence": "try_match/try_match_any (core.py:271-285) compare the Origin header against configured patterns (case-insensitive regex or string equality); request.path is matched against resource regexes (extension.py:178) the same way - these confine which requests get CORS headers, they do not sanitize any file path" },
+      { "evidence": "response-header echo of request values (adjacent CWE material)", "note": "the matched Origin header value is returned and written into Access-Control-Allow-Origin (core.py:133 -> :184 -> resp.headers.add core.py:250), and matched preflight header names into Access-Control-Allow-Headers (get_allow_headers core.py:161-171 -> :203) - header-injection-shaped (Pass 10) material, recorded here for labeling context, NOT emitted as Pass 1 sink rows" },
+      { "evidence": "exec of file content in setup.py (adjacent CWE material)", "note": "setup.py:16 exec(f.read()) executes the content of the just-opened local flask_cors/version.py - code-execution of file content (Pass 4 material); the open() row at :15 anchors the read; the exec call itself is not emitted as a Pass 1 sink" },
+      { "evidence": "logging of request values (adjacent CWE material)", "note": "LOG.debug(\"CORS request received with 'Origin' %s\", request_origin) core.py:120 and LOG.debug(\"Request to '%s' matches ...\", request.path, ...) extension.py:180 log attacker-controlled values - log-injection-shaped (Pass 11) material, recorded as evidence only" },
+      { "evidence": "percent-decoding / symlink / TOCTOU: NOT PRESENT", "note": "no URL decoding is performed inside this library (Flask/Werkzeug decode request.path before it is visible here; the decoded value is only regex-matched); no symlinks are ever resolved; no check-then-use file sequence exists anywhere in the package (no FS access at all), so TOCTOU is not applicable" },
+      { "evidence": "mixed separators / absolute paths / base-directory confinement", "note": "not applicable inside the library: no path value ever reaches a filesystem call. The only path arguments observed (setup.py literal filenames, examples __file__-derived parentdir) are compile-time constants with no attacker influence" }
+    ],
+    "notObserved": [
+      "filesystem access of ANY kind inside the flask_cors package: zero calls to open/io.open/os.open/os.remove/os.rmdir/os.rename/os.replace/os.chmod/os.chdir/os.makedirs/os.listdir/os.walk/glob/shutil.*/pathlib.* across all 5 modules (core.py, decorator.py, extension.py, __init__.py, version.py - read in full)",
+      "static-file / download / upload serving: no send_file/send_from_directory/FileResponse/static-folder handling, no request.files/multipart filename handling, no request.args.get('filename')-style file parameters - the http-shaped path-traversal families of the web references produce zero package rows",
+      "archive handling: no zipfile/tarfile/extract/extractall imports or calls",
+      "pathlib: zero usage (no Path/PurePath construction, no .open/.read_text/.write_text/.resolve/.relative_to member calls)",
+      "request.args / request.form / request.json / request.cookies / request.values / request.data / request.url: never read by the library (only headers, path, method)",
+      "os.environ / os.getenv: zero call sites in the whole snapshot - no env source family",
+      "CLI surface: no argparse/sys.argv/click (the package is import-only; setup.py is a packaging script)",
+      "subprocess / outbound HTTP (requests/httpx/urllib) / SQL execution / deserialization (pickle/yaml): zero call sites - the corresponding source/sink families are not emitted",
+      "message queues / RPC deserialization / DB content: zero usage - the patterns.md source families for those boundaries do not apply"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution (and compile validation) deferred to the next round per the task contract (generation only).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable; parameter position in the function definition for param rows, including the self slot for methods)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO source or sink row is expected to resolve at API level: the request boundary flows through the Flask 'request' proxy (flask/werkzeug are external libraries not part of the database - only the flask-cors tree is), the header/option boundaries flow through .get calls on local parameter/variable names, and the sink side is builtins/os.path members plus bare names imported via `from os.path import join, dirname` (setup.py:13) where no syntactic receiver exists. The column is kept 'ast' for all families for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, request/options/app_config/os/os.path/sys name conventions). Member-name matching is receiver-name-anchored where the codebase allows it (request_headers.get/resp.headers.get/options.get are anchored to their receiver base names; the bare-name join/dirname rows are anchored to setup.py, the file whose import line justifies the alias)."
+    },
+    "flowKinds": {
+      "sources": [
+        "request_header",
+        "request_attr",
+        "response_header",
+        "request_value_param",
+        "wrapper_param",
+        "config_param",
+        "config_field"
+      ],
+      "sinks": [
+        "file_open",
+        "path_join",
+        "path_part",
+        "path_canon",
+        "import_path_insert"
+      ]
+    },
+    "exclusions": [
+      "paths containing /tests/ (18 files of the database snapshot - the workflow's noise rule for tests and fixtures)",
+      "/flask-cors-db/ (the CodeQL database directory nested inside the source tree)",
+      "setup.py, examples/ (3 demo Flask apps) and docs/conf.py are NOT excluded: they are inside the database, are the ONLY files containing filesystem operations in the whole snapshot, and carry only literal/__file__-derived constant paths; their rows are expected to be labeled none/FP (kept for auditability, consistent with prior projects in this series)"
+    ],
+    "expectedVolume": "roughly 53 source rows (request_header 3, request_attr 5, response_header 1, request_value_param 6, wrapper_param 6, config_param 12, config_field 20) and roughly 21 sink rows (open 3, join 2, dirname 8 = 2 bare-name in setup.py + 6 attribute-form in examples, abspath 4, sys.path.insert 4). The sink volume is small BY EVIDENCE, not by omission: the audited package contains zero filesystem calls, so the only real sink candidates in the database snapshot are the three literal-path open() reads in the packaging script plus the constant path-manipulation nodes in examples/docs. Far smaller than the CLI/web application targets of this series (dfetch ~60 sources / ~100 sinks; aiohttp ~60-120 / ~55-90) - the numbers reflect a 731-line header-filtering library with no I/O."
+  },
+  "uncoveredCases": [
+    "Flask 'request' proxy aliasing: request_attr rows are matched on the syntactic base name 'request' (from flask import request in core.py:20/decorator.py:13/extension.py:11); an alias import (from flask import request as req) or a request passed under another local name would be missed - not observed in this tree (every module imports the bare name).",
+    "request_headers / acl_request_headers / options / _options / app_config matching is likewise name-anchored to the exact parameter/variable names used in this codebase; a renamed variable would be missed (not observed). The dict-comprehension app_config.get(k) rows (core.py:311/:313) are inside a comprehension scope - still matched as ordinary Call nodes.",
+    "serialize_option(options_dict, key) reads its values via the options_dict[key] SUBSCRIPT (core.py:334-336), not .get - subscript-on-local-name reads were not given a family in this project (config-only channel, operator-trust); recorded here so the labeling step knows the config_field family under-covers it by one shape.",
+    "Flask's URL-rule variable binding (path variables -> view kwargs) happens inside the flask library (external, not in this database); the wrapper_param rows (decorator.py:121 / extension.py:160 wrapped_function *args/**kwargs) are the in-repo boundary where those values pass through library code, but the actual binding site is invisible to this extraction - the rows anchor the channel, and the star-parameter arg_index values are the syntactic positions (0/1) rather than concrete route-variable indices.",
+    "The bare-name join/dirname matching is constrained to setup.py because the from-import form (`from os.path import join, dirname`, setup.py:13) leaves no syntactic receiver to anchor on; a bare join()/dirname() call in another file of a different project would be missed unless that file has the same import - not observed elsewhere in this snapshot. The os.path.join attribute form is also matched (0 rows expected here) for cross-project recall.",
+    "os.sys.path.insert (examples:18) resolves sys through the os module attribute - matched via a two-level attribute chain (os.sys.path.insert); any other exotic spelling of the sys.path list access would be missed (none observed).",
+    "Dynamic-dispatch ambiguity is minimal in this snapshot: the only name-based member matches are .get (anchored to request_headers/resp.headers/options/_options/app_config receivers), .insert (anchored to a *.path receiver whose object is sys), and the os/os.path attribute forms; no same-named members on unrelated receivers were observed in non-excluded files (headers.add in core.py:184/:250 and f.required_methods.add in decorator.py:118 use .add, not .insert, and are not matched).",
+    "resp.headers.add(k, v) (core.py:250) writes response headers whose values can embed the matched Origin / preflight header names - Pass 10 (header injection) material, deliberately NOT emitted as Pass 1 sink rows; exec(f.read()) (setup.py:16) is Pass 4 material and LOG.debug of request values (core.py:120, extension.py:180) is Pass 11 material - both recorded in guardsAndEvidence instead of candidate rows.",
+    "Compile validation was NOT performed in this round (CodeQL execution forbidden by the task contract): the queries reuse verbatim the structural shapes already compiled and executed on the same CLI 2.25.1 + codeql/python-all pack family in prior runs of this series (helpers, bindingset annotations, AST casts); `codeql query run` + `bqrs decode` remain deferred to the next round."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 1 = CWE-022/023/036/073 Path Traversal, pass query name Pass1_PathTraversal.ql; extraction via codeql query run + bqrs decode, not database analyze; Python pitfalls: no Decorator class, no StrConst)",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/references/flask.md (framework reference: flask import evidence matched - from flask import request/current_app/make_response in core.py:20, decorator.py:13, extension.py:11)",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl (stub with {{...}} placeholders - filled from repository evidence, no placeholder left in the generated query)",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl (stub with {{...}} placeholders - filled from repository evidence, no placeholder left in the generated query)"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted. The source root contains five analysis artifacts NOT present in the database snapshot (ANALYSIS_REPORT.md, MISSED_VULN_ANALYSIS.md, PATH_TRAVERSAL_AUDIT_REPORT.md, enhanced_path_sinks.csv, path_traversal_sinks.csv - all absent from the git tree of creation sha 5c6e05e, i.e. added after database creation, and non-.py so never extracted): they were NOT opened during this run and were excluded from all evidence gathering. Full disclosure of one incident: a single verification grep over the source tree (intended to locate file-operation call sites in the .py sources) returned a few incidental matching lines from those .md files alongside the source hits; none of those files was subsequently read, no conclusion in this run is derived from them, and every fact in detection.json was independently established by direct full reads of the source files themselves (all 5 flask_cors modules, setup.py, the 3 examples, docs/conf.py head, and greps restricted to the .py trees thereafter). The git repository at the source root was used ONLY for a read-only ls-tree file-name inventory of the snapshot commit (no log/diff/patch/vulnerability content consulted). flask-cors-db was used solely to read codeql-database.yml, its creation log line for scope confirmation, and the git inventory for cross-checking; it was otherwise excluded. Project source, the database, and the Augur installation were not modified. Only the three Phase-1 Step-1/2 artifacts under iris_manual/Path_Traversal/flask-cors/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). No CodeQL command was executed and no LLM labeling performed, per the task contract; run_manifest.json and summary.md belong to Step 0 / post-execution steps and were not fabricated."
+  }
+}

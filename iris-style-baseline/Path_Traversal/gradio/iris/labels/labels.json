@@ -1,0 +1,2578 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "run_id": "gradio-pathtraversal-pass1-20261022",
+    "generated_at": "2026-10-22T08:00:43Z",
+    "language": "python",
+    "framework": "flask",
+    "model": "glm-5.3 (Claude Code CLI in-session LLM labeling; no external API calls)",
+    "project": "gradio 2.5.0 (path_traversal corpus, gradio/ package scope)",
+    "notes": [
+      "Scope: gradio/ package only (relative path 'gradio/%'); demo/, test/, website/, setup.py and the gradio-db CodeQL database directory were excluded during extraction.",
+      "Labeling model: glm-5.3 performing in-session LLM API candidate labeling; each candidate was traced against the real sources in gradio_vuln before labeling. 5 batches, 114 candidates (64 source + 50 sink), 0 exact duplicate rows removed (verified by (nodeRepr, receiver, file, line, argIndex) key).",
+      "Key observation 1: secure_filename at networking.py:380 (/file route) is not imported in gradio/networking.py (only safe_join from werkzeug.security, line 30); as written the call is an unresolved name (NameError), so it must NOT be modeled as a sanitizer barrier. See entries K35, K44, S64.",
+      "Key observation 2: werkzeug safe_join at networking.py:143 (/static route) is an effective base-dir containment barrier; findings through S62/K42 are expected to be filtered as sanitized.",
+      "Key observation 3: in decode_base64_to_file (processing_utils.py:137-156) the tempfile prefix/suffix derive from the client-controlled data-URI header when file_path is None (flagging flow) without separator filtering; see entries K03/K04 and S30/S03-S13.",
+      "No sanitizer entries were labeled: the Phase 1 candidate CSVs contain no sanitizer API candidates; call-site barriers (safe_join, the component.py:52 label charset filter) are documented in entry evidence and phase1_review.md for Step 4 generation.",
+      "No summary entries were labeled: standard CodeQL call-edge data flow covers the observed wrapper propagation; detection.json wrapper list is retained in phase1_review.md as a Step 4 fallback.",
+      "Low-confidence / unresolved entries retained as classification 'candidate' pending human review: S51 (flag_data flag_index), K25 (shutil.move destination), K45 (os.path.getsize in File.postprocess)."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "22",
+        "23",
+        "36",
+        "73"
+      ],
+      "entries": [
+        {
+          "id": "S01",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "gradio.component",
+            "type": "Component",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/component.py",
+            "line": 36
+          },
+          "rationale": "Base Component.save_flagged returns data unchanged (component.py:36-40); the return value is written as a CSV cell into the fixed log file '{flagging_dir}/log.csv' (networking.py:278-279, 339-343). data never reaches a filesystem path parameter, so it is not a pass-1 source.",
+          "evidence": [
+            "gradio/component.py:36-40: `return data` (no file access)",
+            "gradio/networking.py:278-279: log_fp is fixed from app.interface.flagging_dir"
+          ]
+        },
+        {
+          "id": "S02",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "Label",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 157
+          },
+          "rationale": "Label.save_flagged serializes data with json.dumps (outputs.py:157-164); the result is a CSV cell in the fixed flagging log (networking.py:339-343). No path parameter is influenced.",
+          "evidence": [
+            "gradio/outputs.py:157-164: json.dumps / data['label'] only",
+            "gradio/networking.py:339-343: csv writer into fixed log_fp"
+          ]
+        },
+        {
+          "id": "S03",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Audio",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1115
+          },
+          "rationale": "Request-derived base64 payload: flag_data passes input_data[i] from the /api/predict or /api/flag request JSON (networking.py:212-214, 358-360) into this override, which forwards data['data'] to save_flagged_file -> decode_base64_to_file -> tempfile.NamedTemporaryFile (component.py:48-66, processing_utils.py:137-156). Destination dir/name are server-generated, but the client controls the data-URI header from which the tempfile suffix extension is derived (see K03/K04).",
+          "evidence": [
+            "gradio/inputs.py:1115-1119: save_flagged_file(dir, label, data['data'], encryption_key)",
+            "gradio/networking.py:358-360: request JSON input_data -> flag_data",
+            "gradio/component.py:51: decode_base64_to_file(data, encryption_key)"
+          ]
+        },
+        {
+          "id": "S04",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "Audio",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 440
+          },
+          "rationale": "Output side of flagging: output_data comes from the prediction or directly from the /api/flag request JSON (networking.py:359) and is persisted via save_flagged_file -> decode_base64_to_file -> tempfile (outputs.py:440-444, component.py:48-66). Same suffix-injection edge as the input-side entries.",
+          "evidence": [
+            "gradio/outputs.py:440-444: save_flagged_file(dir, label, data, encryption_key)",
+            "gradio/networking.py:288-290: output components save_flagged from flag_data"
+          ]
+        },
+        {
+          "id": "S05",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Image",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 863
+          },
+          "rationale": "Image input flagging: flagged request base64 is passed straight to save_flagged_file (inputs.py:863-867) -> decode_base64_to_file -> tempfile.NamedTemporaryFile. Content is client-controlled; destination path server-generated except for the client-derived tempfile suffix extension.",
+          "evidence": [
+            "gradio/inputs.py:863-867: self.save_flagged_file(dir, label, data, encryption_key)",
+            "gradio/processing_utils.py:137-156: decode_base64_to_file"
+          ]
+        },
+        {
+          "id": "S06",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "Image",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 242
+          },
+          "rationale": "Image output flagging mirrors the input side (outputs.py:242-246); prediction/request data reaches decode_base64_to_file and the temp-file write path.",
+          "evidence": [
+            "gradio/outputs.py:242-246: save_flagged_file delegation"
+          ]
+        },
+        {
+          "id": "S07",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Dataframe",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1282
+          },
+          "rationale": "Dataframe input save_flagged returns json.dumps(data) (inputs.py:1282-1286); the string becomes a CSV cell in the fixed log. No filesystem path is influenced.",
+          "evidence": [
+            "gradio/inputs.py:1282-1286: json.dumps(data)"
+          ]
+        },
+        {
+          "id": "S08",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "Dataframe",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 626
+          },
+          "rationale": "Dataframe output save_flagged returns json.dumps(data['data']) (outputs.py:626-630); CSV cell content only.",
+          "evidence": [
+            "gradio/outputs.py:626-630: json.dumps(data['data'])"
+          ]
+        },
+        {
+          "id": "S09",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "CheckboxGroup",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 523
+          },
+          "rationale": "CheckboxGroup save_flagged returns json.dumps(data) (inputs.py:523-527); CSV cell content only.",
+          "evidence": [
+            "gradio/inputs.py:523-527: json.dumps(data)"
+          ]
+        },
+        {
+          "id": "S10",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Video",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 941
+          },
+          "rationale": "Video input flagging forwards data['data'] (client base64 string) to save_flagged_file -> decode_base64_to_file -> tempfile (inputs.py:941-945); client controls the data-URI header and hence the tempfile suffix extension in the file_path=None flow.",
+          "evidence": [
+            "gradio/inputs.py:941-945: save_flagged_file(..., data['data'], ...)",
+            "gradio/processing_utils.py:124-135: extension parsed from client data-URI header"
+          ]
+        },
+        {
+          "id": "S11",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "Video",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 297
+          },
+          "rationale": "Video output flagging forwards data['data'] to save_flagged_file (outputs.py:297-301); same request-derived content to temp-file-write flow.",
+          "evidence": [
+            "gradio/outputs.py:297-301: save_flagged_file(dir, label, data['data'], encryption_key)"
+          ]
+        },
+        {
+          "id": "S12",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "File",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1194
+          },
+          "rationale": "File input flagging forwards data[0]['data'] (client base64) to save_flagged_file (inputs.py:1194-1198); the flagged content and its data-URI header are fully client-controlled.",
+          "evidence": [
+            "gradio/inputs.py:1194-1198: save_flagged_file(..., data[0]['data'], ...)"
+          ]
+        },
+        {
+          "id": "S13",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "File",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 549
+          },
+          "rationale": "File output flagging forwards data['data'] to save_flagged_file (outputs.py:549-553); request-derived content reaching the temp-file write path.",
+          "evidence": [
+            "gradio/outputs.py:549-553: save_flagged_file(dir, label, data['data'], encryption_key)"
+          ]
+        },
+        {
+          "id": "S14",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Timeseries",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1346
+          },
+          "rationale": "Timeseries input save_flagged returns json.dumps(data) (inputs.py:1346-1350); CSV cell content only.",
+          "evidence": [
+            "gradio/inputs.py:1346-1350: json.dumps(data)"
+          ]
+        },
+        {
+          "id": "S15",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "Timeseries",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 758
+          },
+          "rationale": "Timeseries output save_flagged returns json.dumps(data) (outputs.py:758-762); CSV cell content only.",
+          "evidence": [
+            "gradio/outputs.py:758-762: json.dumps(data)"
+          ]
+        },
+        {
+          "id": "S16",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "KeyValues",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 339
+          },
+          "rationale": "KeyValues save_flagged returns json.dumps(data) (outputs.py:339-340); CSV cell content only.",
+          "evidence": [
+            "gradio/outputs.py:339-340: json.dumps(data)"
+          ]
+        },
+        {
+          "id": "S17",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "HighlightedText",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 385
+          },
+          "rationale": "HighlightedText save_flagged returns json.dumps(data) (outputs.py:385-386); CSV cell content only.",
+          "evidence": [
+            "gradio/outputs.py:385-386: json.dumps(data)"
+          ]
+        },
+        {
+          "id": "S18",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "JSON",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 479
+          },
+          "rationale": "JSON save_flagged returns json.dumps(data) (outputs.py:479-480); CSV cell content only.",
+          "evidence": [
+            "gradio/outputs.py:479-480: json.dumps(data)"
+          ]
+        },
+        {
+          "id": "S19",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "Carousel",
+            "callable": "save_flagged",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 682
+          },
+          "rationale": "Carousel save_flagged recurses into per-component save_flagged and json.dumps the results (outputs.py:682-688); only serialization of flagged content, no path influence.",
+          "evidence": [
+            "gradio/outputs.py:682-688: json.dumps over component.save_flagged results"
+          ]
+        },
+        {
+          "id": "S20",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.component",
+            "type": "Component",
+            "callable": "restore_flagged",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/component.py",
+            "line": 42
+          },
+          "rationale": "Base restore_flagged returns data unchanged (component.py:42-45). The data is a log.csv cell (second-order, file-derived) consumed during example loading (interface.py:309-315) and re-serialized into the interface config sent to the client; it is never used as a filesystem path.",
+          "evidence": [
+            "gradio/component.py:42-45: `return data`",
+            "gradio/interface.py:309-315: examples restored from log.csv into config"
+          ]
+        },
+        {
+          "id": "S21",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "Label",
+            "callable": "restore_flagged",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 166
+          },
+          "rationale": "restore_flagged json.loads the log.csv cell and returns it (outputs.py:166-171); value flows into config['examples'] only, never into a file API.",
+          "evidence": [
+            "gradio/outputs.py:166-171: json.loads fallback to raw data"
+          ]
+        },
+        {
+          "id": "S22",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Dataframe",
+            "callable": "restore_flagged",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1288
+          },
+          "rationale": "Dataframe input restore_flagged json.loads the log.csv cell (inputs.py:1288-1289); returned to config only.",
+          "evidence": [
+            "gradio/inputs.py:1288-1289: json.loads(data)"
+          ]
+        },
+        {
+          "id": "S23",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "Dataframe",
+            "callable": "restore_flagged",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 632
+          },
+          "rationale": "Dataframe output restore_flagged json.loads the log.csv cell (outputs.py:632-633); returned to config only.",
+          "evidence": [
+            "gradio/outputs.py:632-633: json.loads(data)"
+          ]
+        },
+        {
+          "id": "S24",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "CheckboxGroup",
+            "callable": "restore_flagged",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 529
+          },
+          "rationale": "CheckboxGroup restore_flagged json.loads the log.csv cell (inputs.py:529-530); returned to config only.",
+          "evidence": [
+            "gradio/inputs.py:529-530: json.loads(data)"
+          ]
+        },
+        {
+          "id": "S25",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Timeseries",
+            "callable": "restore_flagged",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1352
+          },
+          "rationale": "Timeseries input restore_flagged json.loads the log.csv cell (inputs.py:1352-1353); returned to config only.",
+          "evidence": [
+            "gradio/inputs.py:1352-1353: json.loads(data)"
+          ]
+        },
+        {
+          "id": "S26",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "Timeseries",
+            "callable": "restore_flagged",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 764
+          },
+          "rationale": "Timeseries output restore_flagged json.loads the log.csv cell (outputs.py:764-765); returned to config only.",
+          "evidence": [
+            "gradio/outputs.py:764-765: json.loads(data)"
+          ]
+        },
+        {
+          "id": "S27",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "KeyValues",
+            "callable": "restore_flagged",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 342
+          },
+          "rationale": "KeyValues restore_flagged json.loads the log.csv cell (outputs.py:342-343); returned to config only.",
+          "evidence": [
+            "gradio/outputs.py:342-343: json.loads(data)"
+          ]
+        },
+        {
+          "id": "S28",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "HighlightedText",
+            "callable": "restore_flagged",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 388
+          },
+          "rationale": "HighlightedText restore_flagged json.loads the log.csv cell (outputs.py:388-389); returned to config only.",
+          "evidence": [
+            "gradio/outputs.py:388-389: json.loads(data)"
+          ]
+        },
+        {
+          "id": "S29",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.outputs",
+            "type": "JSON",
+            "callable": "restore_flagged",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 482
+          },
+          "rationale": "JSON restore_flagged json.loads the log.csv cell (outputs.py:482-483); returned to config only.",
+          "evidence": [
+            "gradio/outputs.py:482-483: json.loads(data)"
+          ]
+        },
+        {
+          "id": "S30",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.component",
+            "type": "Component",
+            "callable": "save_flagged_file",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/component.py",
+            "line": 48
+          },
+          "rationale": "Receives flagged request data (base64 string, fully client-controlled including the data-URI header) and writes it to disk: decode_base64_to_file -> tempfile.NamedTemporaryFile -> file_obj.write -> shutil.move into the flagging dir (component.py:48-66). Destination dir/name are server-generated (charset-filtered label + index), but the tempfile suffix extension derives from the client data-URI header when file_path is None (processing_utils.py:124-151). Genuine untrusted-data-to-disk boundary for pass 1.",
+          "evidence": [
+            "gradio/component.py:48-66: decode, makedirs, listdir, shutil.move",
+            "gradio/processing_utils.py:137-156: suffix from mime extension when file_path is None",
+            "gradio/component.py:52: label charset filter alnum + '._- '"
+          ]
+        },
+        {
+          "id": "S31",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Textbox",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 139
+          },
+          "rationale": "Textbox preprocess receives the raw request JSON payload dispatched from Interface.process (interface.py:363-370) after /api/predict (networking.py:189-192); genuine untrusted boundary, but x is a scalar text value with no filesystem-path use inside the gradio package. Labeled source at reduced confidence for conservative recall.",
+          "evidence": [
+            "gradio/interface.py:363-370: preprocess(raw_input[i]) dispatch",
+            "gradio/networking.py:192: raw_input = request.json['data']"
+          ]
+        },
+        {
+          "id": "S32",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Checkbox",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 410
+          },
+          "rationale": "Checkbox preprocess x is the raw request JSON value (bool); genuine boundary, no path use in the package (inputs.py:410-414 returns x). Reduced-confidence source for recall.",
+          "evidence": [
+            "gradio/inputs.py:410-414: `return x`"
+          ]
+        },
+        {
+          "id": "S33",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Audio",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 989
+          },
+          "rationale": "Audio preprocess x is a dict whose 'name' and 'data' fields and the client-settable 'is_example' flag all come from the request JSON (inputs.py:989-1004): is_example=True routes the client 'name' directly into create_tmp_copy_of_file(file_name) -> shutil.copy2 (inputs.py:1001, processing_utils.py:158-169); otherwise 'name' controls the tempfile prefix/extension via decode_base64_to_file(file_path=file_name). High-relevance pass-1 source.",
+          "evidence": [
+            "gradio/inputs.py:998-1004: x['name'], x['data'], x.get('is_example')",
+            "gradio/inputs.py:1000-1004: is_example branch uses client 'name' as path"
+          ]
+        },
+        {
+          "id": "S34",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Image",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 718
+          },
+          "rationale": "Image preprocess x is a base64 data-URI string decoded via decode_base64_to_image into PIL over BytesIO (inputs.py:718-739, processing_utils.py:18-21); the 'name' field is not used. Boundary genuine, path relevance low.",
+          "evidence": [
+            "gradio/processing_utils.py:18-21: Image.open(BytesIO(...))"
+          ]
+        },
+        {
+          "id": "S35",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Dataframe",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1260
+          },
+          "rationale": "Dataframe preprocess x is the raw request 2D array converted to pandas/numpy (inputs.py:1260-1280); no path use in the package. Reduced-confidence source for recall.",
+          "evidence": [
+            "gradio/inputs.py:1267-1280: pd.DataFrame/np.array conversion"
+          ]
+        },
+        {
+          "id": "S36",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "InputComponent",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 29
+          },
+          "rationale": "InputComponent base preprocess is the passthrough every input component inherits (inputs.py:29-33); x is the raw request payload per component. Genuine boundary; for components that do not override, no path use.",
+          "evidence": [
+            "gradio/inputs.py:29-33: `return x`"
+          ]
+        },
+        {
+          "id": "S37",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Number",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 243
+          },
+          "rationale": "Number preprocess converts x to float (inputs.py:243-250); scalar request value, no path use. Reduced-confidence source for recall.",
+          "evidence": [
+            "gradio/inputs.py:243-250: `return float(x)`"
+          ]
+        },
+        {
+          "id": "S38",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Slider",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 341
+          },
+          "rationale": "Slider preprocess returns x unchanged (inputs.py:341-348); scalar request value, no path use. Reduced-confidence source for recall.",
+          "evidence": [
+            "gradio/inputs.py:341-348: `return x`"
+          ]
+        },
+        {
+          "id": "S39",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "CheckboxGroup",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 477
+          },
+          "rationale": "CheckboxGroup preprocess returns the selected list or maps to indices (inputs.py:477-490); no path use. Reduced-confidence source for recall.",
+          "evidence": [
+            "gradio/inputs.py:484-490: value/index transform"
+          ]
+        },
+        {
+          "id": "S40",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Radio",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 564
+          },
+          "rationale": "Radio preprocess returns the selected choice or its index (inputs.py:564-577); no path use. Reduced-confidence source for recall.",
+          "evidence": [
+            "gradio/inputs.py:564-577: value/index transform"
+          ]
+        },
+        {
+          "id": "S41",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Dropdown",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 631
+          },
+          "rationale": "Dropdown preprocess returns the selected choice or its index (inputs.py:631-644); no path use. Reduced-confidence source for recall.",
+          "evidence": [
+            "gradio/inputs.py:631-644: value/index transform"
+          ]
+        },
+        {
+          "id": "S42",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Video",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 906
+          },
+          "rationale": "Video preprocess x carries client-controlled 'name'/'data' and the client-settable 'is_example' flag (inputs.py:906-921): is_example=True passes the client 'name' to create_tmp_copy_of_file (inputs.py:917); otherwise decode_base64_to_file(file_path=file_name) uses 'name' for the tempfile prefix/extension, and the resulting temp path feeds FFmpeg inputs/outputs (inputs.py:926-930). High-relevance pass-1 source.",
+          "evidence": [
+            "gradio/inputs.py:915-920: name/data/is_example extraction",
+            "gradio/inputs.py:926-930: FFmpeg on temp-derived paths"
+          ]
+        },
+        {
+          "id": "S43",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "File",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1161
+          },
+          "rationale": "File preprocess x is a list of dicts with client-supplied 'name' and client-settable 'is_example' (inputs.py:1161-1192): with is_example and type='bytes' the client 'name' is opened directly (inputs.py:1180); with type='file' it is copied (inputs.py:1175). Highest-relevance pass-1 source (arbitrary file read via request JSON).",
+          "evidence": [
+            "gradio/inputs.py:1171-1182: process_single_file branches",
+            "gradio/inputs.py:1180: open(file_name, 'rb') on client 'name'"
+          ]
+        },
+        {
+          "id": "S44",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": "Timeseries",
+            "callable": "preprocess",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1331
+          },
+          "rationale": "Timeseries preprocess builds a pandas DataFrame from the request dict x['data']/x['headers'] (inputs.py:1331-1344); no path use. Reduced-confidence source for recall.",
+          "evidence": [
+            "gradio/inputs.py:1338-1344: pd.DataFrame(x['data'], columns=x['headers'])"
+          ]
+        },
+        {
+          "id": "S45",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "gradio.inputs",
+            "type": null,
+            "callable": "process_single_file",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1171
+          },
+          "rationale": "Nested helper receiving the per-file request dict f: f['name'] is the client-supplied filename and f.get('is_example') is client-settable (inputs.py:1171-1182). When is_example is true, f['name'] is used directly as the path argument to open() (type 'bytes') or create_tmp_copy_of_file (type 'file'); otherwise it seeds the tempfile prefix/extension. Full input controllability of the path string.",
+          "evidence": [
+            "gradio/inputs.py:1172: file_name, data, is_example = f['name'], f['data'], f.get('is_example', False)",
+            "gradio/inputs.py:1174-1181: is_example branches reach open/create_tmp_copy_of_file"
+          ]
+        },
+        {
+          "id": "S46",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "gradio.interface",
+            "type": "Interface",
+            "callable": "process",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/interface.py",
+            "line": 363
+          },
+          "rationale": "Interface.process receives the raw /api/predict request JSON 'data' list (networking.py:192 -> 196/201) and dispatches raw_input[i] to each input component's preprocess (interface.py:363-370), where File/Video/Audio use the client 'name' field as a filesystem path. Key internal boundary for pass 1.",
+          "evidence": [
+            "gradio/networking.py:192: raw_input = request.json['data']",
+            "gradio/interface.py:369-370: input_component.preprocess(raw_input[i])"
+          ]
+        },
+        {
+          "id": "S47",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.interface",
+            "type": "Interface",
+            "callable": "interpret",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/interface.py",
+            "line": 377
+          },
+          "rationale": "Interface.interpret receives the raw /api/interpret request JSON 'data' list (networking.py:368-370) and likewise dispatches raw_input[i] to component preprocess and tokenization helpers (interface.py:377-386). Same dispatch surface as process; interpretation additionally base64-decodes client strings.",
+          "evidence": [
+            "gradio/networking.py:368-370: raw_input = request.json['data']",
+            "gradio/interface.py:384-386: preprocess(raw_input[i]) inside interpret"
+          ]
+        },
+        {
+          "id": "S48",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.networking",
+            "type": null,
+            "callable": "flag_data",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 276
+          },
+          "rationale": "flag_data is called with request JSON data from /api/predict auto-flagging (networking.py:212-214) and /api/flag (networking.py:358-360); input_data[i] is dispatched to component save_flagged, reaching decode_base64_to_file and the temp-file write path (component.py:48-66). Destination paths are server-generated (see K03/K04 for the suffix edge).",
+          "evidence": [
+            "gradio/networking.py:285-287: interface.save_flagged(flag_path, label, input_data[i], ...)",
+            "gradio/component.py:48-66: save_flagged_file flow"
+          ]
+        },
+        {
+          "id": "S49",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "gradio.networking",
+            "type": null,
+            "callable": "flag_data",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 276
+          },
+          "rationale": "output_data is the prediction result or the /api/flag request JSON field (networking.py:359, 288-290); it reaches the output components' save_flagged and the same temp-file write path. Prediction outputs are developer-code-derived, but the /api/flag route feeds them directly from the request.",
+          "evidence": [
+            "gradio/networking.py:288-290: output component save_flagged(output_data[i])"
+          ]
+        },
+        {
+          "id": "S50",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.networking",
+            "type": null,
+            "callable": "flag_data",
+            "arg_index": 2,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 276
+          },
+          "rationale": "flag_option is a request JSON string (networking.py:359) written as a CSV cell via replace_flag_at_index (networking.py:307-316); content-only influence over the fixed log.csv, no path influence. Retained at reduced confidence.",
+          "evidence": [
+            "gradio/networking.py:307-316: replace_flag_at_index writes flag_option into CSV content"
+          ]
+        },
+        {
+          "id": "S51",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "package": null,
+            "module": "gradio.networking",
+            "type": null,
+            "callable": "flag_data",
+            "arg_index": 3,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 276
+          },
+          "rationale": "flag_index is a request JSON value used as a row index into the log.csv content (networking.py:312, 345-348). It is not a filesystem path parameter and its pass-1 relevance is unclear (index errors, not traversal); kept as candidate pending human review.",
+          "evidence": [
+            "gradio/networking.py:312: content[flag_index][flag_col_index] = flag_option"
+          ]
+        },
+        {
+          "id": "S52",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "package": null,
+            "module": "gradio.queue",
+            "type": null,
+            "callable": "push",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/queue.py",
+            "line": 68
+          },
+          "rationale": "queue.push receives the /api/queue/push request JSON data (networking.py:394-396), persists it into the sqlite job queue, and queue_thread re-posts it to the local /api/<task_type>/ endpoint (networking.py:408-416) where it re-enters Interface.process. Second-order request boundary covering the queue round-trip.",
+          "evidence": [
+            "gradio/networking.py:394-396: data/action from request.json",
+            "gradio/networking.py:415-416: requests.post to local /api/<task_type>/"
+          ]
+        },
+        {
+          "id": "S53",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "gradio.queue",
+            "type": null,
+            "callable": "push",
+            "arg_index": 1,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/queue.py",
+            "line": 68
+          },
+          "rationale": "action comes from the request JSON (networking.py:395) and becomes the task_type URL segment of the local re-post (networking/networking.py:416); it is not used as a filesystem path. Retained at reduced confidence as part of the queue boundary.",
+          "evidence": [
+            "gradio/networking.py:416: path_to_local_server + '/api/' + task_type + '/'"
+          ]
+        },
+        {
+          "id": "S54",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 192
+          },
+          "rationale": "request.json['data'] in the /api/predict POST handler (networking.py:189-192) is the root request payload; it reaches Interface.process -> component preprocess, where File/Video/Audio consume the client 'name' field as a filesystem path (inputs.py:917, 1001, 1175-1180). Primary pass-1 source.",
+          "evidence": [
+            "gradio/networking.py:192: raw_input = request.json['data']",
+            "gradio/inputs.py:1175-1180: client 'name' used as open()/copy path"
+          ]
+        },
+        {
+          "id": "S55",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 358
+          },
+          "rationale": "request.json['data'] in /api/flag (networking.py:354-360); its input_data/output_data fields reach flag_data -> save_flagged -> decode_base64_to_file -> tempfile (see K03/K04 suffix edge).",
+          "evidence": [
+            "gradio/networking.py:358-360: data['input_data'], data['output_data'] into flag_data"
+          ]
+        },
+        {
+          "id": "S56",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 368
+          },
+          "rationale": "request.json['data'] in /api/interpret (networking.py:364-370) feeds Interface.interpret and the component preprocess/tokenization pipelines (interface.py:377-386).",
+          "evidence": [
+            "gradio/networking.py:368: raw_input = request.json['data']"
+          ]
+        },
+        {
+          "id": "S57",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 394
+          },
+          "rationale": "request.json['data'] in /api/queue/push (networking.py:391-396) enters queue.push and is re-posted locally to the predict/interpret handlers (networking.py:408-416) — second-order boundary to the same preprocess path flows.",
+          "evidence": [
+            "gradio/networking.py:394: data = request.json['data']"
+          ]
+        },
+        {
+          "id": "S58",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 395
+          },
+          "rationale": "request.json['action'] in /api/queue/push (networking.py:395) becomes the task_type URL segment of the local re-post (networking.py:416); not a filesystem path. Reduced-confidence source.",
+          "evidence": [
+            "gradio/networking.py:416: task_type interpolated into local URL"
+          ]
+        },
+        {
+          "id": "S59",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "request.json",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 403
+          },
+          "rationale": "request.json['hash'] in /api/queue/status is used only as a sqlite lookup key (networking.py:400-405, queue.py:95-143); no filesystem path use.",
+          "evidence": [
+            "gradio/networking.py:403: hash = request.json['hash']",
+            "gradio/queue.py:95-110: SELECT by hash"
+          ]
+        },
+        {
+          "id": "S60",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "request.form.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 153
+          },
+          "rationale": "request.form.get('username') in the /login handler is compared against app.auth credentials (networking.py:152-160); no filesystem use.",
+          "evidence": [
+            "gradio/networking.py:153-160: credential comparison"
+          ]
+        },
+        {
+          "id": "S61",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": "request",
+            "callable": "request.form.get",
+            "arg_index": null,
+            "flow_kind": "field"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 154
+          },
+          "rationale": "request.form.get('password') in the /login handler is compared against app.auth credentials (networking.py:152-160); no filesystem use.",
+          "evidence": [
+            "gradio/networking.py:154-160: credential comparison"
+          ]
+        },
+        {
+          "id": "S62",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "gradio.networking",
+            "type": null,
+            "callable": "static_resource",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 139
+          },
+          "rationale": "URL path variable of /static/<path:path> (networking.py:138-143) reaching send_file(safe_join(STATIC_PATH_LIB, path)). Genuine URL-derived path source; werkzeug safe_join enforces containment at the sink (see K42), so alerts through this source should be filtered as sanitized.",
+          "evidence": [
+            "gradio/networking.py:138-143: safe_join(STATIC_PATH_LIB, path)",
+            "gradio/networking.py:30: from werkzeug.security import safe_join"
+          ]
+        },
+        {
+          "id": "S63",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "gradio.networking",
+            "type": null,
+            "callable": "enable_sharing",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 173
+          },
+          "rationale": "URL path variable of /enable_sharing/<path:path> is only stored into app.interface.config['share_url'] (networking.py:171-177); it never reaches a filesystem operation, so it is not a pass-1 source.",
+          "evidence": [
+            "gradio/networking.py:173-177: config['share_url'] = path"
+          ]
+        },
+        {
+          "id": "S64",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "gradio.networking",
+            "type": null,
+            "callable": "file",
+            "arg_index": 0,
+            "flow_kind": "param"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 379
+          },
+          "rationale": "URL path variable of /file/<path:path> (networking.py:377-388) is joined into os.path.join(app.cwd, path) and passed to open()/send_file. The intended sanitizer secure_filename (networking.py:380) is NOT imported in this module (only safe_join from werkzeug.security, line 30), so as written it is an unresolved name — NameError, not sanitization; the raw route path is the value that reaches the join in the modeled flow. Highest-relevance pass-1 source.",
+          "evidence": [
+            "gradio/networking.py:379-380: path = secure_filename(path) — name not imported",
+            "gradio/networking.py:382,388: os.path.join(app.cwd, path)"
+          ]
+        },
+        {
+          "id": "K01",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "ffmpy",
+            "type": null,
+            "callable": "FFmpeg",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 283
+          },
+          "rationale": "ffmpy.FFmpeg(inputs={y: None}, outputs={output_file_name: None}).run() (outputs.py:283-287) spawns an ffmpeg subprocess reading and writing the paths in the keyword dicts. In Video.postprocess, y is the predict function's returned path (developer/model code, not request-derived in gradio's own flow); the sink signature is retained because the dict keys are the file-access parameter surface for pass 1.",
+          "evidence": [
+            "gradio/outputs.py:279-287: FFmpeg on y / output_file_name",
+            "gradio/outputs.py:536-547: y comes from postprocess(payload)"
+          ]
+        },
+        {
+          "id": "K02",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "ffmpy",
+            "type": null,
+            "callable": "FFmpeg",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 926
+          },
+          "rationale": "FFmpeg in Video.preprocess (inputs.py:926-930): both dict paths derive from decode_base64_to_file temp names whose prefix/extension come from the client-supplied 'name' (basename-constrained), and output_file_name is the temp stem plus the developer-configured self.type. Real subprocess file read/write at client-influenced path components.",
+          "evidence": [
+            "gradio/inputs.py:921-930: file_name -> FFmpeg inputs/outputs",
+            "gradio/processing_utils.py:137-156: temp name prefix/extension derivation"
+          ]
+        },
+        {
+          "id": "K03",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 149
+          },
+          "rationale": "NamedTemporaryFile(delete=False, prefix=prefix) inside decode_base64_to_file (processing_utils.py:137-156). In the flagging flow file_path is None, so prefix/suffix derive from the client-controlled data-URI header parsed in decode_base64_to_binary (processing_utils.py:124-135) with no separator filtering; a suffix containing path separators can redirect file creation outside the temp dir (the random body and O_EXCL constrain but do not canonicalize). High-relevance pass-1 sink.",
+          "evidence": [
+            "gradio/processing_utils.py:146-151: prefix/extension -> tempfile arguments",
+            "gradio/processing_utils.py:126-133: extension parsed from client data-URI header"
+          ]
+        },
+        {
+          "id": "K04",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 151
+          },
+          "rationale": "NamedTemporaryFile(delete=False, prefix=prefix, suffix='.'+extension) in decode_base64_to_file (processing_utils.py:151): same client-controlled extension surface as K03; suffix separators are not filtered in the file_path=None (flagging) flow.",
+          "evidence": [
+            "gradio/processing_utils.py:149-151: suffix='.'+extension",
+            "gradio/component.py:51: decode_base64_to_file(data, encryption_key) with file_path=None"
+          ]
+        },
+        {
+          "id": "K05",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 165
+          },
+          "rationale": "NamedTemporaryFile in create_tmp_copy_of_file (processing_utils.py:158-167): prefix/extension are derived via os.path.basename(file_path) (processing_utils.py:159-163), which strips directory separators; file_path can be the client 'name' when is_example=True. Filename components are client-influenced, but traversal via prefix/suffix is blocked by basename.",
+          "evidence": [
+            "gradio/processing_utils.py:158-163: basename-based prefix/extension",
+            "gradio/inputs.py:917, 1001, 1175: create_tmp_copy_of_file(client 'name')"
+          ]
+        },
+        {
+          "id": "K06",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 167
+          },
+          "rationale": "NamedTemporaryFile with basename-derived suffix in create_tmp_copy_of_file (processing_utils.py:167): same basename constraint as K05; retained as sink for the client-influenced filename surface.",
+          "evidence": [
+            "gradio/processing_utils.py:164-167: suffix='.'+extension"
+          ]
+        },
+        {
+          "id": "K07",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/external.py",
+            "line": 26
+          },
+          "rationale": "NamedTemporaryFile(delete=False) with no prefix/suffix (external.py:25-28); the name is fully tempfile-generated and the content is the remote HF API response, not request data.",
+          "evidence": [
+            "gradio/external.py:25-28: fixed temp file for r.content"
+          ]
+        },
+        {
+          "id": "K08",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 429
+          },
+          "rationale": "NamedTemporaryFile(prefix='sample', suffix='.wav', delete=False) (outputs.py:429-430); both name components are literals.",
+          "evidence": [
+            "gradio/outputs.py:429-430: literal prefix/suffix"
+          ]
+        },
+        {
+          "id": "K09",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 741
+          },
+          "rationale": "NamedTemporaryFile(delete=False, suffix='.'+fmt.lower() ...) in Image.preprocess (inputs.py:741-742): suffix is a fixed '.png' or the decoded image format; no client-controlled prefix; the path is tempfile-generated.",
+          "evidence": [
+            "gradio/inputs.py:741-743: fixed-suffix temp file for im.save"
+          ]
+        },
+        {
+          "id": "K10",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 767
+          },
+          "rationale": "NamedTemporaryFile in Image.serialize (inputs.py:767-769): fixed-format suffix, tempfile-generated path for x.save.",
+          "evidence": [
+            "gradio/inputs.py:767-769: fixed-suffix temp file"
+          ]
+        },
+        {
+          "id": "K11",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1031
+          },
+          "rationale": "NamedTemporaryFile(delete=False) with no prefix/suffix in Audio.serialize (inputs.py:1031-1032); fully tempfile-generated name.",
+          "evidence": [
+            "gradio/inputs.py:1031-1032"
+          ]
+        },
+        {
+          "id": "K12",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1066
+          },
+          "rationale": "NamedTemporaryFile(delete=False) in Audio.tokenize (inputs.py:1066-1067); fully tempfile-generated name.",
+          "evidence": [
+            "gradio/inputs.py:1066-1067"
+          ]
+        },
+        {
+          "id": "K13",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1075
+          },
+          "rationale": "NamedTemporaryFile(delete=False) in Audio.tokenize (inputs.py:1075-1076); fully tempfile-generated name.",
+          "evidence": [
+            "gradio/inputs.py:1075-1076"
+          ]
+        },
+        {
+          "id": "K14",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "tempfile",
+            "type": "tempfile",
+            "callable": "tempfile.NamedTemporaryFile",
+            "arg_index": null,
+            "flow_kind": "unknown"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1100
+          },
+          "rationale": "NamedTemporaryFile(delete=False) in Audio.get_masked_inputs (inputs.py:1100-1101); fully tempfile-generated name.",
+          "evidence": [
+            "gradio/inputs.py:1100-1101"
+          ]
+        },
+        {
+          "id": "K15",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "PIL.Image (inferred from receiver)",
+            "type": "x",
+            "callable": "save",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 769
+          },
+          "rationale": "x.save(file_obj.name) in Image.serialize (inputs.py:769): the destination is a tempfile-generated path with a fixed suffix; not a client-controlled path.",
+          "evidence": [
+            "gradio/inputs.py:767-770"
+          ]
+        },
+        {
+          "id": "K16",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "PIL.Image (inferred from receiver)",
+            "type": "im",
+            "callable": "save",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 743
+          },
+          "rationale": "im.save(file_obj.name) in Image.preprocess (inputs.py:743): destination is a tempfile-generated path with fixed suffix; not a client-controlled path.",
+          "evidence": [
+            "gradio/inputs.py:741-743"
+          ]
+        },
+        {
+          "id": "K17",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "PIL.Image (inferred from receiver)",
+            "type": "PIL_image",
+            "callable": "save",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 71
+          },
+          "rationale": "PIL_image.save(output_bytes, 'PNG') targets a BytesIO buffer (processing_utils.py:69-72), not a filesystem path.",
+          "evidence": [
+            "gradio/processing_utils.py:68-72: BytesIO output"
+          ]
+        },
+        {
+          "id": "K18",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "matplotlib (inferred from receiver)",
+            "type": "plt",
+            "callable": "savefig",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 63
+          },
+          "rationale": "plt.savefig(output_bytes, format='png') targets a BytesIO buffer (processing_utils.py:62-64), not a filesystem path.",
+          "evidence": [
+            "gradio/processing_utils.py:61-64: BytesIO output"
+          ]
+        },
+        {
+          "id": "K19",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "pydub (inferred from receiver)",
+            "type": "audio",
+            "callable": "export",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 118
+          },
+          "rationale": "AudioSegment.export(filename, format='wav') in audio_to_file (processing_utils.py:111-118): genuine audio file write at the wrapper's filename parameter. In-package call sites pass tempfile-generated names (inputs.py:1007, 1033, 1067, 1076, 1101), but the parameter position is the dangerous write path for pass 1.",
+          "evidence": [
+            "gradio/processing_utils.py:111-118: audio.export(filename)"
+          ]
+        },
+        {
+          "id": "K20",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": "os",
+            "callable": "os.listdir",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/component.py",
+            "line": 56
+          },
+          "rationale": "os.listdir(output_dir) where output_dir = os.path.join(dir, label) (component.py:54-56): label is the developer-configured component label filtered to alnum plus '._- ' (component.py:52), which excludes path separators; dir is the server flagging dir. Not attacker-controlled.",
+          "evidence": [
+            "gradio/component.py:52-56: charset-filtered label join"
+          ]
+        },
+        {
+          "id": "K21",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": "os",
+            "callable": "os.listdir",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/interface.py",
+            "line": 304
+          },
+          "rationale": "os.listdir(self.examples) with self.examples being developer configuration (interface.py:295-304).",
+          "evidence": [
+            "gradio/interface.py:300-304: examples directory listing"
+          ]
+        },
+        {
+          "id": "K22",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": "os",
+            "callable": "os.makedirs",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/component.py",
+            "line": 58
+          },
+          "rationale": "os.makedirs(output_dir) with the charset-filtered developer label (component.py:54-58); separators excluded, not request-derived.",
+          "evidence": [
+            "gradio/component.py:52-58"
+          ]
+        },
+        {
+          "id": "K23",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": "os",
+            "callable": "os.makedirs",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/interface.py",
+            "line": 217
+          },
+          "rationale": "os.makedirs(self.flagging_dir, exist_ok=True) with flagging_dir a developer constructor argument (interface.py:180, 216-217).",
+          "evidence": [
+            "gradio/interface.py:216-217"
+          ]
+        },
+        {
+          "id": "K24",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "package": null,
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.move",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/component.py",
+            "line": 65
+          },
+          "rationale": "shutil.move source is old_file_name = file.name, the tempfile-generated name returned by decode_base64_to_file (component.py:51-53); not a client path.",
+          "evidence": [
+            "gradio/component.py:51-53, 65"
+          ]
+        },
+        {
+          "id": "K25",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.move",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/component.py",
+            "line": 65
+          },
+          "rationale": "shutil.move destination os.path.join(dir, label, new_file_name) (component.py:54-65): label is charset-filtered and new_file_name is index-based, but the appended extension comes from the temp filename (old_file_name.split('.')[-1]) whose suffix ultimately derives from the client data-URI header in the flagging flow (see K03/K04). Separators are mostly excluded; edge case retained as candidate for human review.",
+          "evidence": [
+            "gradio/component.py:60-65: new_file_name = index + '.' + uploaded_format",
+            "gradio/processing_utils.py:146-151: extension source"
+          ]
+        },
+        {
+          "id": "K26",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 28
+          },
+          "rationale": "open(path, 'rb') fallback in get_url_or_file_as_bytes (processing_utils.py:24-29): genuine file-read sink at argument 0. No in-package callers were found (public helper), so in-repo reachability is nil, but the parameter position is the dangerous read path.",
+          "evidence": [
+            "gradio/processing_utils.py:24-29: requests.get fallback to open(path)"
+          ]
+        },
+        {
+          "id": "K27",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.6,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 41
+          },
+          "rationale": "open(f, 'rb') in encode_file_to_base64 (processing_utils.py:40-41): argument 0 is a genuine read-path position, fed by example values (second-order log.csv content, interface.py:309-314) and by model-output paths (outputs.py:291, 546).",
+          "evidence": [
+            "gradio/processing_utils.py:40-48"
+          ]
+        },
+        {
+          "id": "K28",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 44
+          },
+          "rationale": "open(VERSION_FILE) with VERSION_FILE a pkg_resources-derived constant (networking.py:43-44).",
+          "evidence": [
+            "gradio/networking.py:41-44"
+          ]
+        },
+        {
+          "id": "K29",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 321
+          },
+          "rationale": "open(log_fp, 'rb') in flag_data: log_fp is '{flagging_dir}/log.csv' (networking.py:278-279); flagging_dir is developer configuration and the flag_path parameter is never passed by any caller (networking.py:212-214, 359). Path fixed; client data reaches only the file content (log/CSV injection, not path traversal).",
+          "evidence": [
+            "gradio/networking.py:276-281: fixed log path",
+            "gradio/networking.py:321-322: encrypted read"
+          ]
+        },
+        {
+          "id": "K30",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 334
+          },
+          "rationale": "open(log_fp, 'wb') in flag_data: same fixed '{flagging_dir}/log.csv' path (networking.py:334); content is client-derived, path is not.",
+          "evidence": [
+            "gradio/networking.py:334-336"
+          ]
+        },
+        {
+          "id": "K31",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 339
+          },
+          "rationale": "open(log_fp, 'a') in flag_data: same fixed log path (networking.py:339); append of client-derived CSV rows, not a path parameter.",
+          "evidence": [
+            "gradio/networking.py:339-343"
+          ]
+        },
+        {
+          "id": "K32",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 345
+          },
+          "rationale": "open(log_fp) in flag_data: same fixed log path (networking.py:345); read of flag rows for index replacement.",
+          "evidence": [
+            "gradio/networking.py:345-347"
+          ]
+        },
+        {
+          "id": "K33",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 348
+          },
+          "rationale": "open(log_fp, 'w') in flag_data: same fixed log path (networking.py:348); rewrite of CSV content.",
+          "evidence": [
+            "gradio/networking.py:348-349"
+          ]
+        },
+        {
+          "id": "K34",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 350
+          },
+          "rationale": "open(log_fp, 'r') in flag_data: same fixed log path (networking.py:350); line count read.",
+          "evidence": [
+            "gradio/networking.py:350-351"
+          ]
+        },
+        {
+          "id": "K35",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 382
+          },
+          "rationale": "open(os.path.join(app.cwd, path), 'rb') in the /file/<path:path> handler (networking.py:377-383): path is the URL route variable. secure_filename at networking.py:380 is NOT imported (the module imports only safe_join from werkzeug.security, line 30), so as written the call is an unresolved name — NameError, not sanitization — and must not be modeled as a barrier. The sink position is a genuine request-derived file read; exploitability as written (crash vs. traversal) is flagged for human review.",
+          "evidence": [
+            "gradio/networking.py:379-382: secure_filename unresolved, join(app.cwd, path)",
+            "gradio/networking.py:30: only safe_join imported from werkzeug.security"
+          ]
+        },
+        {
+          "id": "K36",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/interface.py",
+            "line": 160
+          },
+          "rationale": "open(css) with css a developer constructor argument (interface.py:159-161).",
+          "evidence": [
+            "gradio/interface.py:159-161"
+          ]
+        },
+        {
+          "id": "K37",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/interface.py",
+            "line": 309
+          },
+          "rationale": "open(log_file) with log_file = os.path.join(self.examples, 'log.csv') under the developer-configured examples directory (interface.py:300-309).",
+          "evidence": [
+            "gradio/interface.py:300-309"
+          ]
+        },
+        {
+          "id": "K38",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/interface.py",
+            "line": 717
+          },
+          "rationale": "open(JSON_PATH) with JSON_PATH a fixed local analytics file (interface.py:715-717).",
+          "evidence": [
+            "gradio/interface.py:715-717: fixed JSON_PATH literal"
+          ]
+        },
+        {
+          "id": "K39",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/interface.py",
+            "line": 720
+          },
+          "rationale": "open(JSON_PATH) with JSON_PATH a fixed local analytics file (interface.py:718-720).",
+          "evidence": [
+            "gradio/interface.py:718-720"
+          ]
+        },
+        {
+          "id": "K40",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/interface.py",
+            "line": 725
+          },
+          "rationale": "open(JSON_PATH) with JSON_PATH a fixed local analytics file (interface.py:723-725).",
+          "evidence": [
+            "gradio/interface.py:723-725"
+          ]
+        },
+        {
+          "id": "K41",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "builtins",
+            "type": null,
+            "callable": "open",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/inputs.py",
+            "line": 1180
+          },
+          "rationale": "open(file_name, 'rb') in File.preprocess's process_single_file (inputs.py:1171-1182): file_name is f['name'], the client-supplied filename, used whenever the client-settable is_example flag is true and the component type is 'bytes'; the read bytes flow back into the response pipeline. Direct arbitrary-file-read sink with full client control of the path string.",
+          "evidence": [
+            "gradio/inputs.py:1172: file_name = f['name']",
+            "gradio/inputs.py:1178-1181: is_example + type 'bytes' branch opens client path"
+          ]
+        },
+        {
+          "id": "K42",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": null,
+            "callable": "send_file",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 143
+          },
+          "rationale": "send_file(safe_join(STATIC_PATH_LIB, path)) for /static/<path:path> (networking.py:138-143): genuine file-response sink, but werkzeug safe_join enforces base-directory containment and raises NotFound on traversal — an effective barrier at this call site. Sink signature retained; expect findings through it to be filtered as sanitized.",
+          "evidence": [
+            "gradio/networking.py:143: safe_join(STATIC_PATH_LIB, path)",
+            "werkzeug safe_join: containment check against STATIC_PATH_LIB"
+          ]
+        },
+        {
+          "id": "K43",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": null,
+            "callable": "send_file",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 386
+          },
+          "rationale": "send_file(io.BytesIO(file_data), ...) serves an in-memory buffer (networking.py:384-386); not a filesystem path sink.",
+          "evidence": [
+            "gradio/networking.py:384-386"
+          ]
+        },
+        {
+          "id": "K44",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "package": null,
+            "module": "flask",
+            "type": null,
+            "callable": "send_file",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/networking.py",
+            "line": 388
+          },
+          "rationale": "send_file(os.path.join(app.cwd, path)) in the /file handler (networking.py:388): the route variable path is joined under app.cwd with no working sanitizer (secure_filename unresolved, see K35) — genuine request-derived file-response sink.",
+          "evidence": [
+            "gradio/networking.py:387-388: join(app.cwd, path) from route variable"
+          ]
+        },
+        {
+          "id": "K45",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "package": null,
+            "module": "os.path",
+            "type": "os.path",
+            "callable": "os.path.getsize",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/outputs.py",
+            "line": 545
+          },
+          "rationale": "os.path.getsize(y) in File.postprocess (outputs.py:536-547): argument 0 is a genuine stat-read position, but y is the predict function's returned path (developer code), not request-derived in gradio's own flow. Retained as candidate for human review.",
+          "evidence": [
+            "gradio/outputs.py:536-547: y from postprocess(prediction)"
+          ]
+        },
+        {
+          "id": "K46",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "package": null,
+            "module": "pydub",
+            "type": "AudioSegment",
+            "callable": "AudioSegment.from_file",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 101
+          },
+          "rationale": "AudioSegment.from_file(filename) in audio_from_file (processing_utils.py:100-101): genuine audio file read at the wrapper's filename parameter; in-package call sites pass tempfile-generated names (note inputs.py:1052 passes the raw base64 string x — a latent bug, but not a path traversal).",
+          "evidence": [
+            "gradio/processing_utils.py:100-101",
+            "gradio/inputs.py:1052: audio_from_file(x) with raw base64 string"
+          ]
+        },
+        {
+          "id": "K47",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copy2",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 168
+          },
+          "rationale": "shutil.copy2(file_path, ...) in create_tmp_copy_of_file (processing_utils.py:158-168): file_path is the client-supplied 'name' whenever the client-settable is_example flag is true (inputs.py:917, 1001, 1175). Direct arbitrary-file-read/copy sink with full client control of the source path.",
+          "evidence": [
+            "gradio/processing_utils.py:158-168: copy2(file_path, file_obj.name)",
+            "gradio/inputs.py:1175: create_tmp_copy_of_file(f['name'])"
+          ]
+        },
+        {
+          "id": "K48",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "package": null,
+            "module": "shutil",
+            "type": "shutil",
+            "callable": "shutil.copy2",
+            "arg_index": 1,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/processing_utils.py",
+            "line": 168
+          },
+          "rationale": "shutil.copy2 destination is file_obj.name, a tempfile-generated path (processing_utils.py:165-168); not client-controlled.",
+          "evidence": [
+            "gradio/processing_utils.py:165-168"
+          ]
+        },
+        {
+          "id": "K49",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": "os",
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/queue.py",
+            "line": 24
+          },
+          "rationale": "os.remove(DB_FILE) with DB_FILE the fixed literal 'gradio_queue.db' (queue.py:6, 22-24).",
+          "evidence": [
+            "gradio/queue.py:6, 23-24"
+          ]
+        },
+        {
+          "id": "K50",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.95,
+          "signature": {
+            "package": null,
+            "module": "os",
+            "type": "os",
+            "callable": "os.remove",
+            "arg_index": 0,
+            "flow_kind": "argument"
+          },
+          "location": {
+            "file": "gradio/queue.py",
+            "line": 46
+          },
+          "rationale": "os.remove(DB_FILE) with DB_FILE the fixed literal 'gradio_queue.db' (queue.py:6, 44-46).",
+          "evidence": [
+            "gradio/queue.py:6, 45-46"
+          ]
+        }
+      ]
+    }
+  ]
+}
