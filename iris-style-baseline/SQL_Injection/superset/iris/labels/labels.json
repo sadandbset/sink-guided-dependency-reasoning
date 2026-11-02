@@ -1,0 +1,1480 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "run_id": "superset-pass5-cwe89-20261021",
+    "generated_at": "2026-10-21T08:10:31+00:00",
+    "language": "python",
+    "framework": "flask + flask-appbuilder (sqlalchemy 1.4 data layer, celery tasks, click CLI)",
+    "model": "glm-5.3",
+    "project": "superset",
+    "notes": [
+      "Pass 5 (CWE-89 SQL Injection) candidate labeling only; 1445 source rows + 297 sink rows = 1742 candidates, all covered via semantic groups (dedup) - see labels/labels_raw_pass5.json for the full row-to-group audit mapping.",
+      "Evidence verification basis: the on-disk source tree at dataset/codeql_databases/sql_injection_dbs/superset_vuln (Apache Superset 3.0.1) matches the CodeQL database source snapshot (creation sha 2f468900, per exploration/detection.json); all file:line evidence was read and verified against this tree during this session.",
+      "This run is an in-context LLM labeling session (model glm-5.3 operating the Claude Code agent harness); no external LLM API calls were made. 12 batches were processed; per-batch scope and row counts are recorded in labels_raw_pass5.json.",
+      "pass 1 block: present with zero entries solely to satisfy the labels_schema.json 'passes contains pass_id=1' constraint; no pass-1 labeling was performed in this run.",
+      "Key semantic findings: (1) the SQL Lab /execute/ flow is a complete request.json->raw-SQL path by design (request.json['sql'] -> SqlJsonExecutionContext -> SandboxedEnvironment Jinja render -> execute_sql_statements -> BaseEngineSpec.execute -> cursor.execute), gated by @protect, marshmallow type validation, post-render table-access validation and DML flags - labeled tp at the API/channel level, threat-model note recorded; (2) the chart-data ad-hoc extras.where/having path reaches raw TextClauses (self.text) and is guarded by validate_adhoc_subquery + sanitize_clause (labeled sanitizer, structural guard); (3) engine-spec adapters interpolate identifiers (hive/gsheets/presto select paths, CTAS tmp_table_name in sql_parse.py:436-441 - unquoted, TODO-acknowledged) and engine-derived cancel ids (mysql/postgres/redshift/snowflake/trino/ocient) into executed SQL; (4) session/connection.execute of Core constructs, tags.py, security/manager.py, importers and pandas read_sql_query(literal_binds) are bound/compiled channels; (5) the bound-parameter argument is the proven sanitizer channel; kwargs['rison'] and most @expose path params terminate in ORM filter()/order_by().",
+      "Extraction match_kind is 'ast' for all rows (receiver-name-agnostic matching); name-collision false positives (session.query ORM rows matched against SqlaTable.query, non-SQL f-strings in importers/benchmark script, sqlparse.format, tag-name f-string bound values) were identified and labeled none/fp individually with evidence retained.",
+      "Position caveat reconciliation (from detection.json uncoveredCases): engine-spec adapter execute call sites carry SQL at argument 1, recorded as corrected arg_index 1 (p5-sink-004); BaseEngineSpec.execute carries query at parameter 2 (p5-sink-005), the Hive @staticmethod shape at parameter 1 (p5-sink-006); the generic bound_params companion rows report arg 1 and must not be used as the SQL-text position on adapter sites."
+    ]
+  },
+  "passes": [
+    {
+      "pass_id": 1,
+      "focus": "Path Traversal",
+      "cwes": [
+        "22",
+        "23",
+        "36",
+        "73"
+      ],
+      "entries": []
+    },
+    {
+      "pass_id": 5,
+      "focus": "SQL Injection",
+      "cwes": [
+        "89"
+      ],
+      "entries": [
+        {
+          "id": "p5-cand-027",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.45,
+          "signature": {
+            "callable": "concat",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "superset.models.helpers"
+          },
+          "rationale": "models/helpers.py:1981/2018 - gby_name + '__' alias/label concatenation for groupby columns; the label becomes a column alias in compiled SQL (dialect-quoted via make_label_compatible). Request-influenced groupby names reach here, but aliases are quoted identifiers in the compiled statement. Low risk; retained as candidate for manual review.",
+          "evidence": [
+            "inner = self.make_sqla_column_compatible(gby_obj, gby_name + '__') - models/helpers.py:1981",
+            "col_name = db_engine_spec.make_label_compatible(gby_name + '__') - models/helpers.py:2018"
+          ],
+          "location": {
+            "file": "superset/models/helpers.py",
+            "line": 1981
+          }
+        },
+        {
+          "id": "p5-cand-029",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.4,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "superset.sql_lab"
+          },
+          "rationale": "sql_lab.py:237 query.tmp_table_name = 'tmp_{}_table_{}'.format(query.user_id, timestamp) - CTAS target table name built from the authenticated user's numeric id and a timestamp; downstream ParsedQuery.as_create_table interpolates it UNQUOTED into 'CREATE {method} {full_table_name} AS' (sql_parse.py:436-441, TODO acknowledges the missing quoting). The .format arguments themselves are not attacker text (int id + timestamp), but the request-controlled tmp_table_name/schema path (sqllab_execution_context.py:203 query_params.get('tmp_table_name') when select_as_cta) feeds the same unquoted construction. Candidate for manual review of the CTAS path.",
+          "evidence": [
+            "query.tmp_table_name = 'tmp_{}_table_{}'.format(query.user_id, start_dttm.strftime(...)) - sql_lab.py:237-239",
+            "tmp_table_name = query_params.get('tmp_table_name') - sqllab/sqllab_execution_context.py:203",
+            "# TODO(bkyryliuk): quote full_table_name - sql_parse.py:437"
+          ],
+          "location": {
+            "file": "superset/sql_lab.py",
+            "line": 237
+          }
+        },
+        {
+          "id": "p5-none-024",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "fstring",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "scripts.benchmark_migration"
+          },
+          "rationale": "Non-SQL f-string noise (17 rows): scripts/benchmark_migration.py (12 rows - print/exception messages; its only executed SQL is the literal at :158), dashboards/commands/importers/v1/__init__.py:118 and commands/importers/v1/assets.py:117 (dataset_uid chart-param string, not SQL), common/tags.py:227/452/495 (f'type:{type_}'/f'owner:{id_}'/f'favorited_by:{id_}' - passed as bound-parameter VALUES to Core inserts, never SQL text). Name-collision noise documented, evidence retained.",
+          "evidence": [
+            "dataset_uid = f\"{dataset_dict['datasource_id']}__{dataset_dict['datasource_type']}\" - dashboards/commands/importers/v1/__init__.py:118",
+            "db.session.execute(insert, name=f'owner:{id_}', ...) - bound VALUE - common/tags.py:452",
+            "print(f'Importing migration script: {filepath}') - scripts/benchmark_migration.py:147"
+          ],
+          "location": {
+            "file": "scripts/benchmark_migration.py",
+            "line": 147
+          }
+        },
+        {
+          "id": "p5-none-026",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "concat",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "superset.common.tags"
+          },
+          "rationale": "common/tags.py:257/293/329/365/514 - '\"owner:\" + slices.c.created_by_fk' style expressions are SQLAlchemy SQL-expression concats (Column __radd__) compared against tag.c.name, i.e. SQL string functions with bound semantics, not Python string building; sql_validators/presto_db.py:124 is an error-message concat. Not SQL-text construction.",
+          "evidence": [
+            "tag.c.name == 'owner:' + slices.c.created_by_fk - common/tags.py:257",
+            "message = error_args['message'] + '\\n(Error location unknown)' - sql_validators/presto_db.py:124"
+          ],
+          "location": {
+            "file": "superset/common/tags.py",
+            "line": 257
+          }
+        },
+        {
+          "id": "p5-none-028",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "format",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "superset.db_engine_specs.base"
+          },
+          "rationale": "sqlparse.format(sql, reindent=True) at base.py:1417 (and the same call shape at connectors/sqla/models.py:845/916, documented extraction noise) - pretty-printing of already-compiled SQL, not construction. The .format() member-name match is documented in the extraction query as low-risk noise.",
+          "evidence": [
+            "sql = sqlparse.format(sql, reindent=True) - db_engine_specs/base.py:1417"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/base.py",
+            "line": 1417
+          }
+        },
+        {
+          "id": "p5-none-034",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "_normalize_prequery_result_type",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "superset.models.helpers",
+            "type": "ExploreMixin"
+          },
+          "rationale": "_normalize_prequery_result_type (models/helpers.py:913, connectors/sqla/models.py:1121) converts prequery RESULT values (dates etc.) into filter values - it consumes executed-SQL output and does not build or forward SQL text.",
+          "evidence": [
+            "def _normalize_prequery_result_type(...) - models/helpers.py:913"
+          ],
+          "location": {
+            "file": "superset/models/helpers.py",
+            "line": 913
+          }
+        },
+        {
+          "id": "p5-none-037",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "main",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "benchmark_migration"
+          },
+          "rationale": "CLI/dev-script wrappers (3 rows): scripts/benchmark_migration.py main (:141 - the only SQL in the script is the literal alembic_version select at :158), SecretsMigrator._select_columns_from_table (utils/encrypt.py:122) and _re_encrypt_row (:127) - identifiers from code-defined model metadata, reachable only from the operator CLI (superset/cli/update.py re_encrypt_secrets).",
+          "evidence": [
+            "db.engine.execute('SELECT version_num FROM alembic_version') - scripts/benchmark_migration.py:158",
+            "def _select_columns_from_table(conn, column_names, table_name) - utils/encrypt.py:122"
+          ],
+          "location": {
+            "file": "scripts/benchmark_migration.py",
+            "line": 141
+          }
+        },
+        {
+          "id": "p5-none-048",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "config",
+            "flow_kind": "field",
+            "arg_index": null,
+            "package": "flask"
+          },
+          "rationale": "current_app.config[...] (77) / app.config[...] (76) reads (153 rows) - operator-managed configuration: SQLALCHEMY_DATABASE_URI, SECRET_KEY, feature flags, WEBDRIVER_BASEURL, SQLLAB_TIMEOUT, DISPLAY_MAX_ROW... Not attacker input for pass 5.",
+          "evidence": [
+            "db_uri = current_app.config['SQLALCHEMY_DATABASE_URI'] - utils/database.py:72",
+            "baseurl = '{WEBDRIVER_BASEURL}'.format(**app.config) - tasks/cache.py:236"
+          ],
+          "location": {
+            "file": "superset/utils/database.py",
+            "line": 72
+          }
+        },
+        {
+          "id": "p5-none-049",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "environ",
+            "flow_kind": "field",
+            "arg_index": null,
+            "package": "os"
+          },
+          "rationale": "os.environ reads (27 rows: config.py SUPERSET_HOME/SECRET_KEY/CONFIG_PATH, app.py SUPERSET_CONFIG, utils/core.py, scripts) - process environment, operator trust; not attacker input.",
+          "evidence": [
+            "SECRET_KEY = os.environ.get('SUPERSET_SECRET_KEY') or CHANGE_ME_SECRET_KEY - config.py:186",
+            "config_module = os.environ.get('SUPERSET_CONFIG', 'superset.config') - app.py:33"
+          ],
+          "location": {
+            "file": "superset/config.py",
+            "line": 186
+          }
+        },
+        {
+          "id": "p5-none-050",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "open",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "package": "builtins"
+          },
+          "rationale": "open() (22) and .read() (23) rows - import/export bundle readers (cli/importexport.py ZipFile/open, commands/importers/v1 YAML contents, upload views, translations, screenshots). Second-order at most: the imported dataset YAML 'sql' field is persisted on SqlaTable (connectors/sqla/models.py:543, export_fields :551) and executed later when the dataset is queried; the reader channel itself is operator-CLI or authenticated-import gated (can_write permission, datasets/commands/importers/v1/utils.py:109-112). No direct request->open()->SQL-text path; labeled none with the second-order note for the review gate.",
+          "evidence": [
+            "with open(path) as file: contents[path] = file.read() - cli/importexport.py:157-162",
+            "yaml_content = load_yaml(file_name, content) (yaml.safe_load) - commands/importers/v1/utils.py:50-56",
+            "sql = Column(MediumText()); export_fields includes 'sql' - connectors/sqla/models.py:543/551"
+          ],
+          "location": {
+            "file": "superset/cli/importexport.py",
+            "line": 157
+          }
+        },
+        {
+          "id": "p5-none-053",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "query",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "package": "sqlalchemy.orm"
+          },
+          "rationale": "session.query(...) call-site rows (316: receiver session 282, get_session 24, sesh 1, datamodel 3, <expr> 6) - SQLAlchemy ORM Query construction. These rows are a name-collision artifact of the extraction's name-only wrapper resolution (SqlaTable.query vs session.query - documented in detection.json uncoveredCases): the ORM channel compiles to parameterized SQL and filter values are bound. Not an SQL-text source for pass 5. The 5 genuine datasource .query rows are labeled separately (p5-sum-054).",
+          "evidence": [
+            "db.session.query(ReportSchedule) ORM - daos/report.py:53 and 281 sibling sites",
+            "db.session.query(Query).filter_by(client_id=...) bound - sqllab/commands/export.py:58",
+            "name-collision documented: 'Dynamic receiver identity' in detection.json uncoveredCases"
+          ],
+          "location": {
+            "file": "superset/daos/report.py",
+            "line": 53
+          }
+        },
+        {
+          "id": "p5-none-065",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "_re_encrypt_row",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.utils.encrypt"
+          },
+          "rationale": "CLI-only encrypt/dev wrapper call args (7 rows: _re_encrypt_row 4, _select_columns_from_table 3) - metadata-derived identifiers on the operator CLI path (SecretsMigrator via cli/update.py). Not request-reachable.",
+          "evidence": [
+            "self._re_encrypt_row(conn, row, table_name, columns) - utils/encrypt.py:190 (driven by discover_encrypted_fields over model metadata)"
+          ],
+          "location": {
+            "file": "superset/utils/encrypt.py",
+            "line": 190
+          }
+        },
+        {
+          "id": "p5-none-066",
+          "role": "none",
+          "classification": "fp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "_normalize_prequery_result_type",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.models.helpers"
+          },
+          "rationale": "Remaining internal_transfer rows whose targets are result-type conversion helpers (_normalize_prequery_result_type, 6 rows) - they consume prequery output values, not SQL text. Full per-row audit trail retained in labels_raw_pass5.json.",
+          "evidence": [
+            "_normalize_prequery_result_type(...) call args - models/helpers.py / connectors/sqla/models.py (6 sites)"
+          ],
+          "location": {
+            "file": "superset/models/helpers.py",
+            "line": 913
+          }
+        },
+        {
+          "id": "p5-san-030",
+          "role": "sanitizer",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 1,
+            "module": "superset.db_engine_specs.presto"
+          },
+          "rationale": "Bound-parameter channel - the second positional argument of execute calls (14 companion rows): presto.py:810 cursor.execute(sql, params) with params={'schema': schema} (:798 - the safe contrast to hive's backtick interpolation), trino.py:206 cls.execute(cursor, sql, params), models/core.py:598/608/611, connectors/sqla/utils.py:138/157, base.py:1070, presto.py:1271, sql_validators/presto_db.py:76, utils/mock_data.py:210, importer sessions (dashboards:149, examples:204) and sqllab/commands/execute.py:156. Values substituted by the driver cannot alter SQL text - recommended isBarrier for pass 5. Caveat for Phase 2: on the engine-spec adapter rows (receiver db_engine_spec/cls/_sql_json_executor) argument 1 is the SQL text, not the bound list (the position caveat); use the corrected signatures (p5-sink-004/005) for those sites, not this companion row.",
+          "evidence": [
+            "params = {'schema': schema}; cursor.execute(sql, params) - presto.py:798/810",
+            "engine.execute(table.insert(), data) - bound VALUES - utils/mock_data.py:210"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/presto.py",
+            "line": 810
+          }
+        },
+        {
+          "id": "p5-san-067",
+          "role": "sanitizer",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "sanitize_clause",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "superset.sql_parse"
+          },
+          "rationale": "sanitize_clause (superset/sql_parse.py:522-549) + validate_adhoc_subquery (superset/models/helpers.py:105-134) - the SQL syntax-context guard applied to every ad-hoc WHERE/HAVING/custom-SQL clause before it reaches self.text()/literal_column (_process_sql_expression, models/helpers.py:832-850): sqlparse-based single-statement enforcement, paren-balance and multiline-comment checks, plus subquery rejection unless the ALLOW_ADHOC_SUBQUERY feature flag (with RLS insertion). This is a genuine SQL syntax-context validation chain (not HTML escaping or a simple replace) - recorded as sanitizer for the ad-hoc clause path. Note it does NOT escape quote characters (it is a structural guard), so it is a barrier for statement structure, not a general value escaper; SandboxedEnvironment (jinja_context.py:448) is the template-injection barrier on the same path. Not backed by a CSV row - documented function-level sanitizer for Phase 2 isBarrier consideration.",
+          "evidence": [
+            "statements = sqlparse.parse(clause); if len(statements) != 1: raise ... 'Clause contains multiple statements' - sql_parse.py:524-526",
+            "if has_table_query(statement) and not is_feature_enabled('ALLOW_ADHOC_SUBQUERY'): raise ... 'Custom SQL fields cannot contain sub-queries.' - models/helpers.py:117-127",
+            "expression = sanitize_clause(expression) - models/helpers.py:848 (inside _process_sql_expression)",
+            "self._env = SandboxedEnvironment(undefined=DebugUndefined) - jinja_context.py:448"
+          ],
+          "location": {
+            "file": "superset/sql_parse.py",
+            "line": 522
+          }
+        },
+        {
+          "id": "p5-sink-001",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.db_engine_specs.base"
+          },
+          "rationale": "DBAPI cursor.execute / raw connection .execute call sites - argument 0 carries the SQL text executed by the database, with no parameter binding on this channel. 28 rows: BaseEngineSpec.execute (base.py:1551), Database.get_raw_connection prequeries (models/core.py:531), get_columns_description (connectors/sqla/utils.py:156), engine-spec sites (mysql.py:282/297, postgres.py:312/418/433, presto.py:347/810, snowflake.py:239/254, redshift.py:160/176, trino.py:250, ocient.py:389, gsheets.py:117, hive.py:548/631), the literal sqlite PRAGMA (utils/core.py:872), SecretsMigrator raw selects (utils/encrypt.py:125/174), the gsheets connection probe (gsheets.py:286) and inspector-bind executes (presto.py:823/981, postgres.py:343, snowflake.py:186). The signature is a genuine pass-5 sink; whether a given instance's text is request-derived (SQL Lab by design) or engine-derived (cancel ids, prequeries) is resolved by the Phase 2 taint query.",
+          "evidence": [
+            "def execute(cls, cursor: Any, query: str, **kwargs) -> None: ... cursor.execute(query) - db_engine_specs/base.py:1531/1551",
+            "cursor.execute(prequery) inside get_raw_connection - models/core.py:529-531",
+            "cursor.execute(f'KILL CONNECTION {cancel_query_id}') - mysql.py:297; cursor.execute(f\"WHERE pid='{cancel_query_id}'\") - postgres.py:433-436",
+            "cursor.execute(sql, params) bound-parameter contrast - presto.py:810"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/base.py",
+            "line": 1551
+          }
+        },
+        {
+          "id": "p5-sink-002",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.db_engine_specs.hive"
+          },
+          "rationale": "Legacy SQLAlchemy Engine.execute call sites, SQL at argument 0 (10 rows). hive.py:210 engine.execute(f'DROP TABLE IF EXISTS {str(table)}') and :232-239 CREATE TABLE - table/schema come from the CSV-upload form (views/database/views.py:225-227), unquoted table name, backticked columns; impala.py:74 literal 'SHOW SCHEMAS'; models/dashboard.py:367/384 Core selects with bound slice_id; mock_data.py:207/210 Core delete/insert and :287 f-string with model-metadata identifiers; scripts/benchmark_migration.py:158 literal alembic_version select. Channel genuine; per-site provenance recorded for Phase 2 triage.",
+          "evidence": [
+            "engine.execute(f'DROP TABLE IF EXISTS {str(table)}') - hive.py:210",
+            "engine.execute(text(f'CREATE TABLE {str(table)} ({schema_definition}) ...'), location=...) - hive.py:232-239 (location is a bind param)",
+            "db.engine.execute(filter_query) Core select, slice_id bound - models/dashboard.py:364-384"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/hive.py",
+            "line": 210
+          }
+        },
+        {
+          "id": "p5-sink-003",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.common.tags"
+          },
+          "rationale": "db.session.execute / connection.execute of SQLAlchemy Core constructs (41 rows: common/tags.py 14, security/manager.py 21, importer/example/asset commands 6, cachekeys/api.py:118, connectors/sqla/models.py:1464). Argument 0 is a Core Insert/Update/Select/Delete, not raw text; values pass through .values()/where() as bound parameters and the f-string tag names (tags.py:227/452/495) are bound values, never SQL text. The channel is kept as a sink for recall (a raw string passed here would execute as SQL text), but bound-parameter compilation neutralizes value-level taint at every observed site.",
+          "evidence": [
+            "query = tagged_object.insert().from_select(columns, charts); db.session.execute(query) - common/tags.py:55-56",
+            "db.session.execute(insert, name=f'type:{type_}', ...) - bound VALUES - common/tags.py:225-229",
+            "connection.execute(table.update().where(...).values(name=...)) Core, bound - security/manager.py:1157-1161 and 20 sibling sites",
+            "session.execute(dashboard_slices.insert(), values) bound int ids - dashboards/commands/importers/v1/__init__.py:149"
+          ],
+          "location": {
+            "file": "superset/common/tags.py",
+            "line": 56
+          }
+        },
+        {
+          "id": "p5-sink-004",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "argument",
+            "arg_index": 1,
+            "module": "superset.models.core"
+          },
+          "rationale": "Engine-spec adapter / SQL-JSON-executor call sites (10 rows): db_engine_spec.execute(cursor, sql) (models/core.py:598/608/611 Database.get_df, connectors/sqla/utils.py:138/157, sql_validators/presto_db.py:76), cls.execute(cursor, sql, async_=True) (base.py:1070, trino.py:206, presto.py:1271) and _sql_json_executor.execute(execution_context, rendered_query, log_params) (sqllab/commands/execute.py:156). The generic CSV row reports arg_index 0, but on these sites the SQL text is positional argument 1 (documented position caveat in detection.json uncoveredCases) - the corrected arg_index 1 is recorded here for Phase 2 sink matching.",
+          "evidence": [
+            "self.db_engine_spec.execute(cursor, sql_) - models/core.py:598/608/611 (Database.get_df)",
+            "cls.execute(cursor, sql, async_=True) - db_engine_specs/base.py:1070",
+            "self._sql_json_executor.execute(execution_context, rendered_query, log_params) - sqllab/commands/execute.py:156"
+          ],
+          "location": {
+            "file": "superset/models/core.py",
+            "line": 598
+          }
+        },
+        {
+          "id": "p5-sink-005",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "superset.db_engine_specs.base",
+            "type": "BaseEngineSpec"
+          },
+          "rationale": "BaseEngineSpec.execute(cls, cursor, query, **kwargs) - the universal raw-SQL funnel: query (parameter 2, after cls and cursor) is passed verbatim to cursor.execute(query) at base.py:1551 with no binding (only optional comment-stripping at :1546). ImpalaEngineSpec.execute (impala.py:92, classmethod, query at parameter 2) shares this shape and is covered by this entry; the HiveEngineSpec @staticmethod shape is recorded separately (p5-sink-006). Every SQL Lab, chart-data, validator and get_df execution terminates here.",
+          "evidence": [
+            "def execute(cls, cursor: Any, query: str, **kwargs: Any) -> None - db_engine_specs/base.py:1531",
+            "cursor.execute(query) - db_engine_specs/base.py:1551",
+            "def execute(cls, cursor, query, **kwargs) - db_engine_specs/impala.py:92"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/base.py",
+            "line": 1531
+          }
+        },
+        {
+          "id": "p5-sink-006",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "superset.db_engine_specs.hive",
+            "type": "HiveEngineSpec"
+          },
+          "rationale": "HiveEngineSpec.execute is a @staticmethod execute(cursor, query, async_=False) - the SQL text is parameter 1 (no cls slot); the body forwards it to cursor.execute(query, **kwargs) (hive.py:548) with only the async flag as kwargs. No binding.",
+          "evidence": [
+            "@staticmethod def execute(cursor: Any, query: str, async_: bool = False) - hive.py:544",
+            "cursor.execute(query, **kwargs) - hive.py:548"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/hive.py",
+            "line": 544
+          }
+        },
+        {
+          "id": "p5-sink-007",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "execute",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "superset.sqllab.sql_json_executer",
+            "type": "SqlJsonExecutor"
+          },
+          "rationale": "SqlJsonExecutor.execute(self, execution_context, rendered_query, log_params) - rendered_query (parameter 2) is the Jinja-rendered SQL Lab query text; the synchronous executor calls get_sql_results(query_id, rendered_query, ...) (sql_json_executer.py:137-145) and the asynchronous one dispatches the celery task via .delay (sql_json_executer.py:169-178), both terminating in execute_sql_statements. SynchronousSqlJsonExecutor (:87) and ASynchronousSqlJsonExecutor (:160) override the same signature and are covered.",
+          "evidence": [
+            "def execute(self, execution_context, rendered_query, log_params) - sqllab/sql_json_executer.py:52 (base), :87, :160",
+            "get_sql_results(query_id, rendered_query, ...) - sqllab/sql_json_executer.py:137-145"
+          ],
+          "location": {
+            "file": "superset/sqllab/sql_json_executer.py",
+            "line": 52
+          }
+        },
+        {
+          "id": "p5-sink-008",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute_with_cursor",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "superset.db_engine_specs.base",
+            "type": "BaseEngineSpec"
+          },
+          "rationale": "BaseEngineSpec.execute_with_cursor(cls, cursor, sql, query, session) - sql at parameter 2; body calls cls.execute(cursor, sql, async_=True) (base.py:1070). TrinoEngineSpec.execute_with_cursor (trino.py:189, sql at 2) and the trino _execute helper (trino.py:201, which calls cls.execute(cursor, sql, params) at :206 with bound params) are covered. Called from sql_lab.py:274 with the fully processed SQL Lab statement.",
+          "evidence": [
+            "def execute_with_cursor(cls, cursor, sql, query, session) - db_engine_specs/base.py:1057",
+            "cls.execute(cursor, sql, async_=True) - db_engine_specs/base.py:1070",
+            "db_engine_spec.execute_with_cursor(cursor, sql, query, session) - sql_lab.py:274"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/base.py",
+            "line": 1057
+          }
+        },
+        {
+          "id": "p5-sink-009",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "execute_sql_statement",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "superset.sql_lab"
+          },
+          "rationale": "Module-level SQL Lab statement executor: execute_sql_statement(sql_statement, query, session, cursor, log_params, apply_ctas) - the SQL text is parameter 0. The body re-parses (ParsedQuery), optionally inserts RLS predicates (feature-flagged, sql_lab.py:207-217), optionally wraps the statement into CREATE-TABLE-AS using the request-derived tmp_table_name (sql_lab.py:234-244; the construction in sql_parse.py:436-441 is an UNQUOTED f-string acknowledged by a TODO), applies the limit mutator and SQL_QUERY_MUTATOR, then drives db_engine_spec.execute_with_cursor at :274.",
+          "evidence": [
+            "def execute_sql_statement(sql_statement: str, query, session, cursor, log_params, apply_ctas) - sql_lab.py:194-201",
+            "sql = parsed_query.as_create_table(query.tmp_table_name, schema_name=query.tmp_schema_name, ...) - sql_lab.py:240-244",
+            "full_table_name = f'{schema_name}.{table_name}' ... exec_sql += f'CREATE {method} {full_table_name} AS \\n{sql}' (TODO: quote full_table_name) - sql_parse.py:436-441",
+            "db_engine_spec.execute_with_cursor(cursor, sql, query, session) - sql_lab.py:274"
+          ],
+          "location": {
+            "file": "superset/sql_lab.py",
+            "line": 194
+          }
+        },
+        {
+          "id": "p5-sink-010",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.95,
+          "signature": {
+            "callable": "execute_sql_statements",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "superset.sql_lab"
+          },
+          "rationale": "execute_sql_statements(query_id, rendered_query, return_results, store_results, ...) - rendered_query is parameter 1: the Jinja-rendered user SQL from the SQL Lab /execute/ endpoint (request.json['sql'] -> SqlJsonExecutionContext -> SqlQueryRenderImpl -> get_sql_results celery task -> here). It is split into statements (sql_lab.py:407-414) and each is dispatched to execute_sql_statement (:487-494). This is the by-design arbitrary-SQL feature: authenticated users with database access; the flow itself is a complete request-source to SQL-text-sink path.",
+          "evidence": [
+            "def execute_sql_statements(query_id, rendered_query, ...) - sql_lab.py:375-385",
+            "statements = parsed_query.get_statements() - sql_lab.py:407-414",
+            "request.json -> SqlJsonExecutionContext(request.json) -> ExecuteSqlCommand - sqllab/api.py:300-310",
+            "rendered_query = sql_template_processor.process_template(parsed_query.stripped(), ...) (SandboxedEnvironment) - sqllab/query_render.py:61-64"
+          ],
+          "location": {
+            "file": "superset/sql_lab.py",
+            "line": 375
+          }
+        },
+        {
+          "id": "p5-sink-011",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "select_star",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "superset.db_engine_specs.base",
+            "type": "BaseEngineSpec"
+          },
+          "rationale": "BaseEngineSpec.select_star(cls, database, table_name, engine, schema=None, ...) - table_name at parameter 2, schema at parameter 4: identifier fragments that determine the SQL structure of the generated SELECT. full_table_name is built with engine.dialect.identifier_preparer.quote (base.py:1399-1403) and embedded via text(full_table_name) (:1405); the docstring warns 'expects only unquoted table and schema names'. Engine overrides (bigquery.py:631, hive.py:475, presto.py:1071) filter columns and delegate to super() with the same parameter shape - covered. The 12 family-6 rows (table_name/schema per definition) plus the base internal wrapper row are in this group. table_name/schema are request-derived on the databases/api.py select_star route; dialect quoting mitigates but is not a proof-grade identifier barrier.",
+          "evidence": [
+            "quote = engine.dialect.identifier_preparer.quote; full_table_name = quote(schema) + '.' + quote(table_name) - base.py:1399-1403",
+            "qry = select(fields).select_from(text(full_table_name)) - base.py:1405",
+            "WARNING: expects only unquoted table and schema names - base.py:1378 docstring"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/base.py",
+            "line": 1363
+          }
+        },
+        {
+          "id": "p5-sink-012",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "select_star",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "superset.models.core",
+            "type": "Database"
+          },
+          "rationale": "Database.select_star(self, table_name, schema=None, limit=100, ...) - table_name at parameter 1; forwards to self.db_engine_spec.select_star(self, table_name, ...) at models/core.py:649. Callers: the REST handler databases/api.py:854 (URL path params, @protect + @check_datasource_access), the SqlaTable.select_star property (connectors/sqla/models.py:731-736, model-stored names) and sql_lab.py:528 (CTAS result display). The constructed SQL is returned in the JSON response by the API endpoint - not executed there - but the identifier construction is the same.",
+          "evidence": [
+            "def select_star(self, table_name, schema=None, ...) -> str - models/core.py:637",
+            "return self.db_engine_spec.select_star(self, table_name, schema=schema, ...) - models/core.py:649"
+          ],
+          "location": {
+            "file": "superset/models/core.py",
+            "line": 637
+          }
+        },
+        {
+          "id": "p5-sink-013",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "select_star",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "superset.databases.api",
+            "type": "DatabaseRestApi"
+          },
+          "rationale": "The REST handler itself: @expose('/<int:pk>/select_star/<path:table_name>/') @protect() @check_datasource_access (databases/api.py:801-804) - table_name (and the optional schema_name path segment) are request-derived identifier fragments at parameter 1. Access to the target table is permission-checked; the generated SELECT is returned in the response (:861), and identifier quoting happens downstream in BaseEngineSpec.select_star.",
+          "evidence": [
+            "@expose('/<int:pk>/select_star/<path:table_name>/', ...) @protect() @check_datasource_access - databases/api.py:801-804",
+            "database.select_star(table_name, schema_name, latest_partition=True, show_cols=True) - databases/api.py:854-856"
+          ],
+          "location": {
+            "file": "superset/databases/api.py",
+            "line": 811
+          }
+        },
+        {
+          "id": "p5-sink-015",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "get_text_clause",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "superset.db_engine_specs.base",
+            "type": "BaseEngineSpec"
+          },
+          "rationale": "BaseEngineSpec.get_text_clause(cls, clause) -> TextClause: returns text(clause) (base.py:557); the only transformation is colon-escaping for the SQLAlchemy bind syntax when allows_escaped_colons (:555-556) - NOT an SQL-injection escape. The clause at parameter 1 becomes the raw SQL text of a TextClause that is compiled into executed queries (ad-hoc WHERE/HAVING, RLS filters, fetch_values_predicate, dttm literals).",
+          "evidence": [
+            "def get_text_clause(cls, clause: str) -> TextClause - base.py:548",
+            "if cls.allows_escaped_colons: clause = clause.replace(':', '\\\\:') - base.py:555-556",
+            "return text(clause) - base.py:557"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/base.py",
+            "line": 548
+          }
+        },
+        {
+          "id": "p5-sink-016",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "text",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "superset.models.helpers",
+            "type": "ExploreMixin"
+          },
+          "rationale": "ExploreMixin.text(self, clause) (models/helpers.py:1077) and SqlaTable.text(self, clause) (connectors/sqla/models.py:1095) - thin wrappers over self.db_engine_spec.get_text_clause(clause); clause at parameter 1 becomes raw SQL text. Consumed by the ad-hoc WHERE/HAVING path (helpers.py:1918/1936), RLS filters (helpers.py:806/816, models.py:1069/1079), fetch_values_predicate (models.py:783) and virtual-dataset FROM clauses (helpers.py:1103, models.py:893/1154).",
+          "evidence": [
+            "def text(self, clause: str) -> TextClause: return self.db_engine_spec.get_text_clause(clause) - models/helpers.py:1077-1078",
+            "def text(self, clause: str) -> TextClause: return self.db_engine_spec.get_text_clause(clause) - connectors/sqla/models.py:1095-1096"
+          ],
+          "location": {
+            "file": "superset/models/helpers.py",
+            "line": 1077
+          }
+        },
+        {
+          "id": "p5-sink-017",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "read_sql_query",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "package": "pandas"
+          },
+          "rationale": "pd.read_sql_query execution sites (3 rows): connectors/sqla/models.py:170 (positional statement), :817 and models/helpers.py:1365 (sql= keyword - arg_index 0 refers to the sql parameter semantically, per the extraction caveat). The statement is a SQLAlchemy-compiled select with literal_binds=True (models.py:813, helpers.py:1361): values are rendered literally by the dialect (escaped per dialect, not bound), and column names are constrained to dataset-defined columns (cols[column_name] lookup, helpers.py:1347). pandas executes the text against the engine - genuine SQL execution channel.",
+          "evidence": [
+            "df = pd.read_sql_query(qry.statement, db.engine) - connectors/sqla/models.py:170",
+            "sql = qry.compile(engine, compile_kwargs={'literal_binds': True}) - connectors/sqla/models.py:813, models/helpers.py:1361",
+            "target_col = cols[column_name] (dataset-column constrained) - models/helpers.py:1347"
+          ],
+          "location": {
+            "file": "superset/connectors/sqla/models.py",
+            "line": 170
+          }
+        },
+        {
+          "id": "p5-sink-019",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "fstring",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "superset.db_engine_specs"
+          },
+          "rationale": "Engine-spec f-string identifier interpolations executed directly (10 rows): hive.py:199/203 f\"SHOW TABLES IN {table.schema} LIKE '{table.table}'\" (CSV-upload form names, unquoted), :210 DROP TABLE, :234 CREATE TABLE, :627 f\"SHOW VIEWS IN `{schema}`\" (backticks, no inner-backtick escaping); gsheets.py:117 f'SELECT GET_METADATA(\"{table_name}\")' (double-quote wrap, no escaping - table_name is the REST path param via extra_table_metadata), :286 f'SELECT * FROM \"{url}\"' (stored connection catalog url); presto.py:980/981 SHOW COLUMNS FROM with quote_identifier-quoted names (mitigated) and :1269 f'SHOW CREATE VIEW {schema}.{table}' (UNQUOTED, schema/table from the REST path via databases/api.py:794-798). Identifiers in SQL structure - genuine injection-shaped construction whose safety depends on per-site quoting.",
+          "evidence": [
+            "cursor.execute(f'SELECT GET_METADATA(\"{table_name}\")') - gsheets.py:117",
+            "sql = f'SHOW CREATE VIEW {schema}.{table}' - presto.py:1269 (unquoted)",
+            "full_table = quote(table_name) ... inspector.bind.execute(f'SHOW COLUMNS FROM {full_table}') - presto.py:977-981 (quoted - safe contrast)",
+            "f\"SHOW TABLES IN {table.schema} LIKE '{table.table}'\" - hive.py:199 (CSV-upload identifiers)"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/gsheets.py",
+            "line": 117
+          }
+        },
+        {
+          "id": "p5-sink-020",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "fstring",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "superset.db_engine_specs"
+          },
+          "rationale": "Cancel-query f-strings (6 rows): mysql.py:297 f'KILL CONNECTION {cancel_query_id}', postgres.py:434 f\"WHERE pid='{cancel_query_id}'\", redshift.py:177, snowflake.py:254, ocient.py:389, trino.py:251 (kill_query call). The construction is genuine raw SQL, but cancel_query_id is engine-derived (SELECT CONNECTION_ID()/pg_backend_pid()/CURRENT_SESSION()/cursor.query_id, captured at sql_lab.py:461) round-tripped through query.extra[QUERY_CANCEL_KEY] (sql_lab.py:630) - second-order, not directly request-controlled. Kept as sink for the shape; no request-source path is expected in Phase 2 unless query.extra_json is tampered.",
+          "evidence": [
+            "cancel_query_id = query.extra.get(QUERY_CANCEL_KEY) - sql_lab.py:630",
+            "cancel_query_id = db_engine_spec.get_cancel_query_id(cursor, query); query.set_extra_json_key(QUERY_CANCEL_KEY, ...) - sql_lab.py:461-463",
+            "cursor.execute(f'KILL CONNECTION {cancel_query_id}') - mysql.py:297"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/mysql.py",
+            "line": 297
+          }
+        },
+        {
+          "id": "p5-sink-021",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "fstring",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "superset.db_engine_specs"
+          },
+          "rationale": "Whole-user-SQL prefix interpolations (3 rows): presto.py:346 f'EXPLAIN (TYPE IO, FORMAT JSON) {statement}', postgres.py:311 f'EXPLAIN {statement}', sql_validators/presto_db.py:66 f'EXPLAIN (TYPE VALIDATE) {sql}'. statement/sql is the SQL Lab user query (request-derived by design - the estimate-cost and validate-SQL features execute EXPLAIN-wrapped user SQL; estimate flow renders templates first, sqllab/commands/estimate.py:72-73). Interpolation is by design under the SQL Lab access model (@protect, database access, DML gating).",
+          "evidence": [
+            "sql = f'EXPLAIN (TYPE IO, FORMAT JSON) {statement}' - presto.py:346",
+            "sql = f'EXPLAIN {statement}' - postgres.py:311",
+            "sql = f'EXPLAIN (TYPE VALIDATE) {sql}' - sql_validators/presto_db.py:66"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/presto.py",
+            "line": 346
+          }
+        },
+        {
+          "id": "p5-sink-022",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "fstring",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "superset.models.helpers"
+          },
+          "rationale": "Query-builder clause constructions (7 rows): models/helpers.py:807/817 (RLS filter clauses wrapped after Jinja processing - filter_.clause is admin-defined DB content from get_rls_filters), :1904/:1922 (ad-hoc extras.where/extras.having from the chart-data form_data, template-processed), :1621 literal_column(f'({selected})') (ad-hoc custom-SQL column), connectors/sqla/models.py:1070/1080 (RLS clauses). These fragments become raw SQL text via self.text()/literal_column and are ANDed into the executed query. Guards on the ad-hoc path: _process_sql_expression -> validate_adhoc_subquery (helpers.py:105-134, blocks subqueries unless the ALLOW_ADHOC_SUBQUERY feature flag) + sanitize_clause (sql_parse.py:522-549, single-statement/paren-balance/comment checks) - genuine SQL syntax-context validation, documented as the sanitizer for this path (p5-san-030 family).",
+          "evidence": [
+            "where = template_processor.process_template(f'({where})') - models/helpers.py:1904",
+            "having_clause_and += [self.text(having)] - models/helpers.py:1936",
+            "clause = self.text(f'({template_processor.process_template(filter_.clause)})') - RLS - models/helpers.py:806-807",
+            "outer = literal_column(f'({selected})') - models/helpers.py:1621"
+          ],
+          "location": {
+            "file": "superset/models/helpers.py",
+            "line": 1904
+          }
+        },
+        {
+          "id": "p5-sink-023",
+          "role": "sink",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "fstring",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "superset.utils.encrypt"
+          },
+          "rationale": "Metadata-derived identifier f-strings (3 rows): utils/encrypt.py:125 f'SELECT id, {cols} FROM {table_name}' and :175 text(f'UPDATE {table_name} SET {set_cols} WHERE id = :id') - table/column names come from the SQLAlchemy metadata of code-defined models (encrypt.py:93-98 discover_encrypted_fields), values are bound params; utils/mock_data.py:287 f'SELECT {column_name} FROM {table_name}' - FK target metadata. Real SQL-text construction with unquoted identifiers, but the only entry path is the operator CLI (superset/cli/update.py re_encrypt_secrets). Not request-reachable; kept as candidate for manual review.",
+          "evidence": [
+            "conn.execute(f'SELECT id, {','.join(column_names)} FROM {table_name}') - utils/encrypt.py:125",
+            "conn.execute(text(f'UPDATE {table_name} SET {set_cols} WHERE id = :id'), id=..., **re_encrypted_columns) - utils/encrypt.py:174-178",
+            "return db.engine.execute(f'SELECT {column_name} FROM {table_name} LIMIT 1') - utils/mock_data.py:287"
+          ],
+          "location": {
+            "file": "superset/utils/encrypt.py",
+            "line": 175
+          }
+        },
+        {
+          "id": "p5-sink-025",
+          "role": "sink",
+          "classification": "tp",
+          "confidence": 0.7,
+          "signature": {
+            "callable": "concat",
+            "flow_kind": "unknown",
+            "arg_index": null,
+            "module": "superset.db_engine_specs.base"
+          },
+          "rationale": "base.py:1401 full_table_name = quote(schema) + '.' + quote(table_name) - the select_star identifier construction with dialect quoting (string-concatenation shape). Identifier-into-SQL-structure construction; mitigated by identifier_preparer.quote but retained as a sink-shape construction for Phase 2 path resolution.",
+          "evidence": [
+            "full_table_name = quote(schema) + '.' + quote(table_name) - db_engine_specs/base.py:1401"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/base.py",
+            "line": 1401
+          }
+        },
+        {
+          "id": "p5-src-038",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "args",
+            "flow_kind": "field",
+            "arg_index": null,
+            "package": "flask"
+          },
+          "rationale": "request.args attribute reads (61 rows across the API layer) - the Flask query-string mapping, attacker-controlled HTTP input. Includes the rison source request.args['q'] parsed by the FAB decorator, get_form_data URL overrides (views/utils.py:166) and chart-data/explore GET parameters. Full HTTP parse boundary with no trust.",
+          "evidence": [
+            "request.args attribute reads - 61 sites across superset/*/api.py and superset/views/*",
+            "request.args.get('form_data') URL-param override - views/utils.py:166"
+          ],
+          "location": {
+            "file": "superset/sqllab/api.py",
+            "line": 306
+          }
+        },
+        {
+          "id": "p5-src-039",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "form",
+            "flow_kind": "field",
+            "arg_index": null,
+            "package": "flask"
+          },
+          "rationale": "request.form reads (70 rows) - POST form bodies, attacker-controlled HTTP input. Includes the chart-data re-entry json.loads(request.form['form_data']) (charts/data/api.py:225) and the import flows' json.loads(request.form['passwords']) (charts/api.py:1098).",
+          "evidence": [
+            "json_body = json.loads(request.form['form_data']) - charts/data/api.py:225",
+            "json.loads(request.form['passwords']) - charts/api.py:1098-1115"
+          ],
+          "location": {
+            "file": "superset/charts/data/api.py",
+            "line": 225
+          }
+        },
+        {
+          "id": "p5-src-040",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "json",
+            "flow_kind": "field",
+            "arg_index": null,
+            "package": "flask"
+          },
+          "rationale": "request.json reads (52 rows) - JSON request bodies, attacker-controlled HTTP input. This is the dominant source of the SQL Lab /execute/ flow: request.json -> execute_model_schema.load (validation-only, result discarded) -> SqlJsonExecutionContext(request.json) -> ExecuteSqlCommand (sqllab/api.py:299-310), and of the chart-data API (charts/data/api.py:221).",
+          "evidence": [
+            "self.execute_model_schema.load(request.json) ... execution_context = SqlJsonExecutionContext(request.json) - sqllab/api.py:300-308",
+            "self.sql = query_params.get('sql') - sqllab/sqllab_execution_context.py:76",
+            "json_body = request.json - charts/data/api.py:221"
+          ],
+          "location": {
+            "file": "superset/sqllab/api.py",
+            "line": 300
+          }
+        },
+        {
+          "id": "p5-src-041",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "files",
+            "flow_kind": "field",
+            "arg_index": null,
+            "package": "flask"
+          },
+          "rationale": "request.files (7 rows - upload/import bundle parts), request.headers (3 - e.g. USER_AGENT log params at sqllab/api.py:306), request.cookies (3) and request.data (1) - attacker-controlled HTTP input boundaries. No direct SQL-text consumer observed for these fields; retained as boundary sources for recall.",
+          "evidence": [
+            "request.files.get(...) - 7 upload/import sites",
+            "log_params = {'user_agent': cast(Optional[str], request.headers.get('USER_AGENT'))} - sqllab/api.py:305-307"
+          ],
+          "location": {
+            "file": "superset/sqllab/api.py",
+            "line": 306
+          }
+        },
+        {
+          "id": "p5-src-042",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "to_dict",
+            "flow_kind": "return",
+            "arg_index": null,
+            "package": "flask"
+          },
+          "rationale": "Whole-mapping reads: request.form.to_dict() (2), request.args.to_dict() (1), request.args.items() (1) - the entire parameter mapping as attacker input.",
+          "evidence": [
+            "request.form.to_dict() / request.args.to_dict() / request.args.items() - 4 sites (utils/cache.py:93, utils/log.py:50/52, views/sql_lab/views.py:221)"
+          ],
+          "location": {
+            "file": "superset/utils/cache.py",
+            "line": 93
+          }
+        },
+        {
+          "id": "p5-src-043",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "get",
+            "flow_kind": "return",
+            "arg_index": 0,
+            "package": "flask.request"
+          },
+          "rationale": "request.<field>.get(...) / getlist(...) reads (83 rows: args 52, form 14, json 8, files 7, headers 1, cookies 1; the key is argument 0) - the highest-signal HTTP accessor shape; the returned value is attacker-controlled.",
+          "evidence": [
+            "request.args.get(...) - 52 sites; request.form.get(...) - 14; request.json.get(...) - 8",
+            "request.args.get('form_data') / request.form.get('form_data') - views/utils.py:165-166"
+          ],
+          "location": {
+            "file": "superset/views/utils.py",
+            "line": 166
+          }
+        },
+        {
+          "id": "p5-src-044",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.9,
+          "signature": {
+            "callable": "__getitem__",
+            "flow_kind": "field",
+            "arg_index": null,
+            "package": "flask"
+          },
+          "rationale": "Keyed reads request.form[...] (30 rows), request.args[...] (2), request.json[...] (2) - attacker-controlled values, including json.loads(request.form['form_data']) (charts/data/api.py:225) and json.loads(request.form['passwords']) (charts/api.py:1098).",
+          "evidence": [
+            "json.loads(request.form['form_data']) - charts/data/api.py:225",
+            "request.form['passwords'] - charts/api.py:1098"
+          ],
+          "location": {
+            "file": "superset/charts/api.py",
+            "line": 1098
+          }
+        },
+        {
+          "id": "p5-src-045",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "rison",
+            "flow_kind": "field",
+            "arg_index": null,
+            "module": "flask_appbuilder.api"
+          },
+          "rationale": "kwargs['rison'] / kwargs.get('rison') reads (35 rows) - the FAB @rison decorator parses request.args['q'] (rison-encoded) and injects it as the 'rison' kwarg; the read sites (advanced_data_type/api.py:93, annotations/api.py:192/249/492, views/base_api.py:574, sqllab/api.py:241...) receive attacker-controlled filter/order/pagination structures. Observed consumers terminate in ORM filter()/order_by() (base_api.py:595-599, order_column restricted to order_rel_fields) or non-SQL result-key lookups - the source is genuine; no rison value was found flowing into raw SQL text in this snapshot.",
+          "evidence": [
+            "params = kwargs['rison'] - sqllab/api.py:241-244 (result-key lookup, non-SQL)",
+            "args = kwargs.get('rison', {}); filters = self._get_related_filter(...); datamodel.query(filters, order_column, ...) - views/base_api.py:574-599 (ORM)",
+            "_apply_layered_relation_to_rison(pk, kwargs['rison']) - annotations/api.py:192 (ORM filters)"
+          ],
+          "location": {
+            "file": "superset/views/base_api.py",
+            "line": 574
+          }
+        },
+        {
+          "id": "p5-src-046",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "handler_parameter",
+            "flow_kind": "param",
+            "arg_index": null,
+            "module": "superset.databases.api"
+          },
+          "rationale": "Parameters of the @expose REST handlers (135 rows) - Flask/FAB route path variables and handler parameters: pk, client_id (sqllab/api.py:138), digest, dashboard_id_or_slug (views/core.py:852) and notably the databases/api.py:811 select_star route's table_name/schema_name URL path segments, which are request-derived SQL identifiers feeding the select_star construction. Most other route params terminate in ORM lookups (e.g. daos/query.py:81 filter_by(client_id)); the select_star family feeds identifier construction - both are attacker-influenced input.",
+          "evidence": [
+            "@expose('/<int:pk>/select_star/<path:table_name>/') ... def select_star(self, database, table_name, schema_name) - databases/api.py:801-812",
+            "@expose('/export/<string:client_id>/') def export_csv(self, client_id: str) - sqllab/api.py:138-146",
+            "db.session.query(Query).filter_by(client_id=client_id) - ORM lookup - daos/query.py:81"
+          ],
+          "location": {
+            "file": "superset/databases/api.py",
+            "line": 811
+          }
+        },
+        {
+          "id": "p5-src-047",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "cli_command_parameter",
+            "flow_kind": "param",
+            "arg_index": null,
+            "package": "click"
+          },
+          "rationale": "Click CLI command parameters (129 rows: superset/cli/*, RELEASING/*, scripts/*). Operator-trusted boundary - the CLI runs with DB credentials and admin rights; no CLI argument was found reaching SQL text (re_encrypt_secrets passes only the key; set_database_uri stores the URI; import commands pass file paths). Candidate pending threat-model confirmation: if the CLI is never exposed to untrusted callers these downgrade to fp.",
+          "evidence": [
+            "def re_encrypt_secrets(previous_secret_key=None) -> SecretsMigrator(...).run() - cli/update.py:110-119 (metadata-derived SQL only)",
+            "def import_dashboards(path, username) - cli/importexport.py:146-164 (file paths)"
+          ],
+          "location": {
+            "file": "superset/cli/update.py",
+            "line": 110
+          }
+        },
+        {
+          "id": "p5-src-051",
+          "role": "source",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "get_sql_results",
+            "flow_kind": "param",
+            "arg_index": 2,
+            "module": "superset.sql_lab"
+          },
+          "rationale": "Celery task sql_lab.get_sql_results parameters (sql_lab.py:163-171): rendered_query (parameter 2) is the Jinja-rendered SQL Lab query text forwarded verbatim to execute_sql_statements (sql_lab.py:177) - a genuine SQL-text input boundary reached from the asynchronous /execute/ flow (sql_json_executer.py:169-178 .delay). The payload originates from request.json; the boundary is broker-mediated (requires celery worker reachability, @protect + database-access validation upstream). Other params (query_id, return_results, store_results, username, start_time, expand_data, log_params) are also request-derived.",
+          "evidence": [
+            "@celery_app.task(name='sql_lab.get_sql_results', bind=True) def get_sql_results(ctask, query_id, rendered_query, ...) - sql_lab.py:156-172",
+            "return execute_sql_statements(query_id, rendered_query, ...) - sql_lab.py:177-186",
+            ".delay(query_id, rendered_query, ...) - sqllab/sql_json_executer.py:169-178"
+          ],
+          "location": {
+            "file": "superset/sql_lab.py",
+            "line": 163
+          }
+        },
+        {
+          "id": "p5-src-052",
+          "role": "source",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "task_parameter",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "superset.tasks.async_queries"
+          },
+          "rationale": "Other celery task parameters (20 rows): load_chart_data_into_cache / load_explore_json_into_cache form_data (tasks/async_queries.py:64-65/107-110 - the serialized chart-data request payload re-enters ChartDataCommand and compiles to SQL; genuine request-derived re-entry), fetch_url data/headers (tasks/cache.py:230 - internal HTTP trigger), cache_warmup strategy_name (stored chart payloads - second-order), reports scheduler execute(report_schedule_id) (int id, stored SQL - second-order), thumbnail tasks (int ids, current_user). Mixed trust; candidate with the form_data tasks as the strongest members.",
+          "evidence": [
+            "def load_chart_data_into_cache(job_metadata: dict, form_data: dict) -> _create_query_context_from_form(form_data) -> ChartDataCommand(...).run(cache=True) - tasks/async_queries.py:62-80",
+            "def cache_warmup(strategy_name: str, *args, **kwargs) - tasks/cache.py:264-266 (stored payloads)"
+          ],
+          "location": {
+            "file": "superset/tasks/async_queries.py",
+            "line": 64
+          }
+        },
+        {
+          "id": "p5-sum-014",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "apply_limit_to_sql",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "superset.db_engine_specs.base",
+            "type": "BaseEngineSpec"
+          },
+          "rationale": "SQL-text transformer: apply_limit_to_sql(cls, sql, limit, database, force) embeds the incoming SQL verbatim as a TextAsFrom(text(sql), ['*']) subquery (base.py:869-874) or rewrites the LIMIT through ParsedQuery (:877-878); sql at parameter 1. Database.apply_limit_to_sql (models/core.py:661, sql at parameter 1) forwards to the engine spec. Modeled as a summary step (parameter -> returned SQL string) so taint flows through limit application into the execution sites.",
+          "evidence": [
+            "def apply_limit_to_sql(cls, sql: str, limit: int, database, force) - base.py:855-856",
+            "select_from(TextAsFrom(text(sql), ['*']).alias('inner_qry')) - base.py:871",
+            "def apply_limit_to_sql(self, sql, limit, force) ... self.db_engine_spec.apply_limit_to_sql(sql, limit, self, force) - models/core.py:661-665"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/base.py",
+            "line": 855
+          }
+        },
+        {
+          "id": "p5-sum-018",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "text",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.models.helpers"
+          },
+          "rationale": "TextClause construction call sites - text(...), self.text(...), get_text_clause(...) with the SQL fragment at argument 0 (21 rows: base.py:557/871/1405, hive.py:233, utils/encrypt.py:175, models/helpers.py:806/816/951/959/1078/1103/1323/1330/1918/1936, connectors/sqla/models.py:783/893/1069/1079/1096/1154). Construction alone does not execute (per WORKFLOW.md: avoid overlabeling pass-5 sinks unless SQL execution is present) - modeled as taint steps carrying the fragment into the TextClause object, which then flows to the execution sites (engine.execute, cursor.execute, read_sql_query, compile_sqla_query).",
+          "evidence": [
+            "clause = self.text(f'({template_processor.process_template(filter_.clause)})') - RLS - models/helpers.py:806-807",
+            "where_clause_and += [self.text(where)] - ad-hoc WHERE - models/helpers.py:1918",
+            "TextAsFrom(self.text(from_sql), []).alias(VIRTUAL_TABLE_ALIAS) - virtual dataset - models/helpers.py:1103"
+          ],
+          "location": {
+            "file": "superset/models/helpers.py",
+            "line": 806
+          }
+        },
+        {
+          "id": "p5-sum-031",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "callable": "get_view_names",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "superset.db_engine_specs.hive",
+            "type": "HiveEngineSpec"
+          },
+          "rationale": "Engine-spec metadata/introspection wrappers (15 definition rows): get_view_names (hive.py:601 - builds 'SHOW VIEWS' + f' IN `{schema}`' at :626-631; presto.py:767 - parameterized WHERE table_schema=%(schema)s, the safe contrast), get_catalog_names (postgres.py:331, presto.py:815, snowflake.py:174), get_schema_names (impala.py:71), get_create_view (presto.py:1254 - f'SHOW CREATE VIEW {schema}.{table}' unquoted), _show_columns (presto.py:967 - quote_identifier-quoted), extra_table_metadata (gsheets.py:109), validate_parameters (gsheets.py:215), df_to_sql (hive.py:169), get_raw_connection (models/core.py:517 - engine-spec prequeries), set_sqlite_pragma (utils/core.py:859 - literal PRAGMA), get_valid_foreign_key / add_data (utils/mock_data.py). Their parameters carry schema/table identifiers toward SQL; per-site quoting varies (hive backticks unescaped vs presto bound). Modeled as summary steps connecting caller identifiers to the execute sites.",
+          "evidence": [
+            "sql += f' IN `{schema}`' ... cursor.execute(sql) - hive.py:626-631",
+            "WHERE table_schema = %(schema)s ... params = {'schema': schema} - presto.py:794/798",
+            "for prequery in self.db_engine_spec.get_prequeries(schema=schema): cursor.execute(prequery) - models/core.py:529-531"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/hive.py",
+            "line": 601
+          }
+        },
+        {
+          "id": "p5-sum-032",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.78,
+          "signature": {
+            "callable": "get_df",
+            "flow_kind": "param",
+            "arg_index": 1,
+            "module": "superset.models.core",
+            "type": "Database"
+          },
+          "rationale": "SQL-text query-builder wrapper definitions (17 rows): Database.get_df (models/core.py:559, sql at parameter 1 -> db_engine_spec.execute at :598/608/611), ExploreMixin.get_sqla_query (helpers.py:1415 - builds the whole SqlaQuery including the text clauses), get_from_clause (helpers.py:1080, models.py:868 - virtual-dataset SQL -> TextAsFrom), get_fetch_values_predicate (models.py:773 -> self.text at :783), values_for_column (helpers.py:1336, models.py:792 -> read_sql_query), get_time_filter (helpers.py:1298 -> get_text_clause at :1323/1330), get_sqla_row_level_filters (helpers.py:790, models.py:1053 -> self.text RLS clauses), get_columns_description (connectors/sqla/utils.py:147 -> cursor.execute at :156), get_virtual_table_metadata (utils.py:103), AnnotationDatasource.query (models.py:160 -> read_sql_query at :170), estimate_statement_cost (postgres.py:310, presto.py:339 -> EXPLAIN f-strings), validate_statement (presto_db.py:45 -> EXPLAIN VALIDATE) and _run_sql_json_exec_from_scratch (sqllab/commands/execute.py:140). Parameters carry SQL text/fragments toward execution - param->execution flow steps.",
+          "evidence": [
+            "def get_df(self, sql: str, schema=None, mutator=None) - models/core.py:559; self.db_engine_spec.execute(cursor, sql_) - :598/608/611",
+            "def get_sqla_query(self, ...) - models/helpers.py:1415 (WHERE/HAVING/RLS text clauses assembled here)",
+            "def validate_statement(cls, database, statement, cursor) - sql_validators/presto_db.py:45 -> EXPLAIN VALIDATE at :66"
+          ],
+          "location": {
+            "file": "superset/models/core.py",
+            "line": 559
+          }
+        },
+        {
+          "id": "p5-sum-033",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "invalidate",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "superset.cachekeys.api",
+            "type": "CacheRestApi"
+          },
+          "rationale": "Cache-invalidation wrappers (3 rows): CacheRestApi.invalidate (cachekeys/api.py:52 -> session.execute(delete_stmt) Core with the cachekey bound at :118) and Dashboard.clear_cache_for_slice / clear_cache_for_datasource (models/dashboard.py:363/372 -> db.engine.execute(Core select) with bound integer slice/datasource ids at :367/:384). Values bound; kept as flow steps for connectivity.",
+          "evidence": [
+            "session.execute(delete_stmt) - cachekeys/api.py:118",
+            "db.engine.execute(filter_query) Core select - models/dashboard.py:367/384"
+          ],
+          "location": {
+            "file": "superset/cachekeys/api.py",
+            "line": 52
+          }
+        },
+        {
+          "id": "p5-sum-035",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.6,
+          "signature": {
+            "callable": "cancel_query",
+            "flow_kind": "param",
+            "arg_index": 3,
+            "module": "superset.db_engine_specs.mysql",
+            "type": "MySQLEngineSpec"
+          },
+          "rationale": "Cancel-query wrappers (10 definition rows): get_cancel_query_id (mysql.py:273, postgres.py:409, redshift.py:151, snowflake.py:230 - execute literal connection-id probes) and cancel_query (mysql.py:287, postgres.py:423, redshift.py:165, snowflake.py:244, ocient.py:386, trino.py:240 - build the cancel SQL from cancel_query_id at parameter 3). Provenance is engine-derived and round-tripped through query.extra (second-order); modeled as flow steps so any future request->extra_json tampering path stays visible. Classification candidate pending threat-model review.",
+          "evidence": [
+            "def cancel_query(cls, cursor, query, cancel_query_id: str) - mysql.py:287",
+            "cursor.execute('SELECT CONNECTION_ID()') - mysql.py:282; cursor.execute('SELECT pg_backend_pid()') - postgres.py:418"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/mysql.py",
+            "line": 287
+          }
+        },
+        {
+          "id": "p5-sum-036",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "_insert_pvm_on_sqla_event",
+            "flow_kind": "param",
+            "arg_index": 0,
+            "module": "superset.security.manager",
+            "type": "SupersetSecurityManager"
+          },
+          "rationale": "ORM-Core glue wrapper definitions (25 rows): security/manager.py permission-view-menu event handlers (_insert_pvm/_delete_pvm/_find_permission/_find_view_menu/_update_*/dataset_after_insert/dataset_before_update - Core table.update/insert/select with .values() bound params; names are DB-derived from dataset metadata), common/tags.py add_types*/add_owners*/add_favorites (Core insert...from_select), importer _import (dashboards/assets/examples - persists YAML bundle fields to ORM models; the dataset 'sql' field becomes stored SQL, executed later - second-order), SqlaTable.update_column (models.py:1451, ORM). All terminate in bound-parameter Core execution; labeled summary/candidate purely for flow connectivity, not as vulnerability evidence.",
+          "evidence": [
+            "connection.execute(view_menu_table.update().where(...).values(name=...)) Core bound - security/manager.py:1212-1216",
+            "db.session.execute(query) Core insert-from-select - common/tags.py:55-56",
+            "dataset 'sql' field persisted via import_from_dict (export_fields includes 'sql') - connectors/sqla/models.py:543/551"
+          ],
+          "location": {
+            "file": "superset/security/manager.py",
+            "line": 1626
+          }
+        },
+        {
+          "id": "p5-sum-054",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "query",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.connectors.sqla.models",
+            "type": "SqlaTable"
+          },
+          "rationale": "Genuine datasource query-wrapper call sites (5 rows): datasource.query(query_obj) / _qc_datasource.query (common/query_context_processor.py:237/464, viz.py:284 - SqlaTable.query -> get_query_str_extended -> database.get_df execution), ExploreMixin self.query (models/helpers.py:2052) and the BigQuery client.query(statement) dry-run (db_engine_specs/bigquery.py:476). Argument->SQL-execution flow steps connecting chart/explore query objects to the execution chain.",
+          "evidence": [
+            "query_context.datasource.query(query_obj) - common/query_context_processor.py:237",
+            "def query(self, query_obj) -> get_query_str_extended -> self.database.get_df(sql, ...) - connectors/sqla/models.py:1180-1214",
+            "query_job = client.query(statement, job_config=job_config) - db_engine_specs/bigquery.py:475-478"
+          ],
+          "location": {
+            "file": "superset/common/query_context_processor.py",
+            "line": 237
+          }
+        },
+        {
+          "id": "p5-sum-055",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "select_star",
+            "flow_kind": "argument",
+            "arg_index": 1,
+            "module": "superset.models.core",
+            "type": "Database"
+          },
+          "rationale": "select_star call-site argument rows (~34; database at arg 0, table_name at arg 1, schema at arg 2, then limit/show_cols/indent/latest_partition/cols) - identifier fragments handed into the SQL-generating select_star: the REST handler (databases/api.py:854, request path params), engine-spec super() delegations (bigquery.py/hive.py/presto.py internal calls), Database.select_star callers (models/core.py) and sql_lab.py:528 (CTAS result display). Flow steps carrying request-derived identifiers toward the (dialect-quoted) identifier construction.",
+          "evidence": [
+            "database.select_star(table_name, schema_name, latest_partition=True, show_cols=True) - databases/api.py:854-856",
+            "self.db_engine_spec.select_star(self, table_name, schema=schema, engine=engine, ...) - models/core.py:649"
+          ],
+          "location": {
+            "file": "superset/databases/api.py",
+            "line": 854
+          }
+        },
+        {
+          "id": "p5-sum-056",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "apply_limit_to_sql",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.db_engine_specs.base"
+          },
+          "rationale": "apply_limit_to_sql call-site argument rows (8; sql at arg 0, limit at arg 1) - SQL text flows through the limit transformer into executed SQL: sql_lab.py:253 apply_limit_if_exists (SQL Lab statements), models/core.py callers, reports/commands/alert.py:150 (stored report SQL) and connectors/sqla/utils.py. Argument->returned-SQL flow steps.",
+          "evidence": [
+            "sql = apply_limit_if_exists(database, increased_limit, query, sql) - sql_lab.py:253",
+            "database.apply_limit_to_sql(sql, limit, force) - reports/commands/alert.py:150"
+          ],
+          "location": {
+            "file": "superset/sql_lab.py",
+            "line": 253
+          }
+        },
+        {
+          "id": "p5-sum-057",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.8,
+          "signature": {
+            "callable": "get_df",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.models.core",
+            "type": "Database"
+          },
+          "rationale": "get_df call-site argument rows (15; sql at arg 0, schema at arg 1) - SQL text handed to Database.get_df -> db_engine_spec.execute (chart query execution connectors/sqla/models.py:1214, sqllab export commands, example loaders). Argument->execution flow steps.",
+          "evidence": [
+            "self.database.get_df(sql, self.schema, mutator) - connectors/sqla/models.py:1214",
+            "def get_df(self, sql, schema=None, mutator=None) -> self.db_engine_spec.execute(cursor, sql_) - models/core.py:559/598"
+          ],
+          "location": {
+            "file": "superset/connectors/sqla/models.py",
+            "line": 1214
+          }
+        },
+        {
+          "id": "p5-sum-058",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.85,
+          "signature": {
+            "callable": "execute_sql_statements",
+            "flow_kind": "argument",
+            "arg_index": 1,
+            "module": "superset.sql_lab"
+          },
+          "rationale": "SQL Lab funnel call-site argument rows (14): execute_sql_statements(rendered_query at arg 1 - sql_lab.py:177), execute_sql_statement(sql_statement at arg 0 - sql_lab.py:487-494 loop) and execute_with_cursor(sql at arg 2 - sql_lab.py:274). These carry the rendered user SQL into the sink definitions p5-sink-008/009/010 - argument->param flow steps.",
+          "evidence": [
+            "execute_sql_statements(query_id, rendered_query, ...) - sql_lab.py:177",
+            "execute_sql_statement(statement, query, session=..., cursor=..., ...) - sql_lab.py:487-494",
+            "db_engine_spec.execute_with_cursor(cursor, sql, query, session) - sql_lab.py:274"
+          ],
+          "location": {
+            "file": "superset/sql_lab.py",
+            "line": 274
+          }
+        },
+        {
+          "id": "p5-sum-059",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "estimate_statement_cost",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.db_engine_specs.base"
+          },
+          "rationale": "estimate_statement_cost call-site argument rows (4; statement at arg 0/1) - the SQL Lab estimate-cost flow: template-rendered user SQL (sqllab/commands/estimate.py:72-73) handed to the EXPLAIN constructions (presto.py:346, postgres.py:311, bigquery.py:475).",
+          "evidence": [
+            "costs.append(cls.estimate_statement_cost(processed_statement, database)) - db_engine_specs/base.py:1492-1493",
+            "sql = template_processor.process_template(sql, **self._template_params) - sqllab/commands/estimate.py:72-73"
+          ],
+          "location": {
+            "file": "superset/db_engine_specs/base.py",
+            "line": 1492
+          }
+        },
+        {
+          "id": "p5-sum-060",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.55,
+          "signature": {
+            "callable": "cancel_query",
+            "flow_kind": "argument",
+            "arg_index": 2,
+            "module": "superset.sql_lab"
+          },
+          "rationale": "Cancel-flow call-site argument rows (5): sql_lab.py:639 query.database.db_engine_spec.cancel_query(cursor, query, cancel_query_id) and the get_cancel_query_id calls (sql_lab.py:461). The cancel_query_id argument is engine-derived (extra_json round-trip - sql_lab.py:630); steps kept for connectivity; candidate pending threat-model review.",
+          "evidence": [
+            "return query.database.db_engine_spec.cancel_query(cursor, query, cancel_query_id) - sql_lab.py:639-640",
+            "cancel_query_id = query.extra.get(QUERY_CANCEL_KEY) - sql_lab.py:630"
+          ],
+          "location": {
+            "file": "superset/sql_lab.py",
+            "line": 639
+          }
+        },
+        {
+          "id": "p5-sum-061",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.65,
+          "signature": {
+            "callable": "get_view_names",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.db_engine_specs"
+          },
+          "rationale": "Metadata-wrapper call-site argument rows (get_view_names 5, get_schema_names 1, df_to_sql 3 - views/database/views.py:225-227 passes the CSV-upload table/schema, _show_columns 3, get_create_view 3, extra_table_metadata 3 - databases/api.py:794-798 REST path params via parse_js_uri_path_item, validate_parameters, get_valid_foreign_key) - schema/table identifiers from requests or metadata flowing into SQL-generating wrappers. Quoting quality varies per wrapper (presto get_view_names bound vs hive backticks vs presto get_create_view unquoted).",
+          "evidence": [
+            "extra_table_metadata(database, table_name, schema_name) - databases/api.py:794-798 (REST path params)",
+            "database.db_engine_spec.df_to_sql(database, csv_table, df, dict(...)) - views/database/views.py:225-227 (CSV-upload form)"
+          ],
+          "location": {
+            "file": "superset/databases/api.py",
+            "line": 794
+          }
+        },
+        {
+          "id": "p5-sum-062",
+          "role": "summary",
+          "classification": "tp",
+          "confidence": 0.75,
+          "signature": {
+            "callable": "get_from_clause",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.models.helpers"
+          },
+          "rationale": "Query-builder call-site argument rows (get_from_clause 4, get_sqla_row_level_filters 2, get_columns_description 2, values_for_column, get_time_filter, validate_statement 3 - the databases/api.py validate_sql endpoint feeds user SQL to the validator): query-object fragments and user SQL propagating into clause construction and execution.",
+          "evidence": [
+            "col_desc = get_columns_description(self.database, sql) - connectors/sqla/models.py:1009",
+            "validate_sql flow: def validate_sql(self, pk) - databases/api.py:989 -> sql_validators presto_db.py:45-76"
+          ],
+          "location": {
+            "file": "superset/connectors/sqla/models.py",
+            "line": 1009
+          }
+        },
+        {
+          "id": "p5-sum-064",
+          "role": "summary",
+          "classification": "candidate",
+          "confidence": 0.5,
+          "signature": {
+            "callable": "_insert_pvm_on_sqla_event",
+            "flow_kind": "argument",
+            "arg_index": 0,
+            "module": "superset.security.manager"
+          },
+          "rationale": "ORM-glue call-site argument rows (security/manager.py pvm event args ~68, common/tags.py add_* ~32, importer _import 9, dataset events 6, update_column): the values terminate in bound-parameter Core execution or ORM persistence (dataset names -> permission names; imported YAML -> model fields). Labeled summary/candidate purely for flow connectivity - not vulnerability evidence; Phase 2 alerts through these steps end in bound parameters.",
+          "evidence": [
+            "_insert_pvm_on_sqla_event(...) args at 24 sites - security/manager.py (DB-derived names into Core .values())",
+            "self._import(db.session, self._configs, self.overwrite) - commands/importers/v1/__init__.py:77"
+          ],
+          "location": {
+            "file": "superset/security/manager.py",
+            "line": 1142
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,291 @@
+{
+  "task": "Independent LLM path re-review of Augur IRIS Pass 5 (CWE-89 SQL Injection) formal results",
+  "rule_id": "py/augur/superset/pass5-sql-injection",
+  "reviewer": "glm-5.3 independent path triage",
+  "date": "2026-10-21",
+  "inputs_reviewed": [
+    "results/pass5.sarif",
+    "report/iris_report.md",
+    "report/query_generation_notes.md",
+    "labels/labels.json (pass 5 entries cited below)",
+    "source snapshot at dataset/codeql_databases/sql_injection_dbs/superset_vuln"
+  ],
+  "isolation_note": "No PyVul ground truth (sql_sinks.csv, 漏洞审查报告.md, 漏洞补充报告.md), CVE descriptions, or fix commits were consulted for the Pass 5 triage. The only ground-truth-style input is the vulnerability description embedded verbatim in the task prompt itself (the where_in / commit 1d403dab cross-check in section 'provided_vulnerability_hit_analysis'), analyzed against the unmodified snapshot.",
+  "sarif_integrity_check": {
+    "formal_results_only": true,
+    "results_total": 10,
+    "all_rule_ids_formal": true,
+    "diagnostic_or_baseline_results_mixed_in": false,
+    "notes": "The single run contains exactly one rule (py/augur/superset/pass5-sql-injection) with 10 results. No '-diag' rule ids, no SARIF parse diagnostics, and no native CodeQL py/sql-injection baseline results are present; nothing from diagnostics/ or the extraction CSVs leaked into the formal run."
+  },
+  "summary": {
+    "likely_tp": 0,
+    "likely_fp": 10,
+    "uncertain": 0,
+    "families": {
+      "A_sql_lab_funnel": "results #2, #5, #6, #7, #8, #9 — the request.json/celery rendered SQL of the SQL Lab execute / estimate / validate features reaches cursor.execute() unbound. The data flow is mechanically real and complete, but it is Superset's by-design feature: an authenticated, per-table access-validated user submits the ENTIRE SQL statement themselves; the attacker input is not a fragment injected into a query the application intended to fix. Verdict: not a CWE-89 vulnerability (by-design arbitrary SQL under auth).",
+      "B_select_star_identifiers": "results #0, #1, #3, #4 — URL-path table_name/schema_name flow into Database.select_star. The constructed identifier is dialect-quoted via SQLAlchemy IdentifierPreparer.quote (which DOES escape embedded quote chars), the compiled SELECT is returned to the client as JSON text and is never executed server-side, and the route requires @protect + @check_datasource_access on the exact parsed table. Verdict: not exploitable SQL injection."
+    }
+  },
+  "alerts": [
+    {
+      "result_index": 0,
+      "primary_location": "superset/databases/api.py:812:35-45 (table_name parameter of DatabaseRestApi.select_star)",
+      "codeflows_present": false,
+      "source": {
+        "location": "superset/databases/api.py:812 (parameter table_name, label p5-src-046 @expose handler param)",
+        "attacker_controlled": true,
+        "entry": "GET /api/v1/database/<int:pk>/select_star/<path:table_name>/ (api.py:801-802)",
+        "preconditions": "@protect (authenticated) + @check_datasource_access (databases/decorators.py:33-67) — can_access_table must pass for the exact unquote_plus-parsed table before the handler body runs"
+      },
+      "sink": {
+        "location": "superset/databases/api.py:812 (the same table_name parameter, label p5-sink-013 definition-side fragment sink)",
+        "real_sql_execution": false
+      },
+      "path_summary": "Zero-length path: the @expose handler parameter is modeled as BOTH source (p5-src-046) and sink (p5-sink-013), so source node == sink node and the SARIF result carries no codeFlows. The alert shows no SQL construction and no SQL execution.",
+      "controlled_sql_part": "none demonstrated — the alert fires at the entry parameter itself; the downstream construction is separately (and also negatively) triaged in results #3/#4.",
+      "binding_or_barrier_evidence": "Not applicable at this node; downstream: base.py:1399-1403 dialect identifier quoting.",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "rationale": "Degenerate self-sink artifact of the modeling (source predicate and definition-side sink predicate match the same node). It contributes no path evidence; the real downstream flow (api.py:854 -> models/core.py:639) is covered by results #3/#4 and is itself non-exploitable (see those entries)."
+    },
+    {
+      "result_index": 1,
+      "primary_location": "superset/databases/api.py:812:52-63 (schema_name parameter of DatabaseRestApi.select_star)",
+      "codeflows_present": false,
+      "source": {
+        "location": "superset/databases/api.py:812 (parameter schema_name, label p5-src-046)",
+        "attacker_controlled": true,
+        "entry": "GET /api/v1/database/<int:pk>/select_star/<path:table_name>/<schema_name>/ (api.py:802)",
+        "preconditions": "same as result #0; schema_name is parsed (parse_js_uri_path_item, eval_undefined) and table access is checked before the handler runs"
+      },
+      "sink": {
+        "location": "superset/databases/api.py:812 (same schema_name parameter, label p5-sink-013)",
+        "real_sql_execution": false
+      },
+      "path_summary": "Zero-length path, same self-sink artifact as result #0 for the schema_name parameter.",
+      "controlled_sql_part": "none demonstrated",
+      "binding_or_barrier_evidence": "see result #4 for the downstream schema flow.",
+      "verdict": "likely_fp",
+      "confidence": 0.8,
+      "rationale": "Same degenerate artifact as result #0; no construction or execution shown."
+    },
+    {
+      "result_index": 2,
+      "primary_location": "superset/db_engine_specs/base.py:1551 (cursor.execute(query) in BaseEngineSpec.execute)",
+      "codeflows_present": true,
+      "codeflow_count": 4,
+      "source": {
+        "locations": [
+          "superset/sqllab/api.py:308 — request.json (label p5-src-040) of POST /api/v1/sqllab/execute/ -> SqlJsonExecutionContext(request.json) (sql field, sqllab_execution_context.py:76)",
+          "superset/sql_lab.py:165 — rendered_query parameter of the sql_lab.get_sql_results celery task (label p5-src-051, broker boundary reached via sql_json_executer.py:169-178 .delay)"
+        ],
+        "attacker_controlled": true,
+        "entry": "POST /api/v1/sqllab/execute/ (@protect, class permission 'SQLLab'); marshmallow ExecutePayloadSchema.load is validation-only and its result is discarded (sqllab/api.py:300)",
+        "preconditions": "Authenticated user with SQL Lab access. Post-render per-table access validation: sqllab/commands/execute.py:148-151 _validate_access(validate_rendered_query) -> CanAccessQueryValidator (sqllab/validators.py:31 security_manager.raise_for_access(query=query)). The celery source additionally presupposes broker/workers are configured."
+      },
+      "sink": {
+        "location": "superset/db_engine_specs/base.py:1551 cursor.execute(query) (label p5-sink-001/p5-sink-005)",
+        "real_sql_execution": true,
+        "parameter_binding": "none — only optional comment stripping at base.py:1546 (strip_comments_from_sql)"
+      },
+      "path_summary": "request.json['sql'] -> SqlJsonExecutionContext (execution_context.py:63/149, Query model field via modeled summary edge (2)) -> SqlQueryRenderImpl.render (query_render.py:61-64: ParsedQuery(query_model.sql).stripped() + process_template Jinja render) -> ParsedQuery stripped/get_statements (sql_parse.py:346-360, summary edge (3a)) -> get_sql_results -> execute_sql_statements (sql_lab.py:378/407-414) -> execute_sql_statement (:488) -> db_engine_spec.execute -> base.py:1546 -> cursor.execute(query) at base.py:1551. Propagation matches the real code; the SQL is re-parsed/split (ParsedQuery) rather than re-formed, and the Jinja render step is modeled by the templateRenderFlow edge, consistent with jinja_context.py:458-469.",
+      "controlled_sql_part": "The ENTIRE SQL statement text — the user authors the whole query in the SQL Lab editor; it is not a fragment embedded into a fixed application query.",
+      "binding_or_barrier_evidence": "No barrier on this channel by design; the access validation at execute.py:151 is control flow (raise_for_access), not data sanitization.",
+      "verdict": "likely_fp",
+      "confidence": 0.7,
+      "rationale": "Mechanically the path is real: attacker-reachable HTTP source, unbound SQL-text sink, genuine DBAPI execution. However this is Superset's by-design SQL Lab feature — the command's own docstring reads 'Runs arbitrary sql and returns data as json' (sqllab/commands/execute.py:96). The tainted value IS the complete statement the user is authorized to run; there is no injection of attacker data into SQL structure the application intended to fix. Under the strict CWE-89 injection definition (attacker input alters the structure of an intended query) this is a functional feature, not a vulnerability; label p5-sink-010's rationale and query_generation_notes.md §2/§5.1 already flag this as the by-design funnel. If a purely mechanical attacker-input->execute() criterion were applied, this family would be a data-flow TP; the vulnerability-level verdict here is FP (by-design)."
+    },
+    {
+      "result_index": 3,
+      "primary_location": "superset/models/core.py:639 (table_name parameter of Database.select_star)",
+      "codeflows_present": true,
+      "codeflow_count": 2,
+      "source": {
+        "locations": [
+          "superset/databases/api.py:686 — table_name param of table_metadata handler (p5-src-046, GET /<int:pk>/table/<path:table_name>/<schema_name>/, api.py:675)",
+          "superset/databases/api.py:812 — table_name param of select_star handler (p5-src-046, api.py:801-802)"
+        ],
+        "attacker_controlled": true,
+        "preconditions": "@protect + @check_datasource_access on both routes: databases/decorators.py:44-67 unquote_plus-parses table_name/schema_name and requires sm.can_access_table(database, Table(table_name_parsed, schema_name_parsed)) to pass for the exact table the user names; otherwise 404."
+      },
+      "sink": {
+        "location": "superset/models/core.py:639 — table_name parameter of Database.select_star definition (label p5-sink-012, fragment-entry sink)",
+        "real_sql_execution": false
+      },
+      "path_summary": "api.py:686 -> :728 get_table_metadata(database, table_name, schema_name) -> databases/utils.py:55 -> :93 database.select_star(table_name, schema=schema_name, ...) -> models/core.py:639; and api.py:812 -> :854 database.select_star(table_name, schema_name, latest_partition=True, show_cols=True) -> core.py:639. Both flows match the real call graph.",
+      "controlled_sql_part": "table_name used as a SQL identifier in 'SELECT * FROM [schema.]table_name': base.py:1399-1403 full_table_name = identifier_preparer.quote(schema) + '.' + quote(table_name); :1405 select(fields).select_from(text(full_table_name)).",
+      "binding_or_barrier_evidence": [
+        "base.py:1399-1403: SQLAlchemy 1.4.36 IdentifierPreparer.quote() — values requiring quotes are wrapped in dialect quotes AND embedded quote characters are escaped (IdentifierPreparer._escape_identifier: value.replace(escape_quote, escape_to_quote), e.g. \" -> \"\" for the default preparer, backtick-escaped for MySQL). Values that do not require quotes are legal identifiers and cannot carry SQL syntax. This is effective identifier escaping, contrary to query_generation_notes.md §1 MySanitizers, which asserts quoting 'wrap[s] identifiers without escaping embedded quote characters'.",
+        "No server-side execution of the constructed statement: base.py:1415 database.compile_sqla_query(qry) (models/core.py:627-635, compile with literal_binds) and the SQL string is RETURNED to the client in the JSON response (api.py:854-861 result -> response; utils.py:92-99 payload['selectStar']). Executing it later requires the user to go through SQL Lab with its own access validation.",
+        "base.py:1395 database.get_columns(table_name, schema) (executed for show_cols/latest_partition) goes through the SQLAlchemy inspector, whose information_schema reflection queries bind table/schema as parameters.",
+        "Entry gated by can_access_table for the exact parsed table (decorators.py:54-66)."
+      ],
+      "verdict": "likely_fp",
+      "confidence": 0.75,
+      "rationale": "The sink is a definition-side fragment parameter, not an execution site; the downstream identifier is properly dialect-quoted/escaped, the compiled SELECT is returned as text rather than executed server-side, and the entry requires authenticated access to the exact table being named. No demonstrated injection."
+    },
+    {
+      "result_index": 4,
+      "primary_location": "superset/models/core.py:640 (schema parameter of Database.select_star)",
+      "codeflows_present": true,
+      "codeflow_count": 2,
+      "source": {
+        "locations": [
+          "superset/databases/api.py:686 — schema_name param (table_metadata route)",
+          "superset/databases/api.py:812 — schema_name param (select_star route)"
+        ],
+        "attacker_controlled": true,
+        "preconditions": "same as result #3 (note: schema_name is additionally parse_js_uri_path_item(eval_undefined=True)-parsed in the decorator and handler)"
+      },
+      "sink": {
+        "location": "superset/models/core.py:640 — schema parameter of Database.select_star (label p5-sink-012)",
+        "real_sql_execution": false
+      },
+      "path_summary": "api.py:686 -> :728 -> databases/utils.py:55 -> :94 select_star(..., schema=schema_name) -> core.py:640; api.py:812 -> :855 -> core.py:640. Same as result #3 for the schema component.",
+      "controlled_sql_part": "schema identifier inside full_table_name (base.py:1400-1401); the schema additionally selects the engine context (core.py:648 get_sqla_engine_with_context(schema)).",
+      "binding_or_barrier_evidence": "Same as result #3: quote(schema) at base.py:1401 escapes embedded quote characters; compiled SQL returned, not executed.",
+      "verdict": "likely_fp",
+      "confidence": 0.75,
+      "rationale": "Same analysis as result #3; the schema segment is dialect-quoted and the statement is returned, not executed."
+    },
+    {
+      "result_index": 5,
+      "primary_location": "superset/db_engine_specs/postgres.py:312 (cursor.execute(sql) in PostgresEngineSpec.estimate_statement_cost)",
+      "codeflows_present": true,
+      "codeflow_count": 4,
+      "source": {
+        "locations": [
+          "superset/sqllab/api.py:308 — request.json (p5-src-040), via the render chain edges",
+          "superset/sql_lab.py:165 — celery get_sql_results rendered_query (p5-src-051)"
+        ],
+        "attacker_controlled": true,
+        "entry": "Real reachability is POST /api/v1/sqllab/estimate/ (sqllab/api.py:88-136: @protect, @requires_json, permission 'can_estimate_query_cost' on the SQLLab resource) -> QueryEstimationCommand (sqllab/commands/estimate.py:47-81: params sql/template_params/schema from request.json; validate() only checks the database exists) -> BaseEngineSpec.estimate_query_cost (base.py:1466-1495) -> get_statements -> process_statement (base.py:1444-1463) -> estimate_statement_cost -> postgres.py:311.",
+        "preconditions": "Authenticated user holding can_estimate_query_cost (SQL Lab role). NOTably the estimate flow performs NO per-table access validation (estimate.py:53-63 checks only database existence) — see rationale."
+      },
+      "sink": {
+        "location": "superset/db_engine_specs/postgres.py:312 cursor.execute(sql) with sql = f\"EXPLAIN {statement}\" (postgres.py:311)",
+        "real_sql_execution": true,
+        "parameter_binding": "none — f-string prefix concatenation"
+      },
+      "path_summary": "request sql -> (template render via estimate.py:73 process_template or the modeled query_render chain) -> ParsedQuery.get_statements (base.py:1486, sql_lab.py:407-414) -> process_statement (base.py:1444-1463, ParsedQuery(statement).stripped()) -> estimate_statement_cost(processed_statement, cursor) -> postgres.py:310-312. Note: codeFlows 0/2 route through query_render.py:61 -> base.py:1453, which relies on the set-based ParsedQuery summary edge (3a); the concrete attacker-reachable route is the /sqllab/estimate/ command chain. The propagation is otherwise consistent with real code.",
+      "controlled_sql_part": "The full user-authored statement appended after the fixed 'EXPLAIN ' prefix; the input is the whole SQL, not a value in a fixed query.",
+      "binding_or_barrier_evidence": "No barrier on this channel. sqlparse statement splitting (base.py:1485-1491) limits multi-statement payloads to one EXPLAIN per statement.",
+      "verdict": "likely_fp",
+      "confidence": 0.6,
+      "rationale": "The f-string formation (postgres.py:311) and unbound cursor execution are real, but the tainted data is the user's own complete SQL statement, EXPLAINed by the by-design query-cost-estimation feature for authenticated SQL Lab users. There is no attacker value injected into SQL structure beyond what the user is intended to submit, so this is not CWE-89 injection. Side observation (not CWE-89): /sqllab/estimate/ lacks the per-table raise_for_access validation that /execute/ has, so a user with the estimate permission can plan EXPLAIN against tables/databases they cannot query — an authorization gap (CWE-862-class) that this SQL-injection rule does not correctly describe."
+    },
+    {
+      "result_index": 6,
+      "primary_location": "superset/db_engine_specs/presto.py:347 (cursor.execute(sql) in PrestoEngineSpec.estimate_statement_cost)",
+      "codeflows_present": true,
+      "codeflow_count": 4,
+      "source": {
+        "locations": [
+          "superset/sqllab/api.py:308 — request.json (p5-src-040)",
+          "superset/sql_lab.py:165 — celery rendered_query (p5-src-051)"
+        ],
+        "attacker_controlled": true,
+        "entry": "same /api/v1/sqllab/estimate/ chain as result #5"
+      },
+      "sink": {
+        "location": "superset/db_engine_specs/presto.py:347 cursor.execute(sql) with sql = f\"EXPLAIN (TYPE IO, FORMAT JSON) {statement}\" (presto.py:346)",
+        "real_sql_execution": true,
+        "parameter_binding": "none"
+      },
+      "path_summary": "Identical funnel to result #5, ending in the Trino/Presto EXPLAIN wrapper at presto.py:339-347.",
+      "controlled_sql_part": "full user statement after the fixed EXPLAIN prefix",
+      "binding_or_barrier_evidence": "none on this channel; same set-based-edge caveat for codeFlows 0/2 as result #5.",
+      "verdict": "likely_fp",
+      "confidence": 0.6,
+      "rationale": "Same by-design EXPLAIN-of-own-SQL analysis as result #5 (presto dialect variant); same non-CWE-89 access-control side observation for the estimate endpoint."
+    },
+    {
+      "result_index": 7,
+      "primary_location": "superset/sql_validators/presto_db.py:76 (db_engine_spec.execute(cursor, sql) in PrestoDBSQLValidator.validate_statement)",
+      "codeflows_present": true,
+      "codeflow_count": 4,
+      "source": {
+        "locations": [
+          "superset/sqllab/api.py:308 — request.json (p5-src-040) via the render/parse chain",
+          "superset/sql_lab.py:165 — celery rendered_query (p5-src-051)"
+        ],
+        "attacker_controlled": true,
+        "entry": "Real reachability is POST /api/v1/database/<int:pk>/validate_sql/ (databases/api.py:982-989, @protect + Database resource method permission) -> ValidateSQLCommand (databases/commands/validate_sql.py:62-68: sql = self._properties['sql'] from the request body) -> PrestoDBSQLValidator.validate (presto_db.py:159-174) -> validate_statement (:47-66) -> db_engine_spec.execute(cursor, sql) at :76 -> BaseEngineSpec.execute -> cursor.execute(query) (base.py:1551).",
+        "preconditions": "Authenticated user with the validate_sql permission on the Database resource; SQL_VALIDATORS_BY_ENGINE configured for the engine."
+      },
+      "sink": {
+        "location": "superset/sql_validators/presto_db.py:76 db_engine_spec.execute(cursor, sql) (adapter argument 1, label p5-sink-004) — reaches base.py:1551 cursor.execute(query)",
+        "real_sql_execution": true,
+        "parameter_binding": "none"
+      },
+      "path_summary": "user sql -> ParsedQuery(sql).get_statements (presto_db.py:159-160/173) -> validate_statement: sql = parsed_query.stripped() (:53-54) -> sql = f\"EXPLAIN (TYPE VALIDATE) {sql}\" (:66) -> db_engine_spec.execute(cursor, sql) (:76). The SQL formation is the fixed EXPLAIN prefix + the user's whole statement.",
+      "controlled_sql_part": "full user-authored statement appended after 'EXPLAIN (TYPE VALIDATE) '",
+      "binding_or_barrier_evidence": "none; the intent of the endpoint is exactly to send the user's own statement to the engine for validation.",
+      "verdict": "likely_fp",
+      "confidence": 0.65,
+      "rationale": "By-design SQL validation: the endpoint's purpose is to EXPLAIN (TYPE VALIDATE) the submitted query. The tainted data is the complete statement the user is submitting, not a fragment escaping an intended query; no injection beyond intended semantics. (Whether validate_sql should enforce table access is again an authorization question, not CWE-89.)"
+    },
+    {
+      "result_index": 8,
+      "primary_location": "superset/sql_lab.py:195 (sql_statement parameter of execute_sql_statement)",
+      "codeflows_present": true,
+      "codeflow_count": 4,
+      "source": {
+        "location": "superset/sql_lab.py:165 — rendered_query parameter of the get_sql_results celery task (label p5-src-051; broker boundary of the async /api/v1/sqllab/execute/ flow, sql_json_executer.py:169-178)",
+        "attacker_controlled": true,
+        "preconditions": "same as result #2 (authenticated SQL Lab user; post-render per-table access validation upstream in the synchronous command chain; async path requires celery worker configuration)"
+      },
+      "sink": {
+        "location": "superset/sql_lab.py:195 — sql_statement parameter 0 of execute_sql_statement (label p5-sink-009, definition-side)",
+        "real_sql_execution": false
+      },
+      "path_summary": "sql_lab.py:165 -> :179 -> execute_sql_statements(:378) -> ParsedQuery(rendered_query).get_statements (:407-414; run_multiple_statements_as_one engines pass the whole :414) -> statements (:466) -> execute_sql_statement(statement, ...) (:488) -> sink param :195. Consistent with the real funnel; the actual execution node is base.py:1551 (alerted separately as result #2).",
+      "controlled_sql_part": "the whole user statement(s); inside execute_sql_statement the RLS branch (:207-217, feature-flagged) and CTAS wrap (:219+) may re-form it, but the alert's sink is the parameter itself.",
+      "binding_or_barrier_evidence": "none — by-design SQL-text channel; label p5-sink-009's own rationale describes it as the module-level SQL Lab statement executor of the by-design arbitrary-SQL feature.",
+      "verdict": "likely_fp",
+      "confidence": 0.7,
+      "rationale": "Definition-side restatement of the same by-design SQL Lab funnel as result #2 (source = the celery payload of that same funnel). Same by-design rationale; no additional path evidence."
+    },
+    {
+      "result_index": 9,
+      "primary_location": "superset/sql_lab.py:378 (rendered_query parameter of execute_sql_statements)",
+      "codeflows_present": true,
+      "codeflow_count": 1,
+      "source": {
+        "location": "superset/sql_lab.py:165 — rendered_query parameter of get_sql_results (label p5-src-051)",
+        "attacker_controlled": true,
+        "preconditions": "same as result #8"
+      },
+      "sink": {
+        "location": "superset/sql_lab.py:378 — rendered_query parameter 1 of execute_sql_statements (label p5-sink-010, definition-side)",
+        "real_sql_execution": false
+      },
+      "path_summary": "sql_lab.py:165 -> :179 -> sink param :378. Three-node trivial fragment of the same funnel; downstream continuation (statements -> execute_sql_statement -> base.py:1551) is alerted as results #8/#2.",
+      "controlled_sql_part": "the whole Jinja-rendered user SQL",
+      "binding_or_barrier_evidence": "none; by-design channel",
+      "verdict": "likely_fp",
+      "confidence": 0.7,
+      "rationale": "Same by-design SQL Lab funnel; the source is the same celery parameter the task receives from the authorized /execute/ flow. The label's rationale itself documents it as the by-design arbitrary-SQL feature for authenticated users with database access."
+    }
+  ],
+  "provided_vulnerability_hit_analysis": {
+    "vulnerability": "CWE-89 SQL injection via the where_in Jinja macro (apache/superset commit 1d403dab9822a8cee6108669c53e53fad881c751, fix 'DB-specific quoting in Jinja macro (#25779)')",
+    "vulnerable_code_present_in_snapshot": {
+      "confirmed": true,
+      "locations": [
+        "superset/jinja_context.py:400-416 — where_in(values, mark=\"'\"): inner quote() only doubles the *caller-chosen* mark character (value.replace(mark, mark*2), f\"{mark}{value}{mark}\"); a template author can pass an arbitrary mark, and values containing any other quote character (or non-string values via str(value)) are not escaped for the target dialect",
+        "superset/jinja_context.py:452 — self._env.filters[\"where_in\"] = where_in (the pre-fix global-function registration; the fix replaces it with WhereInMacro(database.get_dialect()))"
+      ]
+    },
+    "hit_by_pass5_results": false,
+    "evidence": [
+      "None of the 10 formal results is located in superset/jinja_context.py, references where_in, or tracks the values/mark arguments of the macro; all 10 alerts belong to the SQL Lab funnel and the select_star identifier flow.",
+      "The injection construction (f\"{mark}{value}{mark}\" / \", \".join, jinja_context.py:412-416) happens inside Jinja template rendering: jinja2 is external to the CodeQL database, so the filter call and its arguments never appear as Python data-flow nodes; only the whole rendered SQL string is propagated (MySummaries templateRenderFlow, jinja_context.py:458-469).",
+      "The attacker-reachable route that makes where_in a real vulnerability — chart viewers' filter values (request form_data -> filter_values()/get_filters() macros, jinja_context.py:487-488) rendered into a stored virtual-dataset template — has no modeled source path: the chart-data flow is broken at ChartDataQueryContextSchema().load (query_generation_notes.md §4, marshmallow external) and stored dataset SQL is second-order with no source (p5-none-050).",
+      "The SQL Lab route (a user writing {{ where_in(...) }} in the query editor) is covered by the funnel alerts only in the trivial whole-SQL-text sense (results #2/#5/#6/#7/#8/#9), which reflects by-design execution of the user's own query and does not demonstrate the quote-escaping flaw; the funnel alerts are themselves triaged FP above."
+    ],
+    "conclusion": "The Pass 5 formal analysis did NOT hit the real where_in SQL injection vulnerability. The root causes are (a) the vulnerable escaping happens inside the external Jinja rendering engine at argument granularity the model does not track, and (b) the attacker-controlled route to those arguments (chart filter values into stored dataset templates) is explicitly out of the model's source scope. To capture this class, a future pass would need a source at the chart-data filter values, an edge through BaseTemplateProcessor filter calls, and a sink at the where_in construction (jinja_context.py:412/416), plus a barrier modeling the fixed WhereInMacro(dialect) quoting."
+  },
+  "conclusion": "CodeQL analysis succeeded and the 10 formal CWE-89 taint paths are all mechanically consistent with the real code, but none of them represents a genuine SQL injection vulnerability: 6 restatements of the by-design SQL Lab execute/estimate/validate funnel (authenticated, access-validated, user-authored whole statements) and 4 restatements of the select_star identifier flow (dialect-quoted, returned-not-executed, table-access-gated). 0 likely_tp / 10 likely_fp / 0 uncertain. The independently-provided real vulnerability of this snapshot (where_in Jinja macro quoting, fixed by commit 1d403dab) was not hit by the formal results."
+}

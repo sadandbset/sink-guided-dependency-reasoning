@@ -1,0 +1,230 @@
+{
+  "run": {
+    "pipeline": "Augur 0.3.0 (IRIS-style neuro-symbolic flow)",
+    "phase": 1,
+    "steps": ["Step 1: explore and detect", "Step 2: extraction query generation"],
+    "generated": "2026-10-21",
+    "workspace": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_manual\\SQL_Injection\\superset\\iris",
+    "augurRoot": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\iris_tools\\augur-0.3.0",
+    "runNote": "Phase 1 Step 1-2 (source exploration + candidate extraction query generation only; no CodeQL execution, no LLM labeling in this round) against the superset_vuln source tree. WORKFLOW.md confirms Pass 5 = CWE-089 SQL Injection with pass query name Pass5_SQLInjection.ql. The CodeQL database superset-db sits INSIDE the source tree, so all exploration, file traversal, and evidence collection excluded superset-db. The database metadata sourceLocationPrefix matches the explored tree (creation sha 2f468900), so file/line evidence below refers to the same snapshot the database was built from. The audit target is the Apache Superset application itself (version 3.0.1): a Flask/Flask-AppBuilder web application whose REST API and FAB views parse HTTP input, whose SQL Lab / chart-data / explore paths render and execute SQL against user-connected databases through SQLAlchemy 1.4, DBAPI cursors obtained from engine.raw_connection(), and pandas.read_sql_query."
+  },
+  "target": {
+    "project": "superset",
+    "projectDescription": "Apache Superset 3.0.1 (superset-frontend/package.json version 3.0.1, read by setup.py) - the Superset application source tree: Flask 2.2.5 + Flask-AppBuilder 4.3.9 REST API layer (52 files with @expose, 199 @expose handler sites, ModelRestApi/BaseSupersetModelRestApi classes plus FAB BaseView pages under superset/views), marshmallow request-schema loading (request.json -> add_model_schema.load), rison query parsing injected by @rison into kwargs['rison'] (33 read sites), SQL Lab execution pipeline (superset/sqllab/api.py execute endpoint -> SqlJsonExecutionContext(request.json) -> SqlJsonExecutionCommand -> superset/sql_lab.py execute_sql_statements/execute_sql_statement -> db_engine_specs BaseEngineSpec.execute -> cursor.execute), the 47-file db_engine_specs engine adapter layer (hive, presto, trino, mysql, postgres, redshift, snowflake, ocient, gsheets, impala with engine.execute / cursor.execute / f-string SQL), the SQLAlchemy 1.4 ORM/Core data access layer (flask-sqlalchemy 2.5.1 db.session, connectors/sqla/models.py SqlaTable query building with TextAsFrom/self.text() raw clauses, models/helpers.py ExploreMixin with template-processed WHERE/HAVING and RLS filters via self.text(...)), Database.get_raw_connection/select_star (models/core.py), pandas 1.5.3 read_sql_query execution, celery 5.2.2 tasks (superset/tasks), and the click 8.1 CLI (superset/cli, 76 click decorators).",
+    "pass": 5,
+    "cwes": ["CWE-089"],
+    "focus": "SQL Injection",
+    "vulnerableSourceTree": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\superset_vuln"
+  },
+  "language": {
+    "detected": "python",
+    "confidence": 1.0,
+    "evidence": [
+      "database metadata: primaryLanguage = python (superset-db/codeql-database.yml)",
+      "the database source archive (superset-db/src.zip, 1454 entries) covers 1299 .py files: 889 under superset/, 403 under tests/, plus setup.py and a handful of scripts/, docker/ and repo-root files",
+      "setup.py (setuptools) with the superset package; requirements/base.txt pins flask==2.2.5, flask-appbuilder==4.3.9, sqlalchemy==1.4.36, pandas==1.5.3, celery==5.2.2, click==8.1.3"
+    ]
+  },
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\superset_vuln\\superset-db",
+    "sourceLocationPrefix": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\sql_injection_dbs\\superset_vuln",
+    "primaryLanguage": "python",
+    "creationMetadata": {
+      "sha": "2f468900c87c6d384d928815cf85e572215b81c5",
+      "cliVersion": "2.25.1",
+      "creationTime": "2026-05-28T03:19:49.436555800Z"
+    },
+    "baselineLinesOfCode": 149264,
+    "finalised": true,
+    "locationNote": "superset-db is nested inside the source tree; it was excluded from all exploration and will be excluded from extraction result rows via the path filter in both queries. The database snapshot also covers tests/ (403 files: integration_tests, unit_tests and fixtures) and superset/migrations (290 alembic version files, of the 889 files under superset/), so both queries filter /tests/, /superset-db/, /migrations/, /node_modules/, /superset-frontend/, /superset-websocket/ and /docs/ paths so candidate rows come from the application source under superset/ (plus the few repo-root scripts) only."
+  },
+  "toolchain": {
+    "qlpack": "iris/superset-cwe89 (dependencies: codeql/python-all: \"*\") - already present in the workspace",
+    "packResolutionExpected": "codeql/python-all resolvable from the local user pack cache (versions 7.1.1 and 7.1.2 present under C:\\Users\\lzh\\.codeql\\packages\\codeql\\python-all)",
+    "codeqlCli": "2.25.1 (database created with cliVersion 2.25.1)",
+    "compatibilityBasis": "API facts used by the generated queries were cross-checked against the cached python-all 7.1.2 library sources: AstNode.getLocation().getFile(): File and Location.getStartLine() (Location API - AstNode.getFile() does not exist), AstNode.getScope() and Scope.getEnclosingModule() (semmle/python/AstExtended.qll:8/:17, semmle/python/Scope.qll:25), Module.getName() (semmle/python/Module.qll:46), Call.getFunc()/getPositionalArg(index) (semmle/python/AstGenerated.qll:200/:206, index must be bound before lookup), Attribute.getName()/getObject(), Subscript.getObject()/getIndex() (AstGenerated.qll:1371-1376), StringLiteral.getText() (semmle/python/Exprs.qll:549 - not getValue()), Fstring (Exprs.qll:627), BinaryExpr.getOp()/getLeft()/getRight() with Mod/Add (semmle/python/Operations.qll:46/:81/:105), Function.getAnArg()/getADecorator() (semmle/python/Function.qll:59 - getADecorator() returns Expr on Function; getADecoratorCall() is defined on FunctionExpr, Function.qll:320, NOT on Function, so the generated queries use f.getADecorator().(Call) casts instead), Parameter.getName()/isSelf()/getPosition() (Function.qll:210/:280/:286), class Class (semmle/python/Class.qll:89). The two queries reuse the structural shapes already proven on this same CLI + pack family in the django CWE-89 run of this series (moduleHintOf/receiverHint/receiverHintOfCall/calledNameOf helpers, bindingset[path] excludedPath, AST-cast matching with unbound receivers, no QL classes, no API::Node-to-DataFlow::Node assignment, variable named moduleHint instead of `module`). Deprecations avoided: no StrConst, no Decorator class, no AstNode.getFile(), no `module` variable name, no unbound `this`, no {{...}} template placeholders. CodeQL execution itself is deferred to the next round per the task contract."
+  },
+  "framework": {
+    "scoring": {
+      "scale": "import/package +0.45, route/decorator/annotation +0.30, runtime/bootstrap +0.20, directory_layout +0.05; threshold primary >= 0.75, secondary 0.50-0.74",
+      "candidates": [
+        {
+          "name": "flask",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package +0.45: requirements/base.txt pins flask==2.2.5 (plus flask-babel/caching/compress/jwt-extended/limiter/login/migrate/sqlalchemy/talisman/wtf); `from flask import current_app, Flask` (superset/__init__.py:19), `from flask import request` across the API layer, `from flask.cli import FlaskGroup, with_appcontext` (superset/cli/main.py:26)",
+            "route/decorator +0.30: @app.route('/health', '/healthcheck', '/ping') (superset/views/health.py:23-25); every REST endpoint is a Flask route generated by the FAB @expose layer (199 @expose sites in 52 files)",
+            "runtime/bootstrap +0.20: create_app() in superset/app.py; app registered in superset/__init__.py via LocalProxy; FlaskGroup CLI bootstrap in superset/cli/main.py",
+            "directory/layout +0.05: superset/views/, per-domain api.py files, templates/, extensions.py"
+          ]
+        },
+        {
+          "name": "flask-appbuilder",
+          "confidence": 1.0,
+          "evidence": [
+            "import/package +0.45: flask-appbuilder==4.3.9 pinned; `from flask_appbuilder.api import expose, protect, rison, safe` imported in every superset/*/api.py (e.g. superset/charts/api.py:26) and in superset/views/base_api.py:25",
+            "route/decorator +0.30: 199 @expose handler sites across 52 files; @protect() and @safe on every REST endpoint; @rison(...) on 35 endpoints (query parsing into kwargs['rison']); ModelRestApi/BaseSupersetModelRestApi subclasses (superset/charts/api.py:99 ChartRestApi(BaseSupersetModelRestApi)); FAB ModelView/BaseView subclasses under superset/views/ (Superset class, superset/views/core.py:144)",
+            "runtime/bootstrap +0.20: appbuilder extension wired in superset/extensions.py and initialized in superset/initialization/__init__.py (route registration); security manager is FAB-based (superset/security/manager.py)",
+            "directory/layout +0.05: superset/views/base.py base view classes, per-domain api.py convention"
+          ]
+        },
+        {
+          "name": "sqlalchemy 1.4 (data access layer, not a web framework)",
+          "kind": "data-layer",
+          "confidence": 1.0,
+          "evidence": [
+            "sqlalchemy==1.4.36 + flask-sqlalchemy==2.5.1 + sqlalchemy-utils==0.38.3 pinned; `db = SQLA(...)` in superset/extensions.py consumed everywhere (db.session, db.engine)",
+            "legacy Engine/Connection.execute channel still in use: db.engine.execute(filter_query) (superset/models/dashboard.py:367/:384), engine.execute(f\"DROP TABLE IF EXISTS {str(table)}\") (superset/db_engine_specs/hive.py:210), inspector.engine.execute('SHOW SCHEMAS') (impala.py:74), connection.execute(...) Core statements (superset/security/manager.py, 21 sites)",
+            "sqlalchemy.sql text/TextAsFrom construction: `from sqlalchemy.sql import quoted_name, text` (base.py:45), text(clause) (base.py:557), TextAsFrom(text(sql), ['*']) (base.py:871), text(full_table_name) (base.py:1405), text(f'UPDATE {table_name} SET {set_cols} WHERE id = :id') (superset/utils/encrypt.py:175), self.text()/get_text_clause wrappers (models/helpers.py:1077, connectors/sqla/models.py:1095)",
+            "ORM-safe parameterized channel (NOT raw SQL): db.session.execute(delete_stmt/insert/select) (superset/common/tags.py:56/:88/:120/:152/:225, cachekeys/api.py:118, importers) - extracted as execute rows, labeling marks the Core-construct channel",
+            "raw DBAPI escape hatch: engine.raw_connection() -> conn.cursor() -> cursor.execute(...) (superset/models/core.py:526-531 Database.get_raw_connection, superset/sql_lab.py:637, db_engine_specs/base.py:1551 BaseEngineSpec.execute)",
+            "pandas execution: pd.read_sql_query(qry.statement, db.engine) (connectors/sqla/models.py:170), pd.read_sql_query(sql=sql, con=engine) (models/helpers.py:1365, connectors/sqla/models.py:817)"
+          ]
+        },
+        {
+          "name": "celery (task queue consumer boundary)",
+          "kind": "task",
+          "confidence": 1.0,
+          "evidence": [
+            "celery==5.2.2 pinned; @celery_app.task(name=...) / @shared_task decorated functions in superset/sql_lab.py, superset/tasks/async_queries.py, tasks/cache.py, tasks/scheduler.py, tasks/thumbnails.py (10 decorator sites)",
+            "task parameters carry request-derived payloads (e.g. fetch_url(data: str, headers: dict), cache_warmup(strategy_name, *args, **kwargs), add_query_to_payload results routed into SQL Lab execution)"
+          ]
+        },
+        {
+          "name": "click (management CLI boundary)",
+          "kind": "cli",
+          "confidence": 1.0,
+          "evidence": [
+            "click==8.1.3 pinned; @click.group/@with_appcontext group in superset/cli/main.py:34-39, @superset.command() subcommands, @click.command/@click.option command registrations in cli/examples.py, cli/importexport.py, cli/lib.py, cli/test.py, cli/thumbnails.py, cli/update.py, cli/native_filters.py (76 click/with_appcontext decorator sites)"
+          ]
+        },
+        { "name": "django", "confidence": 0.0, "evidence": ["no django import anywhere in the tree - connection.cursor()/Manager.raw()/RawSQL()/extra() channels NOT observed and NOT emitted; references/django.md was not loaded"] },
+        { "name": "fastapi", "confidence": 0.0, "evidence": ["no fastapi import - path/query/body dependency sources NOT observed and NOT emitted; references/fastapi.md was not loaded"] },
+        { "name": "psycopg / psycopg2 / mysqlclient / sqlite3 direct driver usage", "confidence": 0.0, "evidence": ["no direct driver imports in the application tree - all DBAPI cursors are obtained through SQLAlchemy engines (engine.raw_connection() -> conn.cursor()) or driver-implicit pandas read_sql_query; the psycopg2 %s-mogrify channel is NOT observed and NOT emitted"] }
+      ]
+    },
+    "selected": "flask + flask-appbuilder (primary, both confidence 1.0: FAB is the application view/API layer built on Flask) with sqlalchemy 1.4 as the data access layer, celery task consumers and the click CLI as additional input boundaries",
+    "notes": "references/flask.md was loaded in addition to references/python.md and references/patterns.md. Its detection heuristics (flask imports, @app.route) and source cues (request.args/form/json, route path variables, headers/cookies) map directly onto the observed API layer; its sink cue 'SQL execution: cursor/connection .execute' is the dominant channel here. Its sanitizer cue (bind parameters) is recorded via the bound_params flow kind. FAB-specific shapes not covered by flask.md (@expose handler parameters, @rison injection into kwargs['rison'], @protect/@safe) are derived from repository evidence. Flask.md section 12/13 sketches use toString()-based matching; the generated queries use the proven typed-AST shapes instead (Attribute.getName() etc.) for the same semantics."
+  },
+  "inputBoundaryInventory": {
+    "summary": "The audit target is a Flask/FAB application, so input boundaries are its own HTTP endpoints plus task/CLI/file boundaries: (1) the HTTP surface - 199 @expose REST handlers in 52 per-domain api.py files (marshmallow-schema loads of request.json at e.g. superset/charts/api.py:324 add_model_schema.load(request.json), request.args.get reads at 51 sites, request.form reads at 70 sites incl. import flows with json.loads(request.form['passwords']) at charts/api.py:1098-1115 and json.loads(request.form['form_data']) at charts/data/api.py:225, request.files.get at 7 sites, request.cookies/headers at 3+3 sites), FAB @rison query parsing injected as kwargs['rison'] and read via kwargs['rison'] (32 sites) / kwargs.get('rison') (1 site), route path variables as @expose handler parameters (pk/client_id/digest/dashboard_id_or_slug), and the single @app.route health endpoint (views/health.py); (2) the task boundary - 10 @celery_app.task/@shared_task functions whose parameters carry request-derived payloads; (3) the CLI boundary - click commands (76 decorator sites) in superset/cli; (4) the filesystem - open() (17 sites) and .read() for import/export YAML/ZIP bundle processing; (5) the database itself - stored RLS filter clauses, dataset WHERE/HAVING/sql expressions and jinja-rendered query templates are re-interpolated into SQL (intermediate propagation, not external input); (6) current_app.config (83 reads) and os.environ (13 reads) - operator-level trust. The dominant SQL execution channels are: cursor.execute (DBAPI cursors from Database.get_raw_connection, models/core.py:531, BaseEngineSpec.execute at db_engine_specs/base.py:1551 and 20+ engine-spec overrides like hive.py:548/:631, postgres.py:312/:418/:433, presto.py:347/:810, mysql.py:282/:297, snowflake.py:239/:254, gsheets.py:117, ocient.py:389, trino.py:250, connectors/sqla/utils.py:156), engine.execute (hive.py:210/:232, impala.py:74, models/dashboard.py:367/:384 via db.engine.execute), session/connection.execute of SQLAlchemy Core constructs (security/manager.py 21 sites, common/tags.py 5 sites), pd.read_sql_query (3 execution sites), sqlalchemy text()/TextAsFrom construction (base.py:557/:871/:1405, utils/encrypt.py:175, self.text()/get_text_clause wrappers in models/helpers.py:1077 and connectors/sqla/models.py:1095 feeding template-processed WHERE/HAVING/RLS clauses at helpers.py:806/:816/:1918/:1936 and sqla/models.py:1069/:1079). Roughly 90 execute-family call sites exist under superset/ outside migrations; ORM filter()/order_by() paths compile to parameterized SQL and are not modeled as raw sinks, while db_engine_specs frequently f-string-interpolate identifiers and cancel IDs directly into executed SQL.",
+    "sourceFamilies": [
+      { "family": "request_state_attr", "flow_kind": "http_request", "evidence": "request.<field> attribute reads where field in args/form/json/files/cookies/headers/data (request.values and request.query_string have ZERO read sites - not emitted): args 61, form 70, json 52, files 7, cookies 3, headers 3, data 1" },
+      { "family": "request_state_get", "flow_kind": "request_param", "evidence": "request.<field>.get(...) (51 args sites, 14 form sites, 8 json, 7 files, 1 headers, 1 cookies) and request.args.getlist(...) (1 site); argument 0 carries the key" },
+      { "family": "request_state_subscript", "flow_kind": "request_param", "evidence": "request.<field>[...] reads (request.form[...] 30 sites incl. charts/api.py:1098 json.loads(request.form['passwords']) and charts/data/api.py:225, request.args[...] 2, request.json[...] 2)" },
+      { "family": "request_state_whole_mapping", "flow_kind": "http_request", "evidence": "request.<field>.to_dict() (2 form + 1 args) and request.args.items() (1 site)" },
+      { "family": "fab_rison_kwargs", "flow_kind": "request_param", "evidence": "FAB @rison decorator parses request.args['q'] (rison) and injects it as the keyword 'rison'; consumed via kwargs['rison'] (32 sites, e.g. advanced_data_type/api.py:93, annotations/api.py:192/:249/:492, annotation_layers/api.py:342) and kwargs.get('rison') (1 site, views/base_api.py:574)" },
+      { "family": "expose_handler_params", "flow_kind": "param", "evidence": "parameters of the 199 @expose-decorated handlers (route path variables such as pk in @expose('/<pk>'), client_id in sqllab/api.py:138, digest, dashboard_id_or_slug in views/core.py:852; ordinary handler parameters also included for labeling triage)" },
+      { "family": "app_route_handler_params", "flow_kind": "param", "evidence": "parameters of @app.route handlers (views/health.py:26 def health()); the only @app.route site in the tree" },
+      { "family": "click_command_params", "flow_kind": "cli", "evidence": "parameters of functions decorated with <group>.command()/@click.group (superset/cli: load_examples at cli/examples.py:106, cli/main.py:60 @superset.command() etc.) plus @click.option/@click.argument registration rows (76 click decorator sites)" },
+      { "family": "celery_task_params", "flow_kind": "task_param", "evidence": "parameters of @celery_app.task/@shared_task functions (superset/tasks/cache.py:230 fetch_url(data, headers), :265 cache_warmup(strategy_name, *args, **kwargs), sql_lab.py and tasks/*.py, 10 decorator sites)" },
+      { "family": "os_environ", "flow_kind": "env", "evidence": "os.environ / os.environ[...] / os.environ.get(...) reads (13 sites, operator-level trust)" },
+      { "family": "current_app_config", "flow_kind": "config", "evidence": "current_app.config[...] subscript reads (83 sites) and app.config[...] (views/health.py:27); operator-level trust, NOT attacker input" },
+      { "family": "file_input", "flow_kind": "file", "evidence": "built-in open(...) (17 sites; import/export ZIP/YAML bundle readers) and <obj>.read() content reads" },
+      { "family": "internal_sql_transfer", "flow_kind": "internal_transfer", "evidence": "positional arguments handed to internal functions that directly execute SQL or build TextClauses (e.g. execute_sql_statement/execute_sql_statements in sql_lab.py, db_engine_spec.execute/apply_limit_to_sql/select_star calls, self.text(where)/get_text_clause(clause) clause hand-offs, _get_sqla_query query_obj hand-offs)" }
+    ],
+    "sinkChannels": [
+      { "channel": "cursor.execute (DBAPI)", "evidence": "models/core.py:531 (get_raw_connection prequeries), db_engine_specs/base.py:1551 (BaseEngineSpec.execute), hive.py:548/:631, postgres.py:312/:418/:433, presto.py:347/:810 (with bound params), mysql.py:282/:297, snowflake.py:239/:254, gsheets.py:117, ocient.py:389, trino.py:250, redshift.py:160/:176, connectors/sqla/utils.py:156, sql_validators/presto_db.py:171ff; SQL text at positional argument 0 (presto.py:810 also passes bound params at argument 1)" },
+      { "channel": "engine.execute / db.engine.execute (SQLAlchemy legacy Engine)", "evidence": "hive.py:210 engine.execute(f'DROP TABLE IF EXISTS {str(table)}'), hive.py:232, impala.py:74 inspector.engine.execute('SHOW SCHEMAS'), models/dashboard.py:367/:384 db.engine.execute(filter_query); SQL text/construct at argument 0" },
+      { "channel": "connection.execute / session.execute / db.session.execute (SQLAlchemy Connection/Session, Core constructs)", "evidence": "security/manager.py 21 sites (table.update()/select() Core constructs), common/tags.py:56/:88/:120/:152/:225, cachekeys/api.py:118 (delete_stmt), commands/importers/v1/*.py (insert/select); construct at argument 0 - parameterized ORM/Core channel, labeling distinguishes" },
+      { "channel": "pd.read_sql_query (pandas SQL execution)", "evidence": "connectors/sqla/models.py:170 (positional statement), models/helpers.py:1365 and connectors/sqla/models.py:817 (sql= keyword); SQL at parameter 0 (keyword sql= at 2 of 3 sites)" },
+      { "channel": "sqlalchemy text() / TextAsFrom / self.text() / get_text_clause (TextClause construction, intermediate nodes)", "evidence": "base.py:557 text(clause), base.py:871 TextAsFrom(text(sql), ['*']), base.py:1405 text(full_table_name), hive.py:233, utils/encrypt.py:175 text(f'UPDATE ...'), helpers.py:1077 def text(self, clause), sqla/models.py:1095 def text(self, clause), base.py:548 def get_text_clause(cls, clause); fragment at argument 0" },
+      { "channel": "dynamic SQL string construction feeding the above", "evidence": "f-strings executed directly: hive.py:210, mysql.py:297 cursor.execute(f'KILL CONNECTION {cancel_query_id}'), snowflake.py:254, ocient.py:389, gsheets.py:117 cursor.execute(f'SELECT GET_METADATA(\"{table_name}\")'), presto.py:981/:1269; f-strings inside SQL-executing functions: postgres.py:436/:433, redshift.py:179/:176, presto.py:468/:474; f-string into text(): utils/encrypt.py:175; template-processed clauses into self.text(): helpers.py:806/:816/:1918/:1936, sqla/models.py:1069/:1079" }
+    ],
+    "notObserved": [
+      "cursor.executemany / cursor.executescript / cursor.callproc: zero call sites in the application tree (grep over superset/ excluding migrations/tests) - NOT emitted, no rules fabricated",
+      "exec_driver_sql (SQLAlchemy 1.4): zero call sites - NOT emitted",
+      "request.get_json(): zero call sites (the codebase reads the request.json property instead) - NOT emitted",
+      "request.values / request.query_string: zero read sites - NOT emitted",
+      "sys.argv: zero reads in superset/ (CLI input goes through click) - NOT emitted",
+      "psycopg/psycopg2/MySQLdb/sqlite3 direct driver imports: not present in the application tree (all DBAPI access flows through SQLAlchemy engines) - driver-specific channels NOT emitted",
+      "Django channels (connection.cursor(), Manager.raw(), RawSQL(), extra(), from_statement): not a Django project - NOT emitted",
+      "SQLAlchemy 1.4 Query.from_statement(): zero call sites in the application tree - NOT emitted"
+    ]
+  },
+  "extraction": {
+    "files": [
+      "iris/extraction/sources.ql",
+      "iris/extraction/sinks.ql"
+    ],
+    "executionPlan": "codeql query run (sequential, one at a time) + codeql bqrs decode --format=csv; NOT database analyze / SARIF. Execution is deferred to the next round per the task contract (generation only).",
+    "metadataForm": "plain multi-column select queries carrying @name/@description/@id/@tags only; intentionally no @kind problem (wrong shape for multi-column candidate tables) and no @kind table (not assumed to exist).",
+    "columnContract": [
+      "node (location-backed AST node; decodes as file:line:col)",
+      "role ('source_candidate' / 'sink_candidate')",
+      "callable",
+      "flow_kind",
+      "receiver",
+      "moduleHint",
+      "arg_index (0-based positional argument index, -1 when not applicable)",
+      "file (absolute path via Location API)",
+      "line (1-based start line)",
+      "match_kind ('api' = resolved real API call via API graphs, 'ast' = syntax-level match)"
+    ],
+    "matchKindSemantics": {
+      "api": "call resolved through semmle.python.ApiGraphs; in this project NO sink or source row is expected to resolve at API level: SQL execution flows through local cursor/engine/connection variables and wrapper chains (conn.cursor(), engine.raw_connection(), db_engine_spec.execute(...), self.text(...)) that API graphs cannot bind to driver members, and the flask request object / click options / celery payloads are framework-injected values, not module members. The column is kept for cross-project contract consistency.",
+      "ast": "pure AST shape match (attribute/name text, syntactic receiver, request/kwargs/config/environ name conventions). All .execute(...) matching is receiver-name-agnostic (any <obj>.execute(...) matches), which tolerates cursor/engine/session aliasing but cannot prove the receiver executes SQL - name-collision noise (e.g. future.execute, plan.execute) is possible and is left to the labeling step."
+    },
+    "flowKinds": {
+      "sources": [
+        "http_request",
+        "request_param",
+        "param",
+        "cli",
+        "task_param",
+        "env",
+        "file",
+        "config",
+        "internal_transfer"
+      ],
+      "sinks": [
+        "sql_text",
+        "bound_params",
+        "sql_text_clause",
+        "sql_percent_format",
+        "sql_format_call",
+        "sql_fstring",
+        "sql_concat",
+        "internal_sql_wrapper",
+        "sql_api_def"
+      ]
+    },
+    "exclusions": [
+      "paths containing /tests/ (403 files of the database snapshot: integration_tests, unit_tests, fixtures; excluded per the workflow noise rules)",
+      "/superset-db/ (the CodeQL database directory nested inside the source tree)",
+      "/migrations/ (superset/migrations, 290 alembic version files: static SQL strings from migration history; the workflow's Step 6 heuristics classify migration files as FP for all passes, so they are excluded at extraction to keep candidate volume on application code - 43 op.execute/execute calls and 186 text/f-string sites live there)",
+      "/node_modules/, /superset-frontend/, /superset-websocket/, /docs/ (non-Python-application trees; defensive even though only .py files reach the queries)"
+    ],
+    "expectedVolume": "roughly 1500-2600 source rows (request state attribute/get/subscript/whole-mapping reads ~200, kwargs['rison'] ~33, @expose handler parameters ~900-1100 across 199 handlers, @app.route handler parameters ~1, click command parameters ~150-250 across ~60 commands plus ~50 option registrations, celery task parameters ~30, env ~13, config ~85, file open/read ~60-120, internal_transfer call arguments ~200-700) and roughly 250-450 sink rows (90 execute-family call sites + 3 pd.read_sql_query sites + bound_params companion rows + text-clause construction sites ~24 + f-string/concat/format construction nodes ~40-120 + internal SQL wrapper functions ~60-120 + ~12 sql_api_def definition rows). This is in line with prior projects in this series (django ~3500-5500/~500-900, pgadmin4 2150/61, arches ~1500-2500/~200-400, maltrail 617/52)."
+  },
+  "uncoveredCases": [
+    "Positional-argument scan cap: the internal_transfer family enumerates argument positions 0-9 (i is bound by range membership before the indexed Call.getPositionalArg(i) lookup, because the index parameter of getPositionalArg is a checked/total-function input in QL); calls with more than 10 positional arguments would not be scanned. No such call was observed on the SQL-relevant paths in this snapshot.",
+    "BaseEngineSpec.execute call-site argument positions: the engine-spec adapter is a classmethod execute(cls, cursor, query, **kwargs) - at call sites like db_engine_spec.execute(cursor, statement) (sql_lab.py) and cls.execute(cursor, sql, async_=True) (base.py:1069) the SQL text is positional argument 1, NOT argument 0. The generic receiver-agnostic sink row reports arg_index 0 (correct for DBAPI cursor.execute / engine.execute / session.execute, where SQL is argument 0); the bound_params companion row reports arg_index 1; and the sql_api_def definition row for BaseEngineSpec.execute records the true SQL-text parameter position 2 (after cls and cursor). The labeling step must reconcile these.",
+    "pd.read_sql_query keyword form: 2 of the 3 execution sites pass SQL as the sql= keyword (models/helpers.py:1365, connectors/sqla/models.py:817), so the row's arg_index 0 refers to the sql parameter semantically, not to an actual positional argument; the positional form appears at connectors/sqla/models.py:170.",
+    "Handler detection is decorator-name-based: functions decorated with @expose (any import alias) or @app.route are treated as handlers; a handler whose request is accessed through a different proxy alias (e.g. `from flask import request as req`) would be missed - no such alias was observed. Parameters of @protect/@safe/@rison decorators themselves are not sources (the @rison-injected value is captured separately via the kwargs['rison']/kwargs.get('rison') reads).",
+    "FAB @rison injection is framework-internal (flask_appbuilder is not part of this database); the boundary visible in this tree is the kwargs['rison'] read. Endpoints decorated with @rison that never read kwargs['rison'] (value consumed only via the schema-validated decorator argument) are not captured - all 35 @rison sites were checked against 33 kwargs['rison'] reads.",
+    "Keyword-argument hand-offs into SQL wrapper functions (e.g. execute_sql_statements(rendered_query=...) or **kwargs propagation into BaseEngineSpec.execute(query=...)) are not captured by internal_transfer (positional arguments only); the DBAPI kwargs path (cursor.execute(query, **kwargs) at hive.py:548) is likewise not decomposed.",
+    "Jinja template rendering (superset/jinja_context.py, superset/common/*.py process_template) is the dominant SQL-text construction mechanism for SQL Lab / chart queries (rendered_query, WHERE/HAVING/RLS clauses, sql metrics) but produces the SQL text through template evaluation, not string operators: it is NOT captured by the construction family; the rendered values enter the extraction as internal_transfer arguments into execute_sql_statements/render and as self.text(...) text-clause rows at the consumption sites. Sandboxed Jinja is a sanitizer candidate for the labeling step, not an extraction rule here.",
+    "Variable-template %-formatting / .format() on SQL variables where the template is a variable (not a literal) is not captured by the construction family (literal-template shapes only); such sites are still represented by their execute/text-clause rows.",
+    "Cross-function construction (SQL built in one function, executed in another) is not traced at extraction time; the construction family only covers constructions directly executed as argument 0 of an execute-family/read_sql_query/text-clause call, or located inside a function that directly executes SQL or builds a TextClause.",
+    "Dynamic receiver identity: <obj>.execute(...) / .text(...) matching is syntactic; whether the receiver is a DBAPI cursor, a SQLAlchemy engine/connection/session, an engine-spec class, or an unrelated object with an execute/text method is not resolved (e.g. future.execute() style collisions are possible). Receiver hints (cursor/conn/engine/session/db/self/db_engine_spec) are emitted for the labeling step.",
+    "sqlparse.format(sql, ...) calls inside SQL wrapper functions would match the .format() construction shape by member name (sqlparse is a SQL pretty-printer, not a constructor); at most a handful of such rows (base.py:894/:1417, postgres.py:271, connectors/sqla/models.py:845/:916) and they carry the SQL text being reformatted - retained as low-risk noise for the labeling step.",
+    "The ORM channel (db.session/Query.filter()/order_by(), marshmallow-validated model loads) compiles to parameterized SQL and is deliberately not extracted as raw SQL beyond the generic .execute rows; stored dataset/RLS SQL fragments read from the database (get_rls_filters, extras['where']/['having']) appear only as internal_transfer/text-clause candidates, not as external sources.",
+    "superset/examples/*.py, scripts/ and repo-root setup.py are inside the database but are bootstrap/example code; they are not excluded by path rules (only tests/migrations/db directories are) - any candidates they contribute are expected to be labeled none/FP.",
+    "Compile/runtime validation of both queries is deferred with execution: per the task contract, CodeQL was not invoked in this round (no query run, no bqrs decode, no query compile). The queries reuse the exact structural shapes (helpers, bindingset annotations, AST-cast matching, no QL classes, moduleHint naming) that compiled and ran clean against CodeQL CLI 2.25.1 + codeql/python-all 7.1.x in the django CWE-89 run of this series."
+  ],
+  "referencesLoaded": [
+    "augur-0.3.0/WORKFLOW.md (confirmed: Pass 5 = CWE-089 SQL Injection, pass query name Pass5_SQLInjection.ql)",
+    "augur-0.3.0/references/patterns.md",
+    "augur-0.3.0/references/python.md",
+    "augur-0.3.0/references/flask.md",
+    "augur-0.3.0/assets/extraction/extract_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/extract_sinks.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sources.ql.tmpl",
+    "augur-0.3.0/assets/extraction/python_sinks.ql.tmpl"
+  ],
+  "constraintsHonored": {
+    "noGroundTruthAccess": true,
+    "notes": "No PyVul vulnerability ground truth was consulted: sql_sinks.csv, 漏洞审查报告.md and 漏洞补充报告.md at the superset_vuln repo root were NOT opened during this step (they were only listed to be explicitly avoided); candidate families are derived from repository evidence and the loaded language/pattern/flask references only. superset-db was used solely to read codeql-database.yml and the src.zip path listing (metadata/scope) and was otherwise excluded. Project source, the database, and the Augur installation were not modified. Only the three Phase-1 Step-1/2 artifacts under iris_manual/SQL_Injection/superset/iris were written (exploration/detection.json, extraction/sources.ql, extraction/sinks.ql). CodeQL execution and LLM labeling are deferred to later steps per the task contract; run_manifest.json and summary.md belong to Step 0 / post-execution steps and were not fabricated."
+  }
+}
