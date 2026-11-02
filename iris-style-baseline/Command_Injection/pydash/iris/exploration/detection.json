@@ -1,0 +1,143 @@
+{
+  "project": "pydash",
+  "package_version": "5.1.2",
+  "detected_date": "2026-10-16",
+  "language": "python",
+  "database": {
+    "path": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\pydash-db",
+    "source_root": "C:\\Users\\lzh\\Desktop\\github\\PyVul-main\\dataset\\codeql_databases\\pydash_vuln",
+    "primary_language": "python",
+    "files_in_db": [
+      "tasks.py",
+      "docs/conf.py",
+      "src/pydash/*.py (11 modules)",
+      "tests/*.py (13 modules)"
+    ]
+  },
+  "pass_scope": {
+    "passes": [2],
+    "cwes": ["CWE-78"],
+    "focus": "Command Injection",
+    "mode": "single-pass (Pass 2 only, per experiment instruction)"
+  },
+  "frameworks": [
+    {
+      "name": "invoke",
+      "category": "cli-task-runner",
+      "role": "primary",
+      "confidence": 0.8,
+      "evidence": [
+        {
+          "type": "import",
+          "score": 0.45,
+          "snippet": "from invoke import Exit, UnexpectedExit, run as _run, task",
+          "location": "tasks.py:14"
+        },
+        {
+          "type": "decorator",
+          "score": 0.3,
+          "snippet": "@task / @task(help={...}) on all 13 task functions",
+          "location": "tasks.py:28,34,40,49,62,68,74,98,110,126,137,144,151"
+        },
+        {
+          "type": "layout",
+          "score": 0.05,
+          "snippet": "invoke tasks.py at repository root",
+          "location": "tasks.py"
+        }
+      ],
+      "note": "invoke 不是 Web 框架,而是 CLI 任务运行器。它提供了本仓库唯一的进程执行面:invoke.run 包装 shell 命令字符串执行。Web 框架(fastapi/django/flask)证据均为 0。"
+    }
+  ],
+  "reference_files_loaded": [
+    "references/patterns.md",
+    "references/python.md"
+  ],
+  "reference_note": "未加载任何框架参考(invoke 不在 Augur references 列表中);按 references/python.md 的 process API / CLI / 环境变量模式从真实源码推导 source/sink 形状。",
+  "source_surface": {
+    "network_socket_or_request": [],
+    "network_note": "pydash 是纯数据处理工具库(Lo-Dash 的 Python 移植),仓库内没有 socket、HTTP 服务端、HTTP 客户端或消息队列代码。",
+    "request_fields": [],
+    "cli_and_config": [
+      {
+        "callable": "invoke @task function parameters",
+        "locations": "tasks.py:29,35,41,50,63,69,75,99,111,127,138,145,152",
+        "detail": "任务函数参数由 `inv` 命令行提供,是攻击者可控制的 CLI 输入边界:test(ctx, args)(L99, args 直接拼入 pytest 命令)、docs(ctx, serve, bind, port)(L127, bind/port 拼入 http.server 命令)、black/isort(ctx, quiet)、各任务的 ctx(invoke Context)。"
+      },
+      {
+        "callable": "os.getenv",
+        "locations": ["tasks.py:101"],
+        "detail": "os.getenv('TOX_ENV_SITE_PACKAGES_DIR') 的返回值经 args.replace() 后拼入 run(f\"pytest {args}\") 命令字符串。"
+      },
+      {
+        "callable": "os.environ.get",
+        "locations": ["docs/conf.py:102"],
+        "detail": "READTHEDOCS 环境变量读取,仅影响 Sphinx 主题选择。"
+      }
+    ],
+    "library_public_api": {
+      "note": "pydash 公共 API 是库的输入边界(调用方传入的数据),按类别 3/5 作为内部候选提取,供 LLM 判定;对 CWE-78 预计绝大多数标注为 none。正常业务功能不自动认定为漏洞。",
+      "public_module_level_functions": 375,
+      "public_class_methods": 23,
+      "modules": [
+        "src/pydash/arrays.py",
+        "src/pydash/chaining.py",
+        "src/pydash/collections.py",
+        "src/pydash/functions.py",
+        "src/pydash/helpers.py",
+        "src/pydash/numerical.py",
+        "src/pydash/objects.py",
+        "src/pydash/predicates.py",
+        "src/pydash/strings.py",
+        "src/pydash/utilities.py"
+      ]
+    }
+  },
+  "sink_surface": {
+    "process_execution_calls": [
+      {
+        "callable": "run",
+        "module_hint": "invoke (local alias)",
+        "binding": "run = partial(_run, pty=True), tasks.py:25, 其中 _run 来自 from invoke import run as _run (tasks.py:14)",
+        "locations": [
+          "tasks.py:31",
+          "tasks.py:37",
+          "tasks.py:43",
+          "tasks.py:65",
+          "tasks.py:71",
+          "tasks.py:107",
+          "tasks.py:129",
+          "tasks.py:130",
+          "tasks.py:134",
+          "tasks.py:140",
+          "tasks.py:141",
+          "tasks.py:147",
+          "tasks.py:148",
+          "tasks.py:154"
+        ],
+        "detail": "invoke.run 以 shell 命令字符串执行;全部 14 处调用点的命令均为 f-string 插值或字面量拼接。其中 L107(f\"pytest {args}\")与 L134(f\"python -m http.server -b {bind} ... {port}\")插值了任务参数。"
+      }
+    ],
+    "direct_stdlib_process_apis": [],
+    "direct_stdlib_note": "src/pydash、tests、docs、tasks.py 中均无 subprocess.* / os.system / os.popen / os.exec* / os.spawn* / pexpect 的直接调用;这些家族仍以已解析 API 形式保留在 sinks.ql 中作为 Pass 2 通用基线(非针对已知漏洞位置的规则)。",
+    "command_construction": "命令参数拼接、格式化全部发生在 f-string 表达式内(tasks.py:31,37,43-46,65,71,107,134 等);QL 提取查询不分析 f-string 形态(避免版本兼容问题),以手工源码观察记录于此。"
+  },
+  "coverage_gaps": [
+    "invoke 包源码不在 CodeQL 数据库内(数据库仅含 28 个项目文件),invoke.run / invoke.Context.run 无法解析为真实 API 调用;run(...) 调用点通过局部名语法匹配(local name 'run' / '_run'),并以本文件记录其绑定链。",
+    "run = partial(_run, pty=True) 的 partial 别名不被 API 图跟踪,故 invoke 家族在 sink 中同时保留 resolved 形式(API::moduleImport(\"invoke\").getMember(\"run\"))与语法形式,分别标注 match_kind。",
+    "invoke Context 方法调用(ctx.run / ctx.sudo)按语法匹配(限定符名为 ctx 的属性调用);本仓库不存在该形式,仅为召回保留。",
+    "os.environ 下标访问(os.environ['X'])未提取;源码中不存在该形式,仅覆盖 os.getenv 与 os.environ.get。",
+    "argparse / sys.argv:仓库内无使用;sys.argv 属性访问以语法匹配保留在 sources.ql 中,当前结果为空。",
+    "tests/ 目录从候选提取中排除(Augur 候选策略:排除测试与 fixtures);经检查 tests/ 中也没有 subprocess 或 invoke 调用。",
+    "docs/conf.py 的 pkg_resources / email 解析属于构建期配置读取,仅 os.environ.get 一处纳入提取。"
+  ],
+  "exclusions": {
+    "paths": ["tests/"],
+    "reason": "Augur 候选策略:测试文件属于提取噪声。"
+  },
+  "toolchain": {
+    "codeql_cli": "本步骤仅生成查询,未执行(Step 1-2 停止点);CLI/pack 版本在后续执行时记录于 run_manifest.json",
+    "qlpack": "iris/pydash-cwe78 (dependencies: codeql/python-all: *)",
+    "compatibility_baseline": "WORKFLOW.md 基线:CodeQL CLI 2.24.x+,codeql/python-all 6.1.x;查询仅使用 python AST 与 semmle.python.ApiGraphs 稳定 API"
+  }
+}

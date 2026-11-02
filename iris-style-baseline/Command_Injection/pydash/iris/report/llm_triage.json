@@ -1,0 +1,165 @@
+{
+  "metadata": {
+    "project": "pydash",
+    "version": "5.1.2 (source snapshot: pre-fix for advisory commit 6ff0831 — no _raise_if_restricted_key anywhere in src/pydash, verified by grep)",
+    "pass": "Pass 2 — CWE-78 Command/Argument Injection",
+    "reviewer": "Independent LLM path re-review (glm-5.3 via Claude Code CLI agent)",
+    "review_date": "2026-10-16",
+    "inputs_reviewed": [
+      "results/pass2.sarif",
+      "report/iris_report.md",
+      "labels/labels.json (pass_id=2, 423 entries: 4 source / 14 sink / 405 none)",
+      "report/query_generation_notes.md",
+      "labels/phase1_review.md (advisory context)",
+      "dataset/codeql_databases/pydash_vuln/tasks.py",
+      "dataset/codeql_databases/pydash_vuln/src/pydash/{objects,helpers,collections}.py",
+      "iris/libraries/MySources.qll, MySinks.qll, MySanitizers.qll, MySummaries.qll",
+      "iris/queries/Pass2_CommandInjection.ql"
+    ],
+    "constraints_observed": "Original SARIF / labels / queries not modified; PyVul ground truth, fix commits and CVE advisories not read (ground-truth functions were supplied in the task prompt only); diagnostic query results not counted as formal TP."
+  },
+  "sarif_review": {
+    "sarif_path": "results/pass2.sarif",
+    "analysis_status": "CodeQL analysis succeeded (executionSuccessful=true). 2 formal CWE-78 path-problem findings present — this is NOT a diagnostics-only round.",
+    "rule_id": "py/augur/pydash/pass2-command-injection",
+    "formal_finding_count": 2,
+    "notes": "Sink semantics verified independently: invoke.run executes its first positional argument as a shell command string (equivalent of shell=True; binding chain tasks.py:14 `from invoke import run as _run` -> tasks.py:25 `run = partial(_run, pty=True)`). Confirmed the repository contains no subprocess.*/os.system/os.popen/pexpect usage anywhere (grep over src/, tasks.py, docs/conf.py), so invoke.run is the only process-execution surface — consistent with the query's sink model."
+  },
+  "findings": [
+    {
+      "finding_id": "pass2-tasks-107",
+      "rule_id": "py/augur/pydash/pass2-command-injection",
+      "location": "tasks.py:107:9-25 (sink = arg 0 of run() in task `test`)",
+      "message": "Command injection: untrusted data (CLI task parameter or environment-derived value) flows into the shell command string passed to invoke.run().",
+      "code_flows_reviewed": [
+        {
+          "flow": "tasks.py:99 param `args` (test(ctx, args=...)) -> tasks.py:107 f-string `f\"pytest {args}\"`",
+          "code_evidence": "Verified against source. tasks.py:99 `def test(ctx, args=f\"{TEST_TARGETS} --cov={PACKAGE_NAME}\")`; tasks.py:107 `run(f\"pytest {args}\")`. Direct f-string interpolation, single function, no intermediaries. REAL.",
+          "valid": true
+        },
+        {
+          "flow": "tasks.py:99 `args` -> tasks.py:105 `args = args.replace(PACKAGE_SOURCE, tox_env_pkg_src)` -> tasks.py:107 f-string",
+          "code_evidence": "Verified. tasks.py:105 inside `if tox_env_site_packages_dir:` branch; str.replace propagates tainted `args` unchanged apart from constant-substring replacement. REAL.",
+          "valid": true
+        },
+        {
+          "flow": "tasks.py:101 `os.getenv(\"TOX_ENV_SITE_PACKAGES_DIR\")` -> tox_env_site_packages_dir -> tasks.py:104 os.path.join(...) = tox_env_pkg_src (AdditionalTaintStep, stdlib model) -> tasks.py:105 args.replace -> tasks.py:107 f-string",
+          "code_evidence": "Verified. tasks.py:101-107 exactly as reported; the `AdditionalTaintStep` taxon at L104 comes from the stdlib dataflow model (semmle/python/frameworks/Stdlib.model.yml) for os.path.join — sound modeling, join does propagate its tainted argument into the result. REAL at the code level.",
+          "valid": true
+        }
+      ],
+      "questions": {
+        "q1_source_is_attacker_influenced_boundary": {
+          "answer": "NO (this is the decisive point)",
+          "reasoning": "The two source families are (a) the `--args` CLI flag of the invoke task `inv test` and (b) the TOX_ENV_SITE_PACKAGES_DIR environment variable. tasks.py is a developer/CI task script, not part of the shipped library (setup.cfg packages only src/pydash). There is no request parameter, no remote input boundary, and no privilege differential: whoever can pass `inv test --args X` (or set the env var for the process) already owns an interactive shell on that machine with the same privileges the command will run under. Controlling the source requires strictly more access than the sink yields. No attacker sits on the other side of this boundary in any deployment this repository defines."
+        },
+        "q2_taint_propagation_real_code_evidence": {
+          "answer": "YES",
+          "reasoning": "All three codeFlows were checked line-by-line against tasks.py:99-107. Every hop corresponds to real code; no fabricated summary edges (MySummaries is none()); the only modeled step (os.path.join at L104) reflects genuine stdlib semantics."
+        },
+        "q3_sink_actually_executes_system_command": {
+          "answer": "YES",
+          "reasoning": "invoke.run (aliased via partial at tasks.py:25) executes the command string through the shell. The sink itself is correctly identified as a shell-execution sink."
+        },
+        "q4_command_content_influenced_by_source": {
+          "answer": "YES",
+          "reasoning": "`args` is interpolated directly into the command string; the env-derived value is spliced into it via str.replace at L105."
+        },
+        "q5_fixed_command_whitelist_filter_or_other_protection": {
+          "answer": "NO technical sanitizer; BUT the default value is a module constant and the flag is the documented feature",
+          "reasoning": "No shlex.quote, whitelist, metacharacter filtering, or type enforcement exists anywhere on this path. However, when `--args` is not supplied the command is fixed (`pytest src/pydash tests --cov=pydash`); the injection capability exists only when the local operator deliberately overrides the flag — and overriding pytest arguments is the flag's documented purpose (`@task(help={\"args\": \"Override default pytest arguments\"})`, tasks.py:98)."
+        },
+        "q6_normal_supported_business_function": {
+          "answer": "YES",
+          "reasoning": "`inv test --args` is a developer-tool parameter whose explicit documented purpose is to let the task invoker control what pytest runs. This is the intended function of the CLI, executed with the invoker's own privileges — not a vulnerability in the library, and tasks.py is not shipped to library consumers at all."
+        },
+        "q7_path_real_or_overapproximation": {
+          "answer": "Dataflow path is REAL; the over-approximation is purely in the threat model",
+          "reasoning": "No spurious dataflow edges: source->sink corresponds to actual code. The false positive arises from modeling a local CLI parameter and a local environment variable as untrusted attacker input, when in this repository's context (pure library + maintainer task runner) those inputs are same-trust-domain as the shell that executes the command. Phase 1 review itself flagged this exact adjudication as open item R1: '本地可执行 CLI 的攻击者是否在威胁模型内(若仅维护者可运行,风险为纵深防御级别而非可远程利用漏洞)'."
+        }
+      },
+      "triage": "likely_fp",
+      "confidence": 0.75,
+      "confidence_rationale": "Dataflow and shell semantics are verified true (Q2/Q3/Q4), which is why this is not a certain FP. The verdict rests on the trust-boundary analysis (Q1/Q6): no attacker-reachable input boundary and no privilege escalation — the source is the shell owner's own CLI flag. Residual scenario that would upgrade it: a CI/workflow configuration that feeds externally controlled values into `inv test --args` or into TOX_ENV_SITE_PACKAGES_DIR for a more-privileged runner; no such configuration exists in this repository (repo contains no CI workflow invoking `inv test --args` with dynamic values)."
+    },
+    {
+      "finding_id": "pass2-tasks-134",
+      "rule_id": "py/augur/pydash/pass2-command-injection",
+      "location": "tasks.py:134:13-83 (sink = arg 0 of run() in task `docs`, guarded by `if serve:`)",
+      "message": "Command injection: untrusted data (CLI task parameter or environment-derived value) flows into the shell command string passed to invoke.run().",
+      "code_flows_reviewed": [
+        {
+          "flow": "tasks.py:127 param `bind` (docs(ctx, serve=False, bind=\"127.0.0.1\", port=8000)) -> tasks.py:134 f-string `f\"python -m http.server -b {bind} --directory docs/_build/html {port}\"`",
+          "code_evidence": "Verified against source tasks.py:126-134. Direct interpolation, single function. REAL.",
+          "valid": true
+        },
+        {
+          "flow": "tasks.py:127 param `port` -> tasks.py:134 f-string",
+          "code_evidence": "Verified. Default is int 8000 but invoke performs no type enforcement on the CLI, so an arbitrary string is accepted. REAL.",
+          "valid": true
+        }
+      ],
+      "questions": {
+        "q1_source_is_attacker_influenced_boundary": {
+          "answer": "NO",
+          "reasoning": "Same analysis as pass2-tasks-107: `--bind`/`--port` are local CLI flags of `inv docs --serve`. Whoever can pass them already owns the shell the command runs in. No request parameter, no remote boundary, no privilege differential. tasks.py is not shipped with the pydash package."
+        },
+        "q2_taint_propagation_real_code_evidence": {
+          "answer": "YES",
+          "reasoning": "Both codeFlows verified line-by-line against tasks.py:126-134; direct parameter-to-f-string flows with no intermediaries and no modeled edges."
+        },
+        "q3_sink_actually_executes_system_command": {
+          "answer": "YES",
+          "reasoning": "invoke.run executes the command string through the shell (tasks.py:134, hide=True only affects output)."
+        },
+        "q4_command_content_influenced_by_source": {
+          "answer": "YES",
+          "reasoning": "bind and port are interpolated directly into the http.server command string."
+        },
+        "q5_fixed_command_whitelist_filter_or_other_protection": {
+          "answer": "NO technical sanitizer; defaults are safe constants only when the flags are omitted",
+          "reasoning": "No validation/quoting on bind or port. Defaults (\"127.0.0.1\" / 8000) apply only when the invoker does not supply the flags; `serve` must also be truthy (tasks.py:132) for the sink to be reached at all."
+        },
+        "q6_normal_supported_business_function": {
+          "answer": "YES",
+          "reasoning": "Letting the task invoker choose the bind address and port of the local docs preview server is the documented purpose of these flags. Executed with the invoker's own privileges in the invoker's own shell session."
+        },
+        "q7_path_real_or_overapproximation": {
+          "answer": "Dataflow path is REAL; over-approximation is in the source threat model",
+          "reasoning": "The path is genuine code; the FP cause is treating local invoke CLI parameters as attacker-controlled untrusted input. Phase 1 review flagged this as open item R2."
+        }
+      },
+      "triage": "likely_fp",
+      "confidence": 0.75,
+      "confidence_rationale": "Identical trust-boundary analysis as pass2-tasks-107, with the additional mitigating context that the sink is additionally gated on `--serve` and the defaults are safe constants. Upgrades to a real vulnerability only in a deployment where an external party controls `inv docs --bind/--port` on a more-privileged runner; no such deployment exists in this repository."
+    }
+  ],
+  "ground_truth_cross_check": {
+    "question": "Was the real pydash vulnerability (advisory commit 6ff0831, CWE-78 'Command Injection' via deep-path dunder attribute access, functions _base_get_object / base_set) hit by this analysis?",
+    "answer": "NO — the ground-truth vulnerability was NOT hit by the formal Pass 2 analysis.",
+    "evidence": {
+      "vulnerable_code_present_in_snapshot": "Confirmed present and unfixed: src/pydash/helpers.py:178-186 `_base_get_object` (calls getattr(obj, key) with no restricted-key check) and src/pydash/helpers.py:189+ `base_set` (setattr without check), both matching the supplied code_before. Version 5.1.2, git HEAD '1947d2a'.",
+      "vulnerable_entry_points": "src/pydash/objects.py:657 `invoke(obj, path, *args, **kwargs)` — resolves `method = getattr(get(obj, target_path), method_name)` then calls `method(*args, **kwargs)` (objects.py:685-689); src/pydash/collections.py:441 `invoke_map`. Attacker-supplied dotted path traverses dunder attributes (e.g. `__class__.__init__.__globals__...`) to reach arbitrary callables, invoked with attacker-supplied arguments.",
+      "what_the_sarif_actually_contains": "2 findings, both in tasks.py (dev task script): tasks.py:107 and tasks.py:134. Neither location touches src/pydash/, helpers.py, objects.py, or collections.py.",
+      "why_the_analysis_missed_it": [
+        "Source scope: all 387 pydash library API parameters (including objects.invoke's `path`/`args` and invoke_map's) were labeled role=none for Pass 2 — the library was judged a pure in-memory data utility with no input boundary relevant to CWE-78 (correct in the narrow sense that the library reads no external input itself; the attacker arrives via the *caller's* application, which is outside this database).",
+        "Sink scope: the only modeled sink is invoke.run in tasks.py. The library contains no subprocess/os.system/os.popen/pexec/pexpect call sites at all (grep verified), so no shell sink exists in the library for any CWE-78 source→sink query to reach.",
+        "Exploit primitive mismatch: the actual vulnerability's dangerous operation is dynamic attribute access (getattr at helpers.py:183 / objects.py:685) followed by dynamic callable dispatch (objects.py:689 `method(*args, **kwargs)`) — an unsafe-reflection / arbitrary-code-execution pattern (closer to CWE-470 / CWE-94) rather than a literal shell command construction. The advisory files it under CWE-78, but the exploit path never constructs or executes a shell command, so a shell-sink-shaped CWE-78 query could not match it even with perfect source labeling.",
+        "Explicit deferral: phase1_review.md item R5 and query_generation_notes.md §7.5 record that the ~15 dynamic-dispatch functions (invoke, invoke_map, attempt, method, result, callit, ...) were deliberately labeled none for CWE-78 and deferred to a hypothetical Pass 4 (code injection) evaluation."
+      ],
+      "would_better_cwe78_modeling_have_found_it": "Only by re-defining the pass: source = pydash public API parameters that applications may pass attacker data to (requires inter-project/caller modeling the single-project database cannot provide), sink = getattr/dynamic-call on attacker-influenced names, plus attribute-traversal summaries (__class__/__globals__/__init__ etc.). That is a different CWE framing than the shell-command-injection query that was rendered.",
+      "empirical_probe_followup": {
+        "note": "Diagnostic probes (probe/ dir, NOT formal results; originals untouched). Tier-1 minimal adjustment (source = invoke/invoke_map `path` param + one getattr-reflection taint step + sink = call of tainted callable) hits EXACTLY the ground-truth dispatch site with 1 path, zero noise: objects.py:657 (path param) -> objects.py:689 (method(*args, **kwargs)). Tier-2 scalable blind version (sources = ALL public pydash API params) yields 233 paths / 46 sinks with the real vuln at only 7 paths (~3% signal). Fixing only the source (0 hits, no shell sink in library) or only the sink (0 hits, no taint source reaching it) does NOT work — all three changes are required. Caveats: Tier-1 source selection is advisory-informed; invoke_map is still missed (call-graph break through lambda + pyd.invoke re-export); the hit locates the attacker-controlled dispatch point, not exploitability (the 6ff0831 fix is a reachability guard, not a taint barrier). See probe/README.md."
+      }
+    }
+  },
+  "summary": {
+    "formal_findings": 2,
+    "likely_tp": 0,
+    "likely_fp": 2,
+    "uncertain": 0,
+    "diagnostics_counted_as_tp": 0,
+    "conclusion": "CodeQL analysis succeeded and produced 2 formal CWE-78 path findings; both are dataflow-real but trust-boundary false positives (local invoke CLI parameters / tox environment variable flowing into a local shell command run by the same trust domain — the documented purpose of those dev-task flags, in a non-shipped task script). The real pydash vulnerability of commit 6ff0831 (dunder-path attribute traversal in src/pydash/helpers.py _base_get_object / base_set, reachable via objects.invoke / collections.invoke_map) was NOT hit: it lives in the library, which has no shell sink, whose parameters were labeled role=none, and whose exploit primitive (getattr traversal + dynamic call) is outside this pass's source→shell-sink model.",
+    "verdict_on_hit_of_real_vulnern": "missed (not hit by any formal finding; the 2 reported findings are unrelated to the ground-truth vulnerability)"
+  }
+}
