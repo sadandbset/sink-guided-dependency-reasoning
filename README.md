@@ -6,6 +6,6 @@ Replication package structure for sink-guided, evidence-constrained backward dep
 | Directory                  | Purpose                                                      |
 | -------------------------- | ------------------------------------------------------------ |
 | `iris-style-baseline/`     | IRIS-style (Augur/Python) reproduction outputs, **not** the official Java IRIS implementation |
-| `proposed-method-results/` | Proposed-method detection reports, trace logs, and ablation findings |
+| `proposed-method-results/` | Proposed-method detection reports, CodeQL (QL) query files, and query rules |
 | `prompts/`                 | experiment prompts for Sections 3.2, 3.3, and 3.4            |
 | `vulnerability-dataset/`   | Four CWE-specific JSON files                                 |
